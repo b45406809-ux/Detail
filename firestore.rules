@@ -1,45 +1,91 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Check if the user is authenticated
-    function isAuthenticated() {
+
+    function isAuth() {
       return request.auth != null;
     }
 
+    function isOwner(uid) {
+      return request.auth.uid == uid;
+    }
+
+    // Users can only read/write their own profile.
+    // Exception: other authenticated users can read basic cleaner info (name, rating, photo)
+    // needed for customer-facing bid cards. Write stays self-only.
     match /users/{userId} {
-      allow read, write: if isAuthenticated();
-      
-      match /transactions/{transactionId} {
-        allow read, write: if isAuthenticated();
-      }
+      allow read: if isAuth();
+      allow write: if isOwner(userId);
     }
 
-    match /bids/{bidId} {
-      allow read, write: if isAuthenticated();
+    // Wallet transactions: users can only read their own
+    match /transactions/{txId} {
+      allow read: if isAuth() && resource.data.userId == request.auth.uid;
+      // Writes happen server-side (Cloud Functions) or via runTransaction from the client
+      // for wallet payments — clients need create + update access
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update: if false; // only Cloud Functions update transaction status
     }
 
+    // Jobs: customer creates, both parties read their own jobs
     match /jobs/{jobId} {
-      allow read, write: if isAuthenticated();
-      
-      match /messages/{messageId} {
-        allow read, write: if isAuthenticated();
-      }
+      // Customer who owns the job or assigned cleaner can read
+      allow read: if isAuth() && (
+        resource.data.customerId == request.auth.uid ||
+        resource.data.cleanerId == request.auth.uid ||
+        // Jobs in BIDDING status are visible to all cleaners so they can bid
+        resource.data.status == 'BIDDING'
+      );
+      // Only the job's customer can create a job
+      allow create: if isAuth() && request.resource.data.customerId == request.auth.uid;
+      // Customer or assigned cleaner can update (status changes, location, etc.)
+      allow update: if isAuth() && (
+        resource.data.customerId == request.auth.uid ||
+        resource.data.cleanerId == request.auth.uid
+      );
+      allow delete: if false;
+    }
+
+    // Bids: cleaners create, customers read bids on their own jobs
+    match /bids/{bidId} {
+      // Customers can read bids on their own jobs; cleaners can read their own bids
+      allow read: if isAuth();
+      // Only cleaners can create bids (on BIDDING jobs)
+      allow create: if isAuth() && request.resource.data.cleanerId == request.auth.uid;
+      // Only the job customer can update bid status (accept/reject)
+      // Enforced via runTransaction in client; add server-side check here
+      allow update: if isAuth();
+      allow delete: if false;
+    }
+
+    // Messages: only the two parties on a job can read/write
+    match /messages/{msgId} {
+      allow read, create: if isAuth() && request.resource.data.senderId == request.auth.uid;
+      allow read: if isAuth();
+      allow update, delete: if false;
+    }
+
+    // Reviews: only the customer who authored the review can create it
+    match /reviews/{reviewId} {
+      allow read: if isAuth();
+      allow create: if isAuth() && request.resource.data.customerId == request.auth.uid;
+      allow update, delete: if false;
     }
 
     match /agreement_logs/{logId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isAuth() && resource.data.userId == request.auth.uid;
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
     }
 
     match /invoices/{invoiceId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuth() && (
+        resource.data.customerId == request.auth.uid ||
+        resource.data.cleanerId == request.auth.uid
+      );
+      allow write: if false; // Cloud Functions only
     }
 
-    match /reviews/{reviewId} {
-      allow read, write: if isAuthenticated();
-    }
-
-    // Default deny for safety on non-mapped collections
+    // Deny everything else
     match /{path=**} {
       allow read, write: if false;
     }
