@@ -1,116 +1,103 @@
+import * as WebBrowser from 'expo-web-browser';
 import { IS_DEV } from '../utils/env';
-import { auth } from './firebase';
-import { db, doc, addDoc, updateDoc, collection, serverTimestamp, increment } from './firebase';
+import { auth, db, doc, addDoc, updateDoc, collection, serverTimestamp, increment } from './firebase';
 
 export interface PaymentResult {
   success: boolean;
   transactionId?: string;
+  referenceNumber?: string;
+  pending?: boolean;
 }
 
 /**
- * Adds funds to the current user's wallet.
+ * Adds funds to the current user's wallet via PesePay.
  *
- * DEV:  Simulates a successful payment (1.2 s delay), writes a real transaction
- *       to Firestore and increments the user's balance — so the wallet screen
- *       updates live without a real payment processor.
+ * DEV:  Simulates a successful payment (1.2 s delay), writes a real Firestore
+ *       transaction and increments the user's balance immediately.
  *
- * PROD: Creates a PaymentIntent via the `createPaymentIntent` Firebase Cloud
- *       Function, then opens Stripe's native PaymentSheet.  On success Stripe's
- *       webhook (or a Firestore trigger) should credit the wallet and write the
- *       transaction — the client-side update is intentionally omitted so the
- *       server is the single source of truth.
+ * PROD: Calls the `createPesePayPayment` Firebase Cloud Function which creates
+ *       the payment on PesePay's API and returns a hosted checkout URL.
+ *       The user completes payment in a browser sheet (EcoCash, card, etc.).
+ *       PesePay's webhook fires back to the backend on success, which updates
+ *       Firestore — the wallet screen's onSnapshot listener picks this up
+ *       automatically with no further polling needed.
  *
- * Backend contract (PROD):
- *   - Cloud Function `createPaymentIntent({ amount: number /*cents*\/, currency: 'usd' })`
- *     → `{ clientSecret: string }`
+ * ─── Backend contracts (PROD) ────────────────────────────────────────────────
+ *
+ * Cloud Function: createPesePayPayment
+ *   Input:  { amount: number, currency: 'USD', userId: string }
+ *   Output: { redirectUrl: string, referenceNumber: string }
+ *   Side-effect: writes a PENDING transaction doc to Firestore:
+ *     transactions/{id} = { userId, type:'CREDIT', amount, status:'PENDING',
+ *                           referenceNumber, description, createdAt }
+ *
+ * Cloud Function / HTTP endpoint: pesepayWebhook  (PesePay → backend)
+ *   PesePay POSTs payment result here after the user pays.
+ *   On status === 'PAID': updates transaction.status → 'COMPLETED' and runs
+ *     users/{userId}.balance = FieldValue.increment(amount)
+ *
+ * Cloud Function: checkPesePayPayment  (optional, for status polling)
+ *   Input:  { referenceNumber: string }
+ *   Output: { status: 'PAID' | 'PENDING' | 'CANCELLED' | 'FAILED' }
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 export async function addFundsToWallet(amountUSD: number): Promise<PaymentResult> {
   const user = auth.currentUser;
   if (!user) throw new Error('Not authenticated');
 
   if (IS_DEV) {
+    // DEV: simulate payment success and write real Firestore records
     await new Promise((r) => setTimeout(r, 1200));
-
     const txRef = await addDoc(collection(db, 'transactions'), {
       userId: user.uid,
       type: 'CREDIT',
       amount: amountUSD,
-      description: `Wallet top-up [DEV simulated]`,
+      description: 'Wallet top-up [DEV simulated]',
       status: 'COMPLETED',
       createdAt: serverTimestamp(),
     });
-
-    await updateDoc(doc(db, 'users', user.uid), {
-      balance: increment(amountUSD),
-    });
-
+    await updateDoc(doc(db, 'users', user.uid), { balance: increment(amountUSD) });
     return { success: true, transactionId: txRef.id };
   }
 
-  // PROD — Stripe PaymentSheet
-  const { initPaymentSheet, presentPaymentSheet } = await import('@stripe/stripe-react-native');
+  // PROD: PesePay hosted checkout
   const { getFunctions, httpsCallable } = await import('firebase/functions');
   const { getApp } = await import('firebase/app');
-
   const functions = getFunctions(getApp());
-  const createPaymentIntent = httpsCallable<
-    { amount: number; currency: string },
-    { clientSecret: string }
-  >(functions, 'createPaymentIntent');
 
-  const { data } = await createPaymentIntent({
-    amount: Math.round(amountUSD * 100),
-    currency: 'usd',
+  // Step 1: Backend creates the PesePay payment and returns the checkout URL
+  const createPayment = httpsCallable<
+    { amount: number; currency: string; userId: string },
+    { redirectUrl: string; referenceNumber: string }
+  >(functions, 'createPesePayPayment');
+
+  const { data } = await createPayment({
+    amount: amountUSD,
+    currency: 'USD',
+    userId: user.uid,
   });
 
-  const { error: initError } = await initPaymentSheet({
-    merchantDisplayName: 'Detail',
-    paymentIntentClientSecret: data.clientSecret,
-    defaultBillingDetails: {
-      name: auth.currentUser?.displayName ?? undefined,
-    },
+  // Step 2: Open PesePay's hosted checkout in a browser sheet
+  await WebBrowser.openBrowserAsync(data.redirectUrl, {
+    presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET,
   });
-  if (initError) throw new Error(initError.message);
 
-  const { error } = await presentPaymentSheet();
-  if (error) {
-    if (error.code === 'Canceled') throw new Error('CANCELED');
-    throw new Error(error.message);
-  }
-
-  return { success: true };
+  // Step 3: Browser dismissed — PesePay's webhook will have already updated Firestore
+  // if the payment was successful. The wallet screen's onSnapshot listener will
+  // reflect the balance change automatically. We return pending=true so the UI
+  // can show an appropriate "processing" message.
+  return { success: true, referenceNumber: data.referenceNumber, pending: true };
 }
 
 /**
- * Returns the user's saved payment methods.
- *
- * DEV:  Returns a fake Visa test card.
- *
- * PROD: Calls the `listPaymentMethods` Firebase Cloud Function which fetches
- *       saved methods from the user's Stripe Customer object.
- *
- * Backend contract (PROD):
- *   - Cloud Function `listPaymentMethods()` → `{ methods: StripePaymentMethod[] }`
- *     Each method: `{ id, brand, last4, expMonth, expYear }`
+ * Returns the payment methods supported on this platform.
+ * PesePay handles method selection inside their hosted checkout page, so
+ * this list is informational only (shown in the wallet UI).
  */
-export async function getPaymentMethods(): Promise<
-  Array<{ id: string; brand: string; last4: string; expMonth: number; expYear: number }>
-> {
-  if (IS_DEV) {
-    return [{ id: 'pm_dev_test', brand: 'visa', last4: '4242', expMonth: 12, expYear: 26 }];
-  }
-
-  try {
-    const { getFunctions, httpsCallable } = await import('firebase/functions');
-    const { getApp } = await import('firebase/app');
-    const functions = getFunctions(getApp());
-    const listPaymentMethods = httpsCallable<void, { methods: any[] }>(
-      functions,
-      'listPaymentMethods'
-    );
-    const { data } = await listPaymentMethods();
-    return data.methods ?? [];
-  } catch {
-    return [];
-  }
+export function getPesePayMethods(): Array<{ id: string; label: string; sub: string }> {
+  return [
+    { id: 'ecocash', label: 'EcoCash', sub: 'Pay via EcoCash mobile money' },
+    { id: 'onemoney', label: 'OneMoney', sub: 'Pay via OneMoney mobile money' },
+    { id: 'card', label: 'Visa / Mastercard', sub: 'Pay with your debit or credit card' },
+  ];
 }

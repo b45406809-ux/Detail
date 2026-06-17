@@ -47,13 +47,6 @@
     "plugins": [
       "expo-router",
       [
-        "@stripe/stripe-react-native",
-        {
-          "merchantIdentifier": "com.detail.app",
-          "enableGooglePay": false
-        }
-      ],
-      [
         "expo-font",
         {
           "fonts": []
