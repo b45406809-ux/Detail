@@ -1,0 +1,75 @@
+{
+  "expo": {
+    "name": "Detail",
+    "slug": "detail",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "detail",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#3906d2"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.detail.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Detail uses your location to find nearby cleaners.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Detail tracks your location during active jobs.",
+        "NSMicrophoneUsageDescription": "Detail uses the microphone for calls with cleaners.",
+        "NSCameraUsageDescription": "Detail uses the camera to take job photos."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#3906d2"
+      },
+      "package": "com.detail.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "RECORD_AUDIO",
+        "CAMERA",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-font",
+        {
+          "fonts": []
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Detail to use your location to find cleaners nearby.",
+          "locationWhenInUsePermission": "Allow Detail to use your location."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#3906d2",
+          "sounds": []
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
