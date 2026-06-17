@@ -5,6 +5,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
+  signInAnonymously,
   User as FirebaseUser,
   initializeAuth,
   getReactNativePersistence,
@@ -28,12 +29,12 @@ import {
   Timestamp,
   collectionGroup,
   getDocFromServer,
+  increment,
 } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Firebase configuration — loaded from environment or bundled config.
-// In production, use expo-constants or a config plugin to inject secrets.
-const firebaseConfig = {
+// Firebase configuration — exported so expo-firebase-recaptcha can consume it
+export const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY ?? '',
   authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN ?? '',
   projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID ?? '',
@@ -103,5 +104,7 @@ export {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
+  signInAnonymously,
+  increment,
 };
 export type { FirebaseUser };

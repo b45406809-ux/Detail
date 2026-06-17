@@ -23,6 +23,7 @@ import {
   serverTimestamp,
 } from '../../../services/firebase';
 import { Job, Bid, JobStatus } from '../../../types';
+import { IS_DEV } from '../../../utils/env';
 
 export default function OffersScreen() {
   const { jobId } = useLocalSearchParams<{ jobId: string }>();
@@ -92,7 +93,7 @@ export default function OffersScreen() {
         style: 'destructive',
         onPress: async () => {
           await updateDoc(doc(db, 'jobs', jobId!), { status: JobStatus.CANCELLED });
-          router.replace('/(app)');
+          router.replace('/home');
         },
       },
     ]);
@@ -179,7 +180,11 @@ export default function OffersScreen() {
                     <View className="flex-row items-center gap-1">
                       <Star size={12} color="#f59e0b" fill="#f59e0b" />
                       <Text className="text-xs font-black text-slate-700">
-                        {bid.cleanerRating?.toFixed(1) ?? '4.8'}
+                        {bid.cleanerRating != null
+                          ? bid.cleanerRating.toFixed(1)
+                          : IS_DEV
+                          ? '4.8'
+                          : 'New'}
                       </Text>
                     </View>
                     <Text className="text-xs text-slate-400 font-medium">

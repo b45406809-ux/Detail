@@ -37,6 +37,14 @@ export function rankCleaners(
     .sort((a, b) => b.finalScore - a.finalScore);
 }
 
+/** Haversine distance in kilometres between two lat/lng points. */
+export function haversineDistanceKm(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number }
+): number {
+  return calculateDistance(a.lat, a.lng, b.lat, b.lng);
+}
+
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371;
   const dLat = (lat2 - lat1) * (Math.PI / 180);

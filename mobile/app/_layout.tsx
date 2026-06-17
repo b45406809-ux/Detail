@@ -14,9 +14,18 @@ import {
   PublicSans_800ExtraBold,
   PublicSans_900Black,
 } from '@expo-google-fonts/public-sans';
+import { StripeProvider } from '@stripe/stripe-react-native';
 import { AuthProvider, useAuth } from '../context/AuthContext';
+import { IS_DEV } from '../utils/env';
 
 SplashScreen.preventAutoHideAsync();
+
+// DEV: Stripe's own public test key (SDK initialises without error, no real charges ever happen
+//      because the payment logic is fully mocked when IS_DEV is true).
+// PROD: Your live publishable key from EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY.
+const STRIPE_KEY = IS_DEV
+  ? 'pk_test_TYooMQauvdEDq54NiTphI7jx'
+  : (process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '');
 
 function AuthGuard() {
   const { user, profile, isLoading } = useAuth();
@@ -68,23 +77,27 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <AuthGuard />
-        <StatusBar style="auto" />
-        <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-          <Stack.Screen name="(auth)" options={{ animation: 'none' }} />
-          <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
-          {/* Stack screens without tab bar */}
-          <Stack.Screen name="booking/create" />
-          <Stack.Screen name="booking/offers" />
-          <Stack.Screen name="booking/confirmation" />
-          <Stack.Screen name="tracking/[jobId]" options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
-          <Stack.Screen name="history" />
-          <Stack.Screen name="privacy-policy" />
-          <Stack.Screen name="cleaner-agreement" />
-          <Stack.Screen name="+not-found" />
-        </Stack>
-      </AuthProvider>
+      <StripeProvider publishableKey={STRIPE_KEY} merchantIdentifier="com.detail.app">
+        <AuthProvider>
+          <AuthGuard />
+          <StatusBar style="auto" />
+          <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+            <Stack.Screen name="(auth)" options={{ animation: 'none' }} />
+            <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
+            {/* Stack screens without tab bar */}
+            <Stack.Screen name="booking/create" />
+            <Stack.Screen name="booking/offers" />
+            <Stack.Screen name="booking/confirmation" />
+            <Stack.Screen name="tracking/[jobId]" options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
+            <Stack.Screen name="history" />
+            <Stack.Screen name="reviews" />
+            <Stack.Screen name="help" />
+            <Stack.Screen name="privacy-policy" />
+            <Stack.Screen name="cleaner-agreement" />
+            <Stack.Screen name="+not-found" />
+          </Stack>
+        </AuthProvider>
+      </StripeProvider>
     </GestureHandlerRootView>
   );
 }

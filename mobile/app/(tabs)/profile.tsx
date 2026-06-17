@@ -21,9 +21,11 @@ import {
   HelpCircle,
   FileText,
 } from 'lucide-react-native';
+import { Linking } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { auth, signOut } from '../../services/firebase';
 import { StarRating } from '../../components/StarRating';
+import { IS_DEV } from '../../utils/env';
 
 export default function ProfileScreen() {
   const { user, profile } = useAuth();
@@ -59,13 +61,16 @@ export default function ProfileScreen() {
                 icon: Star,
                 label: 'My Reviews',
                 sub: 'Ratings from customers',
-                onPress: () => {},
+                onPress: () => router.push('/reviews'),
               },
               {
                 icon: Briefcase,
                 label: 'My Portfolio',
                 sub: 'Showcase your work',
-                onPress: () => {},
+                onPress: () =>
+                  IS_DEV
+                    ? Alert.alert('[DEV] Portfolio', 'Portfolio upload coming in next release.')
+                    : Alert.alert('Coming Soon', 'Portfolio photos are coming in the next update.'),
               },
             ]
           : []),
@@ -99,7 +104,7 @@ export default function ProfileScreen() {
           icon: HelpCircle,
           label: 'Help & Support',
           sub: 'FAQs and contact us',
-          onPress: () => {},
+          onPress: () => router.push('/help'),
         },
       ],
     },

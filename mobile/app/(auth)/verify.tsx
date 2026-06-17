@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,21 +12,52 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
+import { IS_DEV } from '../../utils/env';
+import { sendPhoneOTP, confirmPhoneOTP } from '../../services/phoneAuth';
+import { firebaseConfig } from '../../services/firebase';
+
+// Loaded lazily so DEV builds never bundle expo-firebase-recaptcha
+let FirebaseRecaptchaVerifierModal: any = null;
+if (!IS_DEV) {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  FirebaseRecaptchaVerifierModal = require('expo-firebase-recaptcha').FirebaseRecaptchaVerifierModal;
+}
 
 const OTP_LENGTH = 6;
 
 export default function VerifyScreen() {
   const { phone } = useLocalSearchParams<{ phone: string }>();
   const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(''));
-  const [isLoading, setIsLoading] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const [resendTimer, setResendTimer] = useState(60);
   const inputRefs = useRef<(TextInput | null)[]>([]);
+  const recaptchaVerifierRef = useRef<any>(null);
 
+  // Send OTP on mount (or resend)
+  const sendCode = useCallback(async () => {
+    if (isSending) return;
+    setIsSending(true);
+    try {
+      await sendPhoneOTP(`+1${phone}`, recaptchaVerifierRef.current);
+      setResendTimer(60);
+    } catch (err: any) {
+      Alert.alert('Failed to Send Code', err.message ?? 'Please try again.');
+    } finally {
+      setIsSending(false);
+    }
+  }, [phone, isSending]);
+
+  // Auto-send on mount
   useEffect(() => {
-    const interval = setInterval(() => {
-      setResendTimer((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(interval);
+    sendCode();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Countdown timer for resend button
+  useEffect(() => {
+    const id = setInterval(() => setResendTimer((t) => (t > 0 ? t - 1 : 0)), 1000);
+    return () => clearInterval(id);
   }, []);
 
   const handleOtpChange = (value: string, index: number) => {
@@ -50,24 +81,42 @@ export default function VerifyScreen() {
   };
 
   const handleVerify = async (code: string) => {
-    setIsLoading(true);
+    setIsVerifying(true);
     try {
-      // Phone auth verification goes here.
-      // Full implementation requires react-native-firebase or expo-firebase-recaptcha.
-      // For now, navigate to profile creation on any 6-digit code.
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      // DEV: signInAnonymously (accepts any 6-digit code)
+      // PROD: validates SMS code against Firebase ConfirmationResult
+      await confirmPhoneOTP(code);
       router.replace('/(auth)/create-profile');
-    } catch {
-      Alert.alert('Verification Failed', 'The code you entered is incorrect. Please try again.');
+    } catch (err: any) {
+      const msg = err.message?.toLowerCase().includes('session')
+        ? 'Your session expired. Tap "Resend Code" to get a new one.'
+        : 'The code you entered is incorrect. Please try again.';
+      Alert.alert('Verification Failed', msg);
       setOtp(Array(OTP_LENGTH).fill(''));
       inputRefs.current[0]?.focus();
     } finally {
-      setIsLoading(false);
+      setIsVerifying(false);
     }
   };
 
+  const handleResend = () => {
+    setOtp(Array(OTP_LENGTH).fill(''));
+    sendCode();
+  };
+
+  const isComplete = otp.every((d) => d !== '');
+
   return (
     <SafeAreaView className="flex-1 bg-white">
+      {/* reCAPTCHA modal — only rendered in PROD, invisible by default */}
+      {!IS_DEV && FirebaseRecaptchaVerifierModal && (
+        <FirebaseRecaptchaVerifierModal
+          ref={recaptchaVerifierRef}
+          firebaseConfig={firebaseConfig}
+          attemptInvisibleVerification
+        />
+      )}
+
       <KeyboardAvoidingView
         className="flex-1 px-6 pt-6"
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -83,9 +132,19 @@ export default function VerifyScreen() {
           Enter the code
         </Text>
         <Text className="text-base text-slate-500 font-medium mb-10">
-          We sent a 6-digit code to{'\n'}
-          <Text className="text-slate-900 font-black">{phone}</Text>
+          {IS_DEV
+            ? 'DEV mode — enter any 6 digits to continue'
+            : `We sent a 6-digit code to\n`}
+          {!IS_DEV && <Text className="text-slate-900 font-black">{phone}</Text>}
         </Text>
+
+        {/* Sending indicator */}
+        {isSending && (
+          <View className="flex-row items-center gap-2 mb-6">
+            <ActivityIndicator size="small" color="#3906d2" />
+            <Text className="text-sm text-slate-400 font-medium">Sending code…</Text>
+          </View>
+        )}
 
         {/* OTP inputs */}
         <View className="flex-row gap-3 justify-center mb-8">
@@ -102,24 +161,25 @@ export default function VerifyScreen() {
               onChangeText={(v) => handleOtpChange(v, index)}
               onKeyPress={(e) => handleKeyPress(e, index)}
               autoFocus={index === 0}
+              editable={!isVerifying}
             />
           ))}
         </View>
 
         <TouchableOpacity
           onPress={() => handleVerify(otp.join(''))}
-          disabled={isLoading || otp.some((d) => !d)}
+          disabled={isVerifying || !isComplete || isSending}
           activeOpacity={0.85}
           className={`w-full py-5 rounded-[32px] items-center shadow-lg ${
-            otp.every((d) => d) ? 'bg-accent shadow-accent/30' : 'bg-slate-100'
+            isComplete && !isSending ? 'bg-accent shadow-accent/30' : 'bg-slate-100'
           }`}
         >
-          {isLoading ? (
+          {isVerifying ? (
             <ActivityIndicator color="#fff" />
           ) : (
             <Text
               className={`font-black text-sm uppercase tracking-widest ${
-                otp.every((d) => d) ? 'text-white' : 'text-slate-400'
+                isComplete && !isSending ? 'text-white' : 'text-slate-400'
               }`}
             >
               Verify Code
@@ -132,7 +192,7 @@ export default function VerifyScreen() {
           {resendTimer > 0 ? (
             <Text className="text-sm font-black text-slate-400">Resend in {resendTimer}s</Text>
           ) : (
-            <TouchableOpacity onPress={() => setResendTimer(60)}>
+            <TouchableOpacity onPress={handleResend} disabled={isSending}>
               <Text className="text-sm font-black text-accent">Resend Code</Text>
             </TouchableOpacity>
           )}

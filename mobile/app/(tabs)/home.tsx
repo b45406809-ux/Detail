@@ -31,11 +31,14 @@ import {
   query,
   where,
   onSnapshot,
+  getDocs,
   orderBy,
   limit,
 } from '../../services/firebase';
 import { Job, JobStatus } from '../../types';
 import { Logo } from '../../components/Logo';
+import { IS_DEV } from '../../utils/env';
+import { haversineDistanceKm } from '../../services/matching';
 
 export default function HomeScreen() {
   const { user, profile, updateProfile } = useAuth();
@@ -114,9 +117,53 @@ export default function HomeScreen() {
 
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await new Promise((r) => setTimeout(r, 800));
+    if (IS_DEV) {
+      // DEV: visual feedback only — onSnapshot listeners keep data current
+      await new Promise((r) => setTimeout(r, 800));
+    } else {
+      // PROD: force a network re-fetch to bypass the Firestore local cache
+      try {
+        if (user) {
+          const field = isCustomer ? 'customerId' : 'cleanerId';
+          const [activeSnap, recentSnap] = await Promise.all([
+            getDocs(
+              query(
+                collection(db, 'jobs'),
+                where(field, '==', user.uid),
+                where('status', 'in', [
+                  JobStatus.ACCEPTED,
+                  JobStatus.EN_ROUTE,
+                  JobStatus.ARRIVED,
+                  JobStatus.IN_PROGRESS,
+                ]),
+                limit(1)
+              )
+            ),
+            getDocs(
+              query(
+                collection(db, 'jobs'),
+                where(field, '==', user.uid),
+                where('status', '==', JobStatus.COMPLETED),
+                orderBy('createdAt', 'desc'),
+                limit(3)
+              )
+            ),
+          ]);
+          setActiveJob(
+            activeSnap.empty
+              ? null
+              : ({ id: activeSnap.docs[0].id, ...activeSnap.docs[0].data() } as Job)
+          );
+          setRecentJobs(
+            recentSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Job))
+          );
+        }
+      } catch {
+        // Silently fall back — onSnapshot will re-sync
+      }
+    }
     setIsRefreshing(false);
-  }, []);
+  }, [user, isCustomer]);
 
   if (!profile) {
     return (
@@ -186,6 +233,7 @@ export default function HomeScreen() {
             onToggleStatus={toggleCleanerStatus}
             availableJobs={availableJobs}
             recentJobs={recentJobs}
+            currentLocation={currentLocation}
           />
         )}
       </ScrollView>
@@ -299,12 +347,14 @@ function CleanerHome({
   onToggleStatus,
   availableJobs,
   recentJobs,
+  currentLocation,
 }: {
   profile: any;
   status: string;
   onToggleStatus: () => void;
   availableJobs: Job[];
   recentJobs: Job[];
+  currentLocation: { lat: number; lng: number } | null;
 }) {
   const isAvailable = status === 'AVAILABLE';
 
@@ -402,11 +452,22 @@ function CleanerHome({
                   <View className="flex-row items-center gap-4">
                     <View className="flex-row items-center gap-1.5">
                       <MapPin size={12} color="#94a3b8" />
-                      <Text className="text-xs text-slate-400 font-bold">2.3 km away</Text>
+                      <Text className="text-xs text-slate-400 font-bold">
+                        {IS_DEV
+                          ? '2.3 km away'
+                          : currentLocation && job.location?.lat && job.location?.lng
+                          ? `${haversineDistanceKm(currentLocation, {
+                              lat: job.location.lat,
+                              lng: job.location.lng,
+                            }).toFixed(1)} km away`
+                          : 'Distance N/A'}
+                      </Text>
                     </View>
                     <View className="flex-row items-center gap-1.5">
                       <Clock size={12} color="#94a3b8" />
-                      <Text className="text-xs text-slate-400 font-bold">2–3 hrs</Text>
+                      <Text className="text-xs text-slate-400 font-bold">
+                        {job.estimatedDuration ? `${job.estimatedDuration} hrs` : '2–3 hrs'}
+                      </Text>
                     </View>
                   </View>
                 </TouchableOpacity>
