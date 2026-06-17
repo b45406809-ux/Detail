@@ -1,0 +1,144 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["CUSTOMER", "CLEANER"] },
+        "balance": { "type": "number" },
+        "status": { "type": "string", "enum": ["ONLINE", "OFFLINE", "BUSY"] },
+        "hasAgreedToTerms": { "type": "boolean" },
+        "commissionOwed": { "type": "number" },
+        "firstJobInWindowDate": { "type": "string", "format": "date-time" },
+        "isSuspended": { "type": "boolean" },
+        "isBanned": { "type": "boolean" },
+        "suspensionDate": { "type": "string", "format": "date-time" },
+        "banDate": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "AgreementLog": {
+      "title": "AgreementLog",
+      "description": "Log of user agreement to terms",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "agreementVersion": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "userAgent": { "type": "string" }
+      },
+      "required": ["uid", "agreementVersion", "timestamp"]
+    },
+    "Job": {
+      "title": "Job",
+      "description": "Cleaning job request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerId": { "type": "string" },
+        "cleanerId": { "type": "string" },
+        "type": { "type": "string" },
+        "status": { "type": "string", "enum": ["REQUESTED", "BIDDING", "ACCEPTED", "EN_ROUTE", "ARRIVED", "IN_PROGRESS", "COMPLETED", "CANCELLED"] },
+        "price": { "type": "number" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" },
+            "address": { "type": "string" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastMessage": { "type": "string" },
+        "lastMessageTimestamp": { "type": "string", "format": "date-time" },
+        "lastMessageSenderId": { "type": "string" },
+        "typing": {
+          "type": "object",
+          "additionalProperties": { "type": "boolean" }
+        },
+        "lastRead": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "format": "date-time" }
+        }
+      },
+      "required": ["customerId", "type", "status", "createdAt"]
+    },
+    "Bid": {
+      "title": "Bid",
+      "description": "Cleaner bid for a job",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "jobId": { "type": "string" },
+        "cleanerId": { "type": "string" },
+        "cleanerName": { "type": "string" },
+        "cleanerPhoto": { "type": "string" },
+        "bidPrice": { "type": "number" },
+        "estimatedArrival": { "type": "number" },
+        "status": { "type": "string", "enum": ["PENDING", "ACCEPTED", "REJECTED"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["jobId", "cleanerId", "bidPrice", "status", "createdAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Chat message between customer and cleaner",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "jobId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["jobId", "senderId", "text", "timestamp"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Commission invoice for cleaners",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "cleanerId": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["UNPAID", "PAID", "OVERDUE"] },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "paidAt": { "type": "string", "format": "date-time" },
+        "jobIds": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["cleanerId", "amount", "status", "dueDate", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/jobs/{jobId}": {
+      "schema": "Job",
+      "description": "Job requests"
+    },
+    "/bids/{bidId}": {
+      "schema": "Bid",
+      "description": "Bids for jobs"
+    },
+    "/jobs/{jobId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Messages for a specific job"
+    },
+    "/agreement_logs/{logId}": {
+      "schema": "AgreementLog",
+      "description": "Logs of agreement acceptance"
+    },
+    "/invoices/{invoiceId}": {
+      "schema": "Invoice",
+      "description": "Commission invoices"
+    }
+  }
+}

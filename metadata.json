@@ -1,0 +1,12 @@
+{
+  "name": "Remix: Detail - Service Marketplace",
+  "description": "A premium on-demand platform for professional cleaning and detailing services, featuring real-time matching and secure bidding.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
