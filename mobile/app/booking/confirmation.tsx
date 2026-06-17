@@ -32,7 +32,7 @@ export default function BookingConfirmationScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => router.replace('/(app)')}
+          onPress={() => router.replace('/home')}
           className="w-full bg-slate-50 border border-slate-100 py-5 rounded-[32px] items-center"
           activeOpacity={0.85}
         >

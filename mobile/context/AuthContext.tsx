@@ -4,7 +4,7 @@ import {
   db,
   onAuthStateChanged,
   doc,
-  getDoc,
+  onSnapshot,
   setDoc,
   updateDoc,
   serverTimestamp,
@@ -33,39 +33,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchProfile = useCallback(async (uid: string) => {
-    try {
-      const snap = await getDoc(doc(db, 'users', uid));
-      if (snap.exists()) {
-        setProfile(snap.data() as UserProfile);
-      }
-    } catch (err) {
-      console.error('Failed to fetch profile:', err);
-    }
-  }, []);
-
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    let unsubProfile: (() => void) | null = null;
+
+    const unsubAuth = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
+      unsubProfile?.();
+      unsubProfile = null;
+
       if (firebaseUser) {
-        await fetchProfile(firebaseUser.uid);
+        let firstLoad = true;
+        unsubProfile = onSnapshot(
+          doc(db, 'users', firebaseUser.uid),
+          (snap) => {
+            setProfile(snap.exists() ? (snap.data() as UserProfile) : null);
+            if (firstLoad) {
+              firstLoad = false;
+              setIsLoading(false);
+            }
+          },
+          (err) => {
+            console.error('Profile listener error:', err);
+            if (firstLoad) {
+              firstLoad = false;
+              setIsLoading(false);
+            }
+          }
+        );
       } else {
         setProfile(null);
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
-    return unsubscribe;
-  }, [fetchProfile]);
 
-  const refreshProfile = useCallback(async () => {
-    if (user) await fetchProfile(user.uid);
-  }, [user, fetchProfile]);
+    return () => {
+      unsubAuth();
+      unsubProfile?.();
+    };
+  }, []);
+
+  // No-op: onSnapshot keeps profile live automatically
+  const refreshProfile = useCallback(async () => {}, []);
 
   const updateProfile = useCallback(
     async (data: Partial<UserProfile>) => {
       if (!user) return;
       await updateDoc(doc(db, 'users', user.uid), { ...data, updatedAt: serverTimestamp() });
-      setProfile((prev) => (prev ? { ...prev, ...data } : prev));
+      // No manual setProfile needed — onSnapshot fires automatically after the write
     },
     [user]
   );

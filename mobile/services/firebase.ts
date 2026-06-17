@@ -30,6 +30,8 @@ import {
   collectionGroup,
   getDocFromServer,
   increment,
+  runTransaction,
+  writeBatch,
 } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -106,5 +108,7 @@ export {
   signOut,
   signInAnonymously,
   increment,
+  runTransaction,
+  writeBatch,
 };
 export type { FirebaseUser };

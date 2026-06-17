@@ -14,13 +14,13 @@ import { useAuth } from '../../../context/AuthContext';
 import {
   db,
   doc,
-  getDoc,
   collection,
   query,
   where,
   onSnapshot,
-  updateDoc,
   serverTimestamp,
+  runTransaction,
+  updateDoc,
 } from '../../../services/firebase';
 import { Job, Bid, JobStatus } from '../../../types';
 import { IS_DEV } from '../../../utils/env';
@@ -33,12 +33,17 @@ export default function OffersScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null);
 
+  // Live job listener — catches status changes (e.g., another session accepted a bid)
   useEffect(() => {
     if (!jobId) return;
-    getDoc(doc(db, 'jobs', jobId)).then((snap) => {
-      if (snap.exists()) setJob({ id: snap.id, ...snap.data() } as Job);
-      setIsLoading(false);
-    });
+    return onSnapshot(
+      doc(db, 'jobs', jobId),
+      (snap) => {
+        if (snap.exists()) setJob({ id: snap.id, ...snap.data() } as Job);
+        setIsLoading(false);
+      },
+      () => setIsLoading(false)
+    );
   }, [jobId]);
 
   useEffect(() => {
@@ -62,20 +67,32 @@ export default function OffersScreen() {
         {
           text: 'Accept',
           onPress: async () => {
+            if (!user) return;
+            if (job?.customerId !== user.uid) {
+              Alert.alert('Unauthorized', 'Only the job owner can accept offers.');
+              return;
+            }
             setAcceptingBidId(bid.id);
             try {
-              await updateDoc(doc(db, 'bids', bid.id), { status: 'ACCEPTED' });
-              await updateDoc(doc(db, 'jobs', jobId!), {
-                status: JobStatus.ACCEPTED,
-                cleanerId: bid.cleanerId,
-                cleanerName: bid.cleanerName,
-                cleanerPhoto: bid.cleanerPhoto,
-                price: bid.bidPrice,
-                acceptedAt: serverTimestamp(),
+              await runTransaction(db, async (transaction) => {
+                const jobSnap = await transaction.get(doc(db, 'jobs', jobId!));
+                if (!jobSnap.exists()) throw new Error('Job not found');
+                if (jobSnap.data().status !== JobStatus.BIDDING) {
+                  throw new Error('This job is no longer accepting bids');
+                }
+                transaction.update(doc(db, 'bids', bid.id), { status: 'ACCEPTED' });
+                transaction.update(doc(db, 'jobs', jobId!), {
+                  status: JobStatus.ACCEPTED,
+                  cleanerId: bid.cleanerId,
+                  cleanerName: bid.cleanerName,
+                  cleanerPhoto: bid.cleanerPhoto,
+                  price: bid.bidPrice,
+                  acceptedAt: serverTimestamp(),
+                });
               });
               router.replace({ pathname: '/tracking/[jobId]', params: { jobId: jobId! } });
-            } catch {
-              Alert.alert('Error', 'Failed to accept offer. Please try again.');
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to accept offer. Please try again.');
             } finally {
               setAcceptingBidId(null);
             }

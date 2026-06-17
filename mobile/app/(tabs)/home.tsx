@@ -431,7 +431,7 @@ function CleanerHome({
                 <TouchableOpacity
                   key={job.id}
                   onPress={() =>
-                    router.push({ pathname: '/booking/offers', params: { jobId: job.id } })
+                    router.push({ pathname: '/job/[jobId]', params: { jobId: job.id } })
                   }
                   className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm"
                   activeOpacity={0.8}

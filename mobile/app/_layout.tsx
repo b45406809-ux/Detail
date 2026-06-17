@@ -80,6 +80,7 @@ export default function RootLayout() {
           <Stack.Screen name="booking/offers" />
           <Stack.Screen name="booking/confirmation" />
           <Stack.Screen name="tracking/[jobId]" options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
+          <Stack.Screen name="job/[jobId]" />
           <Stack.Screen name="history" />
           <Stack.Screen name="reviews" />
           <Stack.Screen name="help" />

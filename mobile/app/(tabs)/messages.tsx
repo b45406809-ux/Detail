@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,16 +15,18 @@ import { ArrowLeft, Send, MessageSquare } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import {
   db,
+  doc,
   collection,
   query,
   where,
   onSnapshot,
   addDoc,
+  updateDoc,
   orderBy,
   serverTimestamp,
+  writeBatch,
 } from '../../services/firebase';
 import { ChatMessage } from '../../types';
-import { Image } from 'expo-image';
 
 interface Conversation {
   jobId: string;
@@ -32,7 +34,7 @@ interface Conversation {
   otherUserPhoto: string;
   lastMessage: string;
   lastMessageAt: any;
-  unread: number;
+  unreadCount: number;
 }
 
 export default function MessagesScreen() {
@@ -43,34 +45,46 @@ export default function MessagesScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const flatListRef = useRef<FlatList>(null);
 
-  // Load conversations (jobs the user is part of that have messages)
+  const isCustomer = profile?.role === 'CUSTOMER';
+  const unreadField = isCustomer ? 'customerUnread' : 'cleanerUnread';
+
+  // Load conversations from jobs the user is part of
   useEffect(() => {
     if (!user) return;
-    const field = profile?.role === 'CUSTOMER' ? 'customerId' : 'cleanerId';
+    const field = isCustomer ? 'customerId' : 'cleanerId';
     const q = query(collection(db, 'jobs'), where(field, '==', user.uid));
-    return onSnapshot(q, (snap) => {
-      const jobs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
-      const convos: Conversation[] = jobs.map((job: any) => ({
-        jobId: job.id,
-        otherUserName:
-          profile?.role === 'CUSTOMER'
-            ? job.cleanerName ?? 'Cleaner'
-            : job.customerName ?? 'Customer',
-        otherUserPhoto:
-          profile?.role === 'CUSTOMER' ? job.cleanerPhoto ?? '' : job.customerPhoto ?? '',
-        lastMessage: job.lastMessage ?? 'No messages yet',
-        lastMessageAt: job.lastMessageAt,
-        unread: job.unreadCount ?? 0,
-      }));
-      setConversations(convos);
-      setIsLoading(false);
-    });
-  }, [user, profile]);
+    return onSnapshot(
+      q,
+      (snap) => {
+        const jobs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
+        const convos: Conversation[] = jobs
+          .filter((job: any) => job.cleanerId) // only show once a cleaner is assigned
+          .map((job: any) => ({
+            jobId: job.id,
+            otherUserName: isCustomer
+              ? job.cleanerName ?? 'Cleaner'
+              : job.customerName ?? 'Customer',
+            otherUserPhoto: isCustomer ? job.cleanerPhoto ?? '' : job.customerPhoto ?? '',
+            lastMessage: job.lastMessage ?? 'No messages yet',
+            lastMessageAt: job.lastMessageAt,
+            unreadCount: job[unreadField] ?? 0,
+          }));
+        setConversations(convos);
+        setIsLoading(false);
+      },
+      () => setIsLoading(false)
+    );
+  }, [user, isCustomer, unreadField]);
 
-  // Load messages for active job
+  // Load messages for active conversation and reset unread count
   useEffect(() => {
-    if (!activeJobId) return;
+    if (!activeJobId || !user) return;
+
+    // Reset this user's unread count when opening a conversation
+    updateDoc(doc(db, 'jobs', activeJobId), { [unreadField]: 0 }).catch(() => {});
+
     const q = query(
       collection(db, 'messages'),
       where('jobId', '==', activeJobId),
@@ -78,23 +92,46 @@ export default function MessagesScreen() {
     );
     return onSnapshot(q, (snap) => {
       setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChatMessage)));
+      // Scroll to bottom on new messages
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     });
-  }, [activeJobId]);
+  }, [activeJobId, user, unreadField]);
 
   const sendMessage = async () => {
     if (!inputText.trim() || !activeJobId || !user) return;
     const text = inputText.trim();
     setInputText('');
-    await addDoc(collection(db, 'messages'), {
+
+    // Use a batch to atomically write the message and update the job's lastMessage + increment other party's unread
+    const batch = writeBatch(db);
+    const messageRef = doc(collection(db, 'messages'));
+    batch.set(messageRef, {
       jobId: activeJobId,
       senderId: user.uid,
       senderName: profile?.displayName,
       text,
       createdAt: serverTimestamp(),
     });
+
+    const otherUnreadField = isCustomer ? 'cleanerUnread' : 'customerUnread';
+    const jobRef = doc(db, 'jobs', activeJobId);
+    batch.update(jobRef, {
+      lastMessage: text,
+      lastMessageAt: serverTimestamp(),
+      // Increment the OTHER user's unread count, reset our own
+      [otherUnreadField]: (conversations.find((c) => c.jobId === activeJobId)?.unreadCount ?? 0) + 1,
+      [unreadField]: 0,
+    });
+
+    await batch.commit().catch(() => {});
+  };
+
+  const openConversation = (jobId: string) => {
+    setActiveJobId(jobId);
   };
 
   if (activeJobId) {
+    const convo = conversations.find((c) => c.jobId === activeJobId);
     return (
       <SafeAreaView className="flex-1 bg-white">
         <KeyboardAvoidingView
@@ -111,29 +148,33 @@ export default function MessagesScreen() {
             </TouchableOpacity>
             <View className="flex-1">
               <Text className="text-base font-black text-slate-900">
-                {conversations.find((c) => c.jobId === activeJobId)?.otherUserName ?? 'Chat'}
+                {convo?.otherUserName ?? 'Chat'}
               </Text>
-              <Text className="text-xs text-slate-400 font-medium">Job #{activeJobId.slice(-6)}</Text>
+              <Text className="text-xs text-slate-400 font-medium">
+                Job #{activeJobId.slice(-6).toUpperCase()}
+              </Text>
             </View>
           </View>
 
           {/* Messages */}
           <FlatList
+            ref={flatListRef}
             data={messages}
             keyExtractor={(m) => m.id}
-            contentContainerClassName="px-4 py-4 gap-3"
+            contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 16, gap: 8 }}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
             renderItem={({ item }) => {
               const isMe = item.senderId === user?.uid;
               return (
                 <View className={`flex-row ${isMe ? 'justify-end' : 'justify-start'}`}>
                   <View
                     className={`max-w-[78%] px-4 py-3 rounded-3xl ${
-                      isMe
-                        ? 'bg-accent rounded-tr-sm'
-                        : 'bg-slate-100 rounded-tl-sm'
+                      isMe ? 'bg-accent rounded-tr-sm' : 'bg-slate-100 rounded-tl-sm'
                     }`}
                   >
-                    <Text className={`text-sm font-medium ${isMe ? 'text-white' : 'text-slate-900'}`}>
+                    <Text
+                      className={`text-sm font-medium ${isMe ? 'text-white' : 'text-slate-900'}`}
+                    >
                       {item.text}
                     </Text>
                   </View>
@@ -152,6 +193,8 @@ export default function MessagesScreen() {
               onChangeText={setInputText}
               multiline
               maxLength={500}
+              onSubmitEditing={sendMessage}
+              returnKeyType="send"
             />
             <TouchableOpacity
               onPress={sendMessage}
@@ -186,17 +229,17 @@ export default function MessagesScreen() {
           </View>
           <Text className="text-lg font-black text-slate-700 text-center">No conversations yet</Text>
           <Text className="text-sm text-slate-400 font-medium text-center mt-2">
-            Messages with your cleaners will appear here
+            Messages will appear here once a job is accepted
           </Text>
         </View>
       ) : (
         <FlatList
           data={conversations}
           keyExtractor={(c) => c.jobId}
-          contentContainerClassName="px-5 gap-3 pb-8"
+          contentContainerStyle={{ paddingHorizontal: 20, gap: 12, paddingBottom: 32 }}
           renderItem={({ item }) => (
             <TouchableOpacity
-              onPress={() => setActiveJobId(item.jobId)}
+              onPress={() => openConversation(item.jobId)}
               className="bg-white rounded-3xl p-4 flex-row items-center gap-4 border border-slate-100 shadow-sm"
               activeOpacity={0.8}
             >
@@ -209,9 +252,11 @@ export default function MessagesScreen() {
                   {item.lastMessage}
                 </Text>
               </View>
-              {item.unread > 0 && (
+              {item.unreadCount > 0 && (
                 <View className="w-5 h-5 bg-accent rounded-full items-center justify-center">
-                  <Text className="text-[10px] font-black text-white">{item.unread}</Text>
+                  <Text className="text-[10px] font-black text-white">
+                    {item.unreadCount > 9 ? '9+' : item.unreadCount}
+                  </Text>
                 </View>
               )}
             </TouchableOpacity>

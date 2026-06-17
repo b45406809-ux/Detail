@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import * as Location from 'expo-location';
 import {
   ArrowLeft,
   MessageSquare,
@@ -21,17 +22,22 @@ import {
   Star,
   CheckCircle,
   MapPin,
+  Navigation,
 } from 'lucide-react-native';
 import { useAuth } from '../../../context/AuthContext';
 import {
   db,
   doc,
+  collection,
   onSnapshot,
   updateDoc,
   serverTimestamp,
+  runTransaction,
+  increment,
+  addDoc,
 } from '../../../services/firebase';
 import { Job, JobStatus } from '../../../types';
-import { StarRating } from '../../../components/StarRating';
+import { IS_DEV } from '../../../utils/env';
 
 const STATUS_LABELS: Record<string, string> = {
   ACCEPTED: 'Job Confirmed',
@@ -39,6 +45,13 @@ const STATUS_LABELS: Record<string, string> = {
   ARRIVED: 'Cleaner Arrived',
   IN_PROGRESS: 'Cleaning in Progress',
   COMPLETED: 'Cleaning Completed',
+};
+
+const CLEANER_NEXT_STATUS: Partial<Record<string, { status: JobStatus; label: string }>> = {
+  ACCEPTED: { status: JobStatus.EN_ROUTE, label: "I'm On My Way" },
+  EN_ROUTE: { status: JobStatus.ARRIVED, label: "I've Arrived" },
+  ARRIVED: { status: JobStatus.IN_PROGRESS, label: 'Start Cleaning' },
+  IN_PROGRESS: { status: JobStatus.COMPLETED, label: 'Mark Complete' },
 };
 
 type TrackingStep = 'TRACKING' | 'PAYMENT' | 'RATING' | 'SUCCESS';
@@ -49,25 +62,74 @@ export default function TrackingScreen() {
   const [job, setJob] = useState<Job | null>(null);
   const [step, setStep] = useState<TrackingStep>('TRACKING');
   const [rating, setRating] = useState(0);
-  const [selectedPayment, setSelectedPayment] = useState<'CARD' | 'CASH' | 'WALLET'>('CARD');
+  const [selectedPayment, setSelectedPayment] = useState<'CARD' | 'CASH' | 'WALLET'>('WALLET');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const locationSubRef = useRef<Location.LocationSubscription | null>(null);
   const slideAnim = useRef(new Animated.Value(300)).current;
 
   const isCustomer = profile?.role === 'CUSTOMER';
+  const isCleaner = profile?.role === 'CLEANER';
 
-  // Listen to job updates
+  // Live job listener
   useEffect(() => {
     if (!jobId) return;
-    return onSnapshot(doc(db, 'jobs', jobId), (snap) => {
-      if (snap.exists()) {
-        const data = { id: snap.id, ...snap.data() } as Job;
-        setJob(data);
-        if (data.status === JobStatus.COMPLETED && step === 'TRACKING') {
-          setStep(isCustomer ? 'PAYMENT' : 'RATING');
+    return onSnapshot(
+      doc(db, 'jobs', jobId),
+      (snap) => {
+        if (snap.exists()) {
+          const data = { id: snap.id, ...snap.data() } as Job;
+          setJob(data);
+          if (data.status === JobStatus.COMPLETED && step === 'TRACKING') {
+            setStep(isCustomer ? 'PAYMENT' : 'RATING');
+          }
         }
+      },
+      (err) => console.error('Job listener error:', err)
+    );
+  }, [jobId, isCustomer, step]);
+
+  // Cleaner location broadcasting — only while job is active
+  useEffect(() => {
+    if (!jobId || !isCleaner || !job) return;
+
+    const activeStatuses = [
+      JobStatus.ACCEPTED,
+      JobStatus.EN_ROUTE,
+      JobStatus.ARRIVED,
+      JobStatus.IN_PROGRESS,
+    ];
+    if (!activeStatuses.includes(job.status as JobStatus)) {
+      locationSubRef.current?.remove();
+      locationSubRef.current = null;
+      return;
+    }
+
+    let mounted = true;
+    Location.watchPositionAsync(
+      { accuracy: Location.Accuracy.Balanced, timeInterval: 10000, distanceInterval: 20 },
+      async (loc) => {
+        if (!mounted) return;
+        try {
+          await updateDoc(doc(db, 'jobs', jobId), {
+            cleanerLocation: { lat: loc.coords.latitude, lng: loc.coords.longitude },
+          });
+        } catch {}
       }
+    ).then((sub) => {
+      if (!mounted) {
+        sub.remove();
+        return;
+      }
+      locationSubRef.current?.remove();
+      locationSubRef.current = sub;
     });
-  }, [jobId, isCustomer]);
+
+    return () => {
+      mounted = false;
+      locationSubRef.current?.remove();
+      locationSubRef.current = null;
+    };
+  }, [jobId, isCleaner, job?.status]);
 
   useEffect(() => {
     Animated.spring(slideAnim, {
@@ -89,17 +151,128 @@ export default function TrackingScreen() {
             status: JobStatus.CANCELLED,
             cancelledAt: serverTimestamp(),
           });
-          router.replace('/(app)');
+          router.replace('/home');
         },
       },
     ]);
   };
 
-  const handlePayment = async () => {
+  const handleCleanerStatusUpdate = async () => {
+    const next = CLEANER_NEXT_STATUS[job?.status ?? ''];
+    if (!next) return;
     setIsSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1200));
-    setIsSubmitting(false);
-    setStep('RATING');
+    try {
+      await updateDoc(doc(db, 'jobs', jobId!), {
+        status: next.status,
+        [`${next.status.toLowerCase()}At`]: serverTimestamp(),
+      });
+    } catch {
+      Alert.alert('Error', 'Failed to update status. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handlePayment = async () => {
+    if (!job?.price || !user || !job.cleanerId) return;
+    const price = job.price;
+    setIsSubmitting(true);
+
+    try {
+      if (selectedPayment === 'WALLET') {
+        await runTransaction(db, async (transaction) => {
+          const customerRef = doc(db, 'users', user.uid);
+          const cleanerRef = doc(db, 'users', job.cleanerId!);
+          const customerSnap = await transaction.get(customerRef);
+          const cleanerSnap = await transaction.get(cleanerRef);
+
+          if (!customerSnap.exists() || !cleanerSnap.exists()) {
+            throw new Error('Account data not found');
+          }
+
+          const balance = customerSnap.data().balance ?? 0;
+          if (balance < price) {
+            throw new Error(
+              `Insufficient balance. You have $${balance.toFixed(2)} but need $${price.toFixed(2)}.`
+            );
+          }
+
+          // 85% to cleaner, platform keeps 15%
+          const cleanerAmount = parseFloat((price * 0.85).toFixed(2));
+
+          transaction.update(customerRef, { balance: increment(-price) });
+          transaction.update(cleanerRef, {
+            balance: increment(cleanerAmount),
+            jobsCompleted: increment(1),
+          });
+
+          const txCustomer = doc(collection(db, 'transactions'));
+          transaction.set(txCustomer, {
+            userId: user.uid,
+            type: 'DEBIT',
+            amount: price,
+            description: `Payment for ${job.serviceType}`,
+            jobId,
+            status: 'COMPLETED',
+            createdAt: serverTimestamp(),
+          });
+
+          const txCleaner = doc(collection(db, 'transactions'));
+          transaction.set(txCleaner, {
+            userId: job.cleanerId,
+            type: 'CREDIT',
+            amount: cleanerAmount,
+            description: `Earnings from ${job.serviceType}`,
+            jobId,
+            status: 'COMPLETED',
+            createdAt: serverTimestamp(),
+          });
+
+          transaction.update(doc(db, 'jobs', jobId!), {
+            paidAt: serverTimestamp(),
+            paymentMethod: 'WALLET',
+          });
+        });
+
+        setStep('RATING');
+      } else if (selectedPayment === 'CARD') {
+        if (IS_DEV) {
+          await new Promise((r) => setTimeout(r, 1200));
+          await updateDoc(doc(db, 'jobs', jobId!), {
+            paidAt: serverTimestamp(),
+            paymentMethod: 'CARD',
+          });
+          setStep('RATING');
+        } else {
+          const { getFunctions, httpsCallable } = await import('firebase/functions');
+          const { getApp } = await import('firebase/app');
+          const functions = getFunctions(getApp());
+          const createPayment = httpsCallable<
+            { amount: number; currency: string; userId: string },
+            { redirectUrl: string; referenceNumber: string }
+          >(functions, 'createPesePayPayment');
+          const { data } = await createPayment({ amount: price, currency: 'USD', userId: user.uid });
+          const { openBrowserAsync } = await import('expo-web-browser');
+          await openBrowserAsync(data.redirectUrl);
+          await updateDoc(doc(db, 'jobs', jobId!), {
+            paidAt: serverTimestamp(),
+            paymentMethod: 'CARD',
+          });
+          setStep('RATING');
+        }
+      } else {
+        // Cash — mark paid, no balance changes
+        await updateDoc(doc(db, 'jobs', jobId!), {
+          paidAt: serverTimestamp(),
+          paymentMethod: 'CASH',
+        });
+        setStep('RATING');
+      }
+    } catch (err: any) {
+      Alert.alert('Payment Failed', err.message || 'Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleRating = async () => {
@@ -107,15 +280,42 @@ export default function TrackingScreen() {
       Alert.alert('Rate your cleaner', 'Please select a star rating before submitting.');
       return;
     }
+    if (!job?.cleanerId || !user) return;
     setIsSubmitting(true);
     try {
-      await updateDoc(doc(db, 'jobs', jobId!), {
-        rating,
-        ratedAt: serverTimestamp(),
+      const cleanerRef = doc(db, 'users', job.cleanerId);
+      const reviewRef = doc(collection(db, 'reviews'));
+
+      await runTransaction(db, async (transaction) => {
+        const cleanerSnap = await transaction.get(cleanerRef);
+        const currentAvg = cleanerSnap.data()?.ratingAverage ?? 0;
+        const currentCount = cleanerSnap.data()?.ratingCount ?? 0;
+        const newCount = currentCount + 1;
+        const newAvg = parseFloat(((currentAvg * currentCount + rating) / newCount).toFixed(2));
+
+        transaction.set(reviewRef, {
+          jobId,
+          cleanerId: job.cleanerId,
+          customerId: user.uid,
+          customerName: profile?.displayName ?? 'Customer',
+          rating,
+          createdAt: serverTimestamp(),
+        });
+
+        transaction.update(cleanerRef, {
+          ratingAverage: newAvg,
+          ratingCount: newCount,
+        });
+
+        transaction.update(doc(db, 'jobs', jobId!), {
+          rating,
+          ratedAt: serverTimestamp(),
+        });
       });
+
       setStep('SUCCESS');
     } catch {
-      Alert.alert('Error', 'Failed to submit rating.');
+      Alert.alert('Error', 'Failed to submit rating. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -150,7 +350,7 @@ export default function TrackingScreen() {
           Thanks for using Detail. We hope your space is sparkling clean.
         </Text>
         <TouchableOpacity
-          onPress={() => router.replace('/(app)')}
+          onPress={() => router.replace('/home')}
           className="w-full bg-accent py-5 rounded-[32px] items-center shadow-lg shadow-accent/30"
           activeOpacity={0.85}
         >
@@ -172,7 +372,6 @@ export default function TrackingScreen() {
             How was {job.cleanerName ?? 'your cleaner'}?
           </Text>
 
-          {/* Star selector */}
           <View className="items-center mb-10">
             <View className="flex-row gap-4">
               {[1, 2, 3, 4, 5].map((star) => (
@@ -221,12 +420,12 @@ export default function TrackingScreen() {
     );
   }
 
-  // PAYMENT screen
+  // PAYMENT screen (customers only)
   if (step === 'PAYMENT') {
     const PAYMENT_OPTIONS = [
-      { id: 'CARD', label: 'Card', emoji: '💳' },
-      { id: 'CASH', label: 'Cash', emoji: '💵' },
-      { id: 'WALLET', label: 'Wallet', emoji: '👛' },
+      { id: 'WALLET', label: 'Detail Wallet', emoji: '👛', sub: `Balance: $${profile?.balance?.toFixed(2) ?? '0.00'}` },
+      { id: 'CARD', label: 'Card via PesePay', emoji: '💳', sub: 'EcoCash, Visa, Mastercard' },
+      { id: 'CASH', label: 'Cash', emoji: '💵', sub: 'Pay cleaner directly' },
     ] as const;
 
     return (
@@ -234,14 +433,14 @@ export default function TrackingScreen() {
         <View className="flex-1 px-6 pt-12 pb-10">
           <Text className="text-3xl font-black text-slate-900 mb-2">Complete Payment</Text>
           <Text className="text-base text-slate-500 font-medium mb-8">
-            Total: <Text className="font-black text-slate-900">${job.price ?? '—'}</Text>
+            Total: <Text className="font-black text-slate-900">${job.price?.toFixed(2) ?? '—'}</Text>
           </Text>
 
           <Text className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">
             Payment Method
           </Text>
           <View className="gap-3 mb-8">
-            {PAYMENT_OPTIONS.map(({ id, label, emoji }) => (
+            {PAYMENT_OPTIONS.map(({ id, label, emoji, sub }) => (
               <TouchableOpacity
                 key={id}
                 onPress={() => setSelectedPayment(id)}
@@ -253,13 +452,16 @@ export default function TrackingScreen() {
                 }`}
               >
                 <Text className="text-3xl">{emoji}</Text>
-                <Text
-                  className={`text-sm font-black ${
-                    selectedPayment === id ? 'text-accent' : 'text-slate-900'
-                  }`}
-                >
-                  {label}
-                </Text>
+                <View className="flex-1">
+                  <Text
+                    className={`text-sm font-black ${
+                      selectedPayment === id ? 'text-accent' : 'text-slate-900'
+                    }`}
+                  >
+                    {label}
+                  </Text>
+                  <Text className="text-xs text-slate-400 font-medium mt-0.5">{sub}</Text>
+                </View>
               </TouchableOpacity>
             ))}
           </View>
@@ -274,7 +476,9 @@ export default function TrackingScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <Text className="text-white font-black text-sm uppercase tracking-widest">
-                Pay ${job.price ?? '—'} via {selectedPayment}
+                {IS_DEV && selectedPayment !== 'WALLET' && selectedPayment !== 'CASH'
+                  ? `[DEV] Pay $${job.price?.toFixed(2) ?? '—'}`
+                  : `Pay $${job.price?.toFixed(2) ?? '—'} via ${selectedPayment}`}
               </Text>
             )}
           </TouchableOpacity>
@@ -303,6 +507,18 @@ export default function TrackingScreen() {
               <MapPin size={20} color="#fff" />
             </View>
           </Marker>
+
+          {/* Real-time cleaner location marker (visible to customer) */}
+          {isCustomer && job.cleanerLocation && (
+            <Marker
+              coordinate={{ latitude: job.cleanerLocation.lat, longitude: job.cleanerLocation.lng }}
+              title={job.cleanerName ?? 'Your Cleaner'}
+            >
+              <View className="w-10 h-10 bg-emerald-500 rounded-2xl items-center justify-center shadow-lg">
+                <Navigation size={20} color="#fff" />
+              </View>
+            </Marker>
+          )}
         </MapView>
       ) : (
         <View className="flex-1 bg-slate-100 items-center justify-center">
@@ -343,7 +559,7 @@ export default function TrackingScreen() {
       >
         <View className="w-12 h-1.5 bg-slate-100 rounded-full mx-auto mb-6" />
 
-        {/* Cleaner info */}
+        {/* Cleaner / Customer info card */}
         <View className="flex-row items-center gap-5 bg-slate-50 rounded-3xl p-5 mb-6 border border-slate-100">
           <View className="relative">
             <View className="w-16 h-16 bg-accent/10 rounded-[24px] items-center justify-center">
@@ -355,12 +571,20 @@ export default function TrackingScreen() {
           </View>
           <View className="flex-1">
             <Text className="text-lg font-black text-slate-900 tracking-tight">
-              {job.cleanerName ?? 'Your Cleaner'}
+              {isCustomer ? job.cleanerName ?? 'Your Cleaner' : job.customerName ?? 'Customer'}
             </Text>
-            <View className="flex-row items-center gap-1 mt-0.5">
-              <Star size={12} color="#f59e0b" fill="#f59e0b" />
-              <Text className="text-xs font-black text-slate-700">4.95 Excellent</Text>
-            </View>
+            {isCustomer && (
+              <View className="flex-row items-center gap-1 mt-0.5">
+                <Star size={12} color="#f59e0b" fill="#f59e0b" />
+                <Text className="text-xs font-black text-slate-700">
+                  {job.cleanerRating != null
+                    ? `${job.cleanerRating.toFixed(1)} Rating`
+                    : IS_DEV
+                    ? '4.95 Excellent'
+                    : 'New Cleaner'}
+                </Text>
+              </View>
+            )}
           </View>
           <TouchableOpacity
             onPress={() => router.push({ pathname: '/messages', params: { jobId } })}
@@ -370,14 +594,32 @@ export default function TrackingScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Cleaner: status update button */}
+        {isCleaner && CLEANER_NEXT_STATUS[job.status] && (
+          <TouchableOpacity
+            onPress={handleCleanerStatusUpdate}
+            disabled={isSubmitting}
+            activeOpacity={0.85}
+            className="bg-accent py-4 rounded-2xl items-center shadow-md shadow-accent/30 mb-4"
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text className="text-white font-black text-sm uppercase tracking-widest">
+                {CLEANER_NEXT_STATUS[job.status]!.label}
+              </Text>
+            )}
+          </TouchableOpacity>
+        )}
+
         {/* Action buttons */}
-        <View className="flex-row gap-4 mb-2">
+        <View className="flex-row gap-4">
           {[
             {
               id: 'message',
               label: 'Message',
               icon: MessageSquare,
-              color: 'text-indigo-500',
+              color: '#6366f1',
               bg: 'bg-indigo-50',
               action: () => router.push({ pathname: '/messages', params: { jobId } }),
             },
@@ -385,7 +627,7 @@ export default function TrackingScreen() {
               id: 'call',
               label: 'Call',
               icon: Phone,
-              color: 'text-emerald-500',
+              color: '#10b981',
               bg: 'bg-emerald-50',
               action: () => Alert.alert('Calling', 'VoIP calling coming soon'),
             },
@@ -393,7 +635,7 @@ export default function TrackingScreen() {
               id: 'cancel',
               label: 'Abort',
               icon: ShieldAlert,
-              color: 'text-red-500',
+              color: '#ef4444',
               bg: 'bg-red-50',
               action: handleCancelJob,
             },
@@ -405,7 +647,7 @@ export default function TrackingScreen() {
               activeOpacity={0.7}
             >
               <View className={`w-14 h-14 ${bg} rounded-[24px] items-center justify-center`}>
-                <Icon size={20} className={color} color={undefined} />
+                <Icon size={20} color={color} />
               </View>
               <Text className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
                 {label}

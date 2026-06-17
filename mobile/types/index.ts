@@ -49,6 +49,7 @@ export interface UserProfile {
   location?: { lat: number; lng: number };
   verificationLevel?: VerificationLevel;
   ratingAverage?: number;
+  ratingCount?: number;
   responseTimeAverage?: number;
 }
 
@@ -60,6 +61,7 @@ export interface Job {
   cleanerId?: string;
   cleanerName?: string;
   cleanerPhoto?: string;
+  cleanerRating?: number;
   serviceType: string;
   description: string;
   location: { lat: number; lng: number; address: string };
@@ -70,6 +72,11 @@ export interface Job {
   photos: string[];
   createdAt?: any;
   estimatedDuration?: number;
+  cleanerLocation?: { lat: number; lng: number };
+  paidAt?: any;
+  paymentMethod?: string;
+  rating?: number;
+  ratedAt?: any;
 }
 
 export interface Bid {
