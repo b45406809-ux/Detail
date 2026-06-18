@@ -176,6 +176,94 @@ export const submitRating = onCall(async (request) => {
   return { success: true };
 });
 
+/* ───────────────────────── acceptBid ───────────────────────── */
+/**
+ * Called by the customer to accept a cleaner's bid.
+ * Input:  { jobId: string, bidId: string }
+ * Output: { success: true }
+ *
+ * The server sets the job price authoritatively from the bid, so the customer
+ * cannot tamper with the agreed amount. Verifies ownership and that the job is
+ * still open for bidding.
+ */
+export const acceptBid = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
+
+  const { jobId, bidId } = (request.data ?? {}) as { jobId?: string; bidId?: string };
+  if (!jobId || !bidId) {
+    throw new HttpsError('invalid-argument', 'jobId and bidId are required.');
+  }
+
+  const jobRef = db.collection('jobs').doc(jobId);
+  const bidRef = db.collection('bids').doc(bidId);
+
+  await db.runTransaction(async (tx) => {
+    const [jobSnap, bidSnap] = await Promise.all([tx.get(jobRef), tx.get(bidRef)]);
+    if (!jobSnap.exists) throw new HttpsError('not-found', 'Job not found.');
+    if (!bidSnap.exists) throw new HttpsError('not-found', 'Bid not found.');
+
+    const job = jobSnap.data() as FirebaseFirestore.DocumentData;
+    const bid = bidSnap.data() as FirebaseFirestore.DocumentData;
+
+    if (job.customerId !== uid) {
+      throw new HttpsError('permission-denied', 'Only the job customer can accept a bid.');
+    }
+    if (job.status !== 'BIDDING') {
+      throw new HttpsError('failed-precondition', 'This job is no longer accepting bids.');
+    }
+    if (bid.jobId !== jobId) {
+      throw new HttpsError('invalid-argument', 'That bid does not belong to this job.');
+    }
+
+    tx.update(bidRef, { status: 'ACCEPTED' });
+    tx.update(jobRef, {
+      status: 'ACCEPTED',
+      cleanerId: bid.cleanerId,
+      cleanerName: bid.cleanerName ?? null,
+      cleanerPhoto: bid.cleanerPhoto ?? null,
+      cleanerRating: bid.cleanerRating ?? null,
+      price: Number(bid.bidPrice), // authoritative — taken from the bid, not the client
+      acceptedAt: FieldValue.serverTimestamp(),
+    });
+  });
+
+  return { success: true };
+});
+
+/* ───────────────────────── devCreditWallet ───────────────────────── */
+/**
+ * DEV-ONLY wallet top-up used for local testing against the Functions emulator.
+ * Hard-refuses to run anywhere except the emulator, so it is safe even if it
+ * gets deployed by accident. Lets developers exercise the wallet without a live
+ * PesePay account.
+ */
+export const devCreditWallet = onCall(async (request) => {
+  if (process.env.FUNCTIONS_EMULATOR !== 'true') {
+    throw new HttpsError('permission-denied', 'devCreditWallet only runs in the local emulator.');
+  }
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
+
+  const { amount } = (request.data ?? {}) as { amount?: number };
+  if (!amount || amount <= 0) throw new HttpsError('invalid-argument', 'A positive amount is required.');
+
+  await db.runTransaction(async (tx) => {
+    const userRef = db.collection('users').doc(uid);
+    tx.update(userRef, { balance: FieldValue.increment(amount) });
+    tx.set(db.collection('transactions').doc(), {
+      userId: uid,
+      type: 'CREDIT',
+      amount,
+      description: 'Wallet top-up [DEV emulator]',
+      status: 'COMPLETED',
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  });
+
+  return { success: true };
+});
+
 /* ───────────────────────── createPesePayPayment ───────────────────────── */
 /**
  * Starts a PesePay hosted checkout so the user can top up their wallet.

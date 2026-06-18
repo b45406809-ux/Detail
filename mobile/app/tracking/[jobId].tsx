@@ -178,17 +178,9 @@ export default function TrackingScreen() {
     if (!job?.price || !user || !job.cleanerId) return;
     setIsSubmitting(true);
     try {
-      if (IS_DEV) {
-        // Local simulation (Expo Go) — mark the job paid without server settlement.
-        await new Promise((r) => setTimeout(r, 1000));
-        await updateDoc(doc(db, 'jobs', jobId!), {
-          paidAt: serverTimestamp(),
-          paymentMethod: selectedPayment,
-        });
-      } else {
-        // PROD — server settles atomically (debits customer, credits cleaner, ledger).
-        await callFunction('settleJobPayment', { jobId, paymentMethod: selectedPayment });
-      }
+      // Settlement is server-only (debits customer, credits cleaner, writes ledger).
+      // Runs against the deployed function in PROD, or the local emulator in DEV.
+      await callFunction('settleJobPayment', { jobId, paymentMethod: selectedPayment });
       setStep('RATING');
     } catch (err: any) {
       Alert.alert('Payment Failed', err.message || 'Please try again.');
@@ -205,13 +197,8 @@ export default function TrackingScreen() {
     if (!job?.cleanerId || !user) return;
     setIsSubmitting(true);
     try {
-      if (IS_DEV) {
-        // Local simulation — store the rating on the job only.
-        await updateDoc(doc(db, 'jobs', jobId!), { rating, ratedAt: serverTimestamp() });
-      } else {
-        // PROD — server writes the review and recomputes the cleaner's average.
-        await callFunction('submitRating', { jobId, rating });
-      }
+      // Server writes the review and recomputes the cleaner's rating average.
+      await callFunction('submitRating', { jobId, rating });
       setStep('SUCCESS');
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to submit rating. Please try again.');

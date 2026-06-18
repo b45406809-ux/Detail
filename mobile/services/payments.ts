@@ -1,6 +1,7 @@
 import * as WebBrowser from 'expo-web-browser';
 import { IS_DEV } from '../utils/env';
-import { auth, db, doc, addDoc, updateDoc, collection, serverTimestamp, increment } from './firebase';
+import { auth } from './firebase';
+import { callFunction } from './functions';
 
 export interface PaymentResult {
   success: boolean;
@@ -10,89 +11,47 @@ export interface PaymentResult {
 }
 
 /**
- * Adds funds to the current user's wallet via PesePay.
+ * Adds funds to the current user's wallet.
  *
- * DEV:  Simulates a successful payment (1.2 s delay), writes a real Firestore
- *       transaction and increments the user's balance immediately.
+ * No balance is ever written from the client — that would let a tampered build
+ * mint money. The wallet is only ever credited by trusted server code:
  *
- * PROD: Calls the `createPesePayPayment` Firebase Cloud Function which creates
- *       the payment on PesePay's API and returns a hosted checkout URL.
- *       The user completes payment in a browser sheet (EcoCash, card, etc.).
- *       PesePay's webhook fires back to the backend on success, which updates
- *       Firestore — the wallet screen's onSnapshot listener picks this up
- *       automatically with no further polling needed.
+ * DEV:  calls `devCreditWallet`, a Cloud Function that refuses to run anywhere
+ *       except the local Functions emulator. Lets you test the wallet without a
+ *       live PesePay account. (Requires EXPO_PUBLIC_USE_FIREBASE_EMULATOR=true.)
  *
- * ─── Backend contracts (PROD) ────────────────────────────────────────────────
- *
- * Cloud Function: createPesePayPayment
- *   Input:  { amount: number, currency: 'USD', userId: string }
- *   Output: { redirectUrl: string, referenceNumber: string }
- *   Side-effect: writes a PENDING transaction doc to Firestore:
- *     transactions/{id} = { userId, type:'CREDIT', amount, status:'PENDING',
- *                           referenceNumber, description, createdAt }
- *
- * Cloud Function / HTTP endpoint: pesepayWebhook  (PesePay → backend)
- *   PesePay POSTs payment result here after the user pays.
- *   On status === 'PAID': updates transaction.status → 'COMPLETED' and runs
- *     users/{userId}.balance = FieldValue.increment(amount)
- *
- * Cloud Function: checkPesePayPayment  (optional, for status polling)
- *   Input:  { referenceNumber: string }
- *   Output: { status: 'PAID' | 'PENDING' | 'CANCELLED' | 'FAILED' }
- * ─────────────────────────────────────────────────────────────────────────────
+ * PROD: calls `createPesePayPayment`, which starts a PesePay hosted checkout and
+ *       returns a redirect URL. The user pays in a browser sheet (EcoCash, card,
+ *       etc.). PesePay's webhook then credits the wallet server-side; the wallet
+ *       screen's onSnapshot listener reflects the new balance automatically.
  */
 export async function addFundsToWallet(amountUSD: number): Promise<PaymentResult> {
   const user = auth.currentUser;
   if (!user) throw new Error('Not authenticated');
 
   if (IS_DEV) {
-    // DEV: simulate payment success and write real Firestore records
-    await new Promise((r) => setTimeout(r, 1200));
-    const txRef = await addDoc(collection(db, 'transactions'), {
-      userId: user.uid,
-      type: 'CREDIT',
-      amount: amountUSD,
-      description: 'Wallet top-up [DEV simulated]',
-      status: 'COMPLETED',
-      createdAt: serverTimestamp(),
-    });
-    await updateDoc(doc(db, 'users', user.uid), { balance: increment(amountUSD) });
-    return { success: true, transactionId: txRef.id };
+    // Emulator-only credit. Throws clearly if the emulator isn't running.
+    await callFunction('devCreditWallet', { amount: amountUSD });
+    return { success: true, pending: false };
   }
 
-  // PROD: PesePay hosted checkout
-  const { getFunctions, httpsCallable } = await import('firebase/functions');
-  const { getApp } = await import('firebase/app');
-  const functions = getFunctions(getApp());
-
-  // Step 1: Backend creates the PesePay payment and returns the checkout URL
-  const createPayment = httpsCallable<
-    { amount: number; currency: string; userId: string },
+  const data = await callFunction<
+    { amount: number; currency: string },
     { redirectUrl: string; referenceNumber: string }
-  >(functions, 'createPesePayPayment');
+  >('createPesePayPayment', { amount: amountUSD, currency: 'USD' });
 
-  const { data } = await createPayment({
-    amount: amountUSD,
-    currency: 'USD',
-    userId: user.uid,
-  });
-
-  // Step 2: Open PesePay's hosted checkout in a browser sheet
   await WebBrowser.openBrowserAsync(data.redirectUrl, {
     presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET,
   });
 
-  // Step 3: Browser dismissed — PesePay's webhook will have already updated Firestore
-  // if the payment was successful. The wallet screen's onSnapshot listener will
-  // reflect the balance change automatically. We return pending=true so the UI
-  // can show an appropriate "processing" message.
+  // Browser dismissed — PesePay's webhook settles the balance server-side and the
+  // wallet's onSnapshot listener picks it up. Return pending so the UI can say so.
   return { success: true, referenceNumber: data.referenceNumber, pending: true };
 }
 
 /**
- * Returns the payment methods supported on this platform.
- * PesePay handles method selection inside their hosted checkout page, so
- * this list is informational only (shown in the wallet UI).
+ * Payment methods shown in the wallet UI. PesePay handles the actual method
+ * selection on its hosted checkout page, so this list is informational only.
  */
 export function getPesePayMethods(): Array<{ id: string; label: string; sub: string }> {
   return [

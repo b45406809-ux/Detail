@@ -9,6 +9,7 @@ import {
   User as FirebaseUser,
   initializeAuth,
   getReactNativePersistence,
+  connectAuthEmulator,
 } from 'firebase/auth';
 import {
   getFirestore,
@@ -32,6 +33,7 @@ import {
   increment,
   runTransaction,
   writeBatch,
+  connectFirestoreEmulator,
 } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -57,6 +59,18 @@ export const auth = initializeAuth(app, {
 });
 
 export const db = getFirestore(app, firestoreDatabaseId ?? '(default)');
+
+// Point at local emulators for development so the app runs the real server code
+// (Cloud Functions, security rules) instead of any client-side shortcut.
+if (process.env.EXPO_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
+  const host = process.env.EXPO_PUBLIC_EMULATOR_HOST ?? 'localhost';
+  try {
+    connectAuthEmulator(auth, `http://${host}:9099`, { disableWarnings: true });
+    connectFirestoreEmulator(db, host, 8080);
+  } catch {
+    // Already connected (hot reload) — ignore.
+  }
+}
 
 export enum OperationType {
   CREATE = 'create',

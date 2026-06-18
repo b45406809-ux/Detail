@@ -7,78 +7,111 @@ service cloud.firestore {
     }
 
     function isOwner(uid) {
-      return request.auth.uid == uid;
+      return isAuth() && request.auth.uid == uid;
     }
 
-    // Users can read any profile (needed for cleaner name/rating on bid cards),
-    // but may only write their OWN document. All cross-user money/rating writes
-    // (balance, jobsCompleted, ratingAverage, ratingCount) happen server-side in
-    // Cloud Functions via the Admin SDK, which bypasses these rules.
+    // Keys that change when an update touches any of the listed fields.
+    function changed(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ───────────────────────── users ─────────────────────────
+    // Anyone signed in can READ a profile (cleaner name/rating on bid cards).
+    // A user may only write their OWN document, and may NEVER set or change the
+    // money / trust fields — those are owned exclusively by Cloud Functions
+    // (settlement, rating aggregation, admin moderation) via the Admin SDK.
     match /users/{userId} {
       allow read: if isAuth();
-      allow create, update: if isOwner(userId);
+
+      allow create: if isOwner(userId)
+        && request.resource.data.balance == 0
+        && (!('jobsCompleted' in request.resource.data) || request.resource.data.jobsCompleted == 0)
+        && (!('ratingAverage' in request.resource.data) || request.resource.data.ratingAverage == 0)
+        && (!('ratingCount' in request.resource.data) || request.resource.data.ratingCount == 0)
+        && (!('isSuspended' in request.resource.data) || request.resource.data.isSuspended == false)
+        && (!('isBanned' in request.resource.data) || request.resource.data.isBanned == false);
+
+      allow update: if isOwner(userId)
+        && !changed([
+          'balance', 'jobsCompleted', 'ratingAverage', 'ratingCount',
+          'commissionOwed', 'isSuspended', 'isBanned', 'verificationLevel',
+          'uid', 'email'
+        ]);
+
       allow delete: if false;
     }
 
-    // Wallet transactions: users read only their own. The ledger is written by
-    // Cloud Functions (settlement, PesePay). Clients may only create a record for
-    // themselves (the DEV-mode simulated top-up); status is never client-editable.
+    // ───────────────────────── transactions ─────────────────────────
+    // Immutable ledger. Read your own only. ALL writes happen server-side
+    // (settlement, PesePay webhook). Clients can never create or edit a record.
     match /transactions/{txId} {
       allow read: if isAuth() && resource.data.userId == request.auth.uid;
-      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if false; // immutable ledger
+      allow write: if false;
     }
 
-    // Jobs: customer creates, both parties read their own jobs
+    // ───────────────────────── jobs ─────────────────────────
+    // Customer creates; customer + assigned cleaner read and make limited updates
+    // (status transitions, cleaner location). Money / identity fields (price,
+    // customerBid, payment, rating, the party ids) are function-only.
     match /jobs/{jobId} {
-      // Customer who owns the job or assigned cleaner can read
       allow read: if isAuth() && (
         resource.data.customerId == request.auth.uid ||
         resource.data.cleanerId == request.auth.uid ||
-        // Jobs in BIDDING status are visible to all cleaners so they can bid
         resource.data.status == 'BIDDING'
       );
-      // Only the job's customer can create a job
-      allow create: if isAuth() && request.resource.data.customerId == request.auth.uid;
-      // Customer or assigned cleaner can update (status changes, location, etc.)
-      allow update: if isAuth() && (
-        resource.data.customerId == request.auth.uid ||
-        resource.data.cleanerId == request.auth.uid
-      );
+
+      allow create: if isAuth()
+        && request.resource.data.customerId == request.auth.uid
+        && request.resource.data.status == 'BIDDING'
+        && !('cleanerId' in request.resource.data)
+        && !('price' in request.resource.data)
+        && !('paidAt' in request.resource.data);
+
+      allow update: if isAuth()
+        && (
+          resource.data.customerId == request.auth.uid ||
+          resource.data.cleanerId == request.auth.uid
+        )
+        && !changed([
+          'price', 'customerBid', 'paidAt', 'paymentMethod', 'rating', 'ratedAt',
+          'customerId', 'cleanerId', 'cleanerName', 'cleanerPhoto', 'cleanerRating'
+        ]);
+
       allow delete: if false;
     }
 
-    // Bids: cleaners create, customers read bids on their own jobs
+    // ───────────────────────── bids ─────────────────────────
+    // A cleaner creates a bid for themselves. Acceptance / rejection is done by
+    // the acceptBid Cloud Function (which also sets the authoritative price), so
+    // clients can never mutate a bid after creation.
     match /bids/{bidId} {
-      // Customers can read bids on their own jobs; cleaners can read their own bids
       allow read: if isAuth();
-      // Only cleaners can create bids (on BIDDING jobs)
       allow create: if isAuth() && request.resource.data.cleanerId == request.auth.uid;
-      // Only the job customer can update bid status (accept/reject)
-      // Enforced via runTransaction in client; add server-side check here
-      allow update: if isAuth();
-      allow delete: if false;
+      allow update, delete: if false;
     }
 
-    // Messages: any authenticated user can read; sender must own the message on create.
+    // ───────────────────────── messages ─────────────────────────
     match /messages/{msgId} {
       allow read: if isAuth();
       allow create: if isAuth() && request.resource.data.senderId == request.auth.uid;
       allow update, delete: if false;
     }
 
-    // Reviews are written server-side by the submitRating function (so the
-    // cleaner's rating average stays authoritative). Clients read only.
+    // ───────────────────────── reviews ─────────────────────────
+    // Written by the submitRating function so the rating average stays authoritative.
     match /reviews/{reviewId} {
       allow read: if isAuth();
-      allow create, update, delete: if false;
+      allow write: if false;
     }
 
+    // ───────────────────────── agreement logs ─────────────────────────
     match /agreement_logs/{logId} {
-      allow read, write: if isAuth() && resource.data.userId == request.auth.uid;
+      allow read: if isAuth() && resource.data.userId == request.auth.uid;
       allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
     }
 
+    // ───────────────────────── invoices ─────────────────────────
     match /invoices/{invoiceId} {
       allow read: if isAuth() && (
         resource.data.customerId == request.auth.uid ||
