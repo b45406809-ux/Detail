@@ -10,21 +10,29 @@ service cloud.firestore {
       return request.auth.uid == uid;
     }
 
-    // Users can only read/write their own profile.
-    // Exception: other authenticated users can read basic cleaner info (name, rating, photo)
-    // needed for customer-facing bid cards. Write stays self-only.
+    // Users can read any profile (needed for cleaner name/rating on bid cards).
+    // Self can fully update own profile. Other authenticated users may ONLY adjust
+    // wallet/aggregate fields — payment settlement and rating aggregation run
+    // client-side via runTransaction and must touch the counterparty's doc.
+    // Identity fields (email, role, displayName, etc.) stay self-only.
     match /users/{userId} {
       allow read: if isAuth();
-      allow write: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow delete: if false;
+      allow update: if isOwner(userId) || (
+        isAuth() &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['balance', 'jobsCompleted', 'ratingAverage', 'ratingCount', 'updatedAt'])
+      );
     }
 
-    // Wallet transactions: users can only read their own
+    // Wallet transactions: users read only their own. Records are immutable.
+    // Create is allowed for any authenticated user because payment settlement
+    // (runTransaction) writes a CREDIT record for the counterparty (the cleaner).
     match /transactions/{txId} {
       allow read: if isAuth() && resource.data.userId == request.auth.uid;
-      // Writes happen server-side (Cloud Functions) or via runTransaction from the client
-      // for wallet payments — clients need create + update access
-      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
-      allow update: if false; // only Cloud Functions update transaction status
+      allow create: if isAuth();
+      allow update, delete: if false; // immutable ledger; status updates via Cloud Functions
     }
 
     // Jobs: customer creates, both parties read their own jobs
@@ -58,10 +66,10 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Messages: only the two parties on a job can read/write
+    // Messages: any authenticated user can read; sender must own the message on create.
     match /messages/{msgId} {
-      allow read, create: if isAuth() && request.resource.data.senderId == request.auth.uid;
       allow read: if isAuth();
+      allow create: if isAuth() && request.resource.data.senderId == request.auth.uid;
       allow update, delete: if false;
     }
 

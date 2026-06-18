@@ -115,14 +115,18 @@ export default function TrackingScreen() {
           });
         } catch {}
       }
-    ).then((sub) => {
-      if (!mounted) {
-        sub.remove();
-        return;
-      }
-      locationSubRef.current?.remove();
-      locationSubRef.current = sub;
-    });
+    )
+      .then((sub) => {
+        if (!mounted) {
+          sub.remove();
+          return;
+        }
+        locationSubRef.current?.remove();
+        locationSubRef.current = sub;
+      })
+      .catch(() => {
+        // Location permission denied or unavailable — tracking degrades gracefully
+      });
 
     return () => {
       mounted = false;

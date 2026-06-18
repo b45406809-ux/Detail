@@ -20,11 +20,11 @@ import {
   query,
   where,
   onSnapshot,
-  addDoc,
   updateDoc,
   orderBy,
   serverTimestamp,
   writeBatch,
+  increment,
 } from '../../services/firebase';
 import { ChatMessage } from '../../types';
 
@@ -118,8 +118,8 @@ export default function MessagesScreen() {
     batch.update(jobRef, {
       lastMessage: text,
       lastMessageAt: serverTimestamp(),
-      // Increment the OTHER user's unread count, reset our own
-      [otherUnreadField]: (conversations.find((c) => c.jobId === activeJobId)?.unreadCount ?? 0) + 1,
+      // Atomically increment the OTHER user's unread count, reset our own
+      [otherUnreadField]: increment(1),
       [unreadField]: 0,
     });
 
