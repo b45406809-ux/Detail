@@ -28,14 +28,11 @@ import { useAuth } from '../../../context/AuthContext';
 import {
   db,
   doc,
-  collection,
   onSnapshot,
   updateDoc,
   serverTimestamp,
-  runTransaction,
-  increment,
-  addDoc,
 } from '../../../services/firebase';
+import { callFunction } from '../../../services/functions';
 import { Job, JobStatus } from '../../../types';
 import { IS_DEV } from '../../../utils/env';
 
@@ -62,7 +59,7 @@ export default function TrackingScreen() {
   const [job, setJob] = useState<Job | null>(null);
   const [step, setStep] = useState<TrackingStep>('TRACKING');
   const [rating, setRating] = useState(0);
-  const [selectedPayment, setSelectedPayment] = useState<'CARD' | 'CASH' | 'WALLET'>('WALLET');
+  const [selectedPayment, setSelectedPayment] = useState<'WALLET' | 'CASH'>('WALLET');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
   const slideAnim = useRef(new Animated.Value(300)).current;
@@ -179,99 +176,20 @@ export default function TrackingScreen() {
 
   const handlePayment = async () => {
     if (!job?.price || !user || !job.cleanerId) return;
-    const price = job.price;
     setIsSubmitting(true);
-
     try {
-      if (selectedPayment === 'WALLET') {
-        await runTransaction(db, async (transaction) => {
-          const customerRef = doc(db, 'users', user.uid);
-          const cleanerRef = doc(db, 'users', job.cleanerId!);
-          const customerSnap = await transaction.get(customerRef);
-          const cleanerSnap = await transaction.get(cleanerRef);
-
-          if (!customerSnap.exists() || !cleanerSnap.exists()) {
-            throw new Error('Account data not found');
-          }
-
-          const balance = customerSnap.data().balance ?? 0;
-          if (balance < price) {
-            throw new Error(
-              `Insufficient balance. You have $${balance.toFixed(2)} but need $${price.toFixed(2)}.`
-            );
-          }
-
-          // 85% to cleaner, platform keeps 15%
-          const cleanerAmount = parseFloat((price * 0.85).toFixed(2));
-
-          transaction.update(customerRef, { balance: increment(-price) });
-          transaction.update(cleanerRef, {
-            balance: increment(cleanerAmount),
-            jobsCompleted: increment(1),
-          });
-
-          const txCustomer = doc(collection(db, 'transactions'));
-          transaction.set(txCustomer, {
-            userId: user.uid,
-            type: 'DEBIT',
-            amount: price,
-            description: `Payment for ${job.serviceType}`,
-            jobId,
-            status: 'COMPLETED',
-            createdAt: serverTimestamp(),
-          });
-
-          const txCleaner = doc(collection(db, 'transactions'));
-          transaction.set(txCleaner, {
-            userId: job.cleanerId,
-            type: 'CREDIT',
-            amount: cleanerAmount,
-            description: `Earnings from ${job.serviceType}`,
-            jobId,
-            status: 'COMPLETED',
-            createdAt: serverTimestamp(),
-          });
-
-          transaction.update(doc(db, 'jobs', jobId!), {
-            paidAt: serverTimestamp(),
-            paymentMethod: 'WALLET',
-          });
-        });
-
-        setStep('RATING');
-      } else if (selectedPayment === 'CARD') {
-        if (IS_DEV) {
-          await new Promise((r) => setTimeout(r, 1200));
-          await updateDoc(doc(db, 'jobs', jobId!), {
-            paidAt: serverTimestamp(),
-            paymentMethod: 'CARD',
-          });
-          setStep('RATING');
-        } else {
-          const { getFunctions, httpsCallable } = await import('firebase/functions');
-          const { getApp } = await import('firebase/app');
-          const functions = getFunctions(getApp());
-          const createPayment = httpsCallable<
-            { amount: number; currency: string; userId: string },
-            { redirectUrl: string; referenceNumber: string }
-          >(functions, 'createPesePayPayment');
-          const { data } = await createPayment({ amount: price, currency: 'USD', userId: user.uid });
-          const { openBrowserAsync } = await import('expo-web-browser');
-          await openBrowserAsync(data.redirectUrl);
-          await updateDoc(doc(db, 'jobs', jobId!), {
-            paidAt: serverTimestamp(),
-            paymentMethod: 'CARD',
-          });
-          setStep('RATING');
-        }
-      } else {
-        // Cash — mark paid, no balance changes
+      if (IS_DEV) {
+        // Local simulation (Expo Go) — mark the job paid without server settlement.
+        await new Promise((r) => setTimeout(r, 1000));
         await updateDoc(doc(db, 'jobs', jobId!), {
           paidAt: serverTimestamp(),
-          paymentMethod: 'CASH',
+          paymentMethod: selectedPayment,
         });
-        setStep('RATING');
+      } else {
+        // PROD — server settles atomically (debits customer, credits cleaner, ledger).
+        await callFunction('settleJobPayment', { jobId, paymentMethod: selectedPayment });
       }
+      setStep('RATING');
     } catch (err: any) {
       Alert.alert('Payment Failed', err.message || 'Please try again.');
     } finally {
@@ -287,39 +205,16 @@ export default function TrackingScreen() {
     if (!job?.cleanerId || !user) return;
     setIsSubmitting(true);
     try {
-      const cleanerRef = doc(db, 'users', job.cleanerId);
-      const reviewRef = doc(collection(db, 'reviews'));
-
-      await runTransaction(db, async (transaction) => {
-        const cleanerSnap = await transaction.get(cleanerRef);
-        const currentAvg = cleanerSnap.data()?.ratingAverage ?? 0;
-        const currentCount = cleanerSnap.data()?.ratingCount ?? 0;
-        const newCount = currentCount + 1;
-        const newAvg = parseFloat(((currentAvg * currentCount + rating) / newCount).toFixed(2));
-
-        transaction.set(reviewRef, {
-          jobId,
-          cleanerId: job.cleanerId,
-          customerId: user.uid,
-          customerName: profile?.displayName ?? 'Customer',
-          rating,
-          createdAt: serverTimestamp(),
-        });
-
-        transaction.update(cleanerRef, {
-          ratingAverage: newAvg,
-          ratingCount: newCount,
-        });
-
-        transaction.update(doc(db, 'jobs', jobId!), {
-          rating,
-          ratedAt: serverTimestamp(),
-        });
-      });
-
+      if (IS_DEV) {
+        // Local simulation — store the rating on the job only.
+        await updateDoc(doc(db, 'jobs', jobId!), { rating, ratedAt: serverTimestamp() });
+      } else {
+        // PROD — server writes the review and recomputes the cleaner's average.
+        await callFunction('submitRating', { jobId, rating });
+      }
       setStep('SUCCESS');
-    } catch {
-      Alert.alert('Error', 'Failed to submit rating. Please try again.');
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to submit rating. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -427,8 +322,12 @@ export default function TrackingScreen() {
   // PAYMENT screen (customers only)
   if (step === 'PAYMENT') {
     const PAYMENT_OPTIONS = [
-      { id: 'WALLET', label: 'Detail Wallet', emoji: '👛', sub: `Balance: $${profile?.balance?.toFixed(2) ?? '0.00'}` },
-      { id: 'CARD', label: 'Card via PesePay', emoji: '💳', sub: 'EcoCash, Visa, Mastercard' },
+      {
+        id: 'WALLET',
+        label: 'Detail Wallet',
+        emoji: '👛',
+        sub: `Balance: $${profile?.balance?.toFixed(2) ?? '0.00'} · top up with card in Wallet`,
+      },
       { id: 'CASH', label: 'Cash', emoji: '💵', sub: 'Pay cleaner directly' },
     ] as const;
 
@@ -480,9 +379,7 @@ export default function TrackingScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <Text className="text-white font-black text-sm uppercase tracking-widest">
-                {IS_DEV && selectedPayment !== 'WALLET' && selectedPayment !== 'CASH'
-                  ? `[DEV] Pay $${job.price?.toFixed(2) ?? '—'}`
-                  : `Pay $${job.price?.toFixed(2) ?? '—'} via ${selectedPayment}`}
+                {IS_DEV ? '[DEV] ' : ''}Pay ${job.price?.toFixed(2) ?? '—'} via {selectedPayment}
               </Text>
             )}
           </TouchableOpacity>

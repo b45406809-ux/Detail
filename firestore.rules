@@ -10,29 +10,23 @@ service cloud.firestore {
       return request.auth.uid == uid;
     }
 
-    // Users can read any profile (needed for cleaner name/rating on bid cards).
-    // Self can fully update own profile. Other authenticated users may ONLY adjust
-    // wallet/aggregate fields — payment settlement and rating aggregation run
-    // client-side via runTransaction and must touch the counterparty's doc.
-    // Identity fields (email, role, displayName, etc.) stay self-only.
+    // Users can read any profile (needed for cleaner name/rating on bid cards),
+    // but may only write their OWN document. All cross-user money/rating writes
+    // (balance, jobsCompleted, ratingAverage, ratingCount) happen server-side in
+    // Cloud Functions via the Admin SDK, which bypasses these rules.
     match /users/{userId} {
       allow read: if isAuth();
-      allow create: if isOwner(userId);
+      allow create, update: if isOwner(userId);
       allow delete: if false;
-      allow update: if isOwner(userId) || (
-        isAuth() &&
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['balance', 'jobsCompleted', 'ratingAverage', 'ratingCount', 'updatedAt'])
-      );
     }
 
-    // Wallet transactions: users read only their own. Records are immutable.
-    // Create is allowed for any authenticated user because payment settlement
-    // (runTransaction) writes a CREDIT record for the counterparty (the cleaner).
+    // Wallet transactions: users read only their own. The ledger is written by
+    // Cloud Functions (settlement, PesePay). Clients may only create a record for
+    // themselves (the DEV-mode simulated top-up); status is never client-editable.
     match /transactions/{txId} {
       allow read: if isAuth() && resource.data.userId == request.auth.uid;
-      allow create: if isAuth();
-      allow update, delete: if false; // immutable ledger; status updates via Cloud Functions
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false; // immutable ledger
     }
 
     // Jobs: customer creates, both parties read their own jobs
@@ -73,11 +67,11 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // Reviews: only the customer who authored the review can create it
+    // Reviews are written server-side by the submitRating function (so the
+    // cleaner's rating average stays authoritative). Clients read only.
     match /reviews/{reviewId} {
       allow read: if isAuth();
-      allow create: if isAuth() && request.resource.data.customerId == request.auth.uid;
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     match /agreement_logs/{logId} {
