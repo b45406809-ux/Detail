@@ -47,6 +47,7 @@
     "plugins": [
       "expo-router",
       "expo-blur",
+      "expo-video",
       [
         "expo-image-picker",
         {
