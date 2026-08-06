@@ -17,6 +17,7 @@
  */
 
 import { onCall, onRequest, HttpsError } from 'firebase-functions/v2/https';
+import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions';
 import * as admin from 'firebase-admin';
@@ -32,6 +33,45 @@ const PESEPAY_INTEGRATION_KEY = defineSecret('PESEPAY_INTEGRATION_KEY');
 const PESEPAY_ENCRYPTION_KEY = defineSecret('PESEPAY_ENCRYPTION_KEY');
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/* ───────────────────────── notification helper ───────────────────────── */
+/**
+ * Writes an in-app notification doc and, if the recipient has registered an
+ * Expo push token, fires a push through Expo's push gateway. Best-effort:
+ * push failures are logged but never throw, so a bad/expired token can't
+ * break the write that triggered it.
+ */
+async function notifyUser(
+  userId: string,
+  notification: { type: string; title: string; body: string; jobId?: string }
+) {
+  await db.collection('notifications').add({
+    userId,
+    ...notification,
+    read: false,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+
+  try {
+    const userSnap = await db.collection('users').doc(userId).get();
+    const token = userSnap.data()?.expoPushToken;
+    if (!token || typeof token !== 'string' || !token.startsWith('ExponentPushToken')) return;
+
+    await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        to: token,
+        title: notification.title,
+        body: notification.body,
+        data: { jobId: notification.jobId ?? null, type: notification.type },
+        sound: 'default',
+      }),
+    });
+  } catch (err) {
+    logger.warn('Expo push send failed', err);
+  }
+}
 
 /* ───────────────────────── settleJobPayment ───────────────────────── */
 /**
@@ -197,9 +237,20 @@ export const acceptBid = onCall(async (request) => {
 
   const jobRef = db.collection('jobs').doc(jobId);
   const bidRef = db.collection('bids').doc(bidId);
+  const otherBidsQuery = db
+    .collection('bids')
+    .where('jobId', '==', jobId)
+    .where('status', 'in', ['PENDING', 'COUNTERED']);
+
+  let acceptedCleanerId: string | null = null;
+  let rejectedCleanerIds: string[] = [];
 
   await db.runTransaction(async (tx) => {
-    const [jobSnap, bidSnap] = await Promise.all([tx.get(jobRef), tx.get(bidRef)]);
+    const [jobSnap, bidSnap, otherBidsSnap] = await Promise.all([
+      tx.get(jobRef),
+      tx.get(bidRef),
+      tx.get(otherBidsQuery),
+    ]);
     if (!jobSnap.exists) throw new HttpsError('not-found', 'Job not found.');
     if (!bidSnap.exists) throw new HttpsError('not-found', 'Bid not found.');
 
@@ -226,7 +277,114 @@ export const acceptBid = onCall(async (request) => {
       price: Number(bid.bidPrice), // authoritative — taken from the bid, not the client
       acceptedAt: FieldValue.serverTimestamp(),
     });
+
+    acceptedCleanerId = bid.cleanerId;
+    // Auto-decline every other outstanding bid on this job now that one is accepted.
+    // Rebuilt fresh (not pushed-to) each attempt so a transaction retry can't
+    // accumulate duplicate ids from a prior, aborted attempt.
+    rejectedCleanerIds = otherBidsSnap.docs
+      .filter((d) => d.id !== bidId)
+      .map((d) => {
+        tx.update(d.ref, { status: 'REJECTED' });
+        return d.data().cleanerId as string;
+      });
   });
+
+  // Notifications are best-effort and happen after the transaction commits.
+  if (acceptedCleanerId) {
+    await notifyUser(acceptedCleanerId, {
+      type: 'BID_ACCEPTED',
+      title: 'Quote accepted! 🎉',
+      body: 'The customer accepted your quote. Head to the job for details.',
+      jobId,
+    });
+  }
+  await Promise.all(
+    rejectedCleanerIds.map((cleanerId) =>
+      notifyUser(cleanerId, {
+        type: 'JOB_UPDATE',
+        title: 'Job filled',
+        body: 'The customer went with another cleaner for this job.',
+        jobId,
+      })
+    )
+  );
+
+  return { success: true };
+});
+
+/* ───────────────────────── counterOffer ───────────────────────── */
+/**
+ * Negotiates a bid price. Either the job's customer or the bid's cleaner may
+ * call this to propose a new price; it's appended to the bid's offer history
+ * and the bid's headline price/status update so both sides see the latest
+ * ask. Kept server-side (like acceptBid) so the price history can't be
+ * tampered with from the client.
+ * Input:  { jobId: string, bidId: string, price: number, message?: string }
+ */
+export const counterOffer = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
+
+  const { jobId, bidId, price, message } = (request.data ?? {}) as {
+    jobId?: string;
+    bidId?: string;
+    price?: number;
+    message?: string;
+  };
+  if (!jobId || !bidId || !price || price <= 0) {
+    throw new HttpsError('invalid-argument', 'jobId, bidId, and a positive price are required.');
+  }
+
+  const jobRef = db.collection('jobs').doc(jobId);
+  const bidRef = db.collection('bids').doc(bidId);
+
+  let notifyTargetId: string | null = null;
+
+  await db.runTransaction(async (tx) => {
+    const [jobSnap, bidSnap] = await Promise.all([tx.get(jobRef), tx.get(bidRef)]);
+    if (!jobSnap.exists) throw new HttpsError('not-found', 'Job not found.');
+    if (!bidSnap.exists) throw new HttpsError('not-found', 'Bid not found.');
+
+    const job = jobSnap.data() as FirebaseFirestore.DocumentData;
+    const bid = bidSnap.data() as FirebaseFirestore.DocumentData;
+    if (bid.jobId !== jobId) {
+      throw new HttpsError('invalid-argument', 'That bid does not belong to this job.');
+    }
+    if (bid.status === 'ACCEPTED' || bid.status === 'REJECTED') {
+      throw new HttpsError('failed-precondition', 'This offer is no longer open for negotiation.');
+    }
+
+    const isCustomer = job.customerId === uid;
+    const isCleaner = bid.cleanerId === uid;
+    if (!isCustomer && !isCleaner) {
+      throw new HttpsError('permission-denied', 'Only the job customer or the bidding cleaner can negotiate.');
+    }
+
+    const entry = {
+      by: isCustomer ? 'CUSTOMER' : 'CLEANER',
+      price: round2(price),
+      message: message ?? null,
+      createdAt: FieldValue.serverTimestamp(),
+    };
+
+    tx.update(bidRef, {
+      bidPrice: round2(price),
+      status: 'COUNTERED',
+      history: FieldValue.arrayUnion(entry),
+    });
+
+    notifyTargetId = isCustomer ? bid.cleanerId : job.customerId;
+  });
+
+  if (notifyTargetId) {
+    await notifyUser(notifyTargetId, {
+      type: 'JOB_UPDATE',
+      title: 'New counter-offer',
+      body: `A new price of $${round2(price).toFixed(2)} was proposed.`,
+      jobId,
+    });
+  }
 
   return { success: true };
 });
@@ -381,3 +539,87 @@ export const pesepayWebhook = onRequest(
     }
   }
 );
+
+/* ───────────────────────── notification triggers ───────────────────────── */
+/**
+ * These three triggers are what actually populate the /notifications
+ * collection and fire push notifications — everything above only writes the
+ * jobs/bids/messages documents the app already needed. Because they run on
+ * the Admin SDK, they can write into a collection the client is forbidden
+ * from writing to directly (see firestore.rules).
+ */
+
+// New quote submitted → tell the customer.
+export const onBidCreated = onDocumentCreated('bids/{bidId}', async (event) => {
+  const bid = event.data?.data();
+  if (!bid) return;
+
+  const jobSnap = await db.collection('jobs').doc(bid.jobId).get();
+  const job = jobSnap.data();
+  if (!job) return;
+
+  await notifyUser(job.customerId, {
+    type: 'NEW_BID',
+    title: 'New quote received',
+    body: `${bid.cleanerName ?? 'A cleaner'} quoted $${Number(bid.bidPrice).toFixed(2)} for your job.`,
+    jobId: bid.jobId,
+  });
+});
+
+// Job status changed (en route, arrived, in progress, completed, cancelled) →
+// tell whichever party didn't make the change.
+const NOTIFIABLE_STATUS: Record<string, string> = {
+  EN_ROUTE: 'Your cleaner is on the way',
+  ARRIVED: 'Your cleaner has arrived',
+  IN_PROGRESS: 'Cleaning has started',
+  COMPLETED: 'Job marked complete',
+  CANCELLED: 'Job was cancelled',
+};
+
+export const onJobUpdated = onDocumentUpdated('jobs/{jobId}', async (event) => {
+  const before = event.data?.before.data();
+  const after = event.data?.after.data();
+  if (!before || !after) return;
+  if (before.status === after.status) return;
+
+  const title = NOTIFIABLE_STATUS[after.status];
+  if (!title) return; // ACCEPTED/BIDDING already handled by acceptBid directly
+
+  // Notify whichever side is not the assumed actor of that transition —
+  // customer for cleaner-driven updates, cleaner for customer-driven ones.
+  const recipients =
+    after.status === 'CANCELLED'
+      ? [after.customerId, after.cleanerId].filter(Boolean)
+      : [after.customerId].filter(Boolean);
+
+  await Promise.all(
+    recipients.map((userId: string) =>
+      notifyUser(userId, {
+        type: 'JOB_UPDATE',
+        title,
+        body: `${after.serviceType ?? 'Your job'} — ${after.location?.address ?? ''}`.trim(),
+        jobId: event.params.jobId,
+      })
+    )
+  );
+});
+
+// New chat message → tell the other participant (not the sender).
+export const onMessageCreated = onDocumentCreated('messages/{messageId}', async (event) => {
+  const message = event.data?.data();
+  if (!message) return;
+
+  const jobSnap = await db.collection('jobs').doc(message.jobId).get();
+  const job = jobSnap.data();
+  if (!job) return;
+
+  const recipientId = message.senderId === job.customerId ? job.cleanerId : job.customerId;
+  if (!recipientId) return;
+
+  await notifyUser(recipientId, {
+    type: 'MESSAGE',
+    title: message.senderName ?? 'New message',
+    body: message.text ? String(message.text).slice(0, 120) : 'Sent a photo',
+    jobId: message.jobId,
+  });
+});

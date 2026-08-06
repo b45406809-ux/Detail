@@ -3,7 +3,7 @@ import { View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft, MapPin, Clock, Star } from 'lucide-react-native';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import {
   db,
   collection,
@@ -12,8 +12,8 @@ import {
   onSnapshot,
   orderBy,
   limit,
-} from '../../services/firebase';
-import { Job, JobStatus } from '../../types';
+} from '../services/firebase';
+import { Job, JobStatus } from '../types';
 
 const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }> = {
   COMPLETED: { label: 'Completed', color: 'text-emerald-700', bg: 'bg-emerald-50' },

@@ -22,8 +22,8 @@ const SUPPORT_EMAIL = IS_DEV ? 'dev-support@detail.app' : 'support@detail.app';
 
 const FAQS = [
   {
-    q: 'How does Detail's bidding system work?',
-    a: 'You post a job with your preferred price, then cleaners in your area place bids. You review each cleaner's profile, rating, and their bid, and accept the one that fits best.',
+    q: "How does Detail's bidding system work?",
+    a: "You post a job with your preferred price, then cleaners in your area place bids. You review each cleaner's profile, rating, and their bid, and accept the one that fits best.",
   },
   {
     q: 'How are cleaners vetted?',
@@ -35,7 +35,7 @@ const FAQS = [
   },
   {
     q: 'How does payment work?',
-    a: 'Payment is processed through your Detail Wallet using Stripe. Top up your wallet before booking. The amount is held and released to the cleaner after you confirm the job is complete.',
+    a: 'Payment is processed through your Detail Wallet or paid in cash. Top up your wallet with PesePay before booking — the amount is held and released to the cleaner after you confirm the job is complete.',
   },
   {
     q: 'How do I become a cleaner on Detail?',

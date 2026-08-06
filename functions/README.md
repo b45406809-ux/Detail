@@ -7,8 +7,19 @@ users, computing rating averages, talking to PesePay with secret keys).
 |---|---|---|
 | `settleJobPayment` | callable | Customer pays a finished job. WALLET = atomic debit/credit + ledger; CASH = mark paid. |
 | `submitRating` | callable | Writes a review and recomputes the cleaner's `ratingAverage` / `ratingCount`. |
+| `acceptBid` | callable | Customer accepts a quote; sets the authoritative price and auto-declines every other outstanding bid on the job. |
+| `counterOffer` | callable | Customer or cleaner proposes a new price on an open bid; appended to the bid's `history`. |
 | `createPesePayPayment` | callable | Starts a PesePay hosted checkout for a wallet top-up; writes a PENDING transaction. |
 | `pesepayWebhook` | HTTP | PesePay calls this on completion; verifies, then credits the wallet (idempotent). |
+| `onBidCreated` | Firestore trigger | New quote → notifies the job's customer (in-app + push). |
+| `onJobUpdated` | Firestore trigger | Job status change (en route / arrived / in progress / completed / cancelled) → notifies the other party. |
+| `onMessageCreated` | Firestore trigger | New chat message → notifies whichever participant didn't send it. |
+
+Notifications are written to `/notifications/{id}` (readable only by the recipient) and,
+when the recipient has an `expoPushToken` on their user doc, also sent as an Expo push
+through `https://exp.host/--/api/v2/push/send`. The mobile app registers its token by
+writing `expoPushToken` on its own `/users/{uid}` doc — no callable required, since it's
+not one of the trust/money fields locked to Cloud Functions in `firestore.rules`.
 
 ## One-time setup
 

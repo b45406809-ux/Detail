@@ -8,10 +8,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Send, MessageSquare } from 'lucide-react-native';
+import { ArrowLeft, Send, MessageSquare, Camera } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
 import {
   db,
@@ -26,7 +28,10 @@ import {
   writeBatch,
   increment,
 } from '../../services/firebase';
+import { uploadChatPhoto } from '../../services/storage';
 import { ChatMessage } from '../../types';
+
+const QUICK_REPLIES = ['On my way!', 'Sounds good', "I'm here", 'Thank you!'];
 
 interface Conversation {
   jobId: string;
@@ -97,10 +102,10 @@ export default function MessagesScreen() {
     });
   }, [activeJobId, user, unreadField]);
 
-  const sendMessage = async () => {
-    if (!inputText.trim() || !activeJobId || !user) return;
-    const text = inputText.trim();
-    setInputText('');
+  const sendMessage = async (override?: string) => {
+    const text = (override ?? inputText).trim();
+    if (!text || !activeJobId || !user) return;
+    if (!override) setInputText('');
 
     // Use a batch to atomically write the message and update the job's lastMessage + increment other party's unread
     const batch = writeBatch(db);
@@ -124,6 +129,43 @@ export default function MessagesScreen() {
     });
 
     await batch.commit().catch(() => {});
+  };
+
+  const [isSendingPhoto, setIsSendingPhoto] = useState(false);
+
+  const sendPhoto = async () => {
+    if (!activeJobId || !user) return;
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) return;
+    const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.6 });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    setIsSendingPhoto(true);
+    try {
+      const imageUrl = await uploadChatPhoto(result.assets[0].uri, activeJobId);
+      const batch = writeBatch(db);
+      const messageRef = doc(collection(db, 'messages'));
+      batch.set(messageRef, {
+        jobId: activeJobId,
+        senderId: user.uid,
+        senderName: profile?.displayName,
+        text: '',
+        imageUrl,
+        createdAt: serverTimestamp(),
+      });
+      const otherUnreadField = isCustomer ? 'cleanerUnread' : 'customerUnread';
+      batch.update(doc(db, 'jobs', activeJobId), {
+        lastMessage: '📷 Photo',
+        lastMessageAt: serverTimestamp(),
+        [otherUnreadField]: increment(1),
+        [unreadField]: 0,
+      });
+      await batch.commit();
+    } catch {
+      // Best-effort — chat stays usable even if a photo upload fails
+    } finally {
+      setIsSendingPhoto(false);
+    }
   };
 
   const openConversation = (jobId: string) => {
@@ -167,24 +209,54 @@ export default function MessagesScreen() {
               const isMe = item.senderId === user?.uid;
               return (
                 <View className={`flex-row ${isMe ? 'justify-end' : 'justify-start'}`}>
-                  <View
-                    className={`max-w-[78%] px-4 py-3 rounded-3xl ${
-                      isMe ? 'bg-accent rounded-tr-sm' : 'bg-slate-100 rounded-tl-sm'
-                    }`}
-                  >
-                    <Text
-                      className={`text-sm font-medium ${isMe ? 'text-white' : 'text-slate-900'}`}
+                  {item.imageUrl ? (
+                    <Image source={{ uri: item.imageUrl }} style={{ width: 180, height: 180, borderRadius: 20 }} />
+                  ) : (
+                    <View
+                      className={`max-w-[78%] px-4 py-3 rounded-3xl ${
+                        isMe ? 'bg-accent rounded-tr-sm' : 'bg-slate-100 rounded-tl-sm'
+                      }`}
                     >
-                      {item.text}
-                    </Text>
-                  </View>
+                      <Text
+                        className={`text-sm font-medium ${isMe ? 'text-white' : 'text-slate-900'}`}
+                      >
+                        {item.text}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               );
             }}
           />
 
+          {/* Quick replies */}
+          <View className="px-4 pb-2">
+            <FlatList
+              data={QUICK_REPLIES}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(r) => r}
+              contentContainerStyle={{ gap: 8 }}
+              renderItem={({ item: reply }) => (
+                <TouchableOpacity
+                  onPress={() => sendMessage(reply)}
+                  className="bg-slate-100 px-4 py-2 rounded-full border border-slate-200"
+                >
+                  <Text className="text-xs font-bold text-slate-600">{reply}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+
           {/* Input */}
           <View className="flex-row items-center gap-3 px-4 py-3 border-t border-slate-100">
+            <TouchableOpacity
+              onPress={sendPhoto}
+              disabled={isSendingPhoto}
+              className="w-11 h-11 rounded-2xl items-center justify-center bg-slate-50 border border-slate-100"
+            >
+              {isSendingPhoto ? <ActivityIndicator size="small" color="#3906D2" /> : <Camera size={18} color="#3906D2" />}
+            </TouchableOpacity>
             <TextInput
               className="flex-1 bg-slate-50 rounded-2xl px-4 py-3 text-sm font-medium text-slate-900 border border-slate-100"
               placeholder="Type a message…"
@@ -193,11 +265,11 @@ export default function MessagesScreen() {
               onChangeText={setInputText}
               multiline
               maxLength={500}
-              onSubmitEditing={sendMessage}
+              onSubmitEditing={() => sendMessage()}
               returnKeyType="send"
             />
             <TouchableOpacity
-              onPress={sendMessage}
+              onPress={() => sendMessage()}
               disabled={!inputText.trim()}
               className={`w-11 h-11 rounded-2xl items-center justify-center ${
                 inputText.trim() ? 'bg-accent' : 'bg-slate-100'

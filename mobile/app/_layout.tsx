@@ -82,6 +82,8 @@ export default function RootLayout() {
           <Stack.Screen name="tracking/[jobId]" options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
           <Stack.Screen name="job/[jobId]" />
           <Stack.Screen name="history" />
+          <Stack.Screen name="favorites" />
+          <Stack.Screen name="notifications" />
           <Stack.Screen name="reviews" />
           <Stack.Screen name="help" />
           <Stack.Screen name="privacy-policy" />

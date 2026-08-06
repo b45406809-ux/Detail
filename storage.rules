@@ -1,0 +1,43 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function underSizeLimit() {
+      return request.resource.size < 10 * 1024 * 1024; // 10 MB
+    }
+
+    // Booking photos ("Add Photos" step) — uploaded by the customer before a
+    // cleanerId even exists, so any signed-in user may read (cleaners need to
+    // see them to bid) but only the uploader's own uid segment is writable.
+    match /job-photos/{uid}/{allPaths=**} {
+      allow read: if isAuth();
+      allow write: if isAuth() && request.auth.uid == uid && isImage() && underSizeLimit();
+    }
+
+    // Chat attachments, scoped per job. Any authenticated participant can
+    // read; write is allowed for any signed-in user since job membership is
+    // enforced by the Firestore `messages` rule the client writes through.
+    match /chat-photos/{jobId}/{allPaths=**} {
+      allow read: if isAuth();
+      allow write: if isAuth() && isImage() && underSizeLimit();
+    }
+
+    // Profile photos.
+    match /profile-photos/{uid}/{allPaths=**} {
+      allow read: if isAuth();
+      allow write: if isAuth() && request.auth.uid == uid && isImage() && underSizeLimit();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

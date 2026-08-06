@@ -9,24 +9,14 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MapPin, Clock, DollarSign, MessageSquare, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, MapPin, Clock, DollarSign, MessageSquare } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
-import {
-  db,
-  doc,
-  collection,
-  onSnapshot,
-  query,
-  where,
-  addDoc,
-  serverTimestamp,
-  getDocs,
-  limit,
-} from '../../services/firebase';
-import { Job, JobStatus } from '../../types';
+import { db, doc, collection, onSnapshot, query, where, addDoc, serverTimestamp, getDocs, limit } from '../../services/firebase';
+import { Job, JobStatus, HouseChecklist, CarChecklist } from '../../types';
 import { IS_DEV } from '../../utils/env';
 import { haversineDistanceKm } from '../../services/matching';
 import * as Location from 'expo-location';
@@ -39,7 +29,6 @@ export default function CleanerJobDetailScreen() {
   const [alreadyBid, setAlreadyBid] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Bid form state
   const [bidPrice, setBidPrice] = useState('');
   const [estimatedArrival, setEstimatedArrival] = useState('');
   const [message, setMessage] = useState('');
@@ -52,7 +41,6 @@ export default function CleanerJobDetailScreen() {
       .catch(() => {});
   }, []);
 
-  // Live job listener
   useEffect(() => {
     if (!jobId) return;
     return onSnapshot(
@@ -65,15 +53,9 @@ export default function CleanerJobDetailScreen() {
     );
   }, [jobId]);
 
-  // Check if cleaner already bid on this job
   useEffect(() => {
     if (!jobId || !user) return;
-    const q = query(
-      collection(db, 'bids'),
-      where('jobId', '==', jobId),
-      where('cleanerId', '==', user.uid),
-      limit(1)
-    );
+    const q = query(collection(db, 'bids'), where('jobId', '==', jobId), where('cleanerId', '==', user.uid), limit(1));
     getDocs(q).then((snap) => setAlreadyBid(!snap.empty));
   }, [jobId, user]);
 
@@ -104,14 +86,16 @@ export default function CleanerJobDetailScreen() {
         cleanerPhoto: profile.photoURL ?? '',
         cleanerRating: profile.ratingAverage ?? null,
         cleanerJobsCompleted: profile.jobsCompleted ?? 0,
+        cleanerEliteVerified: (profile.verificationLevel ?? 0) >= 3,
         bidPrice: price,
         estimatedArrival: eta,
         message: message.trim() || null,
         status: 'PENDING',
+        history: [{ by: 'CLEANER', price, message: message.trim() || null, createdAt: serverTimestamp() }],
         createdAt: serverTimestamp(),
       });
       setAlreadyBid(true);
-      Alert.alert('Bid Placed!', 'Your offer has been sent to the customer. You\'ll be notified if they accept.');
+      Alert.alert('Bid Placed!', "Your offer has been sent to the customer. You'll be notified if they accept.");
     } catch {
       Alert.alert('Error', 'Failed to submit bid. Please try again.');
     } finally {
@@ -122,7 +106,7 @@ export default function CleanerJobDetailScreen() {
   if (isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator color="#3906d2" size="large" />
+        <ActivityIndicator color="#3906D2" size="large" />
       </View>
     );
   }
@@ -130,7 +114,7 @@ export default function CleanerJobDetailScreen() {
   if (!job) {
     return (
       <SafeAreaView className="flex-1 bg-white items-center justify-center px-6">
-        <Text className="text-lg font-black text-slate-900 text-center">Job not found</Text>
+        <Text className="text-lg font-black text-ink text-center">Job not found</Text>
         <TouchableOpacity onPress={() => router.back()} className="mt-4">
           <Text className="text-accent font-black">Go Back</Text>
         </TouchableOpacity>
@@ -139,185 +123,121 @@ export default function CleanerJobDetailScreen() {
   }
 
   const isTaken = job.status !== JobStatus.BIDDING;
-  const distance =
-    IS_DEV
-      ? '2.3 km away'
-      : currentLocation && job.location?.lat && job.location?.lng
-      ? `${haversineDistanceKm(currentLocation, { lat: job.location.lat, lng: job.location.lng }).toFixed(1)} km away`
-      : null;
+  const distance = IS_DEV
+    ? '2.3 km away'
+    : currentLocation && job.location?.lat && job.location?.lng
+    ? `${haversineDistanceKm(currentLocation, { lat: job.location.lat, lng: job.location.lng }).toFixed(1)} km away`
+    : null;
+
+  const budgetLabel =
+    job.budgetMin || job.budgetMax
+      ? `$${job.budgetMin ?? 0} – $${job.budgetMax ?? '—'}`
+      : job.customerBid
+      ? `$${job.customerBid}`
+      : 'Open — send your best price';
+
+  const checklistTags = getChecklistTags(job);
 
   return (
-    <SafeAreaView className="flex-1 bg-[#F2F1F5]">
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        {/* Header */}
+    <SafeAreaView className="flex-1 bg-[#F3F1FC]">
+      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View className="flex-row items-center gap-3 px-5 pt-4 pb-4">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            className="w-10 h-10 bg-white rounded-2xl items-center justify-center border border-slate-100"
-          >
-            <ArrowLeft size={18} color="#0f172a" />
+          <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 bg-white rounded-2xl items-center justify-center border border-ink/5">
+            <ArrowLeft size={18} color="#150256" />
           </TouchableOpacity>
           <View className="flex-1">
-            <Text className="text-xl font-black text-slate-900">{job.serviceType}</Text>
-            <Text className="text-xs text-slate-400 font-medium">
-              #{jobId?.slice(-6).toUpperCase()}
-            </Text>
+            <Text className="text-xl font-black text-ink">{job.serviceType}</Text>
+            <Text className="text-xs text-ink/40 font-medium">#{jobId?.slice(-6).toUpperCase()}</Text>
           </View>
           {isTaken && (
             <View className="bg-amber-100 px-3 py-1.5 rounded-xl">
-              <Text className="text-xs font-black text-amber-700 uppercase tracking-wider">
-                {job.status}
-              </Text>
+              <Text className="text-xs font-black text-amber-700 uppercase tracking-wider">{job.status}</Text>
             </View>
           )}
         </View>
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 40 }}
-        >
-          {/* Job details card */}
-          <View className="mx-5 bg-white rounded-3xl p-5 border border-slate-100 mb-4">
-            <Text className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">
-              Job Details
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+          <View className="mx-5 bg-white rounded-3xl p-5 border border-ink/5 mb-4">
+            <Text className="text-xs font-black text-ink/40 uppercase tracking-widest mb-3">
+              {job.category === 'CAR' ? '🚗 Car Cleaning' : '🏠 House Cleaning'}
             </Text>
 
             <View className="gap-3">
-              <View className="flex-row items-start gap-3">
-                <View className="w-8 h-8 bg-accent/10 rounded-xl items-center justify-center mt-0.5">
-                  <MapPin size={14} color="#3906d2" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-sm font-black text-slate-900">Location</Text>
-                  <Text className="text-xs text-slate-500 font-medium mt-0.5">
-                    {job.location?.address ?? 'Address not provided'}
-                  </Text>
-                  {distance && (
-                    <Text className="text-xs text-accent font-black mt-0.5">{distance}</Text>
-                  )}
-                </View>
-              </View>
-
-              <View className="flex-row items-start gap-3">
-                <View className="w-8 h-8 bg-accent/10 rounded-xl items-center justify-center mt-0.5">
-                  <DollarSign size={14} color="#3906d2" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-sm font-black text-slate-900">Customer Budget</Text>
-                  <Text className="text-xs text-slate-500 font-medium mt-0.5">
-                    ${job.customerBid ?? '—'}
-                  </Text>
-                </View>
-              </View>
-
-              <View className="flex-row items-start gap-3">
-                <View className="w-8 h-8 bg-accent/10 rounded-xl items-center justify-center mt-0.5">
-                  <Clock size={14} color="#3906d2" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-sm font-black text-slate-900">Estimated Duration</Text>
-                  <Text className="text-xs text-slate-500 font-medium mt-0.5">
-                    {job.estimatedDuration ? `${job.estimatedDuration} hours` : '2–3 hours'}
-                  </Text>
-                </View>
-              </View>
-
-              {job.description && (
-                <View className="flex-row items-start gap-3">
-                  <View className="w-8 h-8 bg-accent/10 rounded-xl items-center justify-center mt-0.5">
-                    <MessageSquare size={14} color="#3906d2" />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-sm font-black text-slate-900">Notes</Text>
-                    <Text className="text-xs text-slate-500 font-medium mt-0.5">
-                      {job.description}
-                    </Text>
-                  </View>
-                </View>
-              )}
+              <DetailRow icon={MapPin} title="Location" value={job.location?.address ?? 'Address not provided'} accent={distance ?? undefined} />
+              <DetailRow icon={DollarSign} title="Customer Budget" value={budgetLabel} />
+              <DetailRow icon={Clock} title="Estimated Duration" value={job.estimatedDuration ? `${job.estimatedDuration} hours` : '2–3 hours'} />
+              {job.description && <DetailRow icon={MessageSquare} title="Notes" value={job.description} />}
             </View>
+
+            {checklistTags.length > 0 && (
+              <View className="flex-row flex-wrap gap-2 mt-4 pt-4 border-t border-ink/5">
+                {checklistTags.map((tag) => (
+                  <View key={tag} className="bg-accent/10 px-3 py-1.5 rounded-full">
+                    <Text className="text-[11px] font-black text-accent">{tag}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {job.photos?.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4 pt-4 border-t border-ink/5" contentContainerStyle={{ gap: 8 }}>
+                {job.photos.map((url) => (
+                  <Image key={url} source={{ uri: url }} style={{ width: 72, height: 72, borderRadius: 16 }} />
+                ))}
+              </ScrollView>
+            )}
           </View>
 
-          {/* Bid form or status */}
           {isTaken ? (
             <View className="mx-5 bg-amber-50 rounded-3xl p-5 border border-amber-100">
-              <Text className="text-sm font-black text-amber-700 text-center">
-                This job has already been accepted
-              </Text>
+              <Text className="text-sm font-black text-amber-700 text-center">This job has already been accepted</Text>
             </View>
           ) : alreadyBid ? (
             <View className="mx-5 bg-emerald-50 rounded-3xl p-5 border border-emerald-100 items-center">
               <Text className="text-2xl mb-2">✅</Text>
-              <Text className="text-sm font-black text-emerald-700 text-center">
-                Bid submitted — waiting for customer to accept
-              </Text>
+              <Text className="text-sm font-black text-emerald-700 text-center">Bid submitted — waiting for customer to accept</Text>
             </View>
           ) : (
-            <View className="mx-5 bg-white rounded-3xl p-5 border border-slate-100">
-              <Text className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">
-                Place Your Bid
-              </Text>
+            <View className="mx-5 bg-white rounded-3xl p-5 border border-ink/5">
+              <Text className="text-xs font-black text-ink/40 uppercase tracking-widest mb-4">Place Your Bid</Text>
 
-              {/* Bid price */}
-              <Text className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5">
-                Your Price (USD)
-              </Text>
+              <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-1.5">Your Price (USD)</Text>
               <TextInput
-                className="border-2 border-slate-100 rounded-2xl px-4 py-3.5 text-xl font-black text-slate-900 bg-slate-50 mb-4"
-                placeholder={`${job.customerBid ?? '0'}.00`}
-                placeholderTextColor="#94a3b8"
+                className="border-2 border-ink/10 rounded-2xl px-4 py-3.5 text-xl font-black text-ink bg-ink/[0.02] mb-4"
+                placeholder={`${job.budgetMax ?? job.customerBid ?? '0'}.00`}
+                placeholderTextColor="#9C94C4"
                 keyboardType="decimal-pad"
                 value={bidPrice}
                 onChangeText={setBidPrice}
               />
 
-              {/* ETA */}
-              <Text className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5">
-                Estimated Arrival (minutes)
-              </Text>
+              <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-1.5">Estimated Arrival (minutes)</Text>
               <TextInput
-                className="border-2 border-slate-100 rounded-2xl px-4 py-3.5 text-base font-bold text-slate-900 bg-slate-50 mb-4"
+                className="border-2 border-ink/10 rounded-2xl px-4 py-3.5 text-base font-bold text-ink bg-ink/[0.02] mb-4"
                 placeholder="e.g. 20"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="#9C94C4"
                 keyboardType="number-pad"
                 value={estimatedArrival}
                 onChangeText={setEstimatedArrival}
               />
 
-              {/* Quick ETA chips */}
               <View className="flex-row gap-2 mb-4">
                 {['10', '20', '30', '45'].map((t) => (
                   <TouchableOpacity
                     key={t}
                     onPress={() => setEstimatedArrival(t)}
-                    className={`flex-1 py-2 rounded-xl items-center border ${
-                      estimatedArrival === t
-                        ? 'bg-accent border-accent'
-                        : 'bg-slate-50 border-slate-100'
-                    }`}
+                    className={`flex-1 py-2 rounded-xl items-center border ${estimatedArrival === t ? 'bg-accent border-accent' : 'bg-ink/[0.02] border-ink/10'}`}
                   >
-                    <Text
-                      className={`text-xs font-black ${
-                        estimatedArrival === t ? 'text-white' : 'text-slate-600'
-                      }`}
-                    >
-                      {t} min
-                    </Text>
+                    <Text className={`text-xs font-black ${estimatedArrival === t ? 'text-white' : 'text-ink/60'}`}>{t} min</Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              {/* Optional message */}
-              <Text className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5">
-                Message (optional)
-              </Text>
+              <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-1.5">Message (optional)</Text>
               <TextInput
-                className="border-2 border-slate-100 rounded-2xl px-4 py-3 text-sm font-medium text-slate-900 bg-slate-50 mb-5"
+                className="border-2 border-ink/10 rounded-2xl px-4 py-3 text-sm font-medium text-ink bg-ink/[0.02] mb-5"
                 placeholder="Introduce yourself or mention your experience…"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="#9C94C4"
                 multiline
                 numberOfLines={3}
                 maxLength={200}
@@ -329,20 +249,12 @@ export default function CleanerJobDetailScreen() {
                 onPress={handleSubmitBid}
                 disabled={isSubmitting || !bidPrice || !estimatedArrival}
                 activeOpacity={0.85}
-                className={`py-5 rounded-[32px] items-center ${
-                  bidPrice && estimatedArrival
-                    ? 'bg-accent shadow-lg shadow-accent/30'
-                    : 'bg-slate-100'
-                }`}
+                className={`py-5 rounded-[32px] items-center ${bidPrice && estimatedArrival ? 'bg-accent shadow-lg shadow-accent/30' : 'bg-ink/10'}`}
               >
                 {isSubmitting ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text
-                    className={`font-black text-sm uppercase tracking-widest ${
-                      bidPrice && estimatedArrival ? 'text-white' : 'text-slate-400'
-                    }`}
-                  >
+                  <Text className={`font-black text-sm uppercase tracking-widest ${bidPrice && estimatedArrival ? 'text-white' : 'text-ink/30'}`}>
                     Submit Bid ${bidPrice || '—'}
                   </Text>
                 )}
@@ -353,4 +265,30 @@ export default function CleanerJobDetailScreen() {
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
+}
+
+function DetailRow({ icon: Icon, title, value, accent }: { icon: any; title: string; value: string; accent?: string }) {
+  return (
+    <View className="flex-row items-start gap-3">
+      <View className="w-8 h-8 bg-accent/10 rounded-xl items-center justify-center mt-0.5">
+        <Icon size={14} color="#3906D2" />
+      </View>
+      <View className="flex-1">
+        <Text className="text-sm font-black text-ink">{title}</Text>
+        <Text className="text-xs text-ink/50 font-medium mt-0.5">{value}</Text>
+        {accent && <Text className="text-xs text-accent font-black mt-0.5">{accent}</Text>}
+      </View>
+    </View>
+  );
+}
+
+function getChecklistTags(job: Job): string[] {
+  const checklist = job.checklist;
+  if (!checklist) return [];
+  if (checklist.category === 'HOUSE') {
+    const c = checklist as HouseChecklist;
+    return [...(c.cleaningTypes ?? []), ...(c.areas ?? []).slice(0, 4)];
+  }
+  const c = checklist as CarChecklist;
+  return [...(c.cleaningTypes ?? []), ...(c.exteriorServices ?? []).slice(0, 2), ...(c.interiorServices ?? []).slice(0, 2)];
 }

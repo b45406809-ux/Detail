@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft, CheckCircle } from 'lucide-react-native';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 
 const TERMS = [
   {
@@ -71,7 +71,7 @@ export default function CleanerAgreementScreen() {
             You're now a verified Detail cleaner. Start accepting jobs!
           </Text>
           <TouchableOpacity
-            onPress={() => router.replace('/(app)')}
+            onPress={() => router.replace('/home')}
             className="w-full bg-accent py-5 rounded-[32px] items-center shadow-lg shadow-accent/30"
             activeOpacity={0.85}
           >

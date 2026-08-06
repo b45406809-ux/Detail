@@ -16,9 +16,10 @@
   "dependencies": {
     "firebase-admin": "^12.6.0",
     "firebase-functions": "^6.1.0",
-    "pesepay": "^1.0.5"
+    "pesepay": "^1.0.4"
   },
   "devDependencies": {
+    "@types/node": "^20.14.0",
     "typescript": "^5.5.4"
   }
 }

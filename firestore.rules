@@ -87,7 +87,17 @@ service cloud.firestore {
     match /bids/{bidId} {
       allow read: if isAuth();
       allow create: if isAuth() && request.resource.data.cleanerId == request.auth.uid;
-      allow update, delete: if false;
+
+      // Rejecting a bid moves no money, so the job's customer may do it directly —
+      // acceptance and counter-offer price changes stay server-only (acceptBid /
+      // counterOffer) since those touch the authoritative price.
+      allow update: if isAuth()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status == 'REJECTED'
+        && resource.data.status in ['PENDING', 'COUNTERED']
+        && get(/databases/$(database)/documents/jobs/$(resource.data.jobId)).data.customerId == request.auth.uid;
+
+      allow delete: if false;
     }
 
     // ───────────────────────── messages ─────────────────────────
@@ -118,6 +128,27 @@ service cloud.firestore {
         resource.data.cleanerId == request.auth.uid
       );
       allow write: if false; // Cloud Functions only
+    }
+
+    // ───────────────────────── favorites ─────────────────────────
+    // A customer's saved cleaners, for quick rebooking. No money/trust fields
+    // involved, so plain client writes are safe — scoped to the caller's own docs.
+    match /favorites/{favoriteId} {
+      allow read: if isAuth() && resource.data.customerId == request.auth.uid;
+      allow create: if isAuth() && request.resource.data.customerId == request.auth.uid;
+      allow delete: if isAuth() && resource.data.customerId == request.auth.uid;
+      allow update: if false;
+    }
+
+    // ───────────────────────── notifications ─────────────────────────
+    // Written exclusively by Cloud Functions triggers (new bid, job status
+    // change, new message). Clients may only flip their own `read` flag.
+    match /notifications/{notificationId} {
+      allow read: if isAuth() && resource.data.userId == request.auth.uid;
+      allow update: if isAuth()
+        && resource.data.userId == request.auth.uid
+        && !changed(['userId', 'type', 'title', 'body', 'jobId', 'createdAt']);
+      allow create, delete: if false;
     }
 
     // Deny everything else

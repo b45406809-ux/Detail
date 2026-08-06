@@ -12,8 +12,8 @@ export enum VerificationLevel {
 }
 
 export enum JobStatus {
-  PENDING = 'PENDING',
-  BIDDING = 'BIDDING',
+  PENDING = 'PENDING', // draft, not yet posted
+  BIDDING = 'BIDDING', // quotes requested, open for cleaner offers
   ACCEPTED = 'ACCEPTED',
   EN_ROUTE = 'EN_ROUTE',
   ARRIVED = 'ARRIVED',
@@ -29,6 +29,37 @@ export enum AvailabilityStatus {
 }
 
 export type UserRole = 'CUSTOMER' | 'CLEANER' | 'ADMIN';
+
+/** The two service verticals Detail operates — matches the customer journey's "Select Service" step. */
+export type ServiceCategory = 'HOUSE' | 'CAR';
+
+export type PricingStrategy = 'INSTANT_BOOK' | 'RECEIVE_BIDS';
+
+export type HouseCondition = 'LIGHT' | 'MODERATE' | 'HEAVY';
+export type CarCondition = 'CLEAN' | 'AVERAGE' | 'VERY_DIRTY';
+
+/** Step-by-step checklist captured while booking a house cleaning. */
+export interface HouseChecklist {
+  category: 'HOUSE';
+  propertySizeSqm?: number;
+  areas: string[]; // Living Room, Bedrooms, Kitchen, Bathrooms, Hallways, Stairs, Dining Room, Other
+  cleaningTypes: string[]; // Standard, Deep, Move In/Out, Post Renovation
+  condition?: HouseCondition;
+  addOns: string[]; // Laundry, Dishes, Inside Fridge, Window Cleaning, Ironing, Carpet Cleaning, Organizing, Other
+}
+
+/** Step-by-step checklist captured while booking a car cleaning. */
+export interface CarChecklist {
+  category: 'CAR';
+  vehicleType?: string; // Sedan, SUV, Truck, Van, Other
+  cleaningTypes: string[]; // Exterior, Interior, Full Service, Other
+  condition?: CarCondition;
+  exteriorServices: string[]; // Wash, Wax/Polish, Tire Shine, Rim Cleaning, Scratch Removal, Headlight Cleaning, Bug Removal, Other
+  interiorServices: string[]; // Vacuum, Dashboard Cleaning, Seat Cleaning, Door Panel Cleaning, Carpet Shampoo, Air Freshener, Window Cleaning, Other
+  deepServices: string[]; // Steam Cleaning, Upholstery Shampoo, Engine Bay Cleaning, Odor Removal, Pet Hair Removal, Other
+}
+
+export type JobChecklist = HouseChecklist | CarChecklist;
 
 export interface UserProfile {
   uid: string;
@@ -51,6 +82,7 @@ export interface UserProfile {
   ratingAverage?: number;
   ratingCount?: number;
   responseTimeAverage?: number;
+  expoPushToken?: string;
 }
 
 export interface Job {
@@ -62,11 +94,17 @@ export interface Job {
   cleanerName?: string;
   cleanerPhoto?: string;
   cleanerRating?: number;
+  category?: ServiceCategory;
   serviceType: string;
+  checklist?: JobChecklist;
   description: string;
   location: { lat: number; lng: number; address: string };
   scheduledTime: any;
+  timePreference?: 'ASAP' | 'TODAY' | 'TOMORROW' | 'CUSTOM';
   status: JobStatus | string;
+  pricingStrategy?: PricingStrategy;
+  budgetMin?: number;
+  budgetMax?: number;
   customerBid?: number;
   price?: number;
   photos: string[];
@@ -77,6 +115,15 @@ export interface Job {
   paymentMethod?: string;
   rating?: number;
   ratedAt?: any;
+  isFavoriteRebook?: boolean;
+}
+
+/** A single counter-offer exchanged while negotiating a bid. */
+export interface OfferHistoryEntry {
+  by: 'CUSTOMER' | 'CLEANER';
+  price: number;
+  message?: string;
+  createdAt?: any;
 }
 
 export interface Bid {
@@ -86,11 +133,14 @@ export interface Bid {
   cleanerName?: string;
   cleanerPhoto?: string;
   cleanerRating?: number;
+  cleanerReviewCount?: number;
   cleanerJobsCompleted?: number;
+  cleanerEliteVerified?: boolean;
   bidPrice: number;
   estimatedArrival: number;
-  status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
+  status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'COUNTERED';
   message?: string;
+  history?: OfferHistoryEntry[];
   createdAt?: any;
 }
 
@@ -114,6 +164,7 @@ export interface ChatMessage {
   senderId: string;
   senderName?: string;
   text: string;
+  imageUrl?: string;
   createdAt: any;
   read?: boolean;
 }
@@ -133,4 +184,34 @@ export interface WalletTransaction {
   amount: number;
   description: string;
   createdAt: any;
+}
+
+/** A customer's saved/favorited cleaner for quick rebooking. */
+export interface Favorite {
+  id: string;
+  customerId: string;
+  cleanerId: string;
+  cleanerName?: string;
+  cleanerPhoto?: string;
+  createdAt?: any;
+}
+
+export type NotificationType =
+  | 'NEW_BID'
+  | 'BID_ACCEPTED'
+  | 'JOB_UPDATE'
+  | 'MESSAGE'
+  | 'PAYMENT'
+  | 'RATING'
+  | 'SYSTEM';
+
+export interface AppNotification {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  jobId?: string;
+  read: boolean;
+  createdAt?: any;
 }

@@ -1,95 +1,124 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Dimensions, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Logo } from '../../components/Logo';
-import { ShieldCheck, Star, Zap } from 'lucide-react-native';
+import { ShieldCheck, Zap, MapPinned } from 'lucide-react-native';
+import { Wordmark } from '../../components/Wordmark';
+import { GlassCard } from '../../components/glass';
+import { gradients } from '../../constants/theme';
 
-const FEATURES = [
-  {
-    icon: Zap,
-    title: 'Instant Matching',
-    sub: 'Get matched with a verified cleaner in minutes',
-  },
+const { width } = Dimensions.get('window');
+
+const SLIDES = [
   {
     icon: ShieldCheck,
-    title: 'Vetted Professionals',
-    sub: 'Every cleaner is background-checked and rated',
+    badge: 'Elite Verified',
+    title: 'Trusted\nProfessionals',
+    sub: 'Every cleaner on Detail undergoes a rigorous identity and background verification process.',
   },
   {
-    icon: Star,
-    title: 'Bid-Based Pricing',
-    sub: 'You set the price and cleaners compete for your job',
+    icon: Zap,
+    badge: 'You set the price',
+    title: 'Bid-Based\nPricing',
+    sub: 'Post a job for house or car cleaning and let nearby pros compete with their best offer.',
+  },
+  {
+    icon: MapPinned,
+    badge: 'Payment protected',
+    title: 'Live Tracking,\nSecure Pay',
+    sub: 'Watch your cleaner arrive in real time and only release payment once you confirm the job.',
   },
 ];
 
 export default function WelcomeScreen() {
+  const [index, setIndex] = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
+  const isLast = index === SLIDES.length - 1;
+
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const i = Math.round(e.nativeEvent.contentOffset.x / width);
+    if (i !== index) setIndex(i);
+  };
+
+  const goNext = () => {
+    if (isLast) return router.push('/(auth)/sign-in');
+    scrollRef.current?.scrollTo({ x: (index + 1) * width, animated: true });
+  };
+
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      <ScrollView
-        contentContainerClassName="flex-grow px-6 pt-12 pb-10"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Hero */}
-        <View className="items-center mb-12">
-          <View className="w-20 h-20 bg-accent/10 rounded-3xl items-center justify-center mb-6">
-            <Logo size={48} color="#3906d2" />
+    <View style={{ flex: 1 }}>
+      <LinearGradient colors={gradients.dusk} style={{ flex: 1 }} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }}>
+        <SafeAreaView style={{ flex: 1 }}>
+          {/* Top bar */}
+          <View className="flex-row items-center justify-between px-6 pt-2">
+            <Wordmark size={20} color="#fff" />
+            {!isLast && (
+              <TouchableOpacity onPress={() => router.push('/(auth)/sign-in')}>
+                <Text className="text-white/60 text-sm font-bold">Skip</Text>
+              </TouchableOpacity>
+            )}
           </View>
-          <Text className="text-4xl font-black text-slate-900 tracking-tight text-center">
-            Your home,{'\n'}spotless.
-          </Text>
-          <Text className="text-base text-slate-500 font-medium text-center mt-3 leading-relaxed">
-            Connect with professional cleaners in your area — fast, trusted, and affordable.
-          </Text>
-        </View>
 
-        {/* Feature pills */}
-        <View className="gap-3 mb-12">
-          {FEATURES.map(({ icon: Icon, title, sub }) => (
-            <View
-              key={title}
-              className="flex-row items-center gap-4 bg-slate-50 rounded-3xl p-4 border border-slate-100"
-            >
-              <View className="w-12 h-12 bg-accent/10 rounded-2xl items-center justify-center">
-                <Icon size={22} color="#3906d2" />
+          <ScrollView
+            ref={scrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={onScroll}
+            style={{ flex: 1 }}
+          >
+            {SLIDES.map(({ icon: Icon, badge, title, sub }, i) => (
+              <View key={i} style={{ width, paddingHorizontal: 28, paddingTop: 24 }}>
+                <GlassCard variant="brand" style={{ height: 300, marginBottom: 32 }}>
+                  <View className="flex-1 items-center justify-center">
+                    <View className="absolute top-5 left-5 bg-white/15 border border-white/25 px-3 py-1.5 rounded-full">
+                      <Text className="text-white text-[11px] font-black tracking-wide">{badge}</Text>
+                    </View>
+                    <View className="w-24 h-24 rounded-[28px] bg-white/15 border border-white/25 items-center justify-center">
+                      <Icon size={44} color="#fff" strokeWidth={1.75} />
+                    </View>
+                  </View>
+                </GlassCard>
+
+                <Text className="text-white text-[34px] leading-[38px] font-black tracking-tight mb-3">
+                  {title}
+                </Text>
+                <Text className="text-white/70 text-base font-medium leading-relaxed">{sub}</Text>
               </View>
-              <View className="flex-1">
-                <Text className="text-sm font-black text-slate-900">{title}</Text>
-                <Text className="text-xs text-slate-500 font-medium mt-0.5">{sub}</Text>
-              </View>
+            ))}
+          </ScrollView>
+
+          <View className="px-7 pb-8 pt-4">
+            <View className="flex-row justify-center gap-2 mb-8">
+              {SLIDES.map((_, i) => (
+                <View
+                  key={i}
+                  className={`h-1.5 rounded-full ${i === index ? 'w-7 bg-white' : 'w-1.5 bg-white/25'}`}
+                />
+              ))}
             </View>
-          ))}
-        </View>
 
-        {/* CTAs */}
-        <View className="gap-3">
-          <TouchableOpacity
-            onPress={() => router.push('/(auth)/sign-in')}
-            activeOpacity={0.85}
-            className="w-full bg-accent py-5 rounded-[32px] items-center shadow-lg shadow-accent/30"
-          >
-            <Text className="text-white font-black text-sm uppercase tracking-widest">
-              Get Started
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              onPress={goNext}
+              activeOpacity={0.88}
+              className="w-full bg-white py-5 rounded-[28px] items-center flex-row justify-center gap-2"
+            >
+              <Text className="text-brand-600 font-black text-sm uppercase tracking-widest" style={{ color: '#3906D2' }}>
+                {isLast ? 'Get Started' : 'Continue'}
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => router.push('/(auth)/sign-in')}
-            activeOpacity={0.85}
-            className="w-full bg-white border-2 border-slate-100 py-5 rounded-[32px] items-center"
-          >
-            <Text className="text-slate-900 font-black text-sm uppercase tracking-widest">
-              Sign In
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <Text className="text-center text-xs text-slate-400 font-medium mt-6 px-4">
-          By continuing you agree to our{' '}
-          <Text className="text-accent font-bold">Terms of Service</Text> and{' '}
-          <Text className="text-accent font-bold">Privacy Policy</Text>
-        </Text>
-      </ScrollView>
-    </SafeAreaView>
+            {isLast && (
+              <TouchableOpacity onPress={() => router.push('/(auth)/sign-in')} className="mt-5 items-center">
+                <Text className="text-white/70 text-sm font-bold">
+                  Already have an account? <Text className="text-white font-black">Log In</Text>
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+    </View>
   );
 }

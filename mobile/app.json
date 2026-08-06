@@ -46,6 +46,14 @@
     },
     "plugins": [
       "expo-router",
+      "expo-blur",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Detail uses your photos so cleaners can see the space or vehicle before bidding.",
+          "cameraPermission": "Detail uses the camera to take job photos."
+        }
+      ],
       [
         "expo-font",
         {

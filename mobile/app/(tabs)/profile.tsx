@@ -20,6 +20,7 @@ import {
   Briefcase,
   HelpCircle,
   FileText,
+  Heart,
 } from 'lucide-react-native';
 import { Linking } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
@@ -55,6 +56,16 @@ export default function ProfileScreen() {
           sub: 'Past bookings and jobs',
           onPress: () => router.push('/history'),
         },
+        ...(profile?.role === 'CUSTOMER'
+          ? [
+              {
+                icon: Heart,
+                label: 'Favorites',
+                sub: 'Your saved cleaners',
+                onPress: () => router.push('/favorites'),
+              },
+            ]
+          : []),
         ...(profile?.role === 'CLEANER'
           ? [
               {
