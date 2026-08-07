@@ -30,13 +30,13 @@
       },
       "package": "com.detail.app",
       "permissions": [
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "RECORD_AUDIO",
-        "CAMERA",
-        "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE"
       ]
     },
     "web": {
@@ -46,7 +46,6 @@
     },
     "plugins": [
       "expo-router",
-      "expo-blur",
       "expo-video",
       [
         "expo-image-picker",
@@ -79,6 +78,15 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "560c0183-2f37-4d7a-8e4f-59b9b0bf9e85"
+      }
+    },
+    "owner": "detail-test"
   }
 }
