@@ -17,14 +17,8 @@ import { IS_DEV } from '../../utils/env';
 import { sendPhoneOTP, confirmPhoneOTP } from '../../services/phoneAuth';
 import { firebaseConfig } from '../../services/firebase';
 import { GlassCard } from '../../components/glass';
+import { RecaptchaModal, RecaptchaModalHandle } from '../../components/RecaptchaModal';
 import { gradients } from '../../constants/theme';
-
-// Loaded lazily so DEV builds never bundle expo-firebase-recaptcha
-let FirebaseRecaptchaVerifierModal: any = null;
-if (!IS_DEV) {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  FirebaseRecaptchaVerifierModal = require('expo-firebase-recaptcha').FirebaseRecaptchaVerifierModal;
-}
 
 const OTP_LENGTH = 6;
 
@@ -35,7 +29,7 @@ export default function VerifyScreen() {
   const [isSending, setIsSending] = useState(false);
   const [resendTimer, setResendTimer] = useState(60);
   const inputRefs = useRef<(TextInput | null)[]>([]);
-  const recaptchaVerifierRef = useRef<any>(null);
+  const recaptchaVerifierRef = useRef<RecaptchaModalHandle>(null);
 
   const sendCode = useCallback(async () => {
     if (isSending) return;
@@ -108,13 +102,7 @@ export default function VerifyScreen() {
     <View style={{ flex: 1 }}>
       <LinearGradient colors={gradients.dusk} style={{ flex: 1 }} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }}>
         <SafeAreaView style={{ flex: 1 }}>
-          {!IS_DEV && FirebaseRecaptchaVerifierModal && (
-            <FirebaseRecaptchaVerifierModal
-              ref={recaptchaVerifierRef}
-              firebaseConfig={firebaseConfig}
-              attemptInvisibleVerification
-            />
-          )}
+          {!IS_DEV && <RecaptchaModal ref={recaptchaVerifierRef} firebaseConfig={firebaseConfig} />}
 
           <KeyboardAvoidingView className="flex-1 px-6 pt-6" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
             <TouchableOpacity

@@ -37,7 +37,7 @@ import {
 } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Firebase configuration — exported so expo-firebase-recaptcha can consume it
+// Firebase configuration — exported so RecaptchaModal (phone-auth OTP) can consume it
 export const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY ?? '',
   authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN ?? '',
