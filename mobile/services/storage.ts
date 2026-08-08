@@ -2,15 +2,25 @@
  * Firebase Storage helper for photo uploads — booking reference photos
  * ("Add Photos" step) and chat attachments. `firebase/storage` is imported
  * lazily so screens that never touch a camera don't pay for it.
+ *
+ * Pointed at the local Storage emulator when either
+ * EXPO_PUBLIC_USE_FIREBASE_EMULATOR or the narrower
+ * EXPO_PUBLIC_USE_STORAGE_EMULATOR is 'true' — the latter lets Storage run
+ * locally (free, no Blaze plan / bucket needed) while Auth/Firestore stay on
+ * a real deployed project.
  */
 import { auth } from './firebase';
+
+const USE_EMULATOR =
+  process.env.EXPO_PUBLIC_USE_FIREBASE_EMULATOR === 'true' ||
+  process.env.EXPO_PUBLIC_USE_STORAGE_EMULATOR === 'true';
 
 async function getStorageModule() {
   const storageMod = await import('firebase/storage');
   const { getApp } = await import('firebase/app');
   const storage = storageMod.getStorage(getApp());
 
-  if (process.env.EXPO_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
+  if (USE_EMULATOR) {
     const host = process.env.EXPO_PUBLIC_EMULATOR_HOST ?? 'localhost';
     try {
       storageMod.connectStorageEmulator(storage, host, 9199);
