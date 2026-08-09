@@ -34,8 +34,9 @@ import {
 } from '../../services/firebase';
 import { callFunction } from '../../services/functions';
 import { Job, JobStatus } from '../../types';
-import { IS_DEV } from '../../utils/env';
+import { IS_MOCK, IS_DEMO } from '../../utils/env';
 import { GlassCard, GlassSheet, GlassIconButton } from '../../components/glass';
+import { MapPlaceholder } from '../../components/MapPlaceholder';
 import { haversineDistanceKm } from '../../services/matching';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -373,7 +374,7 @@ export default function TrackingScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <Text className="text-white font-black text-sm uppercase tracking-widest">
-                {IS_DEV ? '[DEV] ' : ''}Pay ${job.price?.toFixed(2) ?? '—'} via {selectedPayment}
+                {IS_MOCK ? '[DEV] ' : ''}Pay ${job.price?.toFixed(2) ?? '—'} via {selectedPayment}
               </Text>
             )}
           </TouchableOpacity>
@@ -385,7 +386,9 @@ export default function TrackingScreen() {
   // Main TRACKING view
   return (
     <View className="flex-1 bg-white">
-      {mapRegion ? (
+      {IS_DEMO ? (
+        <MapPlaceholder style={{ flex: 1 }} />
+      ) : mapRegion ? (
         <MapView style={{ flex: 1 }} provider={PROVIDER_DEFAULT} initialRegion={mapRegion} showsUserLocation showsMyLocationButton={false}>
           <Marker coordinate={{ latitude: job.location.lat, longitude: job.location.lng }} title="Job Location">
             <View className="w-10 h-10 bg-accent rounded-2xl items-center justify-center shadow-lg">
@@ -470,7 +473,7 @@ export default function TrackingScreen() {
               <View className="flex-row items-center gap-1 mt-0.5">
                 <Star size={12} color="#f59e0b" fill="#f59e0b" />
                 <Text className="text-xs font-black text-ink/60">
-                  {job.cleanerRating != null ? `${job.cleanerRating.toFixed(1)} Rating` : IS_DEV ? '4.95 Excellent' : 'New Cleaner'}
+                  {job.cleanerRating != null ? `${job.cleanerRating.toFixed(1)} Rating` : IS_MOCK ? '4.95 Excellent' : 'New Cleaner'}
                 </Text>
               </View>
             )}

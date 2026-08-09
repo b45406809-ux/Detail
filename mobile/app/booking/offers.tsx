@@ -17,7 +17,7 @@ import { useAuth } from '../../context/AuthContext';
 import { db, doc, collection, query, where, onSnapshot, updateDoc } from '../../services/firebase';
 import { callFunction } from '../../services/functions';
 import { Job, Bid, JobStatus } from '../../types';
-import { IS_DEV } from '../../utils/env';
+import { IS_MOCK } from '../../utils/env';
 
 export default function OffersScreen() {
   const { jobId } = useLocalSearchParams<{ jobId: string }>();
@@ -190,7 +190,7 @@ export default function OffersScreen() {
                       <View className="flex-row items-center gap-1">
                         <Star size={12} color="#f59e0b" fill="#f59e0b" />
                         <Text className="text-xs font-black text-ink/70">
-                          {bid.cleanerRating != null ? bid.cleanerRating.toFixed(1) : IS_DEV ? '4.8' : 'New'}
+                          {bid.cleanerRating != null ? bid.cleanerRating.toFixed(1) : IS_MOCK ? '4.8' : 'New'}
                         </Text>
                       </View>
                       <Text className="text-xs text-ink/40 font-medium">{bid.cleanerJobsCompleted ?? 0} jobs</Text>

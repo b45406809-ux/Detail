@@ -1,5 +1,5 @@
 import * as WebBrowser from 'expo-web-browser';
-import { IS_DEV } from '../utils/env';
+import { IS_MOCK } from '../utils/env';
 import { auth } from './firebase';
 import { callFunction } from './functions';
 
@@ -29,7 +29,7 @@ export async function addFundsToWallet(amountUSD: number): Promise<PaymentResult
   const user = auth.currentUser;
   if (!user) throw new Error('Not authenticated');
 
-  if (IS_DEV) {
+  if (IS_MOCK) {
     // Emulator-only credit. Throws clearly if the emulator isn't running.
     await callFunction('devCreditWallet', { amount: amountUSD });
     return { success: true, pending: false };

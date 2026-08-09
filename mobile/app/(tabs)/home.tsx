@@ -44,9 +44,10 @@ import {
 } from '../../services/firebase';
 import { Job, JobStatus, Favorite } from '../../types';
 import { Logo } from '../../components/Logo';
-import { IS_DEV } from '../../utils/env';
 import { haversineDistanceKm } from '../../services/matching';
 import { GlassCard, GlassSheet, GlassIconButton, RoleToggle } from '../../components/glass';
+import { MapPlaceholder } from '../../components/MapPlaceholder';
+import { IS_DEMO } from '../../utils/env';
 
 const FALLBACK_REGION = { latitude: 37.7749, longitude: -122.4194, latitudeDelta: 0.04, longitudeDelta: 0.04 };
 
@@ -83,9 +84,13 @@ export default function HomeScreen() {
       where('status', 'in', [JobStatus.ACCEPTED, JobStatus.EN_ROUTE, JobStatus.ARRIVED, JobStatus.IN_PROGRESS]),
       limit(1)
     );
-    return onSnapshot(q, (snap) => {
-      setActiveJob(snap.empty ? null : ({ id: snap.docs[0].id, ...snap.docs[0].data() } as Job));
-    });
+    return onSnapshot(
+      q,
+      (snap) => {
+        setActiveJob(snap.empty ? null : ({ id: snap.docs[0].id, ...snap.docs[0].data() } as Job));
+      },
+      (err) => console.warn('[home] activeJob listener error:', err.message)
+    );
   }, [user, isCustomer]);
 
   useEffect(() => {
@@ -98,19 +103,31 @@ export default function HomeScreen() {
       orderBy('createdAt', 'desc'),
       limit(3)
     );
-    return onSnapshot(q, (snap) => setRecentJobs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Job))));
+    return onSnapshot(
+      q,
+      (snap) => setRecentJobs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Job))),
+      (err) => console.warn('[home] recentJobs listener error:', err.message)
+    );
   }, [user, isCustomer]);
 
   useEffect(() => {
     if (isCustomer) return;
     const q = query(collection(db, 'jobs'), where('status', '==', JobStatus.BIDDING), orderBy('createdAt', 'desc'), limit(10));
-    return onSnapshot(q, (snap) => setAvailableJobs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Job))));
+    return onSnapshot(
+      q,
+      (snap) => setAvailableJobs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Job))),
+      (err) => console.warn('[home] availableJobs listener error:', err.message)
+    );
   }, [isCustomer]);
 
   useEffect(() => {
     if (!user || !isCustomer) return;
     const q = query(collection(db, 'favorites'), where('customerId', '==', user.uid), limit(10));
-    return onSnapshot(q, (snap) => setFavorites(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Favorite))));
+    return onSnapshot(
+      q,
+      (snap) => setFavorites(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Favorite))),
+      (err) => console.warn('[home] favorites listener error:', err.message)
+    );
   }, [user, isCustomer]);
 
   const toggleCleanerStatus = async () => {
@@ -139,16 +156,20 @@ export default function HomeScreen() {
 
   return (
     <View className="flex-1 bg-[#EDEBFA]">
-      <MapView
-        ref={mapRef}
-        style={{ flex: 1 }}
-        provider={PROVIDER_DEFAULT}
-        initialRegion={region}
-        region={currentLocation ? region : undefined}
-        showsUserLocation
-        showsMyLocationButton={false}
-        showsCompass={false}
-      />
+      {IS_DEMO ? (
+        <MapPlaceholder style={{ flex: 1 }} />
+      ) : (
+        <MapView
+          ref={mapRef}
+          style={{ flex: 1 }}
+          provider={PROVIDER_DEFAULT}
+          initialRegion={region}
+          region={currentLocation ? region : undefined}
+          showsUserLocation
+          showsMyLocationButton={false}
+          showsCompass={false}
+        />
+      )}
 
       {/* Header overlay */}
       <SafeAreaView className="absolute top-0 left-0 right-0" edges={['top']} pointerEvents="box-none">

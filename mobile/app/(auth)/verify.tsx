@@ -13,7 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
-import { IS_DEV } from '../../utils/env';
+import { IS_MOCK } from '../../utils/env';
 import { sendPhoneOTP, confirmPhoneOTP } from '../../services/phoneAuth';
 import { firebaseConfig } from '../../services/firebase';
 import { GlassCard } from '../../components/glass';
@@ -102,7 +102,7 @@ export default function VerifyScreen() {
     <View style={{ flex: 1 }}>
       <LinearGradient colors={gradients.dusk} style={{ flex: 1 }} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }}>
         <SafeAreaView style={{ flex: 1 }}>
-          {!IS_DEV && <RecaptchaModal ref={recaptchaVerifierRef} firebaseConfig={firebaseConfig} />}
+          {!IS_MOCK && <RecaptchaModal ref={recaptchaVerifierRef} firebaseConfig={firebaseConfig} />}
 
           <KeyboardAvoidingView className="flex-1 px-6 pt-6" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
             <TouchableOpacity
@@ -114,8 +114,8 @@ export default function VerifyScreen() {
 
             <Text className="text-3xl font-black text-white tracking-tight mb-2">Enter the code</Text>
             <Text className="text-base text-white/60 font-medium mb-10">
-              {IS_DEV ? 'DEV mode — enter any 6 digits to continue' : `We sent a 6-digit code to\n`}
-              {!IS_DEV && <Text className="text-white font-black">{phone}</Text>}
+              {IS_MOCK ? 'DEV mode — enter any 6 digits to continue' : `We sent a 6-digit code to\n`}
+              {!IS_MOCK && <Text className="text-white font-black">{phone}</Text>}
             </Text>
 
             {isSending && (

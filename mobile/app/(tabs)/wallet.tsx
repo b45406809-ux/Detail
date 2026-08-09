@@ -30,7 +30,7 @@ import {
   limit,
 } from '../../services/firebase';
 import { addFundsToWallet, getPesePayMethods } from '../../services/payments';
-import { IS_DEV } from '../../utils/env';
+import { IS_MOCK } from '../../utils/env';
 import { WalletTransaction } from '../../types';
 
 const METHOD_ICONS: Record<string, any> = {
@@ -76,7 +76,7 @@ export default function WalletScreen() {
       setIsAddFundsOpen(false);
       setAmount('');
 
-      if (IS_DEV) {
+      if (IS_MOCK) {
         Alert.alert('[DEV] Simulated', `$${value.toFixed(2)} added to your wallet (no real charge).`);
       } else if (result.pending) {
         Alert.alert(
@@ -142,7 +142,7 @@ export default function WalletScreen() {
       <View className="mx-5 mb-6">
         <Text className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">
           Accepted via PesePay
-          {IS_DEV && <Text className="text-amber-500"> [DEV — simulated]</Text>}
+          {IS_MOCK && <Text className="text-amber-500"> [DEV — simulated]</Text>}
         </Text>
         <View className="bg-white rounded-3xl border border-slate-100 overflow-hidden">
           {paymentMethods.map(({ id, label, sub }, idx) => {
@@ -239,7 +239,7 @@ export default function WalletScreen() {
               </TouchableOpacity>
             </View>
             <Text className="text-xs text-slate-400 font-medium mb-6">
-              {IS_DEV ? 'DEV mode — no real charge' : 'Powered by PesePay · EcoCash, Card & more'}
+              {IS_MOCK ? 'DEV mode — no real charge' : 'Powered by PesePay · EcoCash, Card & more'}
             </Text>
 
             <Text className="text-xs font-black text-slate-500 uppercase tracking-widest mb-2">
@@ -286,7 +286,7 @@ export default function WalletScreen() {
                 <ActivityIndicator color="#fff" />
               ) : (
                 <Text className="text-white font-black text-sm uppercase tracking-widest">
-                  {IS_DEV
+                  {IS_MOCK
                     ? `[DEV] Add $${amount || '0.00'}`
                     : `Pay $${amount || '0.00'} via PesePay`}
                 </Text>

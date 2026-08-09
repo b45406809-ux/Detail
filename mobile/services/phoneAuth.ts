@@ -1,5 +1,5 @@
 import type { ConfirmationResult } from 'firebase/auth';
-import { IS_DEV } from '../utils/env';
+import { IS_MOCK } from '../utils/env';
 
 // Module-level store for the active OTP session (one at a time per app lifecycle)
 let _confirmationResult: ConfirmationResult | null = null;
@@ -15,7 +15,7 @@ export async function sendPhoneOTP(
   phoneNumber: string,
   recaptchaVerifier: any
 ): Promise<void> {
-  if (IS_DEV) {
+  if (IS_MOCK) {
     await new Promise((r) => setTimeout(r, 800));
     return;
   }
@@ -32,7 +32,7 @@ export async function sendPhoneOTP(
  *       On success the user is fully authenticated.
  */
 export async function confirmPhoneOTP(code: string): Promise<void> {
-  if (IS_DEV) {
+  if (IS_MOCK) {
     const { signInAnonymously } = await import('firebase/auth');
     const { auth } = await import('./firebase');
     await signInAnonymously(auth);

@@ -17,7 +17,7 @@ import { ArrowLeft, MapPin, Clock, DollarSign, MessageSquare } from 'lucide-reac
 import { useAuth } from '../../context/AuthContext';
 import { db, doc, collection, onSnapshot, query, where, addDoc, serverTimestamp, getDocs, limit } from '../../services/firebase';
 import { Job, JobStatus, HouseChecklist, CarChecklist } from '../../types';
-import { IS_DEV } from '../../utils/env';
+import { IS_MOCK } from '../../utils/env';
 import { haversineDistanceKm } from '../../services/matching';
 import * as Location from 'expo-location';
 
@@ -123,7 +123,7 @@ export default function CleanerJobDetailScreen() {
   }
 
   const isTaken = job.status !== JobStatus.BIDDING;
-  const distance = IS_DEV
+  const distance = IS_MOCK
     ? '2.3 km away'
     : currentLocation && job.location?.lat && job.location?.lng
     ? `${haversineDistanceKm(currentLocation, { lat: job.location.lat, lng: job.location.lng }).toFixed(1)} km away`

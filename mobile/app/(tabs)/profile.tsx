@@ -26,7 +26,7 @@ import { Linking } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { auth, signOut } from '../../services/firebase';
 import { StarRating } from '../../components/StarRating';
-import { IS_DEV } from '../../utils/env';
+import { IS_MOCK } from '../../utils/env';
 
 export default function ProfileScreen() {
   const { user, profile } = useAuth();
@@ -79,7 +79,7 @@ export default function ProfileScreen() {
                 label: 'My Portfolio',
                 sub: 'Showcase your work',
                 onPress: () =>
-                  IS_DEV
+                  IS_MOCK
                     ? Alert.alert('[DEV] Portfolio', 'Portfolio upload coming in next release.')
                     : Alert.alert('Coming Soon', 'Portfolio photos are coming in the next update.'),
               },

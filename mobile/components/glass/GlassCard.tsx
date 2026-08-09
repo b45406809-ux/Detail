@@ -47,7 +47,11 @@ const VARIANT_BORDER: Record<string, string> = {
 export function GlassCard({
   variant = 'light',
   intensity,
-  noBlur = false,
+  // expo-blur's Android implementation has known rendering glitches in release
+  // builds (distorted/garbled card shapes instead of a clean blur) — default
+  // to the flat tinted fallback there and reserve real BlurView for iOS,
+  // unless a caller explicitly opts in with noBlur={false}.
+  noBlur = Platform.OS === 'android',
   style,
   className,
   children,
@@ -74,7 +78,7 @@ export function GlassCard({
           { backgroundColor: noBlur ? VARIANT_OVERLAY_FLAT[variant] : VARIANT_OVERLAY[variant] },
         ]}
       />
-      <View style={styles.content}>{children}</View>
+      <View>{children}</View>
     </View>
   );
 }
@@ -89,8 +93,5 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 8 },
     elevation: 6,
-  },
-  content: {
-    flex: 1,
   },
 });

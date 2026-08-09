@@ -16,9 +16,9 @@ import {
   Mail,
   MessageCircle,
 } from 'lucide-react-native';
-import { IS_DEV } from '../utils/env';
+import { IS_MOCK } from '../utils/env';
 
-const SUPPORT_EMAIL = IS_DEV ? 'dev-support@detail.app' : 'support@detail.app';
+const SUPPORT_EMAIL = IS_MOCK ? 'dev-support@detail.app' : 'support@detail.app';
 
 const FAQS = [
   {
@@ -119,7 +119,7 @@ export default function HelpScreen() {
             onPress={() =>
               Alert.alert(
                 'Live Chat',
-                IS_DEV
+                IS_MOCK
                   ? '[DEV] Live chat not available in dev mode.'
                   : 'Live chat is available Mon–Fri 8am–8pm EST.',
                 [{ text: 'OK' }]
@@ -140,7 +140,7 @@ export default function HelpScreen() {
           </TouchableOpacity>
         </View>
 
-        {IS_DEV && (
+        {IS_MOCK && (
           <View className="mx-5 mb-5 bg-amber-50 rounded-2xl px-4 py-3 border border-amber-100">
             <Text className="text-xs font-black text-amber-700 uppercase tracking-wider mb-0.5">
               DEV Mode
