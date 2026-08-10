@@ -1,4 +1,4 @@
-import { CleanerProfile } from '../types';
+import { CleanerProfile, Bid } from '../types';
 
 export function rankCleaners(
   cleaners: CleanerProfile[],
@@ -35,6 +35,21 @@ export function rankCleaners(
       return { ...cleaner, distance, finalScore };
     })
     .sort((a, b) => b.finalScore - a.finalScore);
+}
+
+/**
+ * Ranks bids on a job so the customer sees the strongest cleaners first when
+ * vetting offers (offers.tsx) — highest rating wins, ties broken by more
+ * completed jobs, then by lower price.
+ */
+export function rankBidsByRating(bids: Bid[]): Bid[] {
+  return [...bids].sort((a, b) => {
+    const ratingDiff = (b.cleanerRating ?? 0) - (a.cleanerRating ?? 0);
+    if (ratingDiff !== 0) return ratingDiff;
+    const jobsDiff = (b.cleanerJobsCompleted ?? 0) - (a.cleanerJobsCompleted ?? 0);
+    if (jobsDiff !== 0) return jobsDiff;
+    return a.bidPrice - b.bidPrice;
+  });
 }
 
 /** Haversine distance in kilometres between two lat/lng points. */

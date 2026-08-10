@@ -73,24 +73,28 @@ service cloud.firestore {
           resource.data.cleanerId == request.auth.uid
         )
         && !changed([
-          'price', 'customerBid', 'paidAt', 'paymentMethod', 'rating', 'ratedAt',
-          'customerId', 'cleanerId', 'cleanerName', 'cleanerPhoto', 'cleanerRating'
+          'price', 'paidAt', 'paymentMethod', 'rating', 'ratedAt',
+          'customerId', 'cleanerId', 'cleanerName', 'cleanerPhoto', 'cleanerRating',
+          // budget/biddingExpiresAt only ever change via the increaseJobBudget
+          // Cloud Function (which also extends the window) — never a raw client write.
+          'budget', 'biddingExpiresAt'
         ]);
 
       allow delete: if false;
     }
 
     // ───────────────────────── bids ─────────────────────────
-    // A cleaner creates a bid for themselves. Acceptance / rejection is done by
-    // the acceptBid Cloud Function (which also sets the authoritative price), so
-    // clients can never mutate a bid after creation.
+    // Created exclusively by the submitBid Cloud Function, which enforces the
+    // cash-commission balance gate (negative balance = blocked from bidding)
+    // authoritatively — a client-side check alone couldn't be trusted.
+    // Acceptance is done by the acceptBid Cloud Function (which also sets the
+    // authoritative price), so clients can never mutate a bid after creation.
     match /bids/{bidId} {
       allow read: if isAuth();
-      allow create: if isAuth() && request.resource.data.cleanerId == request.auth.uid;
+      allow create: if false;
 
-      // Rejecting a bid moves no money, so the job's customer may do it directly —
-      // acceptance and counter-offer price changes stay server-only (acceptBid /
-      // counterOffer) since those touch the authoritative price.
+      // Rejecting a bid moves no money, so the job's customer may do it
+      // directly — acceptance/price changes stay server-only (acceptBid).
       allow update: if isAuth()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         && request.resource.data.status == 'REJECTED'
@@ -101,9 +105,19 @@ service cloud.firestore {
     }
 
     // ───────────────────────── messages ─────────────────────────
+    // Chat unlocks the instant a bid is accepted, not before: the sender must
+    // be a participant on the job AND the job must have left BIDDING (i.e.
+    // acceptBid has run and set cleanerId) — a real server-side guarantee,
+    // not just a client-side convention.
     match /messages/{msgId} {
       allow read: if isAuth();
-      allow create: if isAuth() && request.resource.data.senderId == request.auth.uid;
+      allow create: if isAuth()
+        && request.resource.data.senderId == request.auth.uid
+        && get(/databases/$(database)/documents/jobs/$(request.resource.data.jobId)).data.status != 'BIDDING'
+        && (
+          get(/databases/$(database)/documents/jobs/$(request.resource.data.jobId)).data.customerId == request.auth.uid ||
+          get(/databases/$(database)/documents/jobs/$(request.resource.data.jobId)).data.cleanerId == request.auth.uid
+        );
       allow update, delete: if false;
     }
 

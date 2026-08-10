@@ -316,78 +316,113 @@ export const acceptBid = onCall(async (request) => {
   return { success: true };
 });
 
-/* ───────────────────────── counterOffer ───────────────────────── */
+/* ───────────────────────── submitBid ───────────────────────── */
 /**
- * Negotiates a bid price. Either the job's customer or the bid's cleaner may
- * call this to propose a new price; it's appended to the bid's offer history
- * and the bid's headline price/status update so both sides see the latest
- * ask. Kept server-side (like acceptBid) so the price history can't be
- * tampered with from the client.
- * Input:  { jobId: string, bidId: string, price: number, message?: string }
+ * A cleaner placing a bid on an open job. Moved server-side (client used to
+ * `addDoc` this directly) so the cash-commission balance gate below can be
+ * enforced authoritatively — a tampered client can't just skip it.
+ * Input:  { jobId, bidPrice, estimatedArrival, message? }
  */
-export const counterOffer = onCall(async (request) => {
+export const submitBid = onCall(async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
 
-  const { jobId, bidId, price, message } = (request.data ?? {}) as {
+  const { jobId, bidPrice, estimatedArrival, message } = (request.data ?? {}) as {
     jobId?: string;
-    bidId?: string;
-    price?: number;
+    bidPrice?: number;
+    estimatedArrival?: number;
     message?: string;
   };
-  if (!jobId || !bidId || !price || price <= 0) {
-    throw new HttpsError('invalid-argument', 'jobId, bidId, and a positive price are required.');
+  if (!jobId || !bidPrice || bidPrice <= 0) {
+    throw new HttpsError('invalid-argument', 'jobId and a positive bidPrice are required.');
+  }
+  if (!estimatedArrival || estimatedArrival < 1 || estimatedArrival > 120) {
+    throw new HttpsError('invalid-argument', 'estimatedArrival must be between 1 and 120 minutes.');
+  }
+
+  const [jobSnap, cleanerSnap] = await Promise.all([
+    db.collection('jobs').doc(jobId).get(),
+    db.collection('users').doc(uid).get(),
+  ]);
+  if (!jobSnap.exists) throw new HttpsError('not-found', 'Job not found.');
+  const job = jobSnap.data() as FirebaseFirestore.DocumentData;
+  if (job.status !== 'BIDDING') {
+    throw new HttpsError('failed-precondition', 'This job is no longer accepting bids.');
+  }
+
+  const cleaner = cleanerSnap.data() ?? {};
+  if (cleaner.role !== 'CLEANER') {
+    throw new HttpsError('permission-denied', 'Only cleaners can submit bids.');
+  }
+  // Cash-commission balance gate (Cleaner Agreement §11-15 / §12): commission
+  // on cash jobs is debited immediately on completion (see settleJobPayment),
+  // so a negative balance means unpaid commission — block new bids until
+  // it's settled, same as the "auto-suspend from bidding" behavior.
+  if (Number(cleaner.balance ?? 0) < 0) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Settle your outstanding commission balance before bidding on new jobs.'
+    );
+  }
+  if (cleaner.isSuspended || cleaner.isBanned) {
+    throw new HttpsError('permission-denied', 'Your account cannot submit bids right now.');
+  }
+
+  const bidRef = await db.collection('bids').add({
+    jobId,
+    cleanerId: uid,
+    cleanerName: cleaner.displayName ?? '',
+    cleanerPhoto: cleaner.photoURL ?? '',
+    cleanerRating: cleaner.ratingAverage ?? null,
+    cleanerJobsCompleted: cleaner.jobsCompleted ?? 0,
+    cleanerEliteVerified: (cleaner.verificationLevel ?? 0) >= 3,
+    bidPrice: round2(bidPrice),
+    estimatedArrival,
+    message: message?.trim() || null,
+    status: 'PENDING',
+    history: [{ by: 'CLEANER', price: round2(bidPrice), message: message?.trim() || null, createdAt: FieldValue.serverTimestamp() }],
+    createdAt: FieldValue.serverTimestamp(),
+  });
+
+  return { success: true, bidId: bidRef.id };
+});
+
+/* ───────────────────────── increaseJobBudget ───────────────────────── */
+/**
+ * Customer raises their job's asking budget while it's still BIDDING (per
+ * the ask: "allow the client to increase budget... while the timer is on").
+ * Extends biddingExpiresAt by another 30 minutes so cleaners get a fresh
+ * window to respond to the raised offer.
+ * Input:  { jobId: string, newBudget: number }
+ */
+export const increaseJobBudget = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
+
+  const { jobId, newBudget } = (request.data ?? {}) as { jobId?: string; newBudget?: number };
+  if (!jobId || !newBudget || newBudget <= 0) {
+    throw new HttpsError('invalid-argument', 'jobId and a positive newBudget are required.');
   }
 
   const jobRef = db.collection('jobs').doc(jobId);
-  const bidRef = db.collection('bids').doc(bidId);
+  const jobSnap = await jobRef.get();
+  if (!jobSnap.exists) throw new HttpsError('not-found', 'Job not found.');
+  const job = jobSnap.data() as FirebaseFirestore.DocumentData;
 
-  let notifyTargetId: string | null = null;
-
-  await db.runTransaction(async (tx) => {
-    const [jobSnap, bidSnap] = await Promise.all([tx.get(jobRef), tx.get(bidRef)]);
-    if (!jobSnap.exists) throw new HttpsError('not-found', 'Job not found.');
-    if (!bidSnap.exists) throw new HttpsError('not-found', 'Bid not found.');
-
-    const job = jobSnap.data() as FirebaseFirestore.DocumentData;
-    const bid = bidSnap.data() as FirebaseFirestore.DocumentData;
-    if (bid.jobId !== jobId) {
-      throw new HttpsError('invalid-argument', 'That bid does not belong to this job.');
-    }
-    if (bid.status === 'ACCEPTED' || bid.status === 'REJECTED') {
-      throw new HttpsError('failed-precondition', 'This offer is no longer open for negotiation.');
-    }
-
-    const isCustomer = job.customerId === uid;
-    const isCleaner = bid.cleanerId === uid;
-    if (!isCustomer && !isCleaner) {
-      throw new HttpsError('permission-denied', 'Only the job customer or the bidding cleaner can negotiate.');
-    }
-
-    const entry = {
-      by: isCustomer ? 'CUSTOMER' : 'CLEANER',
-      price: round2(price),
-      message: message ?? null,
-      createdAt: FieldValue.serverTimestamp(),
-    };
-
-    tx.update(bidRef, {
-      bidPrice: round2(price),
-      status: 'COUNTERED',
-      history: FieldValue.arrayUnion(entry),
-    });
-
-    notifyTargetId = isCustomer ? bid.cleanerId : job.customerId;
-  });
-
-  if (notifyTargetId) {
-    await notifyUser(notifyTargetId, {
-      type: 'JOB_UPDATE',
-      title: 'New counter-offer',
-      body: `A new price of $${round2(price).toFixed(2)} was proposed.`,
-      jobId,
-    });
+  if (job.customerId !== uid) {
+    throw new HttpsError('permission-denied', 'Only the job customer can change the budget.');
   }
+  if (job.status !== 'BIDDING') {
+    throw new HttpsError('failed-precondition', 'This job is no longer accepting bids.');
+  }
+  if (newBudget <= Number(job.budget ?? 0)) {
+    throw new HttpsError('invalid-argument', 'The new budget must be higher than the current one.');
+  }
+
+  await jobRef.update({
+    budget: round2(newBudget),
+    biddingExpiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 30 * 60 * 1000),
+  });
 
   return { success: true };
 });

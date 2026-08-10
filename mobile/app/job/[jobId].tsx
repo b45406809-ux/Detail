@@ -15,7 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, MapPin, Clock, DollarSign, MessageSquare } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
-import { db, doc, collection, onSnapshot, query, where, addDoc, serverTimestamp, getDocs, limit } from '../../services/firebase';
+import { db, doc, collection, onSnapshot, query, where, getDocs, limit } from '../../services/firebase';
+import { callFunction } from '../../services/functions';
 import { Job, JobStatus, HouseChecklist, CarChecklist } from '../../types';
 import { IS_MOCK } from '../../utils/env';
 import { haversineDistanceKm } from '../../services/matching';
@@ -79,25 +80,16 @@ export default function CleanerJobDetailScreen() {
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, 'bids'), {
+      await callFunction('submitBid', {
         jobId,
-        cleanerId: user.uid,
-        cleanerName: profile.displayName,
-        cleanerPhoto: profile.photoURL ?? '',
-        cleanerRating: profile.ratingAverage ?? null,
-        cleanerJobsCompleted: profile.jobsCompleted ?? 0,
-        cleanerEliteVerified: (profile.verificationLevel ?? 0) >= 3,
         bidPrice: price,
         estimatedArrival: eta,
-        message: message.trim() || null,
-        status: 'PENDING',
-        history: [{ by: 'CLEANER', price, message: message.trim() || null, createdAt: serverTimestamp() }],
-        createdAt: serverTimestamp(),
+        message: message.trim() || undefined,
       });
       setAlreadyBid(true);
       Alert.alert('Bid Placed!', "Your offer has been sent to the customer. You'll be notified if they accept.");
-    } catch {
-      Alert.alert('Error', 'Failed to submit bid. Please try again.');
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to submit bid. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
