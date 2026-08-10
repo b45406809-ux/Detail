@@ -18,6 +18,7 @@
 
 import { onCall, onRequest, HttpsError } from 'firebase-functions/v2/https';
 import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions';
 import * as admin from 'firebase-admin';
@@ -580,12 +581,68 @@ export const pesepayWebhook = onRequest(
 
 /* ───────────────────────── notification triggers ───────────────────────── */
 /**
- * These three triggers are what actually populate the /notifications
- * collection and fire push notifications — everything above only writes the
+ * These triggers are what actually populate the /notifications collection
+ * and fire push notifications — everything above only writes the
  * jobs/bids/messages documents the app already needed. Because they run on
  * the Admin SDK, they can write into a collection the client is forbidden
  * from writing to directly (see firestore.rules).
  */
+
+// New job posted → tell every cleaner immediately (Cleaner Agreement note:
+// "Cleaner must get push notifications on new jobs"). Broadcasts to every
+// non-suspended cleaner — no geo-sharding infra exists yet, so this doesn't
+// scope by distance; a known scale limitation to revisit once the cleaner
+// base grows past what a broadcast can reasonably serve.
+export const onJobCreated = onDocumentCreated('jobs/{jobId}', async (event) => {
+  const job = event.data?.data();
+  if (!job || job.status !== 'BIDDING') return;
+
+  const cleanersSnap = await db.collection('users').where('role', '==', 'CLEANER').get();
+  await Promise.all(
+    cleanersSnap.docs
+      .filter((d) => !d.data().isSuspended && !d.data().isBanned)
+      .map((d) =>
+        notifyUser(d.id, {
+          type: 'JOB_UPDATE',
+          title: 'New job posted',
+          body: `${job.serviceType ?? 'A new job'} near ${job.location?.address ?? 'you'} — $${job.budget ?? '—'}`,
+          jobId: event.params.jobId,
+        })
+      )
+  );
+});
+
+// Every 15 minutes: remind the assigned cleaner about jobs scheduled within
+// the next hour, once (reminderSent guards against re-notifying on the next run).
+export const sendJobReminders = onSchedule('every 15 minutes', async () => {
+  const now = admin.firestore.Timestamp.now();
+  const soon = admin.firestore.Timestamp.fromMillis(now.toMillis() + 60 * 60 * 1000);
+
+  const upcomingSnap = await db
+    .collection('jobs')
+    .where('status', '==', 'ACCEPTED')
+    .where('scheduledDateTime', '>=', now)
+    .where('scheduledDateTime', '<=', soon)
+    .get();
+
+  await Promise.all(
+    upcomingSnap.docs
+      .filter((d) => !d.data().reminderSent && d.data().cleanerId)
+      .map(async (d) => {
+        const job = d.data();
+        const when = job.scheduledDateTime?.toDate?.();
+        await notifyUser(job.cleanerId, {
+          type: 'JOB_UPDATE',
+          title: 'Upcoming job reminder',
+          body: `Your job at ${job.location?.address ?? 'the scheduled address'} is coming up${
+            when ? ` at ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''
+          }.`,
+          jobId: d.id,
+        });
+        await d.ref.update({ reminderSent: true });
+      })
+  );
+});
 
 // New quote submitted → tell the customer.
 export const onBidCreated = onDocumentCreated('bids/{bidId}', async (event) => {
