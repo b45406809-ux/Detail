@@ -129,12 +129,7 @@ export default function CleanerJobDetailScreen() {
     ? `${haversineDistanceKm(currentLocation, { lat: job.location.lat, lng: job.location.lng }).toFixed(1)} km away`
     : null;
 
-  const budgetLabel =
-    job.budgetMin || job.budgetMax
-      ? `$${job.budgetMin ?? 0} – $${job.budgetMax ?? '—'}`
-      : job.customerBid
-      ? `$${job.customerBid}`
-      : 'Open — send your best price';
+  const budgetLabel = job.budget ? `$${job.budget}` : 'Open — send your best price';
 
   const checklistTags = getChecklistTags(job);
 
@@ -204,7 +199,7 @@ export default function CleanerJobDetailScreen() {
               <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-1.5">Your Price (USD)</Text>
               <TextInput
                 className="border-2 border-ink/10 rounded-2xl px-4 py-3.5 text-xl font-black text-ink bg-ink/[0.02] mb-4"
-                placeholder={`${job.budgetMax ?? job.customerBid ?? '0'}.00`}
+                placeholder={`${job.budget ?? '0'}.00`}
                 placeholderTextColor="#9C94C4"
                 keyboardType="decimal-pad"
                 value={bidPrice}

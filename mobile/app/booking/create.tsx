@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import {
   ArrowLeft,
   MapPin,
@@ -25,11 +26,10 @@ import {
   X,
   Home as HomeIcon,
   Car,
-  Zap,
-  Users,
+  CalendarDays,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
-import { db, addDoc, collection, serverTimestamp } from '../../services/firebase';
+import { db, addDoc, collection, serverTimestamp, Timestamp } from '../../services/firebase';
 import { uploadJobPhoto } from '../../services/storage';
 import { JobStatus, ServiceCategory, HouseChecklist, CarChecklist } from '../../types';
 import {
@@ -43,8 +43,24 @@ import {
   CAR_INTERIOR_SERVICES,
   CAR_DEEP_SERVICES,
   TIME_OPTIONS,
-  PRICING_STRATEGIES,
 } from '../../constants/services';
+
+// A posted job stays open to new bids for 30 minutes — see offers.tsx for
+// the countdown UI and the increase-budget/cancel actions available while
+// it's running.
+const BIDDING_WINDOW_MS = 30 * 60 * 1000;
+
+/** Derive a concrete Date for every schedule preset so every job — not just
+ * CUSTOM ones — has one queryable scheduledDateTime for the reminder system. */
+function resolveScheduledDate(
+  preference: (typeof TIME_OPTIONS)[number]['id'],
+  customDate: Date | null
+): Date {
+  const now = new Date();
+  if (preference === 'CUSTOM' && customDate) return customDate;
+  if (preference === 'TOMORROW') return new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  return now; // ASAP / TODAY
+}
 
 const STEPS = ['CATEGORY', 'CHECKLIST', 'DETAILS', 'LOCATION', 'SCHEDULE', 'BUDGET'] as const;
 type Step = (typeof STEPS)[number];
@@ -83,9 +99,9 @@ export default function CreateBookingScreen() {
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
 
   const [timePreference, setTimePreference] = useState<(typeof TIME_OPTIONS)[number]['id']>('ASAP');
-  const [pricingStrategy, setPricingStrategy] = useState<'INSTANT_BOOK' | 'RECEIVE_BIDS'>('RECEIVE_BIDS');
-  const [budgetMin, setBudgetMin] = useState('');
-  const [budgetMax, setBudgetMax] = useState('');
+  const [customDateTime, setCustomDateTime] = useState<Date | null>(null);
+  const [pickerMode, setPickerMode] = useState<'date' | 'time' | null>(null);
+  const [budget, setBudget] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const step = STEPS[stepIndex];
@@ -157,9 +173,9 @@ export default function CreateBookingScreen() {
       case 'LOCATION':
         return !!address || !!coordinates;
       case 'SCHEDULE':
-        return !!timePreference;
+        return !!timePreference && (timePreference !== 'CUSTOM' || !!customDateTime);
       case 'BUDGET':
-        return true;
+        return !!budget && Number(budget) > 0;
       default:
         return true;
     }
@@ -195,8 +211,8 @@ export default function CreateBookingScreen() {
               deepServices,
             };
 
-      const min = budgetMin ? Number(budgetMin) : undefined;
-      const max = budgetMax ? Number(budgetMax) : undefined;
+      const scheduledDateTime = resolveScheduledDate(timePreference, customDateTime);
+      const now = Date.now();
 
       const jobRef = await addDoc(collection(db, 'jobs'), {
         customerId: user.uid,
@@ -209,11 +225,17 @@ export default function CreateBookingScreen() {
         location: { lat: coordinates?.lat ?? 0, lng: coordinates?.lng ?? 0, address },
         scheduledTime: timePreference,
         timePreference,
+        scheduledDateTime: Timestamp.fromDate(scheduledDateTime),
         status: JobStatus.BIDDING,
-        pricingStrategy,
-        ...(min != null ? { budgetMin: min } : {}),
-        ...(max != null ? { budgetMax: max } : {}),
-        ...(pricingStrategy === 'INSTANT_BOOK' && max != null ? { customerBid: max } : {}),
+        // Only pricing strategy left is client-vetted bidding — the field
+        // stays on the doc for forward-compatibility, just not user-chosen.
+        pricingStrategy: 'RECEIVE_BIDS',
+        budget: Number(budget),
+        // Jobs stay open to new bids for 30 minutes; the customer can
+        // increase the budget (which extends this window) or cancel any
+        // time while it's running — see offers.tsx.
+        biddingExpiresAt: Timestamp.fromMillis(now + BIDDING_WINDOW_MS),
+        reminderSent: false,
         photos: photoUris,
         createdAt: serverTimestamp(),
       });
@@ -440,7 +462,14 @@ export default function CreateBookingScreen() {
                 {TIME_OPTIONS.map(({ id, label, sub }) => (
                   <TouchableOpacity
                     key={id}
-                    onPress={() => setTimePreference(id)}
+                    onPress={() => {
+                      setTimePreference(id);
+                      // Android's picker is a modal dialog (one field at a time,
+                      // auto-advance date -> time on confirm). iOS renders both
+                      // compact pickers inline below instead — see the block
+                      // after this list.
+                      if (id === 'CUSTOM' && Platform.OS === 'android') setPickerMode('date');
+                    }}
                     activeOpacity={0.8}
                     className={`flex-row items-center gap-4 p-4 rounded-3xl border-2 ${
                       timePreference === id ? 'border-accent bg-accent/5' : 'border-ink/10 bg-ink/[0.02]'
@@ -449,71 +478,111 @@ export default function CreateBookingScreen() {
                     <View className={`w-10 h-10 rounded-2xl items-center justify-center ${timePreference === id ? 'bg-accent' : 'bg-white border border-ink/10'}`}>
                       <Clock size={18} color={timePreference === id ? '#fff' : '#9C94C4'} />
                     </View>
-                    <View>
+                    <View className="flex-1">
                       <Text className={`text-sm font-black ${timePreference === id ? 'text-accent' : 'text-ink'}`}>{label}</Text>
-                      <Text className="text-xs text-ink/50 font-medium mt-0.5">{sub}</Text>
+                      <Text className="text-xs text-ink/50 font-medium mt-0.5">
+                        {id === 'CUSTOM' && customDateTime
+                          ? customDateTime.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+                          : sub}
+                      </Text>
                     </View>
+                    {id === 'CUSTOM' && timePreference === 'CUSTOM' && Platform.OS === 'android' && (
+                      <TouchableOpacity onPress={() => setPickerMode('date')} className="p-2">
+                        <CalendarDays size={18} color="#3906D2" />
+                      </TouchableOpacity>
+                    )}
                   </TouchableOpacity>
                 ))}
               </View>
+
+              {/* Android: modal dialog, one field at a time, auto-advances date -> time. */}
+              {Platform.OS === 'android' && pickerMode && (
+                <DateTimePicker
+                  value={customDateTime ?? new Date()}
+                  mode={pickerMode}
+                  minimumDate={new Date()}
+                  onChange={(event, selected) => {
+                    setPickerMode(null);
+                    if (event.type === 'dismissed' || !selected) return;
+                    if (pickerMode === 'date') {
+                      const base = customDateTime ?? new Date();
+                      const merged = new Date(selected);
+                      merged.setHours(base.getHours(), base.getMinutes());
+                      setCustomDateTime(merged);
+                      setPickerMode('time');
+                    } else {
+                      const merged = new Date(customDateTime ?? selected);
+                      merged.setHours(selected.getHours(), selected.getMinutes());
+                      setCustomDateTime(merged);
+                    }
+                  }}
+                />
+              )}
+
+              {/* iOS: two compact inline pickers (tap to open a sheet), no modal juggling. */}
+              {Platform.OS === 'ios' && timePreference === 'CUSTOM' && (
+                <View className="flex-row gap-3 mt-3">
+                  <DateTimePicker
+                    value={customDateTime ?? new Date()}
+                    mode="date"
+                    display="compact"
+                    minimumDate={new Date()}
+                    onChange={(_, selected) => {
+                      if (!selected) return;
+                      const base = customDateTime ?? new Date();
+                      const merged = new Date(selected);
+                      merged.setHours(base.getHours(), base.getMinutes());
+                      setCustomDateTime(merged);
+                    }}
+                  />
+                  <DateTimePicker
+                    value={customDateTime ?? new Date()}
+                    mode="time"
+                    display="compact"
+                    onChange={(_, selected) => {
+                      if (!selected) return;
+                      const merged = new Date(customDateTime ?? selected);
+                      merged.setHours(selected.getHours(), selected.getMinutes());
+                      setCustomDateTime(merged);
+                    }}
+                  />
+                </View>
+              )}
             </View>
           )}
 
           {step === 'BUDGET' && (
             <View>
-              <Text className="text-2xl font-black text-ink mb-1">Pricing strategy</Text>
-              <Text className="text-sm text-ink/50 font-medium mb-6">Choose how you'd like to be matched</Text>
+              <Text className="text-2xl font-black text-ink mb-1">Set your budget</Text>
+              <Text className="text-sm text-ink/50 font-medium mb-6">
+                Cleaners will bid against this amount — you'll review every offer and pick the best one.
+                Your job stays open for 30 minutes; you can raise the budget or cancel any time during that window.
+              </Text>
 
-              <View className="flex-row gap-3 mb-6">
-                {PRICING_STRATEGIES.map(({ id, label, desc }) => (
-                  <TouchableOpacity
-                    key={id}
-                    onPress={() => setPricingStrategy(id)}
-                    activeOpacity={0.85}
-                    className={`flex-1 p-4 rounded-3xl border-2 ${pricingStrategy === id ? 'border-accent bg-accent/5' : 'border-ink/10 bg-ink/[0.02]'}`}
-                  >
-                    {id === 'INSTANT_BOOK' ? (
-                      <Zap size={18} color={pricingStrategy === id ? '#3906D2' : '#9C94C4'} />
-                    ) : (
-                      <Users size={18} color={pricingStrategy === id ? '#3906D2' : '#9C94C4'} />
-                    )}
-                    <Text className={`text-sm font-black mt-2 ${pricingStrategy === id ? 'text-accent' : 'text-ink'}`}>{label}</Text>
-                    <Text className="text-[11px] text-ink/50 font-medium mt-1 leading-snug">{desc}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text className="text-xs font-black text-ink/40 uppercase tracking-widest mb-2">Your Budget (USD, optional)</Text>
-              <View className="flex-row gap-3 mb-6">
-                <View className="flex-1 border-2 border-ink/10 rounded-2xl bg-ink/[0.02] px-4 py-3">
-                  <Text className="text-[10px] font-bold text-ink/40 uppercase mb-1">Min</Text>
-                  <TextInput
-                    className="text-lg font-black text-ink"
-                    placeholder="$0"
-                    placeholderTextColor="#9C94C4"
-                    keyboardType="decimal-pad"
-                    value={budgetMin}
-                    onChangeText={setBudgetMin}
-                  />
-                </View>
-                <View className="flex-1 border-2 border-ink/10 rounded-2xl bg-ink/[0.02] px-4 py-3">
-                  <Text className="text-[10px] font-bold text-ink/40 uppercase mb-1">Max</Text>
-                  <TextInput
-                    className="text-lg font-black text-ink"
-                    placeholder="$0"
-                    placeholderTextColor="#9C94C4"
-                    keyboardType="decimal-pad"
-                    value={budgetMax}
-                    onChangeText={setBudgetMax}
-                  />
-                </View>
+              <Text className="text-xs font-black text-ink/40 uppercase tracking-widest mb-2">Your Budget (USD)</Text>
+              <View className="border-2 border-ink/10 rounded-2xl bg-ink/[0.02] px-4 py-3 mb-6">
+                <TextInput
+                  className="text-2xl font-black text-ink"
+                  placeholder="$0"
+                  placeholderTextColor="#9C94C4"
+                  keyboardType="decimal-pad"
+                  value={budget}
+                  onChangeText={setBudget}
+                />
               </View>
 
               <View className="bg-ink/[0.03] rounded-3xl p-5 border border-ink/10 gap-3">
                 <Text className="text-xs font-black text-ink/40 uppercase tracking-widest">Review Request</Text>
                 <SummaryRow label="Service" value={serviceLabel()} />
                 <SummaryRow label="Location" value={address || 'Not set'} />
-                <SummaryRow label="Time" value={TIME_OPTIONS.find((t) => t.id === timePreference)?.label ?? ''} />
+                <SummaryRow
+                  label="Time"
+                  value={
+                    timePreference === 'CUSTOM' && customDateTime
+                      ? customDateTime.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+                      : TIME_OPTIONS.find((t) => t.id === timePreference)?.label ?? ''
+                  }
+                />
                 <SummaryRow label="Photos" value={`${photoUris.length} attached`} />
               </View>
             </View>

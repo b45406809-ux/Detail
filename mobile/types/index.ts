@@ -113,12 +113,20 @@ export interface Job {
   timePreference?: 'ASAP' | 'TODAY' | 'TOMORROW' | 'CUSTOM';
   status: JobStatus | string;
   pricingStrategy?: PricingStrategy;
-  budgetMin?: number;
-  budgetMax?: number;
-  customerBid?: number;
+  /** The single customer-set asking amount cleaners bid against (replaces the
+   * old budgetMin/budgetMax/customerBid trio now that Instant Book is gone). */
+  budget?: number;
   price?: number;
   photos: string[];
   createdAt?: any;
+  /** When the job stops accepting new bids — 30 min from creation, extended
+   * by another 30 min each time the customer raises the budget. */
+  biddingExpiresAt?: any;
+  /** The concrete date/time the job is scheduled for, derived from
+   * timePreference (or picked directly for CUSTOM) — what sendJobReminders
+   * queries against once a bid is accepted. */
+  scheduledDateTime?: any;
+  reminderSent?: boolean;
   estimatedDuration?: number;
   cleanerLocation?: { lat: number; lng: number };
   paidAt?: any;

@@ -423,7 +423,7 @@ function CleanerPanel({
                     </View>
                     <View className="bg-accent/10 px-3 py-1.5 rounded-xl">
                       <Text className="text-sm font-black text-accent">
-                        {job.budgetMax ? `$${job.budgetMin ?? 0}–${job.budgetMax}` : job.customerBid ? `$${job.customerBid}` : 'Open'}
+                        {job.budget ? `$${job.budget}` : 'Open'}
                       </Text>
                     </View>
                   </View>
