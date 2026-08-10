@@ -35,7 +35,6 @@ import { WalletTransaction } from '../../types';
 
 const METHOD_ICONS: Record<string, any> = {
   ecocash: Smartphone,
-  onemoney: Smartphone,
   card: CreditCard,
 };
 

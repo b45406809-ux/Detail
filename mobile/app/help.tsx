@@ -35,7 +35,7 @@ const FAQS = [
   },
   {
     q: 'How does payment work?',
-    a: 'Payment is processed through your Detail Wallet or paid in cash. Top up your wallet with PesePay before booking — the amount is held and released to the cleaner after you confirm the job is complete.',
+    a: 'Payment is processed through your Detail Wallet or paid in cash. Securely top up your wallet before booking — the amount is held and released to the cleaner after you confirm the job is complete.',
   },
   {
     q: 'How do I become a cleaner on Detail?',
