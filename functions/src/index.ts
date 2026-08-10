@@ -240,6 +240,128 @@ export const submitRating = onCall(async (request) => {
   return { success: true };
 });
 
+/* ───────────────────────── reportJobIssue ───────────────────────── */
+/**
+ * Customer reports a completed job as poorly done (Customer/Cleaner
+ * Agreement §12-15: a refund may be due; if the cleaner already took cash,
+ * it's recovered from their balance). Just files the dispute for review —
+ * resolveDispute is what actually applies a refund, since deciding whether
+ * a report is legitimate needs a human look, not an automatic one.
+ * Input:  { jobId: string, reason: string, evidencePhotos?: string[] }
+ */
+export const reportJobIssue = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
+
+  const { jobId, reason, evidencePhotos } = (request.data ?? {}) as {
+    jobId?: string;
+    reason?: string;
+    evidencePhotos?: string[];
+  };
+  if (!jobId || !reason?.trim()) {
+    throw new HttpsError('invalid-argument', 'jobId and a reason are required.');
+  }
+
+  const jobSnap = await db.collection('jobs').doc(jobId).get();
+  if (!jobSnap.exists) throw new HttpsError('not-found', 'Job not found.');
+  const job = jobSnap.data() as FirebaseFirestore.DocumentData;
+
+  if (job.customerId !== uid) {
+    throw new HttpsError('permission-denied', 'Only the job customer can report an issue.');
+  }
+  if (job.status !== 'COMPLETED') {
+    throw new HttpsError('failed-precondition', 'Only completed jobs can be reported.');
+  }
+
+  const disputeRef = await db.collection('disputes').add({
+    jobId,
+    customerId: uid,
+    cleanerId: job.cleanerId ?? null,
+    reason: reason.trim(),
+    evidencePhotos: evidencePhotos ?? [],
+    status: 'PENDING',
+    createdAt: FieldValue.serverTimestamp(),
+  });
+
+  return { success: true, disputeId: disputeRef.id };
+});
+
+/* ───────────────────────── resolveDispute ───────────────────────── */
+/**
+ * Staff-invoked resolution for a reported job (no admin UI exists in this
+ * codebase yet — called via the Firebase console or a future admin tool).
+ * Applies a refund by crediting the customer and debiting the cleaner's
+ * balance (can go negative, same recovery mechanism as the cash-commission
+ * debit in settleJobPayment) per Cleaner Agreement §15.
+ * Input:  { disputeId: string, refundAmount: number, resolution: string }
+ */
+export const resolveDispute = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
+
+  const callerSnap = await db.collection('users').doc(uid).get();
+  if (callerSnap.data()?.role !== 'ADMIN') {
+    throw new HttpsError('permission-denied', 'Only Detail staff can resolve disputes.');
+  }
+
+  const { disputeId, refundAmount, resolution } = (request.data ?? {}) as {
+    disputeId?: string;
+    refundAmount?: number;
+    resolution?: string;
+  };
+  if (!disputeId || refundAmount == null || refundAmount < 0) {
+    throw new HttpsError('invalid-argument', 'disputeId and a non-negative refundAmount are required.');
+  }
+
+  const disputeRef = db.collection('disputes').doc(disputeId);
+
+  await db.runTransaction(async (tx) => {
+    const disputeSnap = await tx.get(disputeRef);
+    if (!disputeSnap.exists) throw new HttpsError('not-found', 'Dispute not found.');
+    const dispute = disputeSnap.data() as FirebaseFirestore.DocumentData;
+    if (dispute.status !== 'PENDING') {
+      throw new HttpsError('failed-precondition', 'This dispute has already been resolved.');
+    }
+
+    if (refundAmount > 0) {
+      const amount = round2(refundAmount);
+      tx.update(db.collection('users').doc(dispute.customerId), { balance: FieldValue.increment(amount) });
+      tx.set(db.collection('transactions').doc(), {
+        userId: dispute.customerId,
+        type: 'CREDIT',
+        amount,
+        description: 'Refund for reported job',
+        jobId: dispute.jobId,
+        status: 'COMPLETED',
+        createdAt: FieldValue.serverTimestamp(),
+      });
+
+      if (dispute.cleanerId) {
+        tx.update(db.collection('users').doc(dispute.cleanerId), { balance: FieldValue.increment(-amount) });
+        tx.set(db.collection('transactions').doc(), {
+          userId: dispute.cleanerId,
+          type: 'DEBIT',
+          amount,
+          description: 'Refund recovered — reported job',
+          jobId: dispute.jobId,
+          status: 'COMPLETED',
+          createdAt: FieldValue.serverTimestamp(),
+        });
+      }
+    }
+
+    tx.update(disputeRef, {
+      status: 'RESOLVED',
+      refundAmount: round2(refundAmount),
+      resolution: resolution ?? null,
+      resolvedAt: FieldValue.serverTimestamp(),
+      resolvedBy: uid,
+    });
+  });
+
+  return { success: true };
+});
+
 /* ───────────────────────── acceptBid ───────────────────────── */
 /**
  * Called by the customer to accept a cleaner's bid.

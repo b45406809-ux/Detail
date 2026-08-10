@@ -135,6 +135,18 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ───────────────────────── disputes ─────────────────────────
+    // Customer files a dispute via the reportJobIssue Cloud Function only
+    // (needs server-side validation that the job is COMPLETED and theirs) —
+    // resolution/refunds are also function-only (resolveDispute, staff-invoked).
+    match /disputes/{disputeId} {
+      allow read: if isAuth() && (
+        resource.data.customerId == request.auth.uid ||
+        resource.data.cleanerId == request.auth.uid
+      );
+      allow write: if false;
+    }
+
     // ───────────────────────── invoices ─────────────────────────
     match /invoices/{invoiceId} {
       allow read: if isAuth() && (

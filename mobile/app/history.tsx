@@ -1,8 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  ActivityIndicator,
+  Modal,
+  TextInput,
+  Alert,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { ArrowLeft, MapPin, Clock, Star } from 'lucide-react-native';
+import { ArrowLeft, MapPin, Flag, X } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import {
   db,
@@ -13,6 +22,7 @@ import {
   orderBy,
   limit,
 } from '../services/firebase';
+import { callFunction } from '../services/functions';
 import { Job, JobStatus } from '../types';
 
 const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }> = {
@@ -25,6 +35,27 @@ export default function HistoryScreen() {
   const { user, profile } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [reportingJob, setReportingJob] = useState<Job | null>(null);
+  const [reportReason, setReportReason] = useState('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+
+  const submitReport = async () => {
+    if (!reportingJob || !reportReason.trim()) {
+      Alert.alert('Tell us what happened', 'Please describe the issue before submitting.');
+      return;
+    }
+    setIsSubmittingReport(true);
+    try {
+      await callFunction('reportJobIssue', { jobId: reportingJob.id, reason: reportReason.trim() });
+      setReportingJob(null);
+      setReportReason('');
+      Alert.alert('Report submitted', "We'll review this and follow up with you.");
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Could not submit your report. Please try again.');
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -123,11 +154,72 @@ export default function HistoryScreen() {
                     </Text>
                   </View>
                 )}
+
+                {profile?.role === 'CUSTOMER' && job.status === JobStatus.COMPLETED && (
+                  <TouchableOpacity
+                    onPress={() => setReportingJob(job)}
+                    activeOpacity={0.8}
+                    className="flex-row items-center justify-center gap-2 mt-4 pt-4 border-t border-slate-50"
+                  >
+                    <Flag size={13} color="#ef4444" />
+                    <Text className="text-xs font-black text-red-500 uppercase tracking-wider">
+                      Report an Issue
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             );
           }}
         />
       )}
+
+      {/* Report an issue modal */}
+      <Modal visible={!!reportingJob} transparent animationType="slide">
+        <View className="flex-1 justify-end">
+          <TouchableOpacity className="flex-1 bg-black/50" onPress={() => setReportingJob(null)} />
+          <View className="bg-white rounded-t-[32px] p-6 pb-10">
+            <View className="flex-row items-center justify-between mb-1">
+              <Text className="text-xl font-black text-slate-900">Report an Issue</Text>
+              <TouchableOpacity onPress={() => setReportingJob(null)}>
+                <X size={22} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+            <Text className="text-xs text-slate-400 font-medium mb-6">
+              {reportingJob?.serviceType} · #{reportingJob?.id.slice(-6).toUpperCase()}
+            </Text>
+
+            <Text className="text-xs font-black text-slate-500 uppercase tracking-widest mb-2">
+              What went wrong?
+            </Text>
+            <TextInput
+              className="border-2 border-slate-100 rounded-2xl px-4 py-4 text-sm font-medium text-slate-900 bg-slate-50 mb-6"
+              placeholder="Describe the issue with this job…"
+              placeholderTextColor="#94a3b8"
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              value={reportReason}
+              onChangeText={setReportReason}
+              autoFocus
+            />
+
+            <TouchableOpacity
+              onPress={submitReport}
+              disabled={isSubmittingReport || !reportReason.trim()}
+              className="bg-accent py-5 rounded-[32px] items-center shadow-lg shadow-accent/30"
+              activeOpacity={0.85}
+            >
+              {isSubmittingReport ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text className="text-white font-black text-sm uppercase tracking-widest">
+                  Submit Report
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
