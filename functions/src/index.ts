@@ -27,7 +27,10 @@ const db = admin.firestore();
 const FieldValue = admin.firestore.FieldValue;
 
 // Platform keeps this share of every job; the cleaner receives the rest.
-const PLATFORM_COMMISSION = 0.15;
+// Per the Cleaner Agreement §10: standard commission is 10%, and Detail
+// reserves the right to change it — this constant is the single source of
+// truth for that rate across settlement, cash-commission debits, and bids.
+const PLATFORM_COMMISSION = 0.1;
 
 const PESEPAY_INTEGRATION_KEY = defineSecret('PESEPAY_INTEGRATION_KEY');
 const PESEPAY_ENCRYPTION_KEY = defineSecret('PESEPAY_ENCRYPTION_KEY');

@@ -29,7 +29,7 @@ import {
   orderBy,
   limit,
 } from '../../services/firebase';
-import { addFundsToWallet, getPesePayMethods } from '../../services/payments';
+import { addFundsToWallet, getPaymentMethods } from '../../services/payments';
 import { IS_MOCK } from '../../utils/env';
 import { WalletTransaction } from '../../types';
 
@@ -46,7 +46,7 @@ export default function WalletScreen() {
   const [amount, setAmount] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const paymentMethods = getPesePayMethods();
+  const paymentMethods = getPaymentMethods();
 
   // Real-time transaction feed from Firestore
   useEffect(() => {
@@ -126,7 +126,7 @@ export default function WalletScreen() {
             onPress={() =>
               Alert.alert(
                 'Withdraw',
-                'Withdrawals are processed within 2–3 business days to your linked account. Contact support to initiate.'
+                'Withdrawals are processed within 1–3 business days to your linked account. Contact support to initiate.'
               )
             }
             className="flex-1 bg-white/20 py-3 rounded-2xl flex-row items-center justify-center gap-2"
@@ -138,10 +138,10 @@ export default function WalletScreen() {
         </View>
       </View>
 
-      {/* Payment methods (informational — PesePay handles selection on their hosted page) */}
+      {/* Payment methods (informational — the processor handles selection on its hosted page) */}
       <View className="mx-5 mb-6">
         <Text className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">
-          Accepted via PesePay
+          Accepted Payment Methods
           {IS_MOCK && <Text className="text-amber-500"> [DEV — simulated]</Text>}
         </Text>
         <View className="bg-white rounded-3xl border border-slate-100 overflow-hidden">
@@ -239,7 +239,7 @@ export default function WalletScreen() {
               </TouchableOpacity>
             </View>
             <Text className="text-xs text-slate-400 font-medium mb-6">
-              {IS_MOCK ? 'DEV mode — no real charge' : 'Powered by PesePay · EcoCash, Card & more'}
+              {IS_MOCK ? 'DEV mode — no real charge' : 'Secure payment · EcoCash, Card & more'}
             </Text>
 
             <Text className="text-xs font-black text-slate-500 uppercase tracking-widest mb-2">
@@ -286,9 +286,7 @@ export default function WalletScreen() {
                 <ActivityIndicator color="#fff" />
               ) : (
                 <Text className="text-white font-black text-sm uppercase tracking-widest">
-                  {IS_MOCK
-                    ? `[DEV] Add $${amount || '0.00'}`
-                    : `Pay $${amount || '0.00'} via PesePay`}
+                  {IS_MOCK ? `[DEV] Add $${amount || '0.00'}` : `Pay $${amount || '0.00'}`}
                 </Text>
               )}
             </TouchableOpacity>
