@@ -21,6 +21,7 @@ import {
   HelpCircle,
   FileText,
   Heart,
+  Repeat,
 } from 'lucide-react-native';
 import { Linking } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
@@ -29,8 +30,24 @@ import { StarRating } from '../../components/StarRating';
 import { IS_MOCK } from '../../utils/env';
 
 export default function ProfileScreen() {
-  const { user, profile } = useAuth();
+  const { user, profile, updateProfile } = useAuth();
   const [notificationsOn, setNotificationsOn] = useState(true);
+
+  // Uber-style mode switch. Going CUSTOMER -> CLEANER is gated: the cleaner
+  // registration form (register-cleaner.tsx) and the Cleaner Agreement
+  // acceptance must both be done first. Once done, switching back and forth
+  // is instant. Going CLEANER -> CUSTOMER never needs a gate.
+  const handleSwitchRole = () => {
+    if (profile?.role === 'CUSTOMER') {
+      if (profile.cleanerOnboardingComplete && profile.hasAgreedToTerms) {
+        updateProfile({ role: 'CLEANER' });
+      } else {
+        router.push('/register-cleaner');
+      }
+    } else if (profile?.role === 'CLEANER') {
+      updateProfile({ role: 'CUSTOMER' });
+    }
+  };
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -85,6 +102,15 @@ export default function ProfileScreen() {
               },
             ]
           : []),
+        {
+          icon: Repeat,
+          label: profile?.role === 'CLEANER' ? 'Switch to Customer' : 'Switch to Cleaner',
+          sub:
+            profile?.role === 'CLEANER'
+              ? 'Go back to booking cleaners'
+              : 'Start earning by accepting jobs',
+          onPress: handleSwitchRole,
+        },
       ],
     },
     {
@@ -96,6 +122,16 @@ export default function ProfileScreen() {
           sub: 'How we handle your data',
           onPress: () => router.push('/privacy-policy'),
         },
+        ...(profile?.role === 'CUSTOMER'
+          ? [
+              {
+                icon: FileText,
+                label: 'Customer Agreement',
+                sub: 'Platform terms for customers',
+                onPress: () => router.push('/customer-agreement'),
+              },
+            ]
+          : []),
         ...(profile?.role === 'CLEANER'
           ? [
               {

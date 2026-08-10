@@ -83,6 +83,16 @@ export interface UserProfile {
   ratingCount?: number;
   responseTimeAverage?: number;
   expoPushToken?: string;
+  // Cleaner registration (register-cleaner.tsx) — required, alongside
+  // hasAgreedToTerms, before profile.tsx's role switch will flip role to
+  // CLEANER. All owner-writable (not in firestore.rules' users update denylist).
+  cleanerOnboardingComplete?: boolean;
+  serviceCategories?: ServiceCategory[];
+  serviceRadiusKm?: number;
+  experienceYears?: number;
+  address?: string;
+  proofOfResidenceUrl?: string;
+  verificationStatus?: 'PENDING' | 'VERIFIED';
 }
 
 export interface Job {

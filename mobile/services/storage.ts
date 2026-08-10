@@ -71,3 +71,14 @@ export async function uploadProfilePhoto(uri: string) {
   const uid = auth.currentUser?.uid ?? 'anonymous';
   return uploadUri(uri, `profile-photos/${uid}/avatar.jpg`);
 }
+
+/**
+ * Upload a proof-of-residence photo captured during cleaner registration
+ * (register-cleaner.tsx). Kept in its own bucket path so it's easy to
+ * restrict access to the uploading user + staff via storage.rules, separate
+ * from the public-ish profile-photos/job-photos paths.
+ */
+export async function uploadProofOfResidence(uri: string) {
+  const uid = auth.currentUser?.uid ?? 'anonymous';
+  return uploadUri(uri, `verification/${uid}/proof-of-residence.jpg`);
+}

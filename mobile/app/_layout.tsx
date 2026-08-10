@@ -89,6 +89,8 @@ export default function RootLayout() {
             <Stack.Screen name="help" />
             <Stack.Screen name="privacy-policy" />
             <Stack.Screen name="cleaner-agreement" />
+            <Stack.Screen name="customer-agreement" />
+            <Stack.Screen name="register-cleaner" />
             <Stack.Screen name="+not-found" />
           </Stack>
         </AuthProvider>

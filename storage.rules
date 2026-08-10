@@ -36,6 +36,15 @@ service firebase.storage {
       allow write: if isAuth() && request.auth.uid == uid && isImage() && underSizeLimit();
     }
 
+    // Proof-of-residence photos captured during cleaner registration
+    // (register-cleaner.tsx). Sensitive PII — unlike profile-photos, only
+    // the owner can ever read their own upload back; Detail staff review it
+    // via the Admin SDK (bypasses rules), not through this path.
+    match /verification/{uid}/{allPaths=**} {
+      allow read: if isAuth() && request.auth.uid == uid;
+      allow write: if isAuth() && request.auth.uid == uid && isImage() && underSizeLimit();
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }
