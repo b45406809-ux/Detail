@@ -24,6 +24,7 @@ import {
   serverTimestamp,
 } from '../../services/firebase';
 import { GlassCard } from '../../components/glass';
+import { SocialSignInButtons } from '../../components/SocialSignInButtons';
 import { gradients } from '../../constants/theme';
 
 type AuthTab = 'phone' | 'email';
@@ -216,6 +217,10 @@ export default function SignInScreen() {
                   </View>
                 )}
               </GlassCard>
+
+              <View className="mt-6">
+                <SocialSignInButtons />
+              </View>
 
               <View className="flex-row items-center justify-center gap-2 mt-8">
                 <View className="w-4 h-4 rounded-full bg-white/10 items-center justify-center">
