@@ -138,6 +138,24 @@ export default function WalletScreen() {
         </View>
       </View>
 
+      {balance < 0 && (
+        <TouchableOpacity
+          onPress={() => setIsAddFundsOpen(true)}
+          activeOpacity={0.85}
+          className="mx-5 mb-6 bg-red-50 border border-red-100 rounded-3xl p-4 flex-row items-center gap-3"
+        >
+          <View className="w-10 h-10 bg-red-100 rounded-2xl items-center justify-center">
+            <ArrowUpRight size={18} color="#ef4444" />
+          </View>
+          <View className="flex-1">
+            <Text className="text-sm font-black text-red-700">Outstanding commission balance</Text>
+            <Text className="text-xs text-red-500 font-medium mt-0.5">
+              Add funds to bring your balance to $0 and keep bidding on jobs
+            </Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
       {/* Payment methods (informational — the processor handles selection on its hosted page) */}
       <View className="mx-5 mb-6">
         <Text className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">

@@ -157,8 +157,28 @@ export const settleJobPayment = onCall(async (request) => {
         createdAt: FieldValue.serverTimestamp(),
       });
     } else {
-      // CASH — no wallet movement, just record completion.
-      tx.update(cleanerRef, { jobsCompleted: FieldValue.increment(1) });
+      // CASH — the cleaner keeps the full amount from the customer directly,
+      // but Detail's commission is still owed (Cleaner Agreement §11: "A cash
+      // payment does not remove your obligation to pay the applicable Detail
+      // commission"). Debited from the cleaner's wallet balance immediately,
+      // same day as the job — not batched into a weekly invoice — so it can
+      // go negative; submitBid's balance gate then blocks new bids until
+      // they top up, which is what actually prevents the "take cash all
+      // week and vanish" risk described in the commission model.
+      const commission = round2(price * PLATFORM_COMMISSION);
+      tx.update(cleanerRef, {
+        balance: FieldValue.increment(-commission),
+        jobsCompleted: FieldValue.increment(1),
+      });
+      tx.set(db.collection('transactions').doc(), {
+        userId: job.cleanerId,
+        type: 'DEBIT',
+        amount: commission,
+        description: `Commission on cash job — ${job.serviceType}`,
+        jobId,
+        status: 'COMPLETED',
+        createdAt: FieldValue.serverTimestamp(),
+      });
     }
 
     tx.update(jobRef, { paidAt: FieldValue.serverTimestamp(), paymentMethod });
