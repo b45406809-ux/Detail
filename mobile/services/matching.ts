@@ -1,4 +1,4 @@
-import { CleanerProfile, Bid } from '../types';
+import { CleanerProfile, Bid, Job } from '../types';
 
 export function rankCleaners(
   cleaners: CleanerProfile[],
@@ -49,6 +49,22 @@ export function rankBidsByRating(bids: Bid[]): Bid[] {
     const jobsDiff = (b.cleanerJobsCompleted ?? 0) - (a.cleanerJobsCompleted ?? 0);
     if (jobsDiff !== 0) return jobsDiff;
     return a.bidPrice - b.bidPrice;
+  });
+}
+
+/**
+ * Uber-style "match nearby first": sorts open jobs by distance from the
+ * cleaner's current location, nearest first — used on the cleaner's Home
+ * feed so the jobs most worth their time (short trip to reach) surface at
+ * the top, the same way a rideshare app surfaces nearby requests before far
+ * ones. Jobs with no resolvable lat/lng sort to the end rather than being
+ * dropped, so a bad/missing location on a job doesn't hide it entirely.
+ */
+export function rankJobsByProximity(jobs: Job[], cleanerLocation: { lat: number; lng: number }): Job[] {
+  return [...jobs].sort((a, b) => {
+    const distA = a.location?.lat && a.location?.lng ? haversineDistanceKm(cleanerLocation, a.location) : Infinity;
+    const distB = b.location?.lat && b.location?.lng ? haversineDistanceKm(cleanerLocation, b.location) : Infinity;
+    return distA - distB;
   });
 }
 

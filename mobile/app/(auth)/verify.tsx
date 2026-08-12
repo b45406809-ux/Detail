@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
@@ -18,7 +17,6 @@ import { sendPhoneOTP, confirmPhoneOTP } from '../../services/phoneAuth';
 import { firebaseConfig } from '../../services/firebase';
 import { GlassCard } from '../../components/glass';
 import { RecaptchaModal, RecaptchaModalHandle } from '../../components/RecaptchaModal';
-import { gradients } from '../../constants/theme';
 
 const OTP_LENGTH = 6;
 
@@ -99,90 +97,86 @@ export default function VerifyScreen() {
   const isComplete = otp.every((d) => d !== '');
 
   return (
-    <View style={{ flex: 1 }}>
-      <LinearGradient colors={gradients.dusk} style={{ flex: 1 }} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }}>
-        <SafeAreaView style={{ flex: 1 }}>
-          {!IS_MOCK && <RecaptchaModal ref={recaptchaVerifierRef} firebaseConfig={firebaseConfig} />}
+    <SafeAreaView className="flex-1 bg-white">
+      {!IS_MOCK && <RecaptchaModal ref={recaptchaVerifierRef} firebaseConfig={firebaseConfig} />}
 
-          <KeyboardAvoidingView className="flex-1 px-6 pt-6" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-            <TouchableOpacity
-              onPress={() => router.back()}
-              className="w-12 h-12 bg-white/10 border border-white/15 rounded-2xl items-center justify-center mb-8"
+      <KeyboardAvoidingView className="flex-1 px-6 pt-6" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          className="w-12 h-12 bg-white rounded-2xl items-center justify-center mb-8 border border-ink/10"
+        >
+          <ArrowLeft size={20} color="#150256" />
+        </TouchableOpacity>
+
+        <Text className="text-3xl font-black text-ink tracking-tight mb-2">Enter the code</Text>
+        <Text className="text-base text-ink/50 font-medium mb-10">
+          {IS_MOCK ? 'DEV mode — enter any 6 digits to continue' : `We sent a 6-digit code to\n`}
+          {!IS_MOCK && <Text className="text-ink font-black">{phone}</Text>}
+        </Text>
+
+        {isSending && (
+          <View className="flex-row items-center gap-2 mb-6">
+            <ActivityIndicator size="small" color="#3906D2" />
+            <Text className="text-sm text-ink/40 font-medium">Sending code…</Text>
+          </View>
+        )}
+
+        <GlassCard style={{ paddingVertical: 24, paddingHorizontal: 16 }}>
+          <View className="flex-row gap-3 justify-center">
+            {otp.map((digit, index) => (
+              <TextInput
+                key={index}
+                ref={(ref) => {
+                  inputRefs.current[index] = ref;
+                }}
+                className="w-12 h-14 rounded-2xl text-center text-xl font-black text-ink"
+                style={{
+                  backgroundColor: digit ? 'rgba(57,6,210,0.12)' : 'rgba(15,11,46,0.03)',
+                  borderWidth: 2,
+                  borderColor: digit ? '#3906D2' : 'rgba(15,11,46,0.1)',
+                }}
+                keyboardType="number-pad"
+                maxLength={1}
+                value={digit}
+                onChangeText={(v) => handleOtpChange(v, index)}
+                onKeyPress={(e) => handleKeyPress(e, index)}
+                autoFocus={index === 0}
+                editable={!isVerifying}
+              />
+            ))}
+          </View>
+        </GlassCard>
+
+        <TouchableOpacity
+          onPress={() => handleVerify(otp.join(''))}
+          disabled={isVerifying || !isComplete || isSending}
+          activeOpacity={0.85}
+          className="w-full py-5 rounded-[28px] items-center mt-8"
+          style={{ backgroundColor: isComplete && !isSending ? '#3906D2' : 'rgba(15,11,46,0.08)' }}
+        >
+          {isVerifying ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text
+              className="font-black text-sm uppercase tracking-widest"
+              style={{ color: isComplete && !isSending ? '#fff' : 'rgba(15,11,46,0.3)' }}
             >
-              <ArrowLeft size={20} color="#fff" />
-            </TouchableOpacity>
-
-            <Text className="text-3xl font-black text-white tracking-tight mb-2">Enter the code</Text>
-            <Text className="text-base text-white/60 font-medium mb-10">
-              {IS_MOCK ? 'DEV mode — enter any 6 digits to continue' : `We sent a 6-digit code to\n`}
-              {!IS_MOCK && <Text className="text-white font-black">{phone}</Text>}
+              Verify Code
             </Text>
+          )}
+        </TouchableOpacity>
 
-            {isSending && (
-              <View className="flex-row items-center gap-2 mb-6">
-                <ActivityIndicator size="small" color="#fff" />
-                <Text className="text-sm text-white/50 font-medium">Sending code…</Text>
-              </View>
-            )}
-
-            <GlassCard style={{ paddingVertical: 24, paddingHorizontal: 16 }}>
-              <View className="flex-row gap-3 justify-center">
-                {otp.map((digit, index) => (
-                  <TextInput
-                    key={index}
-                    ref={(ref) => {
-                      inputRefs.current[index] = ref;
-                    }}
-                    className="w-12 h-14 rounded-2xl text-center text-xl font-black text-ink"
-                    style={{
-                      backgroundColor: digit ? 'rgba(57,6,210,0.12)' : 'rgba(255,255,255,0.55)',
-                      borderWidth: 2,
-                      borderColor: digit ? '#3906D2' : 'rgba(255,255,255,0.6)',
-                    }}
-                    keyboardType="number-pad"
-                    maxLength={1}
-                    value={digit}
-                    onChangeText={(v) => handleOtpChange(v, index)}
-                    onKeyPress={(e) => handleKeyPress(e, index)}
-                    autoFocus={index === 0}
-                    editable={!isVerifying}
-                  />
-                ))}
-              </View>
-            </GlassCard>
-
-            <TouchableOpacity
-              onPress={() => handleVerify(otp.join(''))}
-              disabled={isVerifying || !isComplete || isSending}
-              activeOpacity={0.85}
-              className="w-full py-5 rounded-[28px] items-center mt-8"
-              style={{ backgroundColor: isComplete && !isSending ? '#fff' : 'rgba(255,255,255,0.15)' }}
-            >
-              {isVerifying ? (
-                <ActivityIndicator color="#3906D2" />
-              ) : (
-                <Text
-                  className="font-black text-sm uppercase tracking-widest"
-                  style={{ color: isComplete && !isSending ? '#3906D2' : 'rgba(255,255,255,0.5)' }}
-                >
-                  Verify Code
-                </Text>
-              )}
+        <View className="flex-row items-center justify-center mt-6">
+          <Text className="text-sm text-ink/40 font-medium">Didn't receive it? </Text>
+          {resendTimer > 0 ? (
+            <Text className="text-sm font-black text-ink/25">Resend in {resendTimer}s</Text>
+          ) : (
+            <TouchableOpacity onPress={handleResend} disabled={isSending}>
+              <Text className="text-sm font-black text-accent">Resend Code</Text>
             </TouchableOpacity>
-
-            <View className="flex-row items-center justify-center mt-6">
-              <Text className="text-sm text-white/50 font-medium">Didn't receive it? </Text>
-              {resendTimer > 0 ? (
-                <Text className="text-sm font-black text-white/30">Resend in {resendTimer}s</Text>
-              ) : (
-                <TouchableOpacity onPress={handleResend} disabled={isSending}>
-                  <Text className="text-sm font-black text-white">Resend Code</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </LinearGradient>
-    </View>
+          )}
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }

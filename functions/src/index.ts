@@ -730,27 +730,58 @@ export const pesepayWebhook = onRequest(
  * from writing to directly (see firestore.rules).
  */
 
-// New job posted → tell every cleaner immediately (Cleaner Agreement note:
-// "Cleaner must get push notifications on new jobs"). Broadcasts to every
-// non-suspended cleaner — no geo-sharding infra exists yet, so this doesn't
-// scope by distance; a known scale limitation to revisit once the cleaner
-// base grows past what a broadcast can reasonably serve.
+// Haversine distance in km — server-side twin of mobile/services/matching.ts's
+// helper (Cloud Functions can't import the client app's module directly).
+function haversineDistanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371;
+  const dLat = (b.lat - a.lat) * (Math.PI / 180);
+  const dLon = (b.lng - a.lng) * (Math.PI / 180);
+  const x =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(a.lat * (Math.PI / 180)) * Math.cos(b.lat * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
+const DEFAULT_SERVICE_RADIUS_KM = 15;
+
+// New job posted → tell cleaners immediately, nearest first (Cleaner
+// Agreement note: "Cleaner must get push notifications on new jobs";
+// "match nearby first" like Uber matches nearby drivers). Cleaners with a
+// stored location (set on Home-screen mount, see mobile/app/(tabs)/home.tsx)
+// only get notified if the job falls within their own registered
+// serviceRadiusKm; cleaners with no stored location yet are notified
+// regardless, as a fallback, so nobody is silently excluded just because
+// this data hasn't been populated for them yet.
 export const onJobCreated = onDocumentCreated('jobs/{jobId}', async (event) => {
   const job = event.data?.data();
   if (!job || job.status !== 'BIDDING') return;
 
+  // A job with no usable coordinates (customer typed an address instead of
+  // using "current location") can't be distance-filtered — fall back to the
+  // old broadcast-everyone behavior rather than silently notifying no one.
+  const jobHasLocation = typeof job.location?.lat === 'number' && (job.location.lat !== 0 || job.location.lng !== 0);
+
   const cleanersSnap = await db.collection('users').where('role', '==', 'CLEANER').get();
+  const targetCleanerIds = cleanersSnap.docs
+    .filter((d) => !d.data().isSuspended && !d.data().isBanned)
+    .filter((d) => {
+      if (!jobHasLocation) return true;
+      const cleaner = d.data();
+      if (!cleaner.location?.lat || !cleaner.location?.lng) return true; // no location yet — fallback, always notify
+      const distance = haversineDistanceKm(job.location, cleaner.location);
+      return distance <= (cleaner.serviceRadiusKm ?? DEFAULT_SERVICE_RADIUS_KM);
+    })
+    .map((d) => d.id);
+
   await Promise.all(
-    cleanersSnap.docs
-      .filter((d) => !d.data().isSuspended && !d.data().isBanned)
-      .map((d) =>
-        notifyUser(d.id, {
-          type: 'JOB_UPDATE',
-          title: 'New job posted',
-          body: `${job.serviceType ?? 'A new job'} near ${job.location?.address ?? 'you'} — $${job.budget ?? '—'}`,
-          jobId: event.params.jobId,
-        })
-      )
+    targetCleanerIds.map((cleanerId) =>
+      notifyUser(cleanerId, {
+        type: 'JOB_UPDATE',
+        title: 'New job posted',
+        body: `${job.serviceType ?? 'A new job'} near ${job.location?.address ?? 'you'} — $${job.budget ?? '—'}`,
+        jobId: event.params.jobId,
+      })
+    )
   );
 });
 

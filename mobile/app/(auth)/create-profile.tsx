@@ -10,14 +10,12 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { User, Briefcase, ChevronRight } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { auth, db, setDoc, doc, serverTimestamp } from '../../services/firebase';
 import { GlassCard } from '../../components/glass';
-import { gradients } from '../../constants/theme';
 
 type Role = 'CUSTOMER' | 'CLEANER';
 
@@ -62,31 +60,29 @@ export default function CreateProfileScreen() {
   };
 
   return (
-    <View style={{ flex: 1 }}>
-      <LinearGradient colors={gradients.dusk} style={{ flex: 1 }} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }}>
-        <SafeAreaView style={{ flex: 1 }}>
-          <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-            <ScrollView contentContainerClassName="flex-grow px-6 pt-8 pb-10" keyboardShouldPersistTaps="handled">
-              <View className="flex-row gap-2 mb-8">
-                {[1, 2, 3].map((step) => (
-                  <View
-                    key={step}
-                    className="h-1.5 flex-1 rounded-full"
-                    style={{ backgroundColor: step === 1 ? '#fff' : 'rgba(255,255,255,0.2)' }}
-                  />
-                ))}
-              </View>
+    <SafeAreaView className="flex-1 bg-white">
+      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerClassName="flex-grow px-6 pt-8 pb-10" keyboardShouldPersistTaps="handled">
+          <View className="flex-row gap-2 mb-8">
+            {[1, 2, 3].map((step) => (
+              <View
+                key={step}
+                className="h-1.5 flex-1 rounded-full"
+                style={{ backgroundColor: step === 1 ? '#3906D2' : 'rgba(15,11,46,0.1)' }}
+              />
+            ))}
+          </View>
 
-              <Text className="text-3xl font-black text-white tracking-tight mb-2">Set up your profile</Text>
-              <Text className="text-base text-white/60 font-medium mb-8">
-                Tell us a bit about yourself to get started
-              </Text>
+          <Text className="text-3xl font-black text-ink tracking-tight mb-2">Set up your profile</Text>
+          <Text className="text-base text-ink/50 font-medium mb-8">
+            Tell us a bit about yourself to get started
+          </Text>
 
-              <GlassCard style={{ padding: 20 }}>
+          <GlassCard style={{ padding: 20 }}>
                 <View className="mb-6">
                   <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-2">Full Name</Text>
                   <TextInput
-                    className="border border-white/40 rounded-2xl px-4 py-4 text-base font-medium text-ink bg-white/50"
+                    className="border border-ink/10 rounded-2xl px-4 py-4 text-base font-medium text-ink bg-ink/[0.02]"
                     placeholder="Your full name"
                     placeholderTextColor="rgba(21,2,86,0.35)"
                     value={name}
@@ -121,13 +117,13 @@ export default function CreateProfileScreen() {
                         activeOpacity={0.8}
                         className="flex-row items-center gap-4 p-4 rounded-3xl border"
                         style={{
-                          borderColor: role === value ? '#3906D2' : 'rgba(255,255,255,0.4)',
-                          backgroundColor: role === value ? 'rgba(57,6,210,0.1)' : 'rgba(255,255,255,0.4)',
+                          borderColor: role === value ? '#3906D2' : 'rgba(15,11,46,0.1)',
+                          backgroundColor: role === value ? 'rgba(57,6,210,0.1)' : 'rgba(15,11,46,0.02)',
                         }}
                       >
                         <View
                           className="w-12 h-12 rounded-2xl items-center justify-center"
-                          style={{ backgroundColor: role === value ? '#3906D2' : 'rgba(255,255,255,0.6)' }}
+                          style={{ backgroundColor: role === value ? '#3906D2' : 'rgba(15,11,46,0.05)' }}
                         >
                           <Icon size={22} color={role === value ? '#fff' : '#150256'} />
                         </View>
@@ -147,24 +143,20 @@ export default function CreateProfileScreen() {
                 </View>
               </GlassCard>
 
-              <TouchableOpacity
-                onPress={handleContinue}
-                disabled={isLoading}
-                activeOpacity={0.85}
-                className="w-full bg-white py-5 rounded-[28px] items-center mt-8"
-              >
-                {isLoading ? (
-                  <ActivityIndicator color="#3906D2" />
-                ) : (
-                  <Text className="font-black text-sm uppercase tracking-widest" style={{ color: '#3906D2' }}>
-                    Continue
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </LinearGradient>
-    </View>
+          <TouchableOpacity
+            onPress={handleContinue}
+            disabled={isLoading}
+            activeOpacity={0.85}
+            className="w-full bg-accent py-5 rounded-[28px] items-center mt-8 shadow-lg shadow-accent/30"
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text className="font-black text-sm uppercase tracking-widest text-white">Continue</Text>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }

@@ -10,7 +10,6 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Phone, Mail } from 'lucide-react-native';
@@ -25,7 +24,6 @@ import {
 } from '../../services/firebase';
 import { GlassCard } from '../../components/glass';
 import { SocialSignInButtons } from '../../components/SocialSignInButtons';
-import { gradients } from '../../constants/theme';
 
 type AuthTab = 'phone' | 'email';
 
@@ -87,22 +85,20 @@ export default function SignInScreen() {
   };
 
   return (
-    <View style={{ flex: 1 }}>
-      <LinearGradient colors={gradients.dusk} style={{ flex: 1 }} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }}>
-        <SafeAreaView style={{ flex: 1 }}>
-          <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-            <ScrollView contentContainerClassName="flex-grow px-6 pt-6 pb-10" keyboardShouldPersistTaps="handled">
-              <TouchableOpacity
-                onPress={() => router.back()}
-                className="w-12 h-12 bg-white/10 border border-white/15 rounded-2xl items-center justify-center mb-8"
-              >
-                <ArrowLeft size={20} color="#fff" />
-              </TouchableOpacity>
+    <SafeAreaView className="flex-1 bg-white">
+      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerClassName="flex-grow px-6 pt-6 pb-10" keyboardShouldPersistTaps="handled">
+          <TouchableOpacity
+            onPress={() => router.back()}
+            className="w-12 h-12 bg-white rounded-2xl items-center justify-center mb-8 border border-ink/10"
+          >
+            <ArrowLeft size={20} color="#150256" />
+          </TouchableOpacity>
 
-              <Text className="text-3xl font-black text-white tracking-tight mb-2">Welcome back</Text>
-              <Text className="text-base text-white/60 font-medium mb-8">Sign in to your Detail account</Text>
+          <Text className="text-3xl font-black text-ink tracking-tight mb-2">Welcome back</Text>
+          <Text className="text-base text-ink/50 font-medium mb-8">Sign in to your Detail account</Text>
 
-              <GlassCard style={{ padding: 20 }}>
+          <GlassCard style={{ padding: 20 }}>
                 {/* Tab switcher */}
                 <View className="flex-row bg-white/40 rounded-2xl p-1 mb-6">
                   {(['phone', 'email'] as AuthTab[]).map((t) => (
@@ -222,16 +218,14 @@ export default function SignInScreen() {
                 <SocialSignInButtons />
               </View>
 
-              <View className="flex-row items-center justify-center gap-2 mt-8">
-                <View className="w-4 h-4 rounded-full bg-white/10 items-center justify-center">
-                  <View className="w-1.5 h-1.5 rounded-full bg-white/60" />
-                </View>
-                <Text className="text-white/40 text-xs font-bold">Bank-grade encryption. Fully verified pros.</Text>
-              </View>
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </LinearGradient>
-    </View>
+          <View className="flex-row items-center justify-center gap-2 mt-8">
+            <View className="w-4 h-4 rounded-full bg-accent/10 items-center justify-center">
+              <View className="w-1.5 h-1.5 rounded-full bg-accent" />
+            </View>
+            <Text className="text-ink/40 text-xs font-bold">Bank-grade encryption. Fully verified pros.</Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }

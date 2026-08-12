@@ -44,7 +44,7 @@ import {
 } from '../../services/firebase';
 import { Job, JobStatus, Favorite } from '../../types';
 import { Logo } from '../../components/Logo';
-import { haversineDistanceKm } from '../../services/matching';
+import { haversineDistanceKm, rankJobsByProximity } from '../../services/matching';
 import { GlassCard, GlassSheet, GlassIconButton, RoleToggle } from '../../components/glass';
 import { MapPlaceholder } from '../../components/MapPlaceholder';
 import { IS_DEMO } from '../../utils/env';
@@ -71,9 +71,17 @@ export default function HomeScreen() {
 
   useEffect(() => {
     Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-      .then(({ coords }) => setCurrentLocation({ lat: coords.latitude, lng: coords.longitude }))
+      .then(({ coords }) => {
+        const location = { lat: coords.latitude, lng: coords.longitude };
+        setCurrentLocation(location);
+        // Persist the cleaner's last-known location so onJobCreated (Cloud
+        // Functions) can notify nearby cleaners first, Uber-style — not
+        // done for customers, who don't need this stored server-side.
+        if (!isCustomer) updateProfile({ location }).catch(() => {});
+      })
       .catch(() => {});
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCustomer]);
 
   useEffect(() => {
     if (!user) return;
@@ -112,7 +120,11 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (isCustomer) return;
-    const q = query(collection(db, 'jobs'), where('status', '==', JobStatus.BIDDING), orderBy('createdAt', 'desc'), limit(10));
+    // Fetch a wider candidate pool than we display — CleanerPanel re-sorts
+    // this by distance (nearest first, Uber-style), so a larger pool means
+    // a genuinely-nearby job doesn't get missed just because it wasn't one
+    // of the 10 most recently posted.
+    const q = query(collection(db, 'jobs'), where('status', '==', JobStatus.BIDDING), orderBy('createdAt', 'desc'), limit(30));
     return onSnapshot(
       q,
       (snap) => setAvailableJobs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Job))),
@@ -351,6 +363,12 @@ function CleanerPanel({
   currentLocation: { lat: number; lng: number } | null;
 }) {
   const isAvailable = status === 'AVAILABLE';
+  // Uber-style "match nearby first" — once we know where the cleaner is,
+  // show the closest jobs first instead of just the most recently posted.
+  const displayJobs = (currentLocation ? rankJobsByProximity(availableJobs, currentLocation) : availableJobs).slice(
+    0,
+    10
+  );
 
   return (
     <View className="pb-6">
@@ -395,9 +413,9 @@ function CleanerPanel({
       {isAvailable && (
         <View>
           <Text className="text-xs font-black text-ink/40 uppercase tracking-widest mb-3">
-            Incoming Jobs{availableJobs.length > 0 ? ` (${availableJobs.length})` : ''}
+            Incoming Jobs{displayJobs.length > 0 ? ` (${displayJobs.length}) · Nearest first` : ''}
           </Text>
-          {availableJobs.length === 0 ? (
+          {displayJobs.length === 0 ? (
             <View className="bg-white/60 rounded-3xl p-8 items-center border border-white">
               <Text className="text-3xl mb-3">🧹</Text>
               <Text className="text-sm font-black text-ink text-center">No jobs available right now</Text>
@@ -407,7 +425,7 @@ function CleanerPanel({
             </View>
           ) : (
             <View className="gap-3">
-              {availableJobs.map((job) => (
+              {displayJobs.map((job) => (
                 <TouchableOpacity
                   key={job.id}
                   onPress={() => router.push({ pathname: '/job/[jobId]', params: { jobId: job.id } })}
