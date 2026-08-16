@@ -8,8 +8,16 @@
  * EXPO_PUBLIC_USE_STORAGE_EMULATOR is 'true' — the latter lets Storage run
  * locally (free, no Blaze plan / bucket needed) while Auth/Firestore stay on
  * a real deployed project.
+ *
+ * TEMPORARY: while EXPO_PUBLIC_SIMULATE_FUNCTIONS is 'true', uploads are
+ * skipped entirely — there's no Storage bucket at all without Blaze billing,
+ * so nothing to upload to. Callers get the local file:// URI straight back,
+ * which is enough to exercise the UI on the same device (the photo just
+ * won't be visible to other users/devices until real Storage is deployed).
+ * Remove this branch once Blaze unlocks a real bucket.
  */
 import { auth } from './firebase';
+import { IS_SIMULATING_FUNCTIONS } from '../utils/env';
 
 const USE_EMULATOR =
   process.env.EXPO_PUBLIC_USE_FIREBASE_EMULATOR === 'true' ||
@@ -32,6 +40,11 @@ async function getStorageModule() {
 }
 
 async function uploadUri(uri: string, path: string, onProgress?: (pct: number) => void) {
+  if (IS_SIMULATING_FUNCTIONS && !USE_EMULATOR) {
+    onProgress?.(1);
+    return uri;
+  }
+
   const { storageMod, storage } = await getStorageModule();
   const response = await fetch(uri);
   const blob = await response.blob();

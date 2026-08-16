@@ -56,14 +56,26 @@ export function SocialSignInButtons() {
 
   // EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: free OAuth Web Client ID from
   // Firebase Console -> Authentication -> Sign-in method -> Google -> Enable.
-  // Set via `eas env:set` the same way the Firebase config vars were added.
+  // EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: a *second*, separate free OAuth
+  // client (type "Android", registered with the app's package name + SHA-1 —
+  // `eas credentials` prints the SHA-1) from Google Cloud Console ->
+  // Credentials. expo-auth-session's Google provider requires this on
+  // Android specifically — the web client ID alone throws
+  // "Client Id property `androidClientId` must be defined". Both are set
+  // via `eas env:set` the same way the Firebase config vars were added.
   const [, , promptGoogleSignIn] = Google.useAuthRequest({
     webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
     redirectUri: AuthSession.makeRedirectUri({ scheme: 'detail' }),
   });
 
+  const isGoogleConfigured =
+    Platform.OS === 'android'
+      ? !!process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
+      : !!process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+
   const handleGoogleSignIn = async () => {
-    if (!process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID) {
+    if (!isGoogleConfigured) {
       Alert.alert('Not configured', 'Google sign-in needs a client ID set up first.');
       return;
     }

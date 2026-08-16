@@ -66,7 +66,7 @@ export default function WelcomeScreen() {
       >
         {SLIDES.map(({ icon: Icon, badge, title, sub }, i) => (
           <View key={i} style={{ width, paddingHorizontal: 28, paddingTop: 24 }}>
-            <GlassCard variant="brand" style={{ height: 300, marginBottom: 32 }}>
+            <GlassCard variant="brand" fillContent style={{ height: 300, marginBottom: 32 }}>
               <View className="flex-1 items-center justify-center">
                 <View className="absolute top-5 left-5 bg-white/15 border border-white/25 px-3 py-1.5 rounded-full">
                   <Text className="text-white text-[11px] font-black tracking-wide">{badge}</Text>

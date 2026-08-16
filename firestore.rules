@@ -1,4 +1,19 @@
 rules_version = '2';
+// ═══════════════════════════════════════════════════════════════════════
+// TEMPORARY — SIMULATE MODE (search this repo for EXPO_PUBLIC_SIMULATE_FUNCTIONS)
+//
+// Cloud Functions can't be deployed yet (Firebase Blaze billing not
+// enabled), so the mobile app's services/functionSimulators.ts replicates
+// several Functions' writes directly from the client for testing purposes.
+// Every relaxation below is marked "SIMULATE MODE" and exists ONLY to let
+// those simulators write what the real Cloud Function would have written.
+//
+// MUST REVERT before real users or real money touch this app: once Blaze
+// is enabled and the real Functions in functions/src/index.ts are deployed,
+// undo every "SIMULATE MODE" block below (git history has the strict
+// version — see the commit that introduced this banner) and flip
+// EXPO_PUBLIC_SIMULATE_FUNCTIONS to false.
+// ═══════════════════════════════════════════════════════════════════════
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -31,22 +46,45 @@ service cloud.firestore {
         && (!('isSuspended' in request.resource.data) || request.resource.data.isSuspended == false)
         && (!('isBanned' in request.resource.data) || request.resource.data.isBanned == false);
 
-      allow update: if isOwner(userId)
+      allow update: if (
+        isOwner(userId)
         && !changed([
-          'balance', 'jobsCompleted', 'ratingAverage', 'ratingCount',
           'commissionOwed', 'isSuspended', 'isBanned', 'verificationLevel',
           'uid', 'email'
-        ]);
+        ])
+      ) || (
+          // SIMULATE MODE — HIGHEST RISK relaxation in this file, revert
+          // first. settleJobPayment/submitRating/devCreditWallet move
+          // balance (and jobsCompleted/ratingAverage/ratingCount) between
+          // TWO DIFFERENT users (customer <-> cleaner) — a cross-user write
+          // Firestore rules can't scope to "only the other party of a
+          // specific shared job" without that job's id in this rule's
+          // context. So, only while simulating, ANY signed-in user may
+          // adjust ANOTHER user's balance/jobsCompleted/ratingAverage/
+          // ratingCount and nothing else — isSuspended/isBanned/
+          // verificationLevel/commissionOwed/uid/email/displayName/etc.
+          // stay fully protected/owner-only regardless.
+          isAuth()
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['balance', 'jobsCompleted', 'ratingAverage', 'ratingCount'])
+        );
 
       allow delete: if false;
     }
 
     // ───────────────────────── transactions ─────────────────────────
-    // Immutable ledger. Read your own only. ALL writes happen server-side
-    // (settlement, PesePay webhook). Clients can never create or edit a record.
+    // Immutable ledger. Read your own only. Normally ALL writes happen
+    // server-side (settlement, PesePay webhook). SIMULATE MODE: temporarily
+    // allowed to create a ledger entry for ANY userId (not just your own) —
+    // simulateSettleJobPayment writes the other party's (e.g. the customer
+    // writes the cleaner's earnings entry) ledger entry too, same
+    // cross-user shape as the users.balance relaxation above. Lower risk
+    // than that one: this is just a record, not the actual balance change.
+    // Still never editable/deletable.
     match /transactions/{txId} {
       allow read: if isAuth() && resource.data.userId == request.auth.uid;
-      allow write: if false;
+      allow create: if isAuth();
+      allow update, delete: if false;
     }
 
     // ───────────────────────── jobs ─────────────────────────
@@ -67,37 +105,42 @@ service cloud.firestore {
         && !('price' in request.resource.data)
         && !('paidAt' in request.resource.data);
 
+      // SIMULATE MODE: price/paidAt/paymentMethod/rating/ratedAt/cleanerId/
+      // cleanerName/cleanerPhoto/cleanerRating/budget/biddingExpiresAt are
+      // normally function-only too — temporarily allowed so
+      // simulateAcceptBid/simulateSettleJobPayment/simulateSubmitRating/
+      // simulateIncreaseJobBudget can write them directly. customerId stays
+      // protected — nothing simulated ever needs to reassign job ownership.
       allow update: if isAuth()
         && (
           resource.data.customerId == request.auth.uid ||
           resource.data.cleanerId == request.auth.uid
         )
-        && !changed([
-          'price', 'paidAt', 'paymentMethod', 'rating', 'ratedAt',
-          'customerId', 'cleanerId', 'cleanerName', 'cleanerPhoto', 'cleanerRating',
-          // budget/biddingExpiresAt only ever change via the increaseJobBudget
-          // Cloud Function (which also extends the window) — never a raw client write.
-          'budget', 'biddingExpiresAt'
-        ]);
+        && !changed(['customerId']);
 
       allow delete: if false;
     }
 
     // ───────────────────────── bids ─────────────────────────
-    // Created exclusively by the submitBid Cloud Function, which enforces the
-    // cash-commission balance gate (negative balance = blocked from bidding)
-    // authoritatively — a client-side check alone couldn't be trusted.
+    // Normally created exclusively by the submitBid Cloud Function, which
+    // enforces the cash-commission balance gate authoritatively. SIMULATE
+    // MODE: temporarily allowed directly by the client (cleanerId ==
+    // caller) so simulateSubmitBid can write it — the balance check there
+    // is only a soft, non-authoritative UX check while this is loosened.
     // Acceptance is done by the acceptBid Cloud Function (which also sets the
     // authoritative price), so clients can never mutate a bid after creation.
     match /bids/{bidId} {
       allow read: if isAuth();
-      allow create: if false;
+      allow create: if isAuth() && request.resource.data.cleanerId == request.auth.uid;
 
       // Rejecting a bid moves no money, so the job's customer may do it
-      // directly — acceptance/price changes stay server-only (acceptBid).
+      // directly — acceptance/price changes normally stay server-only
+      // (acceptBid). SIMULATE MODE: also allow the job's customer to
+      // transition a bid straight to 'ACCEPTED' (status field only) so
+      // simulateAcceptBid can write it, matching what acceptBid would do.
       allow update: if isAuth()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
-        && request.resource.data.status == 'REJECTED'
+        && request.resource.data.status in ['REJECTED', 'ACCEPTED']
         && resource.data.status in ['PENDING', 'COUNTERED']
         && get(/databases/$(database)/documents/jobs/$(resource.data.jobId)).data.customerId == request.auth.uid;
 
@@ -122,10 +165,13 @@ service cloud.firestore {
     }
 
     // ───────────────────────── reviews ─────────────────────────
-    // Written by the submitRating function so the rating average stays authoritative.
+    // Normally written only by the submitRating function. SIMULATE MODE:
+    // temporarily allowed directly by the client (customerId == caller) so
+    // simulateSubmitRating can write it.
     match /reviews/{reviewId} {
       allow read: if isAuth();
-      allow write: if false;
+      allow create: if isAuth() && request.resource.data.customerId == request.auth.uid;
+      allow update, delete: if false;
     }
 
     // ───────────────────────── agreement logs ─────────────────────────
@@ -136,15 +182,19 @@ service cloud.firestore {
     }
 
     // ───────────────────────── disputes ─────────────────────────
-    // Customer files a dispute via the reportJobIssue Cloud Function only
-    // (needs server-side validation that the job is COMPLETED and theirs) —
-    // resolution/refunds are also function-only (resolveDispute, staff-invoked).
+    // Normally filed via the reportJobIssue Cloud Function only (needs
+    // server-side validation that the job is COMPLETED and theirs).
+    // SIMULATE MODE: temporarily allowed directly by the client (customerId
+    // == caller) so simulateReportJobIssue can write it. Resolution/refunds
+    // stay function-only always (resolveDispute, staff-invoked) — not part
+    // of the simulate layer.
     match /disputes/{disputeId} {
       allow read: if isAuth() && (
         resource.data.customerId == request.auth.uid ||
         resource.data.cleanerId == request.auth.uid
       );
-      allow write: if false;
+      allow create: if isAuth() && request.resource.data.customerId == request.auth.uid;
+      allow update, delete: if false;
     }
 
     // ───────────────────────── invoices ─────────────────────────

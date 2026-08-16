@@ -15,6 +15,12 @@ interface GlassCardProps extends ViewProps {
   intensity?: number;
   /** Disable the blur and fall back to a flat tinted surface (Android perf / static contexts). */
   noBlur?: boolean;
+  /** Stretch the content wrapper to fill the card (flex: 1). Off by default —
+   *  most cards auto-size to their content (e.g. list rows, the permissions
+   *  panel), and forcing flex:1 there squashes them. Opt in for a
+   *  *fixed-height* card whose content needs to center/fill vertically
+   *  (e.g. welcome.tsx's illustration card). */
+  fillContent?: boolean;
   className?: string;
 }
 
@@ -52,6 +58,7 @@ export function GlassCard({
   // to the flat tinted fallback there and reserve real BlurView for iOS,
   // unless a caller explicitly opts in with noBlur={false}.
   noBlur = Platform.OS === 'android',
+  fillContent = false,
   style,
   className,
   children,
@@ -78,12 +85,15 @@ export function GlassCard({
           { backgroundColor: noBlur ? VARIANT_OVERLAY_FLAT[variant] : VARIANT_OVERLAY[variant] },
         ]}
       />
-      <View>{children}</View>
+      <View style={fillContent ? styles.fillContent : undefined}>{children}</View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  fillContent: {
+    flex: 1,
+  },
   wrap: {
     borderRadius: 28,
     borderWidth: 1,
