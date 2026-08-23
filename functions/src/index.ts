@@ -47,11 +47,15 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
  */
 async function notifyUser(
   userId: string,
-  notification: { type: string; title: string; body: string; jobId?: string }
+  notification: { type: string; title: string; body: string; jobId?: string; imageUrl?: string }
 ) {
   await db.collection('notifications').add({
     userId,
-    ...notification,
+    type: notification.type,
+    title: notification.title,
+    body: notification.body,
+    jobId: notification.jobId,
+    imageUrl: notification.imageUrl,
     read: false,
     createdAt: FieldValue.serverTimestamp(),
   });
@@ -61,16 +65,30 @@ async function notifyUser(
     const token = userSnap.data()?.expoPushToken;
     if (!token || typeof token !== 'string' || !token.startsWith('ExponentPushToken')) return;
 
+    const payload: Record<string, unknown> = {
+      to: token,
+      title: notification.title,
+      body: notification.body,
+      data: {
+        jobId: notification.jobId ?? null,
+        type: notification.type,
+        imageUrl: notification.imageUrl ?? null,
+      },
+      sound: 'default',
+    };
+
+    // Rich push: attach the first job photo so cleaners can see the work at a glance
+    if (notification.imageUrl) {
+      // iOS notification extension — shows image thumbnail in the lock-screen preview
+      payload.attachments = [{ url: notification.imageUrl }];
+      // Android (FCM via Expo gateway) — image in the expanded notification
+      payload.imageUrl = notification.imageUrl;
+    }
+
     await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({
-        to: token,
-        title: notification.title,
-        body: notification.body,
-        data: { jobId: notification.jobId ?? null, type: notification.type },
-        sound: 'default',
-      }),
+      body: JSON.stringify(payload),
     });
   } catch (err) {
     logger.warn('Expo push send failed', err);
@@ -773,13 +791,22 @@ export const onJobCreated = onDocumentCreated('jobs/{jobId}', async (event) => {
     })
     .map((d) => d.id);
 
+  const firstPhoto: string | undefined = Array.isArray(job.photos) && job.photos.length > 0
+    ? job.photos[0]
+    : undefined;
+  const photoNote = Array.isArray(job.photos) && job.photos.length > 0
+    ? ` · ${job.photos.length} photo${job.photos.length > 1 ? 's' : ''}`
+    : '';
+  const regNote = job.checklist?.registrationNumber ? ` · Reg: ${job.checklist.registrationNumber}` : '';
+
   await Promise.all(
     targetCleanerIds.map((cleanerId) =>
       notifyUser(cleanerId, {
         type: 'JOB_UPDATE',
-        title: 'New job posted',
-        body: `${job.serviceType ?? 'A new job'} near ${job.location?.address ?? 'you'} — $${job.budget ?? '—'}`,
+        title: 'New job posted 🧹',
+        body: `${job.serviceType ?? 'A new job'} near ${job.location?.address ?? 'you'} — $${job.budget ?? '—'}${photoNote}${regNote}`,
         jobId: event.params.jobId,
+        imageUrl: firstPhoto,
       })
     )
   );

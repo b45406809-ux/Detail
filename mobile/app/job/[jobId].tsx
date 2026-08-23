@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MapPin, Clock, DollarSign, MessageSquare } from 'lucide-react-native';
+import { ArrowLeft, MapPin, Clock, DollarSign, MessageSquare, Hash } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { db, doc, collection, onSnapshot, query, where, getDocs, limit } from '../../services/firebase';
 import { callFunction } from '../../services/functions';
@@ -153,6 +153,14 @@ export default function CleanerJobDetailScreen() {
               <DetailRow icon={MapPin} title="Location" value={job.location?.address ?? 'Address not provided'} accent={distance ?? undefined} />
               <DetailRow icon={DollarSign} title="Customer Budget" value={budgetLabel} />
               <DetailRow icon={Clock} title="Estimated Duration" value={job.estimatedDuration ? `${job.estimatedDuration} hours` : '2–3 hours'} />
+              {job.category === 'CAR' && (job.checklist as CarChecklist)?.registrationNumber && (
+                <DetailRow
+                  icon={Hash}
+                  title="Vehicle Registration"
+                  value={(job.checklist as CarChecklist).registrationNumber!}
+                  highlight
+                />
+              )}
               {job.description && <DetailRow icon={MessageSquare} title="Notes" value={job.description} />}
             </View>
 
@@ -254,15 +262,21 @@ export default function CleanerJobDetailScreen() {
   );
 }
 
-function DetailRow({ icon: Icon, title, value, accent }: { icon: any; title: string; value: string; accent?: string }) {
+function DetailRow({
+  icon: Icon, title, value, accent, highlight,
+}: {
+  icon: any; title: string; value: string; accent?: string; highlight?: boolean;
+}) {
   return (
-    <View className="flex-row items-start gap-3">
-      <View className="w-8 h-8 bg-accent/10 rounded-xl items-center justify-center mt-0.5">
-        <Icon size={14} color="#3906D2" />
+    <View className={`flex-row items-start gap-3 ${highlight ? 'bg-accent/5 -mx-1 px-1 py-1.5 rounded-2xl' : ''}`}>
+      <View className={`w-8 h-8 rounded-xl items-center justify-center mt-0.5 ${highlight ? 'bg-accent' : 'bg-accent/10'}`}>
+        <Icon size={14} color={highlight ? '#fff' : '#3906D2'} />
       </View>
       <View className="flex-1">
         <Text className="text-sm font-black text-ink">{title}</Text>
-        <Text className="text-xs text-ink/50 font-medium mt-0.5">{value}</Text>
+        <Text className={`text-sm font-black mt-0.5 tracking-widest ${highlight ? 'text-accent' : 'text-xs text-ink/50 font-medium'}`}>
+          {value}
+        </Text>
         {accent && <Text className="text-xs text-accent font-black mt-0.5">{accent}</Text>}
       </View>
     </View>

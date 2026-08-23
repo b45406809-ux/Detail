@@ -86,6 +86,7 @@ export default function CreateBookingScreen() {
   // Car checklist state
   const [carCleaningTypes, setCarCleaningTypes] = useState<string[]>([]);
   const [carCondition, setCarCondition] = useState<CarChecklist['condition']>();
+  const [registrationNumber, setRegistrationNumber] = useState('');
   const [exteriorServices, setExteriorServices] = useState<string[]>([]);
   const [interiorServices, setInteriorServices] = useState<string[]>([]);
   const [deepServices, setDeepServices] = useState<string[]>([]);
@@ -204,6 +205,7 @@ export default function CreateBookingScreen() {
             }
           : {
               category: 'CAR',
+              registrationNumber: registrationNumber.trim() || undefined,
               cleaningTypes: carCleaningTypes,
               condition: carCondition,
               exteriorServices,
@@ -362,15 +364,33 @@ export default function CreateBookingScreen() {
                 </View>
               </View>
               <View>
-                <SectionLabel n={3} title="Exterior Cleaning" optional />
+                <SectionLabel n={3} title="Registration Number" optional />
+                <View className="border-2 border-ink/10 rounded-2xl bg-ink/[0.02] flex-row items-center gap-3 px-4">
+                  <Text className="text-sm font-black text-ink/30">#</Text>
+                  <TextInput
+                    className="flex-1 py-4 text-sm font-bold text-ink uppercase"
+                    placeholder="e.g. ABC 1234"
+                    placeholderTextColor="#9C94C4"
+                    autoCapitalize="characters"
+                    value={registrationNumber}
+                    onChangeText={(v) => setRegistrationNumber(v.toUpperCase())}
+                  />
+                </View>
+                <Text className="text-[11px] text-ink/40 font-medium mt-1.5 ml-1">
+                  Helps the cleaner identify your car on arrival
+                </Text>
+              </View>
+
+              <View>
+                <SectionLabel n={4} title="Exterior Cleaning" optional />
                 <ChipGrid options={CAR_EXTERIOR_SERVICES as unknown as string[]} selected={exteriorServices} onToggle={(v) => setExteriorServices(toggleItem(exteriorServices, v))} />
               </View>
               <View>
-                <SectionLabel n={4} title="Interior Cleaning" optional />
+                <SectionLabel n={5} title="Interior Cleaning" optional />
                 <ChipGrid options={CAR_INTERIOR_SERVICES as unknown as string[]} selected={interiorServices} onToggle={(v) => setInteriorServices(toggleItem(interiorServices, v))} />
               </View>
               <View>
-                <SectionLabel n={5} title="Deep Cleaning" optional />
+                <SectionLabel n={6} title="Deep Cleaning" optional />
                 <ChipGrid options={CAR_DEEP_SERVICES as unknown as string[]} selected={deepServices} onToggle={(v) => setDeepServices(toggleItem(deepServices, v))} />
               </View>
             </View>

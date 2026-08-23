@@ -284,22 +284,22 @@ function CustomerPanel({ favorites, recentJobs }: { favorites: Favorite[]; recen
         <TouchableOpacity
           onPress={() => router.push({ pathname: '/booking/create', params: { category: 'HOUSE' } })}
           activeOpacity={0.85}
-          className="flex-1 bg-white/70 border border-white rounded-3xl p-4 items-center"
+          className="flex-1 bg-white border border-slate-100 rounded-2xl p-4 items-center"
         >
-          <View className="w-11 h-11 bg-accent/10 rounded-2xl items-center justify-center mb-2">
+          <View className="w-11 h-11 bg-accent/10 rounded-xl items-center justify-center mb-2">
             <HomeIcon size={20} color="#3906D2" />
           </View>
-          <Text className="text-xs font-black text-ink">House Cleaning</Text>
+          <Text className="text-xs font-black text-slate-900">House</Text>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => router.push({ pathname: '/booking/create', params: { category: 'CAR' } })}
           activeOpacity={0.85}
-          className="flex-1 bg-white/70 border border-white rounded-3xl p-4 items-center"
+          className="flex-1 bg-white border border-slate-100 rounded-2xl p-4 items-center"
         >
-          <View className="w-11 h-11 bg-accent/10 rounded-2xl items-center justify-center mb-2">
+          <View className="w-11 h-11 bg-accent/10 rounded-xl items-center justify-center mb-2">
             <Car size={20} color="#3906D2" />
           </View>
-          <Text className="text-xs font-black text-ink">Car Cleaning</Text>
+          <Text className="text-xs font-black text-slate-900">Car</Text>
         </TouchableOpacity>
       </View>
 
@@ -402,10 +402,10 @@ function CleanerPanel({
           { label: 'Rating', value: `${profile.ratingAverage?.toFixed(1) ?? '—'}★`, icon: Star },
           { label: 'Earned', value: `$${profile.balance?.toFixed(0) ?? 0}`, icon: DollarSign },
         ].map(({ label, value, icon: Icon }) => (
-          <View key={label} className="flex-1 bg-white/60 rounded-2xl p-3 items-center border border-white">
+          <View key={label} className="flex-1 bg-white rounded-2xl p-3 items-center border border-slate-100">
             <Icon size={16} color="#3906D2" />
-            <Text className="text-base font-black text-ink mt-1">{String(value)}</Text>
-            <Text className="text-[10px] font-bold text-ink/40 uppercase tracking-wider">{label}</Text>
+            <Text className="text-base font-black text-slate-900 mt-1">{String(value)}</Text>
+            <Text className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</Text>
           </View>
         ))}
       </View>
@@ -416,53 +416,86 @@ function CleanerPanel({
             Incoming Jobs{displayJobs.length > 0 ? ` (${displayJobs.length}) · Nearest first` : ''}
           </Text>
           {displayJobs.length === 0 ? (
-            <View className="bg-white/60 rounded-3xl p-8 items-center border border-white">
-              <Text className="text-3xl mb-3">🧹</Text>
-              <Text className="text-sm font-black text-ink text-center">No jobs available right now</Text>
-              <Text className="text-xs text-ink/40 font-medium text-center mt-1">
-                Stay online to be notified when jobs are posted nearby
+            <View className="bg-white rounded-2xl p-8 items-center border border-slate-100">
+              <View className="w-14 h-14 bg-accent/10 rounded-2xl items-center justify-center mb-3">
+                <CheckCircle size={28} color="#3906D2" />
+              </View>
+              <Text className="text-sm font-black text-slate-900 text-center">No jobs nearby right now</Text>
+              <Text className="text-xs text-slate-400 font-medium text-center mt-1">
+                You'll get a notification as soon as one is posted
               </Text>
             </View>
           ) : (
-            <View className="gap-3">
-              {displayJobs.map((job) => (
-                <TouchableOpacity
-                  key={job.id}
-                  onPress={() => router.push({ pathname: '/job/[jobId]', params: { jobId: job.id } })}
-                  className="bg-white/70 rounded-3xl p-4 border border-white"
-                  activeOpacity={0.85}
-                >
-                  <View className="flex-row items-start justify-between mb-2">
+            <View className="gap-2">
+              {displayJobs.map((job) => {
+                const thumbUrl = Array.isArray(job.photos) && job.photos.length > 0 ? job.photos[0] : null;
+                const regNum = (job.checklist as any)?.registrationNumber;
+                const dist = currentLocation && job.location?.lat && job.location?.lng
+                  ? `${haversineDistanceKm(currentLocation, { lat: job.location.lat, lng: job.location.lng }).toFixed(1)} km`
+                  : null;
+                return (
+                  <TouchableOpacity
+                    key={job.id}
+                    onPress={() => router.push({ pathname: '/job/[jobId]', params: { jobId: job.id } })}
+                    className="bg-white rounded-2xl p-4 border border-slate-100 flex-row items-center gap-3"
+                    activeOpacity={0.8}
+                  >
+                    {/* Thumb or category icon */}
+                    {thumbUrl ? (
+                      <Image source={{ uri: thumbUrl }} style={{ width: 56, height: 56, borderRadius: 12 }} />
+                    ) : (
+                      <View className="w-14 h-14 bg-accent/10 rounded-xl items-center justify-center">
+                        {job.category === 'CAR'
+                          ? <Car size={24} color="#3906D2" />
+                          : <HomeIcon size={24} color="#3906D2" />}
+                      </View>
+                    )}
+
+                    {/* Body */}
                     <View className="flex-1">
-                      <Text className="text-sm font-black text-ink">{job.serviceType}</Text>
-                      <Text className="text-xs text-ink/50 font-medium mt-0.5" numberOfLines={1}>
+                      <View className="flex-row items-center justify-between mb-0.5">
+                        <Text className="text-sm font-black text-slate-900 flex-1" numberOfLines={1}>
+                          {job.serviceType}
+                        </Text>
+                        <View className="bg-accent px-2.5 py-1 rounded-lg ml-2">
+                          <Text className="text-xs font-black text-white">
+                            {job.budget ? `$${job.budget}` : 'Open'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <Text className="text-xs text-slate-400 font-medium mb-1.5" numberOfLines={1}>
                         {job.location?.address}
                       </Text>
+
+                      <View className="flex-row items-center gap-3">
+                        {dist && (
+                          <View className="flex-row items-center gap-1">
+                            <MapPin size={11} color="#3906D2" />
+                            <Text className="text-[11px] font-bold text-slate-500">{dist}</Text>
+                          </View>
+                        )}
+                        <View className="flex-row items-center gap-1">
+                          <Clock size={11} color="#94a3b8" />
+                          <Text className="text-[11px] font-bold text-slate-400">
+                            {job.estimatedDuration ? `${job.estimatedDuration}h` : '2–3h'}
+                          </Text>
+                        </View>
+                        {regNum && (
+                          <View className="bg-slate-100 px-2 py-0.5 rounded-md">
+                            <Text className="text-[10px] font-black text-slate-600 tracking-wider">{regNum}</Text>
+                          </View>
+                        )}
+                        {Array.isArray(job.photos) && job.photos.length > 0 && (
+                          <Text className="text-[10px] font-bold text-slate-400">📷 {job.photos.length}</Text>
+                        )}
+                      </View>
                     </View>
-                    <View className="bg-accent/10 px-3 py-1.5 rounded-xl">
-                      <Text className="text-sm font-black text-accent">
-                        {job.budget ? `$${job.budget}` : 'Open'}
-                      </Text>
-                    </View>
-                  </View>
-                  <View className="flex-row items-center gap-4">
-                    <View className="flex-row items-center gap-1.5">
-                      <MapPin size={12} color="rgba(21,2,86,0.4)" />
-                      <Text className="text-xs text-ink/40 font-bold">
-                        {currentLocation && job.location?.lat && job.location?.lng
-                          ? `${haversineDistanceKm(currentLocation, { lat: job.location.lat, lng: job.location.lng }).toFixed(1)} km away`
-                          : 'Distance N/A'}
-                      </Text>
-                    </View>
-                    <View className="flex-row items-center gap-1.5">
-                      <Clock size={12} color="rgba(21,2,86,0.4)" />
-                      <Text className="text-xs text-ink/40 font-bold">
-                        {job.estimatedDuration ? `${job.estimatedDuration} hrs` : '2–3 hrs'}
-                      </Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
+
+                    <ChevronRight size={16} color="#cbd5e1" />
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           )}
         </View>

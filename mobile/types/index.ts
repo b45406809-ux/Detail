@@ -52,6 +52,7 @@ export interface HouseChecklist {
 export interface CarChecklist {
   category: 'CAR';
   vehicleType?: string; // Sedan, SUV, Truck, Van, Other
+  registrationNumber?: string; // e.g. ABC-1234 — shown to the cleaner so they wash the correct car
   cleaningTypes: string[]; // Exterior, Interior, Full Service, Other
   condition?: CarCondition;
   exteriorServices: string[]; // Wash, Wax/Polish, Tire Shine, Rim Cleaning, Scratch Removal, Headlight Cleaning, Bug Removal, Other

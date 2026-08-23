@@ -9,10 +9,12 @@ import {
   Platform,
   ActivityIndicator,
   Image,
+  ActionSheetIOS,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Send, MessageSquare, Camera } from 'lucide-react-native';
+import { ArrowLeft, Send, MessageSquare, ImagePlus } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -133,16 +135,11 @@ export default function MessagesScreen() {
 
   const [isSendingPhoto, setIsSendingPhoto] = useState(false);
 
-  const sendPhoto = async () => {
+  const uploadAndSend = async (uri: string) => {
     if (!activeJobId || !user) return;
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) return;
-    const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.6 });
-    if (result.canceled || !result.assets?.[0]) return;
-
     setIsSendingPhoto(true);
     try {
-      const imageUrl = await uploadChatPhoto(result.assets[0].uri, activeJobId);
+      const imageUrl = await uploadChatPhoto(uri, activeJobId);
       const batch = writeBatch(db);
       const messageRef = doc(collection(db, 'messages'));
       batch.set(messageRef, {
@@ -165,6 +162,38 @@ export default function MessagesScreen() {
       // Best-effort — chat stays usable even if a photo upload fails
     } finally {
       setIsSendingPhoto(false);
+    }
+  };
+
+  const sendPhoto = async () => {
+    if (!activeJobId || !user) return;
+
+    const pickFromLibrary = async () => {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) { Alert.alert('Permission needed', 'Allow access to your photo library.'); return; }
+      const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
+      if (!result.canceled && result.assets?.[0]) uploadAndSend(result.assets[0].uri);
+    };
+
+    const takePhoto = async () => {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) { Alert.alert('Permission needed', 'Allow camera access to take photos.'); return; }
+      const result = await ImagePicker.launchCameraAsync({ quality: 0.7 });
+      if (!result.canceled && result.assets?.[0]) uploadAndSend(result.assets[0].uri);
+    };
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: ['Cancel', 'Take Photo', 'Choose from Library'], cancelButtonIndex: 0 },
+        (idx) => { if (idx === 1) takePhoto(); else if (idx === 2) pickFromLibrary(); }
+      );
+    } else {
+      // Android: simple Alert-based picker
+      Alert.alert('Send Photo', undefined, [
+        { text: 'Take Photo', onPress: takePhoto },
+        { text: 'Choose from Library', onPress: pickFromLibrary },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
     }
   };
 
@@ -253,9 +282,9 @@ export default function MessagesScreen() {
             <TouchableOpacity
               onPress={sendPhoto}
               disabled={isSendingPhoto}
-              className="w-11 h-11 rounded-2xl items-center justify-center bg-slate-50 border border-slate-100"
+              className="w-11 h-11 rounded-2xl items-center justify-center bg-accent/10"
             >
-              {isSendingPhoto ? <ActivityIndicator size="small" color="#3906D2" /> : <Camera size={18} color="#3906D2" />}
+              {isSendingPhoto ? <ActivityIndicator size="small" color="#3906D2" /> : <ImagePlus size={18} color="#3906D2" />}
             </TouchableOpacity>
             <TextInput
               className="flex-1 bg-slate-50 rounded-2xl px-4 py-3 text-sm font-medium text-slate-900 border border-slate-100"
