@@ -27,11 +27,11 @@ const SECTIONS = [
   },
   {
     title: '6. Your Rights',
-    body: 'You have the right to access, update, or delete your account information. Contact us at privacy@detail.app to exercise these rights.',
+    body: 'You have the right to access, update, or delete your account information. Contact us at privacy@detail to exercise these rights.',
   },
   {
     title: '7. Contact',
-    body: 'If you have any questions about this Privacy Policy, please contact us at privacy@detail.app.',
+    body: 'If you have any questions about this Privacy Policy, please contact us at privacy@detail.',
   },
 ];
 

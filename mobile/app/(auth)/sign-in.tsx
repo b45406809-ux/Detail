@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Phone, Mail } from 'lucide-react-native';
+import { ArrowLeft, Phone, Mail, ChevronDown, Check } from 'lucide-react-native';
 import {
   auth,
   signInWithEmailAndPassword,
@@ -24,23 +24,54 @@ import {
 } from '../../services/firebase';
 import { GlassCard } from '../../components/glass';
 import { SocialSignInButtons } from '../../components/SocialSignInButtons';
+import { CountryPickerModal } from '../../components/CountryPickerModal';
+import { DEFAULT_COUNTRY, Country } from '../../constants/countries';
 
 type AuthTab = 'phone' | 'email';
 
 export default function SignInScreen() {
   const [tab, setTab] = useState<AuthTab>('phone');
   const [phone, setPhone] = useState('');
+  const [selectedCountry, setSelectedCountry] = useState<Country>(DEFAULT_COUNTRY);
+  const [isCountryPickerOpen, setIsCountryPickerOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isNewAccount, setIsNewAccount] = useState(false);
+  const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const handlePhoneContinue = () => {
-    if (!phone.trim()) {
+    const cleanDigits = phone.replace(/[^\d]/g, '');
+    if (!cleanDigits) {
       Alert.alert('Phone required', 'Please enter your phone number.');
       return;
     }
-    router.push({ pathname: '/(auth)/verify', params: { phone } });
+    if (!hasAcceptedTerms) {
+      Alert.alert(
+        'Accept Terms & Conditions',
+        'Please review and accept Detail’s Terms of Service and Privacy Policy to continue.',
+        [
+          { text: 'Review Terms', onPress: () => router.push('/customer-agreement') },
+          { text: 'I Agree', onPress: () => { setHasAcceptedTerms(true); proceedWithPhone(cleanDigits); } },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+      return;
+    }
+    proceedWithPhone(cleanDigits);
+  };
+
+  const proceedWithPhone = (cleanDigits: string) => {
+    // Strip leading zero if provided (e.g. 0771234567 -> 771234567)
+    const normalizedDigits = cleanDigits.startsWith('0') ? cleanDigits.slice(1) : cleanDigits;
+    const fullPhoneNumber = `${selectedCountry.dialCode}${normalizedDigits}`;
+    router.push({
+      pathname: '/(auth)/verify',
+      params: {
+        phone: fullPhoneNumber,
+        displayPhone: `${selectedCountry.flag} ${selectedCountry.dialCode} ${phone.trim()}`,
+      },
+    });
   };
 
   const handleEmailAuth = async () => {
@@ -48,6 +79,22 @@ export default function SignInScreen() {
       Alert.alert('Missing fields', 'Please enter your email and password.');
       return;
     }
+    if (isNewAccount && !hasAcceptedTerms) {
+      Alert.alert(
+        'Accept Terms & Conditions',
+        'Please review and accept Detail’s Terms of Service and Privacy Policy to create an account.',
+        [
+          { text: 'Review Terms', onPress: () => router.push('/customer-agreement') },
+          { text: 'I Agree', onPress: () => { setHasAcceptedTerms(true); proceedWithEmailAuth(); } },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+      return;
+    }
+    await proceedWithEmailAuth();
+  };
+
+  const proceedWithEmailAuth = async () => {
     setIsLoading(true);
     try {
       if (isNewAccount) {
@@ -62,6 +109,7 @@ export default function SignInScreen() {
           status: 'AVAILABLE',
           hasCompletedProfile: false,
           hasSetupPermissions: false,
+          hasAgreedToTerms: true,
           createdAt: serverTimestamp(),
         });
         router.replace('/(auth)/create-profile');
@@ -131,12 +179,20 @@ export default function SignInScreen() {
                         Phone Number
                       </Text>
                       <View className="flex-row items-center border border-white/40 rounded-2xl overflow-hidden bg-white/50">
-                        <View className="px-4 py-4 border-r border-white/40">
-                          <Text className="text-sm font-bold text-ink">+1</Text>
-                        </View>
+                        {/* Country code selector button */}
+                        <TouchableOpacity
+                          onPress={() => setIsCountryPickerOpen(true)}
+                          activeOpacity={0.7}
+                          className="flex-row items-center gap-1.5 px-3.5 py-4 border-r border-white/40 bg-ink/[0.02]"
+                        >
+                          <Text style={{ fontSize: 18 }}>{selectedCountry.flag}</Text>
+                          <Text className="text-sm font-bold text-ink">{selectedCountry.dialCode}</Text>
+                          <ChevronDown size={14} color="rgba(21,2,86,0.5)" />
+                        </TouchableOpacity>
+
                         <TextInput
                           className="flex-1 px-4 py-4 text-base font-medium text-ink"
-                          placeholder="(555) 000-0000"
+                          placeholder={selectedCountry.placeholder || '000 000 0000'}
                           placeholderTextColor="rgba(21,2,86,0.35)"
                           keyboardType="phone-pad"
                           value={phone}
@@ -145,9 +201,42 @@ export default function SignInScreen() {
                         />
                       </View>
                       <Text className="text-xs text-ink/50 font-medium mt-2 px-1">
-                        We'll send a verification code to this number
+                        We'll send a verification code to {selectedCountry.dialCode} {phone || '…'}
                       </Text>
                     </View>
+
+                    {/* Terms acceptance checkbox */}
+                    <TouchableOpacity
+                      onPress={() => setHasAcceptedTerms(!hasAcceptedTerms)}
+                      activeOpacity={0.7}
+                      className="flex-row items-start gap-3 py-1"
+                    >
+                      <View
+                        className={`w-5 h-5 rounded-md border items-center justify-center mt-0.5 ${
+                          hasAcceptedTerms ? 'bg-accent border-accent' : 'border-ink/30 bg-white/60'
+                        }`}
+                      >
+                        {hasAcceptedTerms && <Check size={14} color="#fff" strokeWidth={3} />}
+                      </View>
+                      <View className="flex-1">
+                        <Text className="text-xs text-ink/70 leading-relaxed font-medium">
+                          I agree to Detail's{' '}
+                          <Text
+                            onPress={() => router.push('/customer-agreement')}
+                            className="font-bold text-accent underline"
+                          >
+                            Terms of Service
+                          </Text>{' '}
+                          and{' '}
+                          <Text
+                            onPress={() => router.push('/privacy-policy')}
+                            className="font-bold text-accent underline"
+                          >
+                            Privacy Policy
+                          </Text>
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
 
                     <TouchableOpacity
                       onPress={handlePhoneContinue}
@@ -185,7 +274,17 @@ export default function SignInScreen() {
                     </View>
 
                     <View>
-                      <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-2">Password</Text>
+                      <View className="flex-row items-center justify-between mb-2">
+                        <Text className="text-xs font-black text-ink/50 uppercase tracking-widest">Password</Text>
+                        {!isNewAccount && (
+                          <TouchableOpacity
+                            onPress={() => router.push('/(auth)/forgot-password')}
+                            activeOpacity={0.7}
+                          >
+                            <Text className="text-xs font-bold text-accent">Forgot password?</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
                       <TextInput
                         className="border border-white/40 rounded-2xl px-4 py-4 text-base font-medium text-ink bg-white/50"
                         placeholder="••••••••"
@@ -195,6 +294,39 @@ export default function SignInScreen() {
                         onChangeText={setPassword}
                       />
                     </View>
+
+                    {/* Terms acceptance checkbox */}
+                    <TouchableOpacity
+                      onPress={() => setHasAcceptedTerms(!hasAcceptedTerms)}
+                      activeOpacity={0.7}
+                      className="flex-row items-start gap-3 py-1"
+                    >
+                      <View
+                        className={`w-5 h-5 rounded-md border items-center justify-center mt-0.5 ${
+                          hasAcceptedTerms ? 'bg-accent border-accent' : 'border-ink/30 bg-white/60'
+                        }`}
+                      >
+                        {hasAcceptedTerms && <Check size={14} color="#fff" strokeWidth={3} />}
+                      </View>
+                      <View className="flex-1">
+                        <Text className="text-xs text-ink/70 leading-relaxed font-medium">
+                          I agree to Detail's{' '}
+                          <Text
+                            onPress={() => router.push('/customer-agreement')}
+                            className="font-bold text-accent underline"
+                          >
+                            Terms of Service
+                          </Text>{' '}
+                          and{' '}
+                          <Text
+                            onPress={() => router.push('/privacy-policy')}
+                            className="font-bold text-accent underline"
+                          >
+                            Privacy Policy
+                          </Text>
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
 
                     <TouchableOpacity
                       onPress={handleEmailAuth}
@@ -218,7 +350,27 @@ export default function SignInScreen() {
                 <SocialSignInButtons />
               </View>
 
-          <View className="flex-row items-center justify-center gap-2 mt-8">
+          {/* Legal footer links */}
+          <View className="mt-8 pt-6 border-t border-ink/10 items-center">
+            <Text className="text-[11px] font-black text-ink/40 uppercase tracking-widest mb-3">
+              Legal & Platform Policies
+            </Text>
+            <View className="flex-row flex-wrap items-center justify-center gap-x-3 gap-y-2">
+              <TouchableOpacity onPress={() => router.push('/customer-agreement')} activeOpacity={0.7}>
+                <Text className="text-xs font-bold text-ink/60">Customer Agreement</Text>
+              </TouchableOpacity>
+              <Text className="text-ink/30">•</Text>
+              <TouchableOpacity onPress={() => router.push('/cleaner-agreement')} activeOpacity={0.7}>
+                <Text className="text-xs font-bold text-ink/60">Cleaner Agreement</Text>
+              </TouchableOpacity>
+              <Text className="text-ink/30">•</Text>
+              <TouchableOpacity onPress={() => router.push('/privacy-policy')} activeOpacity={0.7}>
+                <Text className="text-xs font-bold text-ink/60">Privacy Policy</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View className="flex-row items-center justify-center gap-2 mt-6">
             <View className="w-4 h-4 rounded-full bg-accent/10 items-center justify-center">
               <View className="w-1.5 h-1.5 rounded-full bg-accent" />
             </View>
@@ -226,6 +378,13 @@ export default function SignInScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <CountryPickerModal
+        visible={isCountryPickerOpen}
+        selectedCountry={selectedCountry}
+        onSelect={(country) => setSelectedCountry(country)}
+        onClose={() => setIsCountryPickerOpen(false)}
+      />
     </SafeAreaView>
   );
 }

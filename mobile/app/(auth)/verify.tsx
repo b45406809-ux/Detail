@@ -21,7 +21,7 @@ import { RecaptchaModal, RecaptchaModalHandle } from '../../components/Recaptcha
 const OTP_LENGTH = 6;
 
 export default function VerifyScreen() {
-  const { phone } = useLocalSearchParams<{ phone: string }>();
+  const { phone, displayPhone } = useLocalSearchParams<{ phone: string; displayPhone?: string }>();
   const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(''));
   const [isVerifying, setIsVerifying] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -30,10 +30,11 @@ export default function VerifyScreen() {
   const recaptchaVerifierRef = useRef<RecaptchaModalHandle>(null);
 
   const sendCode = useCallback(async () => {
-    if (isSending) return;
+    if (isSending || !phone) return;
     setIsSending(true);
     try {
-      await sendPhoneOTP(`+1${phone}`, recaptchaVerifierRef.current);
+      const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`;
+      await sendPhoneOTP(normalizedPhone, recaptchaVerifierRef.current);
       setResendTimer(60);
     } catch (err: any) {
       Alert.alert('Failed to Send Code', err.message ?? 'Please try again.');
@@ -111,7 +112,7 @@ export default function VerifyScreen() {
         <Text className="text-3xl font-black text-ink tracking-tight mb-2">Enter the code</Text>
         <Text className="text-base text-ink/50 font-medium mb-10">
           {IS_MOCK ? 'DEV mode — enter any 6 digits to continue' : `We sent a 6-digit code to\n`}
-          {!IS_MOCK && <Text className="text-ink font-black">{phone}</Text>}
+          {!IS_MOCK && <Text className="text-ink font-black">{displayPhone || phone}</Text>}
         </Text>
 
         {isSending && (

@@ -576,7 +576,8 @@ export const increaseJobBudget = onCall(async (request) => {
   if (job.status !== 'BIDDING') {
     throw new HttpsError('failed-precondition', 'This job is no longer accepting bids.');
   }
-  if (newBudget <= Number(job.budget ?? 0)) {
+  const currentBudget = Number(job.budget ?? 0);
+  if (currentBudget > 0 && newBudget <= currentBudget) {
     throw new HttpsError('invalid-argument', 'The new budget must be higher than the current one.');
   }
 

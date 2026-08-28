@@ -27,6 +27,9 @@ import {
   Home as HomeIcon,
   Car,
   CalendarDays,
+  DollarSign,
+  Sparkles,
+  CheckCircle2,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { db, addDoc, collection, serverTimestamp, Timestamp } from '../../services/firebase';
@@ -78,6 +81,9 @@ export default function CreateBookingScreen() {
 
   // House checklist state
   const [propertySizeSqm, setPropertySizeSqm] = useState('');
+  const [storiesCount, setStoriesCount] = useState('1');
+  const [roomsCount, setRoomsCount] = useState('3');
+  const [bathroomsCount, setBathroomsCount] = useState('2');
   const [areas, setAreas] = useState<string[]>([]);
   const [houseCleaningTypes, setHouseCleaningTypes] = useState<string[]>([]);
   const [houseCondition, setHouseCondition] = useState<HouseChecklist['condition']>();
@@ -102,6 +108,7 @@ export default function CreateBookingScreen() {
   const [timePreference, setTimePreference] = useState<(typeof TIME_OPTIONS)[number]['id']>('ASAP');
   const [customDateTime, setCustomDateTime] = useState<Date | null>(null);
   const [pickerMode, setPickerMode] = useState<'date' | 'time' | null>(null);
+  const [budgetOption, setBudgetOption] = useState<'NOT_SURE' | 'FIXED'>('NOT_SURE');
   const [budget, setBudget] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -176,7 +183,7 @@ export default function CreateBookingScreen() {
       case 'SCHEDULE':
         return !!timePreference && (timePreference !== 'CUSTOM' || !!customDateTime);
       case 'BUDGET':
-        return !!budget && Number(budget) > 0;
+        return budgetOption === 'NOT_SURE' || (!!budget && Number(budget) > 0);
       default:
         return true;
     }
@@ -198,6 +205,9 @@ export default function CreateBookingScreen() {
           ? {
               category: 'HOUSE',
               propertySizeSqm: propertySizeSqm ? Number(propertySizeSqm) : undefined,
+              storiesCount: storiesCount ? Number(storiesCount) : undefined,
+              roomsCount: roomsCount ? Number(roomsCount) : undefined,
+              bathroomsCount: bathroomsCount ? Number(bathroomsCount) : undefined,
               areas,
               cleaningTypes: houseCleaningTypes,
               condition: houseCondition,
@@ -215,6 +225,7 @@ export default function CreateBookingScreen() {
 
       const scheduledDateTime = resolveScheduledDate(timePreference, customDateTime);
       const now = Date.now();
+      const finalBudget = budgetOption === 'NOT_SURE' ? 0 : Number(budget);
 
       const jobRef = await addDoc(collection(db, 'jobs'), {
         customerId: user.uid,
@@ -232,7 +243,7 @@ export default function CreateBookingScreen() {
         // Only pricing strategy left is client-vetted bidding — the field
         // stays on the doc for forward-compatibility, just not user-chosen.
         pricingStrategy: 'RECEIVE_BIDS',
-        budget: Number(budget),
+        budget: finalBudget,
         // Jobs stay open to new bids for 30 minutes; the customer can
         // increase the budget (which extends this window) or cancel any
         // time while it's running — see offers.tsx.
@@ -308,15 +319,114 @@ export default function CreateBookingScreen() {
           {step === 'CHECKLIST' && category === 'HOUSE' && (
             <View className="gap-7">
               <View>
-                <SectionLabel n={1} title="Property Size (m²)" />
-                <TextInput
-                  className="border-2 border-ink/10 rounded-2xl px-4 py-4 text-sm font-medium text-ink bg-ink/[0.02]"
-                  placeholder="e.g. 120"
-                  placeholderTextColor="#9C94C4"
-                  keyboardType="number-pad"
-                  value={propertySizeSqm}
-                  onChangeText={setPropertySizeSqm}
-                />
+                <SectionLabel n={1} title="Property Size & Stories" />
+                <View className="gap-4">
+                  <View>
+                    <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-2">
+                      Number of Stories (Floors)
+                    </Text>
+                    <View className="flex-row gap-2 flex-wrap">
+                      {[
+                        { id: '1', label: '1 Story (Single Level)' },
+                        { id: '2', label: '2 Stories' },
+                        { id: '3', label: '3 Stories' },
+                        { id: '4', label: '4+ Stories' },
+                      ].map((item) => (
+                        <TouchableOpacity
+                          key={item.id}
+                          onPress={() => setStoriesCount(item.id)}
+                          className={`px-4 py-3 rounded-2xl border ${
+                            storiesCount === item.id
+                              ? 'border-accent bg-accent/10'
+                              : 'border-ink/10 bg-ink/[0.02]'
+                          }`}
+                        >
+                          <Text
+                            className={`text-xs font-black ${
+                              storiesCount === item.id ? 'text-accent' : 'text-ink/70'
+                            }`}
+                          >
+                            {item.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  <View>
+                    <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-2">
+                      Number of Rooms to Clean
+                    </Text>
+                    <View className="flex-row gap-2 flex-wrap">
+                      {['1 Room', '2 Rooms', '3 Rooms', '4 Rooms', '5 Rooms', '6+ Rooms'].map((label, idx) => {
+                        const val = String(idx + 1);
+                        return (
+                          <TouchableOpacity
+                            key={label}
+                            onPress={() => setRoomsCount(val)}
+                            className={`px-4 py-3 rounded-2xl border ${
+                              roomsCount === val
+                                ? 'border-accent bg-accent/10'
+                                : 'border-ink/10 bg-ink/[0.02]'
+                            }`}
+                          >
+                            <Text
+                              className={`text-xs font-black ${
+                                roomsCount === val ? 'text-accent' : 'text-ink/70'
+                              }`}
+                            >
+                              {label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  <View>
+                    <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-2">
+                      Number of Bathrooms
+                    </Text>
+                    <View className="flex-row gap-2 flex-wrap">
+                      {['1 Bath', '2 Baths', '3 Baths', '4+ Baths'].map((label, idx) => {
+                        const val = String(idx + 1);
+                        return (
+                          <TouchableOpacity
+                            key={label}
+                            onPress={() => setBathroomsCount(val)}
+                            className={`px-4 py-3 rounded-2xl border ${
+                              bathroomsCount === val
+                                ? 'border-accent bg-accent/10'
+                                : 'border-ink/10 bg-ink/[0.02]'
+                            }`}
+                          >
+                            <Text
+                              className={`text-xs font-black ${
+                                bathroomsCount === val ? 'text-accent' : 'text-ink/70'
+                              }`}
+                            >
+                              {label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  <View>
+                    <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-2">
+                      Approximate Property Size (m²) · Optional
+                    </Text>
+                    <TextInput
+                      className="border-2 border-ink/10 rounded-2xl px-4 py-3.5 text-sm font-medium text-ink bg-ink/[0.02]"
+                      placeholder="e.g. 120"
+                      placeholderTextColor="#9C94C4"
+                      keyboardType="number-pad"
+                      value={propertySizeSqm}
+                      onChangeText={setPropertySizeSqm}
+                    />
+                  </View>
+                </View>
               </View>
               <View>
                 <SectionLabel n={2} title="Areas to Clean" />
@@ -398,8 +508,10 @@ export default function CreateBookingScreen() {
 
           {step === 'DETAILS' && (
             <View>
-              <Text className="text-2xl font-black text-ink mb-1">Any special requests?</Text>
-              <Text className="text-sm text-ink/50 font-medium mb-6">Add notes and photos to help pros quote accurately</Text>
+              <Text className="text-2xl font-black text-ink mb-1">Details & Condition</Text>
+              <Text className="text-sm text-ink/50 font-medium mb-6">
+                Add notes and photos of dirty areas so cleaners know what needs cleaning and quote accurately
+              </Text>
 
               <Text className="text-xs font-black text-ink/40 uppercase tracking-widest mb-2">Special Instructions (Optional)</Text>
               <TextInput
@@ -413,31 +525,67 @@ export default function CreateBookingScreen() {
                 textAlignVertical="top"
               />
 
-              <Text className="text-xs font-black text-ink/40 uppercase tracking-widest mb-2">
-                Add Photos (Optional) · {photoUris.length}/6
-              </Text>
-              <View className="flex-row flex-wrap gap-3">
+              <View className="mb-2">
+                <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-1">
+                  Photos of What Needs Cleaning (Dirty areas & vehicle)
+                </Text>
+                <Text className="text-xs text-ink/50 font-medium mb-3">
+                  Upload photos of dirty rooms, stains, surfaces, pet hair, or vehicle condition ({photoUris.length}/6)
+                </Text>
+              </View>
+
+              <View className="flex-row flex-wrap gap-3 mb-4">
                 {photoUris.map((url) => (
-                  <View key={url} className="w-20 h-20 rounded-2xl overflow-hidden">
-                    <Image source={{ uri: url }} style={{ width: 80, height: 80 }} />
+                  <View key={url} className="w-24 h-24 rounded-2xl overflow-hidden border border-ink/10 relative">
+                    <Image source={{ uri: url }} style={{ width: 96, height: 96 }} />
+                    <View className="absolute bottom-1 left-1 bg-black/70 px-1.5 py-0.5 rounded-md">
+                      <Text className="text-[9px] font-black text-white uppercase">Needs Cleaning</Text>
+                    </View>
                     <TouchableOpacity
                       onPress={() => removePhoto(url)}
-                      className="absolute top-1 right-1 w-5 h-5 bg-black/60 rounded-full items-center justify-center"
+                      className="absolute top-1 right-1 w-6 h-6 bg-black/70 rounded-full items-center justify-center"
                     >
                       <X size={12} color="#fff" />
                     </TouchableOpacity>
                   </View>
                 ))}
-                {photoUris.length < 6 && (
+              </View>
+
+              {photoUris.length < 6 && (
+                <View className="flex-row gap-3">
+                  <TouchableOpacity
+                    onPress={() => pickPhoto(true)}
+                    disabled={isUploadingPhoto}
+                    activeOpacity={0.8}
+                    className="flex-1 py-3.5 px-4 rounded-2xl border-2 border-dashed border-accent/40 bg-accent/5 flex-row items-center justify-center gap-2"
+                  >
+                    {isUploadingPhoto ? (
+                      <ActivityIndicator color="#3906D2" size="small" />
+                    ) : (
+                      <>
+                        <Camera size={18} color="#3906D2" />
+                        <Text className="text-xs font-black text-accent uppercase">Take Photo</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+
                   <TouchableOpacity
                     onPress={() => pickPhoto(false)}
                     disabled={isUploadingPhoto}
-                    className="w-20 h-20 rounded-2xl border-2 border-dashed border-ink/15 items-center justify-center bg-ink/[0.02]"
+                    activeOpacity={0.8}
+                    className="flex-1 py-3.5 px-4 rounded-2xl border-2 border-dashed border-ink/20 bg-ink/[0.02] flex-row items-center justify-center gap-2"
                   >
-                    {isUploadingPhoto ? <ActivityIndicator color="#3906D2" /> : <Camera size={22} color="#3906D2" />}
+                    {isUploadingPhoto ? (
+                      <ActivityIndicator color="#3906D2" size="small" />
+                    ) : (
+                      <>
+                        <Sparkles size={18} color="#150256" />
+                        <Text className="text-xs font-black text-ink uppercase">Choose from Library</Text>
+                      </>
+                    )}
                   </TouchableOpacity>
-                )}
-              </View>
+                </View>
+              )}
             </View>
           )}
 
@@ -575,25 +723,123 @@ export default function CreateBookingScreen() {
             <View>
               <Text className="text-2xl font-black text-ink mb-1">Set your budget</Text>
               <Text className="text-sm text-ink/50 font-medium mb-6">
-                Cleaners will bid against this amount — you'll review every offer and pick the best one.
-                Your job stays open for 30 minutes; you can raise the budget or cancel any time during that window.
+                Choose how you want to price your job. Your request stays open for 30 minutes to receive competitive bids from local pros.
               </Text>
 
-              <Text className="text-xs font-black text-ink/40 uppercase tracking-widest mb-2">Your Budget (USD)</Text>
-              <View className="border-2 border-ink/10 rounded-2xl bg-ink/[0.02] px-4 py-3 mb-6">
-                <TextInput
-                  className="text-2xl font-black text-ink"
-                  placeholder="$0"
-                  placeholderTextColor="#9C94C4"
-                  keyboardType="decimal-pad"
-                  value={budget}
-                  onChangeText={setBudget}
-                />
-              </View>
+              {/* Option 1: Not sure - check cleaner bids */}
+              <TouchableOpacity
+                onPress={() => setBudgetOption('NOT_SURE')}
+                activeOpacity={0.85}
+                className={`p-4 rounded-3xl border-2 mb-3 ${
+                  budgetOption === 'NOT_SURE'
+                    ? 'border-accent bg-accent/5'
+                    : 'border-ink/10 bg-white'
+                }`}
+              >
+                <View className="flex-row items-start gap-3">
+                  <View
+                    className={`w-10 h-10 rounded-2xl items-center justify-center ${
+                      budgetOption === 'NOT_SURE' ? 'bg-accent' : 'bg-ink/5'
+                    }`}
+                  >
+                    <Sparkles size={20} color={budgetOption === 'NOT_SURE' ? '#fff' : '#150256'} />
+                  </View>
+                  <View className="flex-1">
+                    <View className="flex-row items-center gap-2 mb-1">
+                      <Text className="text-sm font-black text-ink">
+                        Not sure — check cleaner bids
+                      </Text>
+                      <View className="bg-accent/10 px-2 py-0.5 rounded-full">
+                        <Text className="text-[10px] font-black text-accent uppercase">Popular</Text>
+                      </View>
+                    </View>
+                    <Text className="text-xs text-ink/60 font-medium leading-relaxed">
+                      Cleaners will review your checklist and submit their best quotes. You compare prices, ratings, and choose the pro you like.
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+
+              {/* Option 2: I have a specific budget */}
+              <TouchableOpacity
+                onPress={() => setBudgetOption('FIXED')}
+                activeOpacity={0.85}
+                className={`p-4 rounded-3xl border-2 mb-4 ${
+                  budgetOption === 'FIXED'
+                    ? 'border-accent bg-accent/5'
+                    : 'border-ink/10 bg-white'
+                }`}
+              >
+                <View className="flex-row items-start gap-3">
+                  <View
+                    className={`w-10 h-10 rounded-2xl items-center justify-center ${
+                      budgetOption === 'FIXED' ? 'bg-accent' : 'bg-ink/5'
+                    }`}
+                  >
+                    <DollarSign size={20} color={budgetOption === 'FIXED' ? '#fff' : '#150256'} />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-sm font-black text-ink mb-1">
+                      I have a specific budget in mind
+                    </Text>
+                    <Text className="text-xs text-ink/60 font-medium">
+                      Set a target amount you are willing to pay for cleaners to bid around.
+                    </Text>
+                  </View>
+                </View>
+
+                {budgetOption === 'FIXED' && (
+                  <View className="mt-4 pt-4 border-t border-ink/5">
+                    <Text className="text-xs font-black text-ink/40 uppercase tracking-widest mb-2">
+                      Your Target Budget (USD)
+                    </Text>
+                    <View className="border-2 border-ink/10 rounded-2xl bg-white px-4 py-3 mb-3">
+                      <TextInput
+                        className="text-2xl font-black text-ink"
+                        placeholder="$0"
+                        placeholderTextColor="#9C94C4"
+                        keyboardType="decimal-pad"
+                        value={budget}
+                        onChangeText={setBudget}
+                        autoFocus
+                      />
+                    </View>
+                    <View className="flex-row flex-wrap gap-2">
+                      {['30', '50', '75', '100', '150'].map((preset) => (
+                        <TouchableOpacity
+                          key={preset}
+                          onPress={() => setBudget(preset)}
+                          className={`px-3.5 py-2 rounded-xl border ${
+                            budget === preset ? 'border-accent bg-accent/10' : 'border-ink/10 bg-white'
+                          }`}
+                        >
+                          <Text
+                            className={`text-xs font-black ${
+                              budget === preset ? 'text-accent' : 'text-ink/70'
+                            }`}
+                          >
+                            ${preset}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </TouchableOpacity>
 
               <View className="bg-ink/[0.03] rounded-3xl p-5 border border-ink/10 gap-3">
                 <Text className="text-xs font-black text-ink/40 uppercase tracking-widest">Review Request</Text>
                 <SummaryRow label="Service" value={serviceLabel()} />
+                {category === 'HOUSE' && (
+                  <SummaryRow
+                    label="Layout"
+                    value={`${storiesCount} ${Number(storiesCount) > 1 ? 'Stories' : 'Story'} · ${roomsCount} Rooms · ${bathroomsCount} Baths`}
+                  />
+                )}
+                <SummaryRow
+                  label="Budget"
+                  value={budgetOption === 'NOT_SURE' ? 'Open to cleaner bids' : budget ? `$${budget}` : 'Not set'}
+                />
                 <SummaryRow label="Location" value={address || 'Not set'} />
                 <SummaryRow
                   label="Time"
@@ -603,7 +849,10 @@ export default function CreateBookingScreen() {
                       : TIME_OPTIONS.find((t) => t.id === timePreference)?.label ?? ''
                   }
                 />
-                <SummaryRow label="Photos" value={`${photoUris.length} attached`} />
+                <SummaryRow
+                  label="Condition Photos"
+                  value={photoUris.length > 0 ? `${photoUris.length} photos of dirty areas` : 'None'}
+                />
               </View>
             </View>
           )}

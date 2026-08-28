@@ -42,6 +42,9 @@ export type CarCondition = 'CLEAN' | 'AVERAGE' | 'VERY_DIRTY';
 export interface HouseChecklist {
   category: 'HOUSE';
   propertySizeSqm?: number;
+  storiesCount?: number; // Number of stories/floors in property (e.g. 1, 2, 3)
+  roomsCount?: number; // Number of rooms to be cleaned
+  bathroomsCount?: number; // Number of bathrooms to be cleaned
   areas: string[]; // Living Room, Bedrooms, Kitchen, Bathrooms, Hallways, Stairs, Dining Room, Other
   cleaningTypes: string[]; // Standard, Deep, Move In/Out, Post Renovation
   condition?: HouseCondition;
@@ -119,6 +122,8 @@ export interface Job {
   budget?: number;
   price?: number;
   photos: string[];
+  /** Photos uploaded upon job completion (proof of work). */
+  completionPhotos?: string[];
   createdAt?: any;
   /** When the job stops accepting new bids — 30 min from creation, extended
    * by another 30 min each time the customer raises the budget. */

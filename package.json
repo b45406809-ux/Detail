@@ -24,6 +24,7 @@
     "express": "^4.21.2",
     "firebase": "^12.11.0",
     "framer-motion": "^11.11.17",
+    "libphonenumber-js": "^1.13.11",
     "lucide-react": "^0.546.0",
     "mapbox-gl": "^2.15.0",
     "maplibre-gl": "^4.7.1",
@@ -35,6 +36,5 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
-  },
-  "devDependencies": {}
+  }
 }

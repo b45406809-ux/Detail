@@ -73,6 +73,13 @@ export async function uploadJobPhoto(uri: string, onProgress?: (pct: number) => 
   return uploadUri(uri, `job-photos/${uid}/${filename}`, onProgress);
 }
 
+/** Upload a completion / after-cleaning photo (proof of work). */
+export async function uploadCompletionPhoto(uri: string, jobId: string, onProgress?: (pct: number) => void) {
+  const uid = auth.currentUser?.uid ?? 'anonymous';
+  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+  return uploadUri(uri, `job-completion/${jobId}/${uid}/${filename}`, onProgress);
+}
+
 /** Upload a chat photo attachment scoped to a job thread. */
 export async function uploadChatPhoto(uri: string, jobId: string) {
   const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;

@@ -119,8 +119,13 @@ export default function OffersScreen() {
 
   const submitBudgetIncrease = async () => {
     const value = parseFloat(newBudgetValue);
-    if (isNaN(value) || value <= (job?.budget ?? 0)) {
-      Alert.alert('Invalid amount', `Enter an amount higher than your current budget ($${job?.budget ?? 0}).`);
+    const currentBudget = Number(job?.budget ?? 0);
+    if (isNaN(value) || value <= 0) {
+      Alert.alert('Invalid amount', 'Please enter a positive budget amount.');
+      return;
+    }
+    if (currentBudget > 0 && value <= currentBudget) {
+      Alert.alert('Invalid amount', `Enter an amount higher than your current budget ($${currentBudget}).`);
       return;
     }
     setIsSavingBudget(true);
@@ -180,8 +185,12 @@ export default function OffersScreen() {
       <View className="mx-5 mb-4 bg-white rounded-3xl p-4 border border-ink/5">
         <View className="flex-row items-center justify-between mb-1">
           <View>
-            <Text className="text-2xl font-black text-ink">${job?.budget ?? 0}</Text>
-            <Text className="text-xs text-ink/50 font-medium mt-0.5">Your budget</Text>
+            <Text className="text-2xl font-black text-ink">
+              {job?.budget && job.budget > 0 ? `$${job.budget}` : 'Open to Bids'}
+            </Text>
+            <Text className="text-xs text-ink/50 font-medium mt-0.5">
+              {job?.budget && job.budget > 0 ? 'Your budget' : 'Cleaners quoting best prices'}
+            </Text>
           </View>
           {msRemaining != null && (
             <View className={`flex-row items-center gap-1.5 px-3 py-1.5 rounded-xl ${timeIsUp ? 'bg-red-50' : 'bg-accent/10'}`}>
@@ -199,7 +208,11 @@ export default function OffersScreen() {
               <Text className="text-lg font-black text-ink/40">$</Text>
               <TextInput
                 className="flex-1 py-3 text-lg font-black text-ink"
-                placeholder={`More than $${job?.budget ?? 0}`}
+                placeholder={
+                  job?.budget && job.budget > 0
+                    ? `More than $${job.budget}`
+                    : 'Target budget (e.g. 50)'
+                }
                 placeholderTextColor="#9C94C4"
                 keyboardType="decimal-pad"
                 value={newBudgetValue}
@@ -219,7 +232,9 @@ export default function OffersScreen() {
                 {isSavingBudget ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text className="text-xs font-black text-white uppercase">Confirm New Budget</Text>
+                  <Text className="text-xs font-black text-white uppercase">
+                    {job?.budget && job.budget > 0 ? 'Confirm New Budget' : 'Set Budget'}
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -234,7 +249,9 @@ export default function OffersScreen() {
             activeOpacity={0.8}
           >
             <TrendingUp size={16} color="#3906D2" />
-            <Text className="text-xs font-black text-accent uppercase tracking-wider">Increase Budget</Text>
+            <Text className="text-xs font-black text-accent uppercase tracking-wider">
+              {job?.budget && job.budget > 0 ? 'Increase Budget' : '+ Set a Target Budget'}
+            </Text>
           </TouchableOpacity>
         )}
       </View>

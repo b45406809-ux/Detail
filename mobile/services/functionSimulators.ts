@@ -153,7 +153,10 @@ async function simulateIncreaseJobBudget(data: { jobId: string; newBudget: numbe
 
   if (job.customerId !== uid) throw new Error('Only the job customer can change the budget.');
   if (job.status !== 'BIDDING') throw new Error('This job is no longer accepting bids.');
-  if (newBudget <= Number(job.budget ?? 0)) throw new Error('The new budget must be higher than the current one.');
+  const currentBudget = Number(job.budget ?? 0);
+  if (currentBudget > 0 && newBudget <= currentBudget) {
+    throw new Error('The new budget must be higher than the current one.');
+  }
 
   await updateDoc(jobRef, {
     budget: round2(newBudget),

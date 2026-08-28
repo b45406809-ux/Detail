@@ -121,7 +121,7 @@ export default function HelpScreen() {
                 'Live Chat',
                 IS_MOCK
                   ? '[DEV] Live chat not available in dev mode.'
-                  : 'Live chat is available Mon–Fri 8am–8pm EST.',
+                  : 'Live chat is available Monday – Friday from 09:00 AM to 4:30 PM CAT.',
                 [{ text: 'OK' }]
               )
             }
@@ -135,7 +135,7 @@ export default function HelpScreen() {
               Live Chat
             </Text>
             <Text className="text-[10px] text-slate-400 font-medium text-center">
-              Mon–Fri 8am–8pm
+              Mon–Fri 09:00–16:30 CAT
             </Text>
           </TouchableOpacity>
         </View>
@@ -147,7 +147,7 @@ export default function HelpScreen() {
             </Text>
             <Text className="text-xs text-amber-600 font-medium">
               Live chat and some contact features are mocked. In production these connect to the
-              real support system.
+              real support system (Mon–Fri 09:00 AM – 4:30 PM CAT).
             </Text>
           </View>
         )}
@@ -168,7 +168,7 @@ export default function HelpScreen() {
             Response Times
           </Text>
           <Text className="text-sm text-slate-600 font-medium leading-relaxed">
-            Email: within 24 hours{'\n'}Live chat: typically under 5 minutes during business hours
+            Email: within 24 hours{'\n'}Live chat: Mon–Fri 09:00 AM – 4:30 PM CAT (typically under 5 minutes)
           </Text>
         </View>
       </ScrollView>

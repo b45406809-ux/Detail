@@ -10,10 +10,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MapPin, Clock, DollarSign, MessageSquare, Hash } from 'lucide-react-native';
+import { ArrowLeft, MapPin, Clock, DollarSign, MessageSquare, Hash, Home, Layers, Sparkles, X } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { db, doc, collection, onSnapshot, query, where, getDocs, limit } from '../../services/firebase';
 import { callFunction } from '../../services/functions';
@@ -29,6 +30,7 @@ export default function CleanerJobDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [alreadyBid, setAlreadyBid] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
 
   const [bidPrice, setBidPrice] = useState('');
   const [estimatedArrival, setEstimatedArrival] = useState('');
@@ -153,6 +155,23 @@ export default function CleanerJobDetailScreen() {
               <DetailRow icon={MapPin} title="Location" value={job.location?.address ?? 'Address not provided'} accent={distance ?? undefined} />
               <DetailRow icon={DollarSign} title="Customer Budget" value={budgetLabel} />
               <DetailRow icon={Clock} title="Estimated Duration" value={job.estimatedDuration ? `${job.estimatedDuration} hours` : '2–3 hours'} />
+              {job.category === 'HOUSE' && (
+                <>
+                  {Boolean((job.checklist as HouseChecklist)?.storiesCount || (job.checklist as HouseChecklist)?.roomsCount) && (
+                    <DetailRow
+                      icon={Home}
+                      title="Property Layout"
+                      value={[
+                        (job.checklist as HouseChecklist).storiesCount ? `${(job.checklist as HouseChecklist).storiesCount} Story` : null,
+                        (job.checklist as HouseChecklist).roomsCount ? `${(job.checklist as HouseChecklist).roomsCount} Rooms to clean` : null,
+                        (job.checklist as HouseChecklist).bathroomsCount ? `${(job.checklist as HouseChecklist).bathroomsCount} Baths` : null,
+                        (job.checklist as HouseChecklist).propertySizeSqm ? `${(job.checklist as HouseChecklist).propertySizeSqm} m²` : null,
+                      ].filter(Boolean).join(' · ')}
+                      highlight
+                    />
+                  )}
+                </>
+              )}
               {job.category === 'CAR' && (job.checklist as CarChecklist)?.registrationNumber && (
                 <DetailRow
                   icon={Hash}
@@ -175,11 +194,55 @@ export default function CleanerJobDetailScreen() {
             )}
 
             {job.photos?.length > 0 && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4 pt-4 border-t border-ink/5" contentContainerStyle={{ gap: 8 }}>
-                {job.photos.map((url) => (
-                  <Image key={url} source={{ uri: url }} style={{ width: 72, height: 72, borderRadius: 16 }} />
-                ))}
-              </ScrollView>
+              <View className="mt-4 pt-4 border-t border-ink/5">
+                <View className="flex-row items-center justify-between mb-2">
+                  <Text className="text-xs font-black text-ink/60 uppercase tracking-wider">
+                    📸 Photos of What Needs Cleaning ({job.photos.length})
+                  </Text>
+                  <Text className="text-[10px] font-bold text-accent">Tap to enlarge</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                  {job.photos.map((url) => (
+                    <TouchableOpacity
+                      key={url}
+                      onPress={() => setSelectedPhotoUrl(url)}
+                      activeOpacity={0.8}
+                      className="relative rounded-2xl overflow-hidden border border-ink/10"
+                    >
+                      <Image source={{ uri: url }} style={{ width: 88, height: 88 }} />
+                      <View className="absolute bottom-1 left-1 bg-black/75 px-1.5 py-0.5 rounded-md">
+                        <Text className="text-[8px] font-black text-white uppercase">Dirty / Before</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {job.completionPhotos && job.completionPhotos.length > 0 && (
+              <View className="mt-4 pt-4 border-t border-ink/5">
+                <View className="flex-row items-center justify-between mb-2">
+                  <Text className="text-xs font-black text-emerald-700 uppercase tracking-wider">
+                    ✨ Photos When Done ({job.completionPhotos.length})
+                  </Text>
+                  <Text className="text-[10px] font-bold text-emerald-700">Completed</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                  {job.completionPhotos.map((url) => (
+                    <TouchableOpacity
+                      key={url}
+                      onPress={() => setSelectedPhotoUrl(url)}
+                      activeOpacity={0.8}
+                      className="relative rounded-2xl overflow-hidden border border-emerald-200"
+                    >
+                      <Image source={{ uri: url }} style={{ width: 88, height: 88 }} />
+                      <View className="absolute bottom-1 left-1 bg-emerald-700/85 px-1.5 py-0.5 rounded-md">
+                        <Text className="text-[8px] font-black text-white uppercase">Completed</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
             )}
           </View>
 
@@ -258,6 +321,28 @@ export default function CleanerJobDetailScreen() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={!!selectedPhotoUrl}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedPhotoUrl(null)}
+      >
+        <View className="flex-1 bg-black/90 items-center justify-center p-4">
+          <TouchableOpacity
+            onPress={() => setSelectedPhotoUrl(null)}
+            className="absolute top-12 right-6 w-10 h-10 rounded-full bg-white/20 items-center justify-center z-10"
+          >
+            <X size={22} color="#fff" />
+          </TouchableOpacity>
+          {selectedPhotoUrl && (
+            <Image
+              source={{ uri: selectedPhotoUrl }}
+              style={{ width: '100%', height: '80%', resizeMode: 'contain' }}
+            />
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

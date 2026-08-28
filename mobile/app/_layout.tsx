@@ -27,14 +27,19 @@ function AuthGuard() {
     if (isLoading) return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    const currentScreen = segments[1] || '';
 
     if (!user && !inAuthGroup) {
       router.replace('/(auth)/splash');
     } else if (user && inAuthGroup) {
       if (!profile?.hasCompletedProfile) {
-        router.replace('/(auth)/create-profile');
+        if (currentScreen !== 'create-profile') {
+          router.replace('/(auth)/create-profile');
+        }
       } else if (!profile?.hasSetupPermissions) {
-        router.replace('/(auth)/permissions');
+        if (currentScreen !== 'permissions') {
+          router.replace('/(auth)/permissions');
+        }
       } else {
         router.replace('/home');
       }

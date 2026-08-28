@@ -1,9 +1,20 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Animated } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+  Animated,
+  Image,
+  Modal,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
 import {
   ArrowLeft,
   MessageSquare,
@@ -16,6 +27,11 @@ import {
   Navigation,
   Siren,
   Heart,
+  Camera,
+  Image as ImageIcon,
+  Sparkles,
+  X,
+  Layers,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -33,6 +49,7 @@ import {
   limit,
 } from '../../services/firebase';
 import { callFunction } from '../../services/functions';
+import { uploadCompletionPhoto } from '../../services/storage';
 import { Job, JobStatus } from '../../types';
 import { IS_MOCK, IS_DEMO } from '../../utils/env';
 import { GlassCard, GlassSheet, GlassIconButton } from '../../components/glass';
@@ -75,11 +92,52 @@ export default function TrackingScreen() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [favoriteDocId, setFavoriteDocId] = useState<string | null>(null);
   const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
+  const [showPhotosModal, setShowPhotosModal] = useState(false);
+  const [selectedPhotoModal, setSelectedPhotoModal] = useState<string | null>(null);
+  const [isUploadingDonePhoto, setIsUploadingDonePhoto] = useState(false);
+  const [photoTab, setPhotoTab] = useState<'BEFORE' | 'AFTER'>('BEFORE');
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
   const slideAnim = useRef(new Animated.Value(300)).current;
 
   const isCustomer = profile?.role === 'CUSTOMER';
   const isCleaner = profile?.role === 'CLEANER';
+
+  const handleUploadDonePhoto = async (fromCamera: boolean) => {
+    if (!jobId) return;
+    const currentCount = job?.completionPhotos?.length ?? 0;
+    if (currentCount >= 6) {
+      Alert.alert('Limit Reached', 'You can upload up to 6 completion photos.');
+      return;
+    }
+    const permission = fromCamera
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Please allow camera / gallery access to add completion photos.');
+      return;
+    }
+    const result = fromCamera
+      ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
+      : await ImagePicker.launchImageLibraryAsync({ quality: 0.7, allowsMultipleSelection: false });
+
+    if (result.canceled || !result.assets?.[0]) return;
+
+    setIsUploadingDonePhoto(true);
+    try {
+      const url = await uploadCompletionPhoto(result.assets[0].uri, jobId);
+      const existing = job?.completionPhotos ?? [];
+      const updated = [...existing, url];
+      await updateDoc(doc(db, 'jobs', jobId), {
+        completionPhotos: updated,
+      });
+      setPhotoTab('AFTER');
+      Alert.alert('Photo Uploaded', 'Completion proof photo added to the job.');
+    } catch {
+      Alert.alert('Upload Failed', 'Could not upload completion photo. Please try again.');
+    } finally {
+      setIsUploadingDonePhoto(false);
+    }
+  };
 
   useEffect(() => {
     if (!jobId) return;
@@ -516,6 +574,94 @@ export default function TrackingScreen() {
           })}
         </View>
 
+        {/* Job Photos quick access row */}
+        {((job.photos && job.photos.length > 0) || (job.completionPhotos && job.completionPhotos.length > 0)) && (
+          <TouchableOpacity
+            onPress={() => setShowPhotosModal(true)}
+            activeOpacity={0.8}
+            className="flex-row items-center justify-between bg-ink/[0.04] p-3 rounded-2xl mb-4 border border-ink/5"
+          >
+            <View className="flex-row items-center gap-2">
+              <Camera size={16} color="#3906D2" />
+              <Text className="text-xs font-black text-ink">
+                Job Photos ({job.photos?.length ?? 0} Before · {job.completionPhotos?.length ?? 0} After)
+              </Text>
+            </View>
+            <Text className="text-[11px] font-black text-accent">View Photos →</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Cleaner proof-of-work upload during cleaning */}
+        {isCleaner && (job.status === JobStatus.IN_PROGRESS || job.status === JobStatus.ARRIVED) && (
+          <View className="bg-accent/5 p-4 rounded-2xl border border-accent/15 mb-4">
+            <View className="flex-row items-center justify-between mb-2">
+              <View className="flex-row items-center gap-2">
+                <Sparkles size={16} color="#3906D2" />
+                <Text className="text-xs font-black text-ink uppercase tracking-wider">
+                  Photos When Done (Proof of Work)
+                </Text>
+              </View>
+              <Text className="text-[10px] font-bold text-accent">
+                {job.completionPhotos?.length ?? 0}/6
+              </Text>
+            </View>
+            <Text className="text-xs text-ink/50 font-medium mb-3">
+              Take photos of the clean space/car before marking the job complete.
+            </Text>
+
+            {job.completionPhotos && job.completionPhotos.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3" contentContainerStyle={{ gap: 8 }}>
+                {job.completionPhotos.map((url) => (
+                  <TouchableOpacity
+                    key={url}
+                    onPress={() => setSelectedPhotoModal(url)}
+                    className="relative rounded-xl overflow-hidden border border-emerald-200"
+                  >
+                    <Image source={{ uri: url }} style={{ width: 64, height: 64 }} />
+                    <View className="absolute bottom-1 left-1 bg-emerald-700/80 px-1 rounded">
+                      <Text className="text-[8px] font-black text-white">Done</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+
+            <View className="flex-row gap-2">
+              <TouchableOpacity
+                onPress={() => handleUploadDonePhoto(true)}
+                disabled={isUploadingDonePhoto}
+                activeOpacity={0.8}
+                className="flex-1 py-2.5 rounded-xl bg-accent items-center justify-center flex-row gap-2"
+              >
+                {isUploadingDonePhoto ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <Camera size={14} color="#fff" />
+                    <Text className="text-xs font-black text-white uppercase">Take Done Photo</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => handleUploadDonePhoto(false)}
+                disabled={isUploadingDonePhoto}
+                activeOpacity={0.8}
+                className="flex-1 py-2.5 rounded-xl bg-white border border-accent/30 items-center justify-center flex-row gap-2"
+              >
+                {isUploadingDonePhoto ? (
+                  <ActivityIndicator color="#3906D2" size="small" />
+                ) : (
+                  <>
+                    <ImageIcon size={14} color="#3906D2" />
+                    <Text className="text-xs font-black text-accent uppercase">Upload Gallery</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {isCleaner && CLEANER_NEXT_STATUS[job.status] && (
           <TouchableOpacity
             onPress={handleCleanerStatusUpdate}
@@ -553,6 +699,152 @@ export default function TrackingScreen() {
           </Text>
         </View>
       </GlassSheet>
+
+      {/* Before & After Photos Modal */}
+      <Modal
+        visible={showPhotosModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowPhotosModal(false)}
+      >
+        <View className="flex-1 justify-end bg-black/50">
+          <View className="bg-white rounded-t-[36px] px-6 pt-6 pb-10 max-h-[85%]">
+            <View className="flex-row items-center justify-between mb-4">
+              <Text className="text-xl font-black text-ink">Job Photos</Text>
+              <TouchableOpacity
+                onPress={() => setShowPhotosModal(false)}
+                className="w-9 h-9 rounded-full bg-ink/5 items-center justify-center"
+              >
+                <X size={18} color="#150256" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Photo Tabs */}
+            <View className="flex-row bg-ink/5 p-1 rounded-2xl mb-5">
+              <TouchableOpacity
+                onPress={() => setPhotoTab('BEFORE')}
+                className={`flex-1 py-2.5 rounded-xl items-center ${
+                  photoTab === 'BEFORE' ? 'bg-white shadow-sm' : ''
+                }`}
+              >
+                <Text
+                  className={`text-xs font-black ${
+                    photoTab === 'BEFORE' ? 'text-ink' : 'text-ink/40'
+                  }`}
+                >
+                  Before Cleaning ({job.photos?.length ?? 0})
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setPhotoTab('AFTER')}
+                className={`flex-1 py-2.5 rounded-xl items-center ${
+                  photoTab === 'AFTER' ? 'bg-white shadow-sm' : ''
+                }`}
+              >
+                <Text
+                  className={`text-xs font-black ${
+                    photoTab === 'AFTER' ? 'text-emerald-700' : 'text-ink/40'
+                  }`}
+                >
+                  When Done ({job.completionPhotos?.length ?? 0})
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+              {photoTab === 'BEFORE' ? (
+                <View>
+                  <Text className="text-xs text-ink/50 font-medium mb-3">
+                    Customer uploaded these photos showing dirty areas / condition needing cleaning.
+                  </Text>
+                  {job.photos && job.photos.length > 0 ? (
+                    <View className="flex-row flex-wrap gap-3">
+                      {job.photos.map((url) => (
+                        <TouchableOpacity
+                          key={url}
+                          onPress={() => setSelectedPhotoModal(url)}
+                          activeOpacity={0.85}
+                          className="w-[47%] aspect-square rounded-2xl overflow-hidden border border-ink/10 relative"
+                        >
+                          <Image source={{ uri: url }} style={{ width: '100%', height: '100%' }} />
+                          <View className="absolute bottom-2 left-2 bg-black/75 px-2 py-1 rounded-lg">
+                            <Text className="text-[10px] font-black text-white uppercase">Dirty / Before</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : (
+                    <View className="py-10 items-center">
+                      <Text className="text-sm font-bold text-ink/40">No before photos attached</Text>
+                    </View>
+                  )}
+                </View>
+              ) : (
+                <View>
+                  <Text className="text-xs text-ink/50 font-medium mb-3">
+                    Cleaner uploaded these photos as proof of completed, sparkling clean work.
+                  </Text>
+                  {job.completionPhotos && job.completionPhotos.length > 0 ? (
+                    <View className="flex-row flex-wrap gap-3">
+                      {job.completionPhotos.map((url) => (
+                        <TouchableOpacity
+                          key={url}
+                          onPress={() => setSelectedPhotoModal(url)}
+                          activeOpacity={0.85}
+                          className="w-[47%] aspect-square rounded-2xl overflow-hidden border border-emerald-300 relative"
+                        >
+                          <Image source={{ uri: url }} style={{ width: '100%', height: '100%' }} />
+                          <View className="absolute bottom-2 left-2 bg-emerald-700/85 px-2 py-1 rounded-lg">
+                            <Text className="text-[10px] font-black text-white uppercase">✨ Clean / Done</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : (
+                    <View className="py-10 items-center">
+                      <Text className="text-sm font-bold text-ink/40 mb-3">No completion photos uploaded yet</Text>
+                      {isCleaner && (
+                        <TouchableOpacity
+                          onPress={() => {
+                            setShowPhotosModal(false);
+                            handleUploadDonePhoto(true);
+                          }}
+                          className="bg-accent px-4 py-2.5 rounded-xl"
+                        >
+                          <Text className="text-xs font-black text-white uppercase">Take First Done Photo</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Full screen photo zoom modal */}
+      <Modal
+        visible={!!selectedPhotoModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedPhotoModal(null)}
+      >
+        <View className="flex-1 bg-black/95 items-center justify-center p-4">
+          <TouchableOpacity
+            onPress={() => setSelectedPhotoModal(null)}
+            className="absolute top-12 right-6 w-10 h-10 rounded-full bg-white/20 items-center justify-center z-10"
+          >
+            <X size={22} color="#fff" />
+          </TouchableOpacity>
+          {selectedPhotoModal && (
+            <Image
+              source={{ uri: selectedPhotoModal }}
+              style={{ width: '100%', height: '80%', resizeMode: 'contain' }}
+            />
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }

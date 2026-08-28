@@ -11,8 +11,10 @@ import {
   ActivityIndicator,
   Animated,
   Image,
+  Platform,
+  Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import MapView, { PROVIDER_DEFAULT } from 'react-native-maps';
 import {
@@ -53,6 +55,7 @@ const FALLBACK_REGION = { latitude: 37.7749, longitude: -122.4194, latitudeDelta
 
 export default function HomeScreen() {
   const { user, profile, updateProfile } = useAuth();
+  const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [recentJobs, setRecentJobs] = useState<Job[]>([]);
@@ -68,6 +71,38 @@ export default function HomeScreen() {
   );
 
   const isCustomer = viewRole === 'CUSTOMER';
+
+  useEffect(() => {
+    if (profile?.role) {
+      setViewRole(profile.role as 'CUSTOMER' | 'CLEANER');
+    }
+  }, [profile?.role]);
+
+  const handleRoleToggle = (newRole: 'CUSTOMER' | 'CLEANER') => {
+    if (newRole === 'CLEANER') {
+      const isRegistered = profile?.cleanerOnboardingComplete && profile?.hasAgreedToTerms;
+      if (!isRegistered) {
+        Alert.alert(
+          'Cleaner Registration Required',
+          'To start earning and accept cleaning jobs, please complete your cleaner registration first.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Register Now',
+              style: 'default',
+              onPress: () => router.push('/register-cleaner'),
+            },
+          ]
+        );
+        return;
+      }
+      setViewRole('CLEANER');
+      updateProfile({ role: 'CLEANER' }).catch(() => {});
+    } else {
+      setViewRole('CUSTOMER');
+      updateProfile({ role: 'CUSTOMER' }).catch(() => {});
+    }
+  };
 
   useEffect(() => {
     Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
@@ -184,15 +219,21 @@ export default function HomeScreen() {
       )}
 
       {/* Header overlay */}
-      <SafeAreaView className="absolute top-0 left-0 right-0" edges={['top']} pointerEvents="box-none">
-        <View className="flex-row items-center justify-between px-5 pt-3" pointerEvents="box-none">
+      <View
+        className="absolute top-0 left-0 right-0"
+        style={{
+          paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 48 : 24) + 6,
+        }}
+        pointerEvents="box-none"
+      >
+        <View className="flex-row items-center justify-between px-5" pointerEvents="box-none">
           <GlassCard style={{ width: 44, height: 44, borderRadius: 16 }} noBlur={false}>
             <View className="flex-1 items-center justify-center">
               <Logo size={20} color="#3906D2" />
             </View>
           </GlassCard>
 
-          <RoleToggle value={viewRole} onChange={setViewRole} />
+          <RoleToggle value={viewRole} onChange={handleRoleToggle} />
 
           <GlassIconButton size={44} onPress={() => router.push('/notifications')}>
             <Bell size={18} color="#150256" />
@@ -225,7 +266,11 @@ export default function HomeScreen() {
 
         <GlassIconButton
           size={44}
-          style={{ position: 'absolute', right: 20, top: 96 }}
+          style={{
+            position: 'absolute',
+            right: 20,
+            top: Math.max(insets.top, Platform.OS === 'ios' ? 48 : 24) + 60,
+          }}
           onPress={() => {
             if (currentLocation) {
               mapRef.current?.animateToRegion(
@@ -237,7 +282,7 @@ export default function HomeScreen() {
         >
           <MapPin size={18} color="#150256" />
         </GlassIconButton>
-      </SafeAreaView>
+      </View>
 
       {/* Bottom glass sheet */}
       <View className="absolute bottom-0 left-0 right-0" pointerEvents="box-none">

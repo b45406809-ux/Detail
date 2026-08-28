@@ -6,6 +6,8 @@ import {
   ScrollView,
   Switch,
   Alert,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -22,16 +24,82 @@ import {
   FileText,
   Heart,
   Repeat,
+  Camera,
 } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { Linking } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { auth, signOut } from '../../services/firebase';
+import { uploadProfilePhoto } from '../../services/storage';
 import { StarRating } from '../../components/StarRating';
 import { IS_MOCK } from '../../utils/env';
 
 export default function ProfileScreen() {
   const { user, profile, updateProfile } = useAuth();
   const [notificationsOn, setNotificationsOn] = useState(true);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+
+  const handlePickProfilePhoto = async () => {
+    Alert.alert('Update Profile Picture', 'Choose how you would like to set your photo', [
+      {
+        text: 'Take Photo',
+        onPress: () => pickImage(true),
+      },
+      {
+        text: 'Choose from Gallery',
+        onPress: () => pickImage(false),
+      },
+      ...(profile?.photoURL
+        ? [
+            {
+              text: 'Remove Photo',
+              style: 'destructive' as const,
+              onPress: async () => {
+                try {
+                  await updateProfile({ photoURL: '' });
+                } catch {
+                  Alert.alert('Error', 'Failed to remove photo.');
+                }
+              },
+            },
+          ]
+        : []),
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const pickImage = async (fromCamera: boolean) => {
+    try {
+      const permission = fromCamera
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Please allow camera/photo access to update your profile picture.');
+        return;
+      }
+      const result = fromCamera
+        ? await ImagePicker.launchCameraAsync({
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+          });
+
+      if (result.canceled || !result.assets?.[0]?.uri) return;
+
+      setIsUploadingPhoto(true);
+      const photoUrl = await uploadProfilePhoto(result.assets[0].uri);
+      await updateProfile({ photoURL: photoUrl });
+    } catch {
+      Alert.alert('Upload failed', 'Could not upload profile picture. Please try again.');
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
 
   // Uber-style mode switch. Going CUSTOMER -> CLEANER is gated: the cleaner
   // registration form (register-cleaner.tsx) and the Cleaner Agreement
@@ -168,11 +236,28 @@ export default function ProfileScreen() {
         {/* Profile card */}
         <View className="mx-5 mb-6 bg-white rounded-4xl p-6 border border-slate-100 shadow-sm">
           <View className="flex-row items-center gap-4">
-            <View className="w-16 h-16 bg-accent rounded-3xl items-center justify-center">
-              <Text className="text-2xl font-black text-white">
-                {profile?.displayName?.charAt(0) ?? '?'}
-              </Text>
-            </View>
+            <TouchableOpacity
+              onPress={handlePickProfilePhoto}
+              disabled={isUploadingPhoto}
+              activeOpacity={0.8}
+              className="relative"
+            >
+              <View className="w-16 h-16 bg-accent rounded-3xl items-center justify-center overflow-hidden border border-slate-200">
+                {isUploadingPhoto ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : profile?.photoURL ? (
+                  <Image source={{ uri: profile.photoURL }} className="w-full h-full" />
+                ) : (
+                  <Text className="text-2xl font-black text-white">
+                    {profile?.displayName?.charAt(0) ?? '?'}
+                  </Text>
+                )}
+              </View>
+              <View className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-accent items-center justify-center border-2 border-white shadow-xs">
+                <Camera size={11} color="#fff" />
+              </View>
+            </TouchableOpacity>
+
             <View className="flex-1">
               <Text className="text-xl font-black text-slate-900">
                 {profile?.displayName ?? 'User'}
@@ -194,8 +279,11 @@ export default function ProfileScreen() {
                 </View>
               </View>
             </View>
-            <TouchableOpacity className="w-10 h-10 bg-slate-50 rounded-2xl items-center justify-center border border-slate-100">
-              <User size={18} color="#64748b" />
+            <TouchableOpacity
+              onPress={handlePickProfilePhoto}
+              className="w-10 h-10 bg-slate-50 rounded-2xl items-center justify-center border border-slate-100"
+            >
+              <Camera size={18} color="#64748b" />
             </TouchableOpacity>
           </View>
 
