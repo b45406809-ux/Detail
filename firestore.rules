@@ -25,6 +25,14 @@ service cloud.firestore {
       return isAuth() && request.auth.uid == uid;
     }
 
+    function isAdmin() {
+      return isAuth() && request.auth.token.admin == true;
+    }
+
+    function hasPermission(permission) {
+      return isAdmin() && permission in request.auth.token.permissions;
+    }
+
     // Keys that change when an update touches any of the listed fields.
     function changed(fields) {
       return request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
@@ -36,7 +44,7 @@ service cloud.firestore {
     // money / trust fields — those are owned exclusively by Cloud Functions
     // (settlement, rating aggregation, admin moderation) via the Admin SDK.
     match /users/{userId} {
-      allow read: if isAuth();
+      allow read: if isAdmin() || (isAuth() && (resource.id == request.auth.uid || resource.data.role == 'CLEANER'));
 
       allow create: if isOwner(userId)
         && request.resource.data.balance == 0
@@ -52,22 +60,7 @@ service cloud.firestore {
           'commissionOwed', 'isSuspended', 'isBanned', 'verificationLevel',
           'uid', 'email'
         ])
-      ) || (
-          // SIMULATE MODE — HIGHEST RISK relaxation in this file, revert
-          // first. settleJobPayment/submitRating/devCreditWallet move
-          // balance (and jobsCompleted/ratingAverage/ratingCount) between
-          // TWO DIFFERENT users (customer <-> cleaner) — a cross-user write
-          // Firestore rules can't scope to "only the other party of a
-          // specific shared job" without that job's id in this rule's
-          // context. So, only while simulating, ANY signed-in user may
-          // adjust ANOTHER user's balance/jobsCompleted/ratingAverage/
-          // ratingCount and nothing else — isSuspended/isBanned/
-          // verificationLevel/commissionOwed/uid/email/displayName/etc.
-          // stay fully protected/owner-only regardless.
-          isAuth()
-          && request.resource.data.diff(resource.data).affectedKeys()
-               .hasOnly(['balance', 'jobsCompleted', 'ratingAverage', 'ratingCount'])
-        );
+      );
 
       allow delete: if false;
     }
@@ -82,23 +75,23 @@ service cloud.firestore {
     // than that one: this is just a record, not the actual balance change.
     // Still never editable/deletable.
     match /transactions/{txId} {
-      allow read: if isAuth() && resource.data.userId == request.auth.uid;
-      allow create: if isAuth();
+      allow read: if isAdmin() || (isAuth() && resource.data.userId == request.auth.uid);
+      allow create: if false;
       allow update, delete: if false;
     }
 
     // ───────────────────────── jobs / bids ─────────────────────────
     // All booking state, assignment, bid, and payment writes are callable-only.
     match /jobs/{jobId} {
-      allow read: if isAuth() && (resource.data.customerId == request.auth.uid || resource.data.cleanerId == request.auth.uid || resource.data.status == 'PENDING');
+      allow read: if isAdmin() || (isAuth() && (resource.data.customerId == request.auth.uid || resource.data.cleanerId == request.auth.uid || resource.data.status == 'PENDING'));
       allow create, update, delete: if false;
       match /events/{eventId} {
-        allow read: if isAuth() && (get(/databases/$(database)/documents/jobs/$(jobId)).data.customerId == request.auth.uid || get(/databases/$(database)/documents/jobs/$(jobId)).data.cleanerId == request.auth.uid);
+        allow read: if isAdmin() || (isAuth() && (get(/databases/$(database)/documents/jobs/$(jobId)).data.customerId == request.auth.uid || get(/databases/$(database)/documents/jobs/$(jobId)).data.cleanerId == request.auth.uid));
         allow write: if false;
       }
     }
     match /bids/{bidId} {
-      allow read: if isAuth();
+      allow read: if isAdmin() || isAuth();
       allow write: if false;
     }
 
@@ -124,8 +117,8 @@ service cloud.firestore {
     // temporarily allowed directly by the client (customerId == caller) so
     // simulateSubmitRating can write it.
     match /reviews/{reviewId} {
-      allow read: if isAuth();
-      allow create: if isAuth() && request.resource.data.customerId == request.auth.uid;
+      allow read: if isAdmin() || isAuth();
+      allow create: if false;
       allow update, delete: if false;
     }
 
@@ -144,11 +137,11 @@ service cloud.firestore {
     // stay function-only always (resolveDispute, staff-invoked) — not part
     // of the simulate layer.
     match /disputes/{disputeId} {
-      allow read: if isAuth() && (
+      allow read: if isAdmin() || (isAuth() && (
         resource.data.customerId == request.auth.uid ||
         resource.data.cleanerId == request.auth.uid
-      );
-      allow create: if isAuth() && request.resource.data.customerId == request.auth.uid;
+      ));
+      allow create: if false;
       allow update, delete: if false;
     }
 
@@ -182,9 +175,16 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
-    match /configuration/{document} { allow read: if isAuth(); allow write: if false; }
-    match /reviewCases/{caseId} { allow read, write: if false; }
-    match /payments/{paymentId} { allow read: if isAuth() && resource.data.customerId == request.auth.uid; allow write: if false; }
+    match /configuration/{document} { allow read: if isAdmin(); allow write: if false; }
+    match /reviewCases/{caseId} { allow read: if isAdmin(); allow write: if false; }
+    match /supportCases/{caseId} { allow read: if isAdmin(); allow write: if false; }
+    match /payments/{paymentId} { allow read: if isAdmin() || (isAuth() && resource.data.customerId == request.auth.uid); allow write: if false; }
+    match /refunds/{refundId} { allow read: if isAdmin() && hasPermission('finance.read'); allow write: if false; }
+    match /adminAuditEvents/{eventId} { allow read: if isAdmin() && hasPermission('audit.read'); allow write: if false; }
+    match /reportingAggregates/{aggregateId} { allow read, write: if false; }
+    match /products/{productId} { allow read: if isAuth(); allow write: if false; }
+    match /productSales/{saleId} { allow read: if isAdmin(); allow write: if false; }
+    match /cleanerInventory/{inventoryId} { allow read: if isAdmin() || (isAuth() && resource.data.cleanerId == request.auth.uid); allow write: if false; }
 
     // Deny everything else
     match /{path=**} {
