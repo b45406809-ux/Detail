@@ -12,15 +12,26 @@ export enum VerificationLevel {
 }
 
 export enum JobStatus {
-  PENDING = 'PENDING', // draft, not yet posted
-  BIDDING = 'BIDDING', // quotes requested, open for cleaner offers
-  ACCEPTED = 'ACCEPTED',
+  PENDING = 'PENDING',
+  CONFIRMED = 'CONFIRMED',
+  ASSIGNED = 'ASSIGNED',
   EN_ROUTE = 'EN_ROUTE',
-  ARRIVED = 'ARRIVED',
   IN_PROGRESS = 'IN_PROGRESS',
   COMPLETED = 'COMPLETED',
   CANCELLED = 'CANCELLED',
 }
+
+/** Only these server-validated transitions are legal. CANCELLED is terminal. */
+export const BOOKING_TRANSITIONS: Readonly<Record<JobStatus, readonly JobStatus[]>> = {
+  [JobStatus.PENDING]: [JobStatus.CONFIRMED, JobStatus.CANCELLED],
+  [JobStatus.CONFIRMED]: [JobStatus.ASSIGNED, JobStatus.CANCELLED],
+  [JobStatus.ASSIGNED]: [JobStatus.EN_ROUTE, JobStatus.CANCELLED],
+  [JobStatus.EN_ROUTE]: [JobStatus.IN_PROGRESS, JobStatus.CANCELLED],
+  [JobStatus.IN_PROGRESS]: [JobStatus.COMPLETED, JobStatus.CANCELLED],
+  [JobStatus.COMPLETED]: [],
+  [JobStatus.CANCELLED]: [],
+};
+
 
 export enum AvailabilityStatus {
   AVAILABLE = 'AVAILABLE',

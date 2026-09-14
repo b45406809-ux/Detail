@@ -9,6 +9,7 @@ import {
   Animated,
   Image,
   Modal,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -65,17 +66,16 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const PROGRESS_STEPS: { status: string; label: string }[] = [
-  { status: 'ACCEPTED', label: 'En Route' },
+  { status: 'ASSIGNED', label: 'En Route' },
   { status: 'EN_ROUTE', label: 'En Route' },
-  { status: 'ARRIVED', label: 'Arrived' },
+  { status: 'IN_PROGRESS', label: 'Arrived' },
   { status: 'IN_PROGRESS', label: 'Cleaning' },
   { status: 'COMPLETED', label: 'Review' },
 ];
 
 const CLEANER_NEXT_STATUS: Partial<Record<string, { status: JobStatus; label: string }>> = {
-  ACCEPTED: { status: JobStatus.EN_ROUTE, label: "I'm On My Way" },
-  EN_ROUTE: { status: JobStatus.ARRIVED, label: "I've Arrived" },
-  ARRIVED: { status: JobStatus.IN_PROGRESS, label: 'Start Cleaning' },
+  ASSIGNED: { status: JobStatus.EN_ROUTE, label: "I'm On My Way" },
+  EN_ROUTE: { status: JobStatus.IN_PROGRESS, label: "I've Arrived" },
   IN_PROGRESS: { status: JobStatus.COMPLETED, label: 'Mark Complete' },
 };
 
@@ -87,6 +87,7 @@ export default function TrackingScreen() {
   const [job, setJob] = useState<Job | null>(null);
   const [step, setStep] = useState<TrackingStep>('TRACKING');
   const [rating, setRating] = useState(0);
+  const [problemDescription, setProblemDescription] = useState('');
   const [selectedPayment, setSelectedPayment] = useState<'WALLET' | 'CASH'>('WALLET');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
@@ -204,7 +205,7 @@ export default function TrackingScreen() {
 
   useEffect(() => {
     if (!jobId || !isCleaner || !job) return;
-    const activeStatuses = [JobStatus.ACCEPTED, JobStatus.EN_ROUTE, JobStatus.ARRIVED, JobStatus.IN_PROGRESS];
+    const activeStatuses = [JobStatus.ASSIGNED, JobStatus.EN_ROUTE, JobStatus.IN_PROGRESS, JobStatus.IN_PROGRESS];
     if (!activeStatuses.includes(job.status as JobStatus)) {
       locationSubRef.current?.remove();
       locationSubRef.current = null;
@@ -246,7 +247,7 @@ export default function TrackingScreen() {
         text: 'Cancel',
         style: 'destructive',
         onPress: async () => {
-          await updateDoc(doc(db, 'jobs', jobId!), { status: JobStatus.CANCELLED, cancelledAt: serverTimestamp() });
+          await callFunction('cancelBooking', { jobId, reason: 'Cancelled by participant', idempotencyKey: `cancel-${jobId}-${Date.now()}` });
           router.replace('/home');
         },
       },
@@ -269,7 +270,7 @@ export default function TrackingScreen() {
     if (!next) return;
     setIsSubmitting(true);
     try {
-      await updateDoc(doc(db, 'jobs', jobId!), { status: next.status, [`${next.status.toLowerCase()}At`]: serverTimestamp() });
+      await callFunction(next.status === JobStatus.COMPLETED ? 'completeBooking' : 'transitionBooking', { jobId, newState: next.status, idempotencyKey: `status-${jobId}-${next.status}` });
     } catch {
       Alert.alert('Error', 'Failed to update status. Please try again.');
     } finally {
@@ -295,10 +296,11 @@ export default function TrackingScreen() {
       Alert.alert('Rate your cleaner', 'Please select a star rating before submitting.');
       return;
     }
+    if (rating < 3 && !problemDescription.trim()) { Alert.alert('Tell us what happened', 'A problem description is required for ratings below three stars.'); return; }
     if (!job?.cleanerId || !user) return;
     setIsSubmitting(true);
     try {
-      await callFunction('submitRating', { jobId, rating });
+      await callFunction('submitRating', { jobId, rating, problemDescription });
       setStep('SUCCESS');
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to submit rating. Please try again.');
@@ -351,6 +353,10 @@ export default function TrackingScreen() {
         <View className="flex-1 px-6 pt-12 pb-10">
           <Text className="text-3xl font-black text-ink text-center mb-2">Rate your cleaner</Text>
           <Text className="text-base text-ink/50 font-medium text-center mb-10">How was {job.cleanerName ?? 'your cleaner'}?</Text>
+
+          {rating > 0 && rating < 3 && (
+            <TextInput value={problemDescription} onChangeText={setProblemDescription} placeholder="Describe the problem (required)" multiline className="border border-red-200 bg-red-50 rounded-2xl p-4 mb-6 min-h-24" />
+          )}
 
           <View className="items-center mb-10">
             <View className="flex-row gap-4">
@@ -556,7 +562,7 @@ export default function TrackingScreen() {
         {/* Live progress stepper */}
         <View className="flex-row items-center justify-between mb-4 px-1">
           {PROGRESS_STEPS.filter((s, i, arr) => arr.findIndex((x) => x.label === s.label) === i).map((s, i, arr) => {
-            const order = ['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED'];
+            const order = ['ASSIGNED', 'EN_ROUTE', 'IN_PROGRESS', 'IN_PROGRESS', 'COMPLETED'];
             const currentIdx = order.indexOf(job.status);
             const stepIdx = order.indexOf(s.status);
             const done = currentIdx >= stepIdx;
@@ -592,7 +598,7 @@ export default function TrackingScreen() {
         )}
 
         {/* Cleaner proof-of-work upload during cleaning */}
-        {isCleaner && (job.status === JobStatus.IN_PROGRESS || job.status === JobStatus.ARRIVED) && (
+        {isCleaner && (job.status === JobStatus.IN_PROGRESS || job.status === JobStatus.IN_PROGRESS) && (
           <View className="bg-accent/5 p-4 rounded-2xl border border-accent/15 mb-4">
             <View className="flex-row items-center justify-between mb-2">
               <View className="flex-row items-center gap-2">

@@ -5,6 +5,8 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
+import * as Notifications from 'expo-notifications';
+import { configureNotificationChannels } from '../services/notifications';
 import {
   PublicSans_300Light,
   PublicSans_400Regular,
@@ -27,7 +29,7 @@ function AuthGuard() {
     if (isLoading) return;
 
     const inAuthGroup = segments[0] === '(auth)';
-    const currentScreen = segments[1] || '';
+    const currentScreen = String((segments as string[])[1] || '');
 
     if (!user && !inAuthGroup) {
       router.replace('/(auth)/splash');
@@ -51,6 +53,19 @@ function AuthGuard() {
 
 export default function RootLayout() {
   const [fontsLoaded, setFontsLoaded] = React.useState(false);
+
+  useEffect(() => {
+    configureNotificationChannels().catch(() => undefined);
+    const routeNotification = (response: Notifications.NotificationResponse) => {
+      const data = response.notification.request.content.data as { jobId?: string; type?: string };
+      if (!data.jobId) return;
+      const offerTypes = ['BOOKING_CREATED', 'NEW_BID'];
+      router.push({ pathname: offerTypes.includes(data.type ?? '') ? '/booking/offers' : '/tracking/[jobId]', params: { jobId: data.jobId } });
+    };
+    const subscription = Notifications.addNotificationResponseReceivedListener(routeNotification);
+    Notifications.getLastNotificationResponseAsync().then(response => response && routeNotification(response));
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     Font.loadAsync({

@@ -12,7 +12,7 @@ import Constants from 'expo-constants';
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
-    shouldPlaySound: false,
+    shouldPlaySound: true,
     shouldSetBadge: true,
     shouldShowBanner: true,
     shouldShowList: true,
@@ -32,5 +32,12 @@ export async function getExpoPushToken(): Promise<string | null> {
   } catch (err) {
     console.warn('Push token registration skipped:', err);
     return null;
+  }
+}
+
+export async function configureNotificationChannels() {
+  if (process.env.EXPO_OS === 'android') {
+    await Notifications.setNotificationChannelAsync('bookings', { name: 'Booking updates', importance: Notifications.AndroidImportance.HIGH, sound: 'booking.wav', vibrationPattern: [0, 250, 150, 250], lightColor: '#3906D2' });
+    await Notifications.setNotificationChannelAsync('urgent', { name: 'Payments & urgent', importance: Notifications.AndroidImportance.MAX, sound: 'urgent.wav', vibrationPattern: [0, 500, 200, 500], lightColor: '#E5484D' });
   }
 }

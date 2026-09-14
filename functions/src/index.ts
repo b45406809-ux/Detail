@@ -41,6 +41,54 @@ const RESEND_API_KEY = defineSecret('RESEND_API_KEY');
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+type BookingState = 'PENDING' | 'CONFIRMED' | 'ASSIGNED' | 'EN_ROUTE' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+const BOOKING_TRANSITIONS: Readonly<Record<BookingState, readonly BookingState[]>> = {
+  PENDING: ['CONFIRMED', 'CANCELLED'],
+  CONFIRMED: ['ASSIGNED', 'CANCELLED'],
+  ASSIGNED: ['EN_ROUTE', 'CANCELLED'],
+  EN_ROUTE: ['IN_PROGRESS', 'CANCELLED'],
+  IN_PROGRESS: ['COMPLETED', 'CANCELLED'],
+  COMPLETED: [], CANCELLED: [],
+};
+function assertTransition(previous: BookingState, next: BookingState) {
+  if (!BOOKING_TRANSITIONS[previous]?.includes(next)) {
+    throw new HttpsError('failed-precondition', `Invalid booking transition: ${previous} → ${next}.`);
+  }
+}
+function eventRef(jobId: string, idempotencyKey: string) {
+  return db.collection('jobs').doc(jobId).collection('events').doc(idempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_'));
+}
+function writeEvent(tx: FirebaseFirestore.Transaction, jobId: string, input: {
+  type: string; actorId: string; actorRole: string; previousState: BookingState | null;
+  newState: BookingState; idempotencyKey: string; metadata?: Record<string, unknown>;
+}) {
+  tx.create(eventRef(jobId, input.idempotencyKey), { ...input, timestamp: FieldValue.serverTimestamp() });
+}
+function requireIdempotencyKey(value: unknown): string {
+  if (typeof value !== 'string' || value.trim().length < 8 || value.length > 128) {
+    throw new HttpsError('invalid-argument', 'A unique idempotencyKey (8-128 characters) is required.');
+  }
+  return value.trim();
+}
+
+
+export const deleteAccount = onCall(async request => {
+  const uid=request.auth?.uid; if(!uid)throw new HttpsError('unauthenticated','Sign in required.');
+  const authTime=Number(request.auth?.token.auth_time??0)*1000;
+  if(Date.now()-authTime>5*60*1000)throw new HttpsError('failed-precondition','RECENT_LOGIN_REQUIRED');
+  if(request.data?.confirmation!=='DELETE')throw new HttpsError('invalid-argument','Type DELETE to confirm.');
+  const [customerJobs,cleanerJobs]=await Promise.all([db.collection('jobs').where('customerId','==',uid).get(),db.collection('jobs').where('cleanerId','==',uid).get()]);
+  const all=new Map([...customerJobs.docs,...cleanerJobs.docs].map(d=>[d.id,d]));
+  const unresolved=[...all.values()].filter(d=>!['COMPLETED','CANCELLED'].includes(d.data().status)||['PENDING','FAILED'].includes(d.data().paymentStatus));
+  if(unresolved.length)throw new HttpsError('failed-precondition','ACTIVE_BOOKINGS_OR_PAYMENTS',{jobIds:unresolved.map(d=>d.id)});
+  const batch=db.batch(); const deletedLabel='Deleted user';
+  for(const snap of all.values()){const job=snap.data();batch.update(snap.ref,uid===job.customerId?{customerId:`deleted_${uid.slice(0,8)}`,customerName:deletedLabel,customerPhoto:FieldValue.delete(),description:FieldValue.delete()}:{cleanerId:`deleted_${uid.slice(0,8)}`,cleanerName:deletedLabel,cleanerPhoto:FieldValue.delete()});}
+  for(const collectionName of ['favorites','notifications']){const docs=await db.collection(collectionName).where(collectionName==='favorites'?'customerId':'userId','==',uid).get();docs.forEach(d=>batch.delete(d.ref));}
+  batch.delete(db.collection('users').doc(uid)); await batch.commit();
+  await admin.auth().revokeRefreshTokens(uid); await admin.auth().deleteUser(uid);
+  return {success:true};
+});
+
 /* ───────────────────────── notification helper ───────────────────────── */
 /**
  * Writes an in-app notification doc and, if the recipient has registered an
@@ -78,6 +126,7 @@ async function notifyUser(
         imageUrl: notification.imageUrl ?? null,
       },
       sound: 'default',
+      channelId: ['PAYMENT_FAILURE', 'REFUND'].includes(notification.type) ? 'urgent' : 'bookings',
     };
 
     // Rich push: attach the first job photo so cleaners can see the work at a glance
@@ -221,10 +270,11 @@ export const submitRating = onCall(async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
 
-  const { jobId, rating } = (request.data ?? {}) as { jobId?: string; rating?: number };
+  const { jobId, rating, problemDescription, evidence = [] } = (request.data ?? {}) as { jobId?: string; rating?: number; problemDescription?: string; evidence?: string[] };
   if (!jobId || !rating || rating < 1 || rating > 5) {
     throw new HttpsError('invalid-argument', 'jobId and a rating between 1 and 5 are required.');
   }
+  if (rating < 3 && !problemDescription?.trim()) throw new HttpsError('invalid-argument', 'A problem description is required below three stars.');
 
   const jobRef = db.collection('jobs').doc(jobId);
 
@@ -252,10 +302,13 @@ export const submitRating = onCall(async (request) => {
       customerId: uid,
       customerName: job.customerName ?? 'Customer',
       rating,
+      problemDescription: problemDescription?.trim() ?? null,
+      evidence: Array.isArray(evidence) ? evidence.slice(0, 5) : [],
       createdAt: FieldValue.serverTimestamp(),
     });
     tx.update(cleanerRef, { ratingAverage: newAvg, ratingCount: newCount });
     tx.update(jobRef, { rating, ratedAt: FieldValue.serverTimestamp() });
+    if (rating < 3) tx.set(db.collection('reviewCases').doc(`rating_${jobId}`), { jobId, customerId: uid, cleanerId: job.cleanerId, rating, problemDescription: problemDescription!.trim(), evidence: Array.isArray(evidence) ? evidence.slice(0, 5) : [], status: 'ADMIN_REVIEW', createdAt: FieldValue.serverTimestamp() });
   });
 
   return { success: true };
@@ -396,89 +449,151 @@ export const resolveDispute = onCall(async (request) => {
 export const acceptBid = onCall(async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
-
-  const { jobId, bidId } = (request.data ?? {}) as { jobId?: string; bidId?: string };
-  if (!jobId || !bidId) {
-    throw new HttpsError('invalid-argument', 'jobId and bidId are required.');
+  const { jobId, bidId, paymentMethod } = request.data ?? {};
+  const idempotencyKey = requireIdempotencyKey(request.data?.idempotencyKey);
+  if (!jobId || !bidId || !['WALLET', 'CASH'].includes(paymentMethod)) {
+    throw new HttpsError('invalid-argument', 'jobId, bidId, and a paymentMethod are required.');
   }
-
+  const betaConfig = (await db.collection('configuration').doc('beta').get()).data() ?? {};
+  if (betaConfig.maintenanceMode || betaConfig.disablePayments) throw new HttpsError('unavailable', 'PAYMENTS_DISABLED');
   const jobRef = db.collection('jobs').doc(jobId);
   const bidRef = db.collection('bids').doc(bidId);
-  const otherBidsQuery = db
-    .collection('bids')
-    .where('jobId', '==', jobId)
-    .where('status', 'in', ['PENDING', 'COUNTERED']);
-
-  let acceptedCleanerId: string | null = null;
-  let rejectedCleanerIds: string[] = [];
-
-  await db.runTransaction(async (tx) => {
-    const [jobSnap, bidSnap, otherBidsSnap] = await Promise.all([
-      tx.get(jobRef),
-      tx.get(bidRef),
-      tx.get(otherBidsQuery),
-    ]);
-    if (!jobSnap.exists) throw new HttpsError('not-found', 'Job not found.');
-    if (!bidSnap.exists) throw new HttpsError('not-found', 'Bid not found.');
-
-    const job = jobSnap.data() as FirebaseFirestore.DocumentData;
-    const bid = bidSnap.data() as FirebaseFirestore.DocumentData;
-
-    if (job.customerId !== uid) {
-      throw new HttpsError('permission-denied', 'Only the job customer can accept a bid.');
+  const bidsQuery = db.collection('bids').where('jobId', '==', jobId).where('status', 'in', ['PENDING', 'COUNTERED']);
+  let cleanerId = ''; let cleanerName = ''; let amount = 0;
+  await db.runTransaction(async tx => {
+    const replay = await tx.get(eventRef(jobId, idempotencyKey));
+    if (replay.exists) return;
+    const [jobSnap, bidSnap, bids] = await Promise.all([tx.get(jobRef), tx.get(bidRef), tx.get(bidsQuery)]);
+    if (!jobSnap.exists || !bidSnap.exists) throw new HttpsError('not-found', 'Job or bid not found.');
+    const job = jobSnap.data()!; const bid = bidSnap.data()!;
+    if (job.customerId !== uid) throw new HttpsError('permission-denied', 'Only the customer can accept a bid.');
+    if (!['PENDING', 'CONFIRMED'].includes(job.status) || job.cleanerId) throw new HttpsError('failed-precondition', 'JOB_UNAVAILABLE');
+    if (bid.jobId !== jobId || !['PENDING', 'COUNTERED'].includes(bid.status)) throw new HttpsError('failed-precondition', 'BID_UNAVAILABLE');
+    amount = round2(Number(bid.bidPrice)); cleanerId = bid.cleanerId; cleanerName = bid.cleanerName ?? 'Cleaner';
+    if (!(amount > 0)) throw new HttpsError('failed-precondition', 'INVALID_BID_AMOUNT');
+    const customerRef = db.collection('users').doc(uid);
+    const customer = await tx.get(customerRef);
+    if (!customer.exists || (paymentMethod === 'WALLET' && Number(customer.data()?.balance ?? 0) < amount)) {
+      tx.set(db.collection('paymentFailures').doc(idempotencyKey), { jobId, customerId: uid, amount, code: 'INSUFFICIENT_FUNDS', createdAt: FieldValue.serverTimestamp() });
+      throw new HttpsError('failed-precondition', 'INSUFFICIENT_FUNDS', { code: 'INSUFFICIENT_FUNDS', amount, available: Number(customer.data()?.balance ?? 0) });
     }
-    if (job.status !== 'BIDDING') {
-      throw new HttpsError('failed-precondition', 'This job is no longer accepting bids.');
-    }
-    if (bid.jobId !== jobId) {
-      throw new HttpsError('invalid-argument', 'That bid does not belong to this job.');
-    }
-
-    tx.update(bidRef, { status: 'ACCEPTED' });
-    tx.update(jobRef, {
-      status: 'ACCEPTED',
-      cleanerId: bid.cleanerId,
-      cleanerName: bid.cleanerName ?? null,
-      cleanerPhoto: bid.cleanerPhoto ?? null,
-      cleanerRating: bid.cleanerRating ?? null,
-      price: Number(bid.bidPrice), // authoritative — taken from the bid, not the client
-      acceptedAt: FieldValue.serverTimestamp(),
-    });
-
-    acceptedCleanerId = bid.cleanerId;
-    // Auto-decline every other outstanding bid on this job now that one is accepted.
-    // Rebuilt fresh (not pushed-to) each attempt so a transaction retry can't
-    // accumulate duplicate ids from a prior, aborted attempt.
-    rejectedCleanerIds = otherBidsSnap.docs
-      .filter((d) => d.id !== bidId)
-      .map((d) => {
-        tx.update(d.ref, { status: 'REJECTED' });
-        return d.data().cleanerId as string;
-      });
+    // Immediate wallet capture. Cash is recorded as a verified pay-on-completion method.
+    if (paymentMethod === 'WALLET') tx.update(customerRef, { balance: FieldValue.increment(-amount) });
+    const paymentRef = db.collection('payments').doc(`${jobId}_booking`);
+    tx.create(paymentRef, { jobId, customerId: uid, cleanerId, amount, method: paymentMethod,
+      status: paymentMethod === 'WALLET' ? 'CAPTURED' : 'AUTHORIZED', originalSource: paymentMethod,
+      idempotencyKey, createdAt: FieldValue.serverTimestamp() });
+    bids.docs.forEach(d => tx.update(d.ref, { status: d.id === bidId ? 'ACCEPTED' : 'REJECTED' }));
+    const previous = job.status as BookingState;
+    // Acceptance confirms and assigns atomically; event log retains both canonical steps.
+    tx.update(jobRef, { status: 'ASSIGNED', cleanerId, cleanerName: bid.cleanerName ?? null,
+      cleanerPhoto: bid.cleanerPhoto ?? null, cleanerRating: bid.cleanerRating ?? null, price: amount,
+      paymentMethod, paymentStatus: paymentMethod === 'WALLET' ? 'CAPTURED' : 'AUTHORIZED', acceptedAt: FieldValue.serverTimestamp() });
+    if (previous === 'PENDING') writeEvent(tx, jobId, { type: 'PAYMENT_CONFIRMED', actorId: uid, actorRole: 'CUSTOMER', previousState: 'PENDING', newState: 'CONFIRMED', idempotencyKey: `${idempotencyKey}_confirmed`, metadata: { paymentMethod, amount } });
+    writeEvent(tx, jobId, { type: 'BID_ACCEPTED', actorId: uid, actorRole: 'CUSTOMER', previousState: 'CONFIRMED',
+      newState: 'ASSIGNED', idempotencyKey, metadata: { bidId, paymentMethod, amount } });
   });
-
-  // Notifications are best-effort and happen after the transaction commits.
-  if (acceptedCleanerId) {
-    await notifyUser(acceptedCleanerId, {
-      type: 'BID_ACCEPTED',
-      title: 'Quote accepted! 🎉',
-      body: 'The customer accepted your quote. Head to the job for details.',
-      jobId,
-    });
-  }
-  await Promise.all(
-    rejectedCleanerIds.map((cleanerId) =>
-      notifyUser(cleanerId, {
-        type: 'JOB_UPDATE',
-        title: 'Job filled',
-        body: 'The customer went with another cleaner for this job.',
-        jobId,
-      })
-    )
-  );
-
-  return { success: true };
+  if (cleanerId) await Promise.all([
+    notifyUser(cleanerId, { type: 'BID_ACCEPTED', title: 'Quote accepted! 🎉', body: 'The customer accepted your quote.', jobId }),
+    notifyUser(uid, { type: 'BID_ACCEPTED', title: 'Cleaner assigned', body: `${cleanerName} is assigned to your booking.`, jobId }),
+  ]);
+  return { success: true, state: 'ASSIGNED', payment: { status: paymentMethod === 'WALLET' ? 'CAPTURED' : 'AUTHORIZED', amount } };
 });
+
+
+
+export const getBetaConfig = onCall(async () => {
+  const snap = await db.collection('configuration').doc('beta').get();
+  return { maintenanceMode: false, disableNewBookings: false, disablePayments: false, contactUrl: 'https://wa.me/', ...(snap.data() ?? {}) };
+});
+
+export const createBooking = onCall(async request => {
+  const uid=request.auth?.uid; if(!uid)throw new HttpsError('unauthenticated','Sign in required.');
+  const config=(await db.collection('configuration').doc('beta').get()).data()??{};
+  if(config.maintenanceMode||config.disableNewBookings) throw new HttpsError('unavailable','BOOKINGS_DISABLED',{contactUrl:config.contactUrl??'https://wa.me/'});
+  const key=requireIdempotencyKey(request.data?.idempotencyKey); const ref=db.collection('jobs').doc(key.replace(/[^a-zA-Z0-9_-]/g,'_'));
+  const allowed=request.data?.booking??{}; if(!allowed.serviceType||!allowed.location)throw new HttpsError('invalid-argument','Service and location are required.');
+  await db.runTransaction(async tx=>{const existing=await tx.get(ref);if(existing.exists)return;tx.create(ref,{...allowed,customerId:uid,status:'PENDING',createdAt:FieldValue.serverTimestamp()});writeEvent(tx,ref.id,{type:'CREATION',actorId:uid,actorRole:'CUSTOMER',previousState:null,newState:'PENDING',idempotencyKey:`created_${key}`});});
+  return {success:true,jobId:ref.id};
+});
+
+/** The sole API for lifecycle changes; clients cannot write job.status. */
+export const transitionBooking = onCall(async request => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
+  const { jobId, newState } = request.data ?? {};
+  const key = requireIdempotencyKey(request.data?.idempotencyKey);
+  if (!jobId || !BOOKING_TRANSITIONS[newState as BookingState]) throw new HttpsError('invalid-argument', 'Valid jobId and newState required.');
+  let recipient = '';
+  await db.runTransaction(async tx => {
+    const ref = db.collection('jobs').doc(jobId); const [snap, replay] = await Promise.all([tx.get(ref), tx.get(eventRef(jobId, key))]);
+    if (replay.exists) return;
+    if (!snap.exists) throw new HttpsError('not-found', 'Job not found.');
+    const job = snap.data()!; const previous = job.status as BookingState;
+    assertTransition(previous, newState);
+    const cleanerDriven = ['EN_ROUTE', 'IN_PROGRESS'].includes(newState);
+    if ((cleanerDriven && job.cleanerId !== uid) || (!cleanerDriven && job.customerId !== uid)) throw new HttpsError('permission-denied', 'You cannot perform this transition.');
+    tx.update(ref, { status: newState, [`${String(newState).toLowerCase()}At`]: FieldValue.serverTimestamp() });
+    writeEvent(tx, jobId, { type: 'STATUS_TRANSITION', actorId: uid, actorRole: cleanerDriven ? 'CLEANER' : 'CUSTOMER', previousState: previous, newState, idempotencyKey: key });
+    recipient = cleanerDriven ? job.customerId : job.cleanerId;
+  });
+  if (recipient) await notifyUser(recipient, { type: String(newState), title: `Booking ${String(newState).toLowerCase().replace('_', ' ')}`, body: 'Your booking has a new update.', jobId });
+  return { success: true, state: newState };
+});
+
+export const cancelBooking = onCall(async request => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
+  const { jobId, reason } = request.data ?? {}; const key = requireIdempotencyKey(request.data?.idempotencyKey);
+  if (!jobId || typeof reason !== 'string' || !reason.trim()) throw new HttpsError('invalid-argument', 'A cancellation reason is required.');
+  let recipients: string[] = []; let refundStatus = 'NOT_REQUIRED'; let refundAmount = 0;
+  await db.runTransaction(async tx => {
+    const ref = db.collection('jobs').doc(jobId); const [snap, replay] = await Promise.all([tx.get(ref), tx.get(eventRef(jobId, key))]);
+    if (replay.exists) return; if (!snap.exists) throw new HttpsError('not-found', 'Job not found.');
+    const job = snap.data()!; if (![job.customerId, job.cleanerId].includes(uid)) throw new HttpsError('permission-denied', 'Not a booking participant.');
+    assertTransition(job.status, 'CANCELLED');
+    const late = ['EN_ROUTE', 'IN_PROGRESS'].includes(job.status); const captured = Number(job.payment?.capturedAmount ?? (job.paymentMethod === 'WALLET' ? job.price : 0));
+    refundAmount = round2(captured * (late ? 0.5 : 1)); refundStatus = refundAmount ? 'REFUNDED' : 'NOT_REQUIRED';
+    if (refundAmount) {
+      tx.update(db.collection('users').doc(job.customerId), { balance: FieldValue.increment(refundAmount) });
+      tx.set(db.collection('transactions').doc(`refund_${key}`), { userId: job.customerId, jobId, type: 'CREDIT', amount: refundAmount, status: 'COMPLETED', originalSource: job.paymentMethod, idempotencyKey: key, createdAt: FieldValue.serverTimestamp() });
+    }
+    tx.update(ref, { status: 'CANCELLED', cancellation: { reason: reason.trim(), actorId: uid, refundAmount, refundStatus }, payment: { ...(job.payment ?? {}), refundStatus, refundedAmount: refundAmount }, cancelledAt: FieldValue.serverTimestamp() });
+    writeEvent(tx, jobId, { type: refundAmount ? 'REFUND' : 'CANCELLATION', actorId: uid, actorRole: uid === job.customerId ? 'CUSTOMER' : 'CLEANER', previousState: job.status, newState: 'CANCELLED', idempotencyKey: key, metadata: { refundAmount } });
+    recipients = [job.customerId, job.cleanerId].filter(Boolean);
+  });
+  await Promise.all(recipients.filter(x => x !== uid).map(userId => notifyUser(userId, { type: refundAmount ? 'REFUND' : 'CANCELLED', title: refundAmount ? 'Booking cancelled — refund issued' : 'Booking cancelled', body: reason.trim(), jobId })));
+  return { success: true, refund: { status: refundStatus, amount: refundAmount } };
+});
+
+export const reportNoShow = onCall(async request => {
+  const uid = request.auth?.uid; if (!uid) throw new HttpsError('unauthenticated', 'Sign in required.');
+  const { jobId, notes, evidence = [] } = request.data ?? {}; const key = requireIdempotencyKey(request.data?.idempotencyKey);
+  if (!jobId || typeof notes !== 'string' || !notes.trim()) throw new HttpsError('invalid-argument', 'Notes are required.');
+  await db.runTransaction(async tx => {
+    const ref = db.collection('jobs').doc(jobId); const [snap, replay] = await Promise.all([tx.get(ref), tx.get(eventRef(jobId,key))]); if (replay.exists) return;
+    if (!snap.exists) throw new HttpsError('not-found','Job not found.'); const job=snap.data()!;
+    if (![job.customerId,job.cleanerId].includes(uid)) throw new HttpsError('permission-denied','Not a participant.');
+    tx.set(db.collection('reviewCases').doc(key), { jobId, reporterId: uid, reportedRole: uid===job.customerId?'CLEANER':'CUSTOMER', notes: notes.trim(), evidence: Array.isArray(evidence)?evidence.slice(0,5):[], status:'ADMIN_REVIEW', createdAt:FieldValue.serverTimestamp() });
+    tx.update(ref,{reviewState:'ADMIN_REVIEW'}); writeEvent(tx,jobId,{type:'NO_SHOW',actorId:uid,actorRole:uid===job.customerId?'CUSTOMER':'CLEANER',previousState:job.status,newState:job.status,idempotencyKey:key});
+  }); return {success:true,reviewState:'ADMIN_REVIEW'};
+});
+
+export const completeBooking = onCall(async request => {
+  const uid=request.auth?.uid; if(!uid) throw new HttpsError('unauthenticated','Sign in required.');
+  const {jobId}=request.data??{}; const key=requireIdempotencyKey(request.data?.idempotencyKey);
+  let customerId='';
+  await db.runTransaction(async tx=>{ const ref=db.collection('jobs').doc(jobId); const [snap,replay]=await Promise.all([tx.get(ref),tx.get(eventRef(jobId,key))]); if(replay.exists)return;
+    if(!snap.exists) throw new HttpsError('not-found','Job not found.'); const job=snap.data()!; if(job.cleanerId!==uid)throw new HttpsError('permission-denied','Only the assigned cleaner can complete.'); assertTransition(job.status,'COMPLETED');
+    const amount=round2(Number(job.price??0)); const earnings=round2(amount*(1-PLATFORM_COMMISSION));
+    if(job.paymentMethod==='WALLET') tx.update(db.collection('users').doc(uid),{balance:FieldValue.increment(earnings),jobsCompleted:FieldValue.increment(1)}); else tx.update(db.collection('users').doc(uid),{balance:FieldValue.increment(-round2(amount*PLATFORM_COMMISSION)),jobsCompleted:FieldValue.increment(1)});
+    tx.update(ref,{status:'COMPLETED',completedAt:FieldValue.serverTimestamp(),earnings:{gross:amount,commission:round2(amount*PLATFORM_COMMISSION),net:earnings,finalized:true}});
+    writeEvent(tx,jobId,{type:'COMPLETION',actorId:uid,actorRole:'CLEANER',previousState:job.status,newState:'COMPLETED',idempotencyKey:key,metadata:{repeatBooking:!!job.isFavoriteRebook}}); customerId=job.customerId;
+  }); if(customerId)await notifyUser(customerId,{type:'COMPLETED',title:'Booking completed',body:'Your cleaning is complete. Please leave a rating.',jobId}); return {success:true};
+});
+
+export const rejectBid = onCall(async request => { const uid=request.auth?.uid; const {jobId,bidId}=request.data??{}; if(!uid)throw new HttpsError('unauthenticated','Sign in required.');
+ await db.runTransaction(async tx=>{const j=await tx.get(db.collection('jobs').doc(jobId));const b=await tx.get(db.collection('bids').doc(bidId));if(!j.exists||!b.exists)throw new HttpsError('not-found','Not found.');if(j.data()!.customerId!==uid||b.data()!.jobId!==jobId)throw new HttpsError('permission-denied','Not allowed.');if(!['PENDING','COUNTERED'].includes(b.data()!.status))throw new HttpsError('failed-precondition','Bid unavailable.');tx.update(b.ref,{status:'REJECTED'});});return{success:true}; });
 
 /* ───────────────────────── submitBid ───────────────────────── */
 /**
@@ -510,7 +625,7 @@ export const submitBid = onCall(async (request) => {
   ]);
   if (!jobSnap.exists) throw new HttpsError('not-found', 'Job not found.');
   const job = jobSnap.data() as FirebaseFirestore.DocumentData;
-  if (job.status !== 'BIDDING') {
+  if (job.status !== 'PENDING') {
     throw new HttpsError('failed-precondition', 'This job is no longer accepting bids.');
   }
 
@@ -576,7 +691,7 @@ export const increaseJobBudget = onCall(async (request) => {
   if (job.customerId !== uid) {
     throw new HttpsError('permission-denied', 'Only the job customer can change the budget.');
   }
-  if (job.status !== 'BIDDING') {
+  if (job.status !== 'PENDING') {
     throw new HttpsError('failed-precondition', 'This job is no longer accepting bids.');
   }
   const currentBudget = Number(job.budget ?? 0);
@@ -824,7 +939,7 @@ export const sendJobReminders = onSchedule('every 15 minutes', async () => {
 
   const upcomingSnap = await db
     .collection('jobs')
-    .where('status', '==', 'ACCEPTED')
+    .where('status', '==', 'ASSIGNED')
     .where('scheduledDateTime', '>=', now)
     .where('scheduledDateTime', '<=', soon)
     .get();

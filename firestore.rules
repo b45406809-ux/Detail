@@ -87,64 +87,19 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // ───────────────────────── jobs ─────────────────────────
-    // Customer creates; customer + assigned cleaner read and make limited updates
-    // (status transitions, cleaner location). Money / identity fields (price,
-    // customerBid, payment, rating, the party ids) are function-only.
+    // ───────────────────────── jobs / bids ─────────────────────────
+    // All booking state, assignment, bid, and payment writes are callable-only.
     match /jobs/{jobId} {
-      allow read: if isAuth() && (
-        resource.data.customerId == request.auth.uid ||
-        resource.data.cleanerId == request.auth.uid ||
-        resource.data.status == 'BIDDING'
-      );
-
-      allow create: if isAuth()
-        && request.resource.data.customerId == request.auth.uid
-        && request.resource.data.status == 'BIDDING'
-        && !('cleanerId' in request.resource.data)
-        && !('price' in request.resource.data)
-        && !('paidAt' in request.resource.data);
-
-      // SIMULATE MODE: price/paidAt/paymentMethod/rating/ratedAt/cleanerId/
-      // cleanerName/cleanerPhoto/cleanerRating/budget/biddingExpiresAt are
-      // normally function-only too — temporarily allowed so
-      // simulateAcceptBid/simulateSettleJobPayment/simulateSubmitRating/
-      // simulateIncreaseJobBudget can write them directly. customerId stays
-      // protected — nothing simulated ever needs to reassign job ownership.
-      allow update: if isAuth()
-        && (
-          resource.data.customerId == request.auth.uid ||
-          resource.data.cleanerId == request.auth.uid
-        )
-        && !changed(['customerId']);
-
-      allow delete: if false;
+      allow read: if isAuth() && (resource.data.customerId == request.auth.uid || resource.data.cleanerId == request.auth.uid || resource.data.status == 'PENDING');
+      allow create, update, delete: if false;
+      match /events/{eventId} {
+        allow read: if isAuth() && (get(/databases/$(database)/documents/jobs/$(jobId)).data.customerId == request.auth.uid || get(/databases/$(database)/documents/jobs/$(jobId)).data.cleanerId == request.auth.uid);
+        allow write: if false;
+      }
     }
-
-    // ───────────────────────── bids ─────────────────────────
-    // Normally created exclusively by the submitBid Cloud Function, which
-    // enforces the cash-commission balance gate authoritatively. SIMULATE
-    // MODE: temporarily allowed directly by the client (cleanerId ==
-    // caller) so simulateSubmitBid can write it — the balance check there
-    // is only a soft, non-authoritative UX check while this is loosened.
-    // Acceptance is done by the acceptBid Cloud Function (which also sets the
-    // authoritative price), so clients can never mutate a bid after creation.
     match /bids/{bidId} {
       allow read: if isAuth();
-      allow create: if isAuth() && request.resource.data.cleanerId == request.auth.uid;
-
-      // Rejecting a bid moves no money, so the job's customer may do it
-      // directly — acceptance/price changes normally stay server-only
-      // (acceptBid). SIMULATE MODE: also allow the job's customer to
-      // transition a bid straight to 'ACCEPTED' (status field only) so
-      // simulateAcceptBid can write it, matching what acceptBid would do.
-      allow update: if isAuth()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
-        && request.resource.data.status in ['REJECTED', 'ACCEPTED']
-        && resource.data.status in ['PENDING', 'COUNTERED']
-        && get(/databases/$(database)/documents/jobs/$(resource.data.jobId)).data.customerId == request.auth.uid;
-
-      allow delete: if false;
+      allow write: if false;
     }
 
     // ───────────────────────── messages ─────────────────────────
@@ -226,6 +181,10 @@ service cloud.firestore {
         && !changed(['userId', 'type', 'title', 'body', 'jobId', 'createdAt']);
       allow create, delete: if false;
     }
+
+    match /configuration/{document} { allow read: if isAuth(); allow write: if false; }
+    match /reviewCases/{caseId} { allow read, write: if false; }
+    match /payments/{paymentId} { allow read: if isAuth() && resource.data.customerId == request.auth.uid; allow write: if false; }
 
     // Deny everything else
     match /{path=**} {
