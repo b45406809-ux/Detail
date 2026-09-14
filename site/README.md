@@ -1,10 +1,11 @@
 # Detail marketing site
 
-Standalone Vite/React landing site for `https://detailapp.co.zw`. The existing root application remains the admin dashboard and is deployed separately to `https://dashboard.detailapp.co.zw`.
+Vite/React web package for the public site at `https://detailapp.co.zw` and the protected admin dashboard at `https://dashboard.detailapp.co.zw`. The customer and cleaner application lives in `mobile/`; the retired root web prototype has been removed.
 
 ## Architecture
 
 - Browser code reads Firebase Remote Config, but **never writes Firestore**. `joinWaitlist` is an HTTPS callable Cloud Function using the Admin SDK.
+- `/admin/*` renders the dashboard from `site/src/admin`. Firebase Authentication establishes the session, a refreshed ID token must contain `admin: true`, and elevated controls additionally require `elevated: true`. Administrative writes remain callable-only.
 - Waitlist records use a deterministic SHA-256 document ID from role + normalized email, preventing duplicate entries without a query race. The function validates/normalizes fields, limits an IP hash to eight attempts per UTC hour, checks a honeypot, optionally verifies Cloudflare Turnstile, and records consent time, source and policy version.
 - Confirmation mail is sent through Resend. A mail-provider failure is logged without losing an accepted waitlist record.
 - PostHog is disabled until explicit consent. Autocapture, session recording and person profiles are disabled. Only allow-listed interaction metadata, section names, role and UTM parameters are sent—never form values.
@@ -63,7 +64,7 @@ For an end-to-end submission, build Functions and run Firebase emulators from th
 `firebase.json` defines two Hosting targets:
 
 - `marketing` -> `site/dist` -> `detailapp.co.zw`
-- `dashboard` -> root `dist` -> `dashboard.detailapp.co.zw`
+- `dashboard` -> `site/dist` (`/admin`) -> `dashboard.detailapp.co.zw`
 
 The checked-in `.firebaserc` maps them to the expected Firebase Hosting site IDs `detail-marketing` and `detail-dashboard`. If the console uses different site IDs, run once:
 
@@ -78,8 +79,7 @@ In Firebase Console, add each custom domain to its matching Hosting site. Add th
 
 ```bash
 # from repository root
-npm --prefix site ci && npm --prefix site run build
-npm run build
+npm --prefix site install && npm --prefix site run build
 npm --prefix functions ci && npm --prefix functions run build
 firebase deploy --only functions:joinWaitlist
 firebase deploy --only hosting:marketing,hosting:dashboard

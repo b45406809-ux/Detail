@@ -41,6 +41,14 @@ const RESEND_API_KEY = defineSecret('RESEND_API_KEY');
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/** Admin endpoints trust custom claims only. A mutable profile role is never authorization. */
+function requireAdmin(request: { auth?: { uid: string; token: Record<string, unknown> } }, elevated = false) {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Authentication is required.');
+  if (request.auth.token.admin !== true) throw new HttpsError('permission-denied', 'Verified admin claim required.');
+  if (elevated && request.auth.token.elevated !== true) throw new HttpsError('permission-denied', 'Elevated admin claim required.');
+  return request.auth.uid;
+}
+
 type BookingState = 'PENDING' | 'CONFIRMED' | 'ASSIGNED' | 'EN_ROUTE' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 const BOOKING_TRANSITIONS: Readonly<Record<BookingState, readonly BookingState[]>> = {
   PENDING: ['CONFIRMED', 'CANCELLED'],
@@ -370,13 +378,7 @@ export const reportJobIssue = onCall(async (request) => {
  * Input:  { disputeId: string, refundAmount: number, resolution: string }
  */
 export const resolveDispute = onCall(async (request) => {
-  const uid = request.auth?.uid;
-  if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
-
-  const callerSnap = await db.collection('users').doc(uid).get();
-  if (callerSnap.data()?.role !== 'ADMIN') {
-    throw new HttpsError('permission-denied', 'Only Detail staff can resolve disputes.');
-  }
+  const uid = requireAdmin(request);
 
   const { disputeId, refundAmount, resolution } = (request.data ?? {}) as {
     disputeId?: string;
@@ -434,6 +436,84 @@ export const resolveDispute = onCall(async (request) => {
   });
 
   return { success: true };
+});
+
+/* ───────────────────────── Admin command center ─────────────────────────
+ * Money values returned to the dashboard are integer minor units. Reporting
+ * boundaries use Africa/Harare (UTC+02, no DST) and the configured ISO 4217
+ * currency. Scheduled aggregation can materialize the same schema at scale.
+ */
+const ADMIN_TIMEZONE = 'Africa/Harare';
+const ADMIN_CURRENCY = 'USD';
+const terminalStatuses = ['COMPLETED', 'CANCELLED'];
+const millis = (value: unknown): number => value instanceof admin.firestore.Timestamp ? value.toMillis() : typeof value === 'string' || typeof value === 'number' ? new Date(value).getTime() : 0;
+const harareBoundary = (now: Date, daysBack = 0) => {
+  const shifted = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+  return Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate() - daysBack) - 2 * 60 * 60 * 1000;
+};
+
+export const adminOverview = onCall(async request => {
+  requireAdmin(request);
+  const period = ['7d', '30d', '12m'].includes(request.data?.period) ? request.data.period as string : '30d';
+  const days = period === '7d' ? 7 : period === '12m' ? 365 : 30;
+  const now = new Date(), start = harareBoundary(now, days - 1), today = harareBoundary(now);
+  const [jobsSnap, usersSnap, paymentsSnap] = await Promise.all([
+    db.collection('jobs').where('createdAt', '>=', admin.firestore.Timestamp.fromMillis(start)).get(),
+    db.collection('users').where('createdAt', '>=', admin.firestore.Timestamp.fromMillis(start)).get(),
+    db.collection('payments').where('createdAt', '>=', admin.firestore.Timestamp.fromMillis(start)).get(),
+  ]);
+  const jobs = jobsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const payments = paymentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const inToday = (v: unknown) => millis(v) >= today;
+  const captured = payments.filter((p: any) => p.status === 'CAPTURED');
+  const revenueSince = (boundary: number) => captured.filter((p: any) => millis(p.capturedAt || p.createdAt) >= boundary).reduce((n: number, p: any) => n + Math.round(Number(p.amountMinor || p.amount * 100 || 0)), 0);
+  const attention: Array<Record<string, unknown>> = [];
+  jobs.forEach((j: any) => {
+    const age = Math.max(0, Math.floor((now.getTime() - millis(j.updatedAt || j.createdAt)) / 60000));
+    let rule = '';
+    if (j.status === 'PENDING' && age > 15) rule = 'Stale pending request';
+    else if (j.notificationSentAt && !j.notificationDeliveredAt && age > 5) rule = 'Delayed cleaner notification';
+    else if (j.status === 'ASSIGNED' && !j.customerSynchronizedAt && age > 5) rule = 'Customer synchronization missing';
+    else if (['ASSIGNED','EN_ROUTE','IN_PROGRESS'].includes(j.status) && millis(j.scheduledDateTime) < now.getTime() - 15*60000) rule = 'Overdue lifecycle milestone';
+    else if (j.status === 'COMPLETED' && !j.completionEventId) rule = 'Missing completion event';
+    if (rule) attention.push({ id: `${j.id}:${rule}`, bookingId: j.id, rule, ageMinutes: age });
+  });
+  payments.filter((p: any) => ['FAILED','REFUND_FAILED'].includes(p.status)).forEach((p: any) => attention.push({id:`payment:${p.id}`,bookingId:p.bookingId,rule:'Payment / refund failure',ageMinutes:Math.floor((now.getTime()-millis(p.updatedAt||p.createdAt))/60000)}));
+  const bucketCount = period === '12m' ? 12 : days;
+  const revenue = Array.from({length:bucketCount},(_,index) => {
+    const bucketStart = period === '12m' ? Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (bucketCount - 1 - index), 1) : harareBoundary(now, bucketCount - 1 - index);
+    const bucketEnd = period === '12m' ? Date.UTC(new Date(bucketStart).getUTCFullYear(), new Date(bucketStart).getUTCMonth()+1, 1) : bucketStart + 86400000;
+    return {label: period === '12m' ? new Date(bucketStart).toLocaleDateString('en',{month:'short',timeZone:ADMIN_TIMEZONE}) : new Date(bucketStart).toLocaleDateString('en',{day:'2-digit',month:'short',timeZone:ADMIN_TIMEZONE}),amount:captured.filter((p:any)=>{const t=millis(p.capturedAt||p.createdAt);return t>=bucketStart&&t<bucketEnd}).reduce((n:number,p:any)=>n+Math.round(Number(p.amountMinor||p.amount*100||0)),0)};
+  });
+  const metrics = [
+    {label:'Bookings today',value:jobs.filter((j:any)=>inToday(j.createdAt)).length},{label:'Upcoming bookings',value:jobs.filter((j:any)=>!terminalStatuses.includes(j.status)&&millis(j.scheduledDateTime)>now.getTime()).length},{label:'Completed jobs',value:jobs.filter((j:any)=>j.status==='COMPLETED').length},{label:'Cancelled jobs',value:jobs.filter((j:any)=>j.status==='CANCELLED').length},
+    {label:'Revenue today',value:revenueSince(today),format:'money'},{label:'Revenue this week',value:revenueSince(harareBoundary(now,6)),format:'money'},{label:'Revenue this month',value:revenueSince(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),1)-2*3600000),format:'money'},
+    {label:'Active cleaners',value:usersSnap.docs.filter(d=>d.data().role==='CLEANER'&&d.data().status==='AVAILABLE'&&!d.data().isSuspended).length},{label:'New customers',value:usersSnap.docs.filter(d=>d.data().role==='CUSTOMER'&&inToday(d.data().createdAt)).length},{label:'Pending payments',value:payments.filter((p:any)=>p.status==='PENDING').length},{label:'Jobs needing attention',value:attention.length},
+  ];
+  return {asOf:now.toISOString(),timezone:ADMIN_TIMEZONE,currency:ADMIN_CURRENCY,metrics,revenue,attention};
+});
+
+export const adminQuery = onCall(async request => {
+  requireAdmin(request);
+  const moduleName = String(request.data?.module || '');
+  if (moduleName === 'settings') { const snap=await db.collection('configuration').doc('operations').get(); return snap.exists?snap.data():{switches:{},supportCopy:''}; }
+  const collections: Record<string,string>={bookings:'jobs',customers:'users',cleaners:'users',payments:'payments',products:'productSales',analytics:'reportingAggregates',support:'supportCases'};
+  const collectionName=collections[moduleName]; if(!collectionName) throw new HttpsError('invalid-argument','Unknown dashboard module.');
+  const pageSize=Math.min(100,Math.max(1,Number(request.data?.pageSize||25)));
+  let q: FirebaseFirestore.Query=db.collection(collectionName).orderBy('createdAt','desc').limit(pageSize+1);
+  if(request.data?.cursor){const cursor=await db.collection(collectionName).doc(String(request.data.cursor)).get();if(cursor.exists)q=q.startAfter(cursor);}
+  const snap=await q.get(), docs=snap.docs.slice(0,pageSize);
+  return {rows:docs.map(d=>({id:d.id,...d.data(),createdAt:d.data().createdAt?.toDate?.().toISOString()})),nextCursor:snap.docs.length>pageSize?docs[docs.length-1].id:null};
+});
+
+export const adminMutation = onCall(async request => {
+  const elevated=String(request.data?.action)==='update_kill_switch'; const actorId=requireAdmin(request,elevated);
+  const reason=String(request.data?.reason||'').trim(), key=requireIdempotencyKey(request.data?.idempotencyKey);
+  if(reason.length<4)throw new HttpsError('invalid-argument','A meaningful reason is required.');
+  const auditRef=db.collection('adminAuditEvents').doc(key.replace(/[^a-zA-Z0-9_-]/g,'_'));
+  try { await auditRef.create({action:String(request.data?.action),actorId,reason,targetId:request.data?.targetId||null,module:request.data?.module||null,request:{...request.data,idempotencyKey:key},createdAt:FieldValue.serverTimestamp(),immutable:true}); } catch(e:any){if(e.code===6||e.code==='already-exists')return {ok:true,auditId:auditRef.id};throw e;}
+  if(elevated){const allowed=['maintenance','bookingCreation','bidAcceptance','payments','supportCopy'];const setting=String(request.data?.key);if(!allowed.includes(setting))throw new HttpsError('invalid-argument','Unknown setting.');await db.collection('configuration').doc('operations').set(setting==='supportCopy'?{supportCopy:request.data.value,updatedAt:FieldValue.serverTimestamp(),updatedBy:actorId}:{switches:{[setting]:request.data.value},updatedAt:FieldValue.serverTimestamp(),updatedBy:actorId},{merge:true});}
+  return {ok:true,auditId:auditRef.id};
 });
 
 /* ───────────────────────── acceptBid ───────────────────────── */
