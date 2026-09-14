@@ -9,6 +9,7 @@
     "noImplicitReturns": true,
     "esModuleInterop": true,
     "skipLibCheck": true
+    ,"types": ["node"]
   },
   "compileOnSave": true,
   "include": ["src"]
