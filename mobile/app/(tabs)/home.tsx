@@ -124,7 +124,7 @@ export default function HomeScreen() {
     const q = query(
       collection(db, 'jobs'),
       where(field, '==', user.uid),
-      where('status', 'in', [JobStatus.ACCEPTED, JobStatus.EN_ROUTE, JobStatus.ARRIVED, JobStatus.IN_PROGRESS]),
+      where('status', 'in', [JobStatus.ASSIGNED, JobStatus.EN_ROUTE, JobStatus.IN_PROGRESS, JobStatus.IN_PROGRESS]),
       limit(1)
     );
     return onSnapshot(
@@ -159,7 +159,7 @@ export default function HomeScreen() {
     // this by distance (nearest first, Uber-style), so a larger pool means
     // a genuinely-nearby job doesn't get missed just because it wasn't one
     // of the 10 most recently posted.
-    const q = query(collection(db, 'jobs'), where('status', '==', JobStatus.BIDDING), orderBy('createdAt', 'desc'), limit(30));
+    const q = query(collection(db, 'jobs'), where('status', '==', JobStatus.PENDING), orderBy('createdAt', 'desc'), limit(30));
     return onSnapshot(
       q,
       (snap) => setAvailableJobs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Job))),

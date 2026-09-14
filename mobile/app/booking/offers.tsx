@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Clock, Star, ShieldCheck, X, Check, TrendingUp, Timer } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
-import { db, doc, collection, query, where, onSnapshot, updateDoc } from '../../services/firebase';
+import { db, doc, collection, query, where, onSnapshot } from '../../services/firebase';
 import { callFunction } from '../../services/functions';
 import { rankBidsByRating } from '../../services/matching';
 import { Job, Bid, JobStatus } from '../../types';
@@ -62,7 +62,7 @@ export default function OffersScreen() {
 
   // Redirect automatically once a bid is accepted elsewhere (job leaves BIDDING).
   useEffect(() => {
-    if (job && job.status !== JobStatus.BIDDING && job.status !== JobStatus.PENDING) {
+    if (job && job.status !== JobStatus.PENDING && job.status !== JobStatus.PENDING) {
       router.replace({ pathname: '/tracking/[jobId]', params: { jobId: jobId! } });
     }
   }, [job?.status]);
@@ -94,8 +94,8 @@ export default function OffersScreen() {
           if (!user) return;
           setBusyBidId(bid.id);
           try {
-            await callFunction('acceptBid', { jobId, bidId: bid.id });
-            router.replace({ pathname: '/tracking/[jobId]', params: { jobId: jobId! } });
+            await callFunction('acceptBid', { jobId, bidId: bid.id, paymentMethod: 'WALLET', idempotencyKey: `accept-${jobId}-${bid.id}` });
+            router.replace({ pathname: '/booking/confirmation', params: { jobId: jobId! } });
           } catch (err: any) {
             Alert.alert('Error', err.message || 'Failed to accept offer. Please try again.');
           } finally {
@@ -109,7 +109,7 @@ export default function OffersScreen() {
   const rejectBid = async (bid: Bid) => {
     setBusyBidId(bid.id);
     try {
-      await updateDoc(doc(db, 'bids', bid.id), { status: 'REJECTED' });
+      await callFunction('rejectBid', { jobId, bidId: bid.id });
     } catch {
       Alert.alert('Error', 'Could not decline this offer. Please try again.');
     } finally {
@@ -147,7 +147,7 @@ export default function OffersScreen() {
         text: 'Cancel Job',
         style: 'destructive',
         onPress: async () => {
-          await updateDoc(doc(db, 'jobs', jobId!), { status: JobStatus.CANCELLED });
+          await callFunction('cancelBooking', { jobId, reason: 'Cancelled before assignment', idempotencyKey: `cancel-${jobId}-${Date.now()}` });
           router.replace('/home');
         },
       },

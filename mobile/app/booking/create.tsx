@@ -1,3 +1,4 @@
+import { callFunction } from '../../services/functions';
 // Booking wizard — branches into a House or Car cleaning checklist, matching
 // the "Book House Cleaning" / "Book Car Cleaning" step-by-step flows.
 import React, { useState, useEffect } from 'react';
@@ -227,7 +228,7 @@ export default function CreateBookingScreen() {
       const now = Date.now();
       const finalBudget = budgetOption === 'NOT_SURE' ? 0 : Number(budget);
 
-      const jobRef = await addDoc(collection(db, 'jobs'), {
+      const result = await callFunction<any, { jobId: string }>('createBooking', { idempotencyKey: `booking-${user.uid}-${now}`, booking: {
         customerId: user.uid,
         customerName: profile?.displayName,
         customerPhoto: profile?.photoURL ?? '',
@@ -239,7 +240,7 @@ export default function CreateBookingScreen() {
         scheduledTime: timePreference,
         timePreference,
         scheduledDateTime: Timestamp.fromDate(scheduledDateTime),
-        status: JobStatus.BIDDING,
+        status: JobStatus.PENDING,
         // Only pricing strategy left is client-vetted bidding — the field
         // stays on the doc for forward-compatibility, just not user-chosen.
         pricingStrategy: 'RECEIVE_BIDS',
@@ -251,8 +252,8 @@ export default function CreateBookingScreen() {
         reminderSent: false,
         photos: photoUris,
         createdAt: serverTimestamp(),
-      });
-      router.replace({ pathname: '/booking/offers', params: { jobId: jobRef.id } });
+      } });
+      router.replace({ pathname: '/booking/offers', params: { jobId: result.jobId } });
     } catch (err) {
       Alert.alert('Error', 'Failed to post job. Please try again.');
     } finally {

@@ -30,6 +30,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Linking } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { auth, signOut } from '../../services/firebase';
+import { callFunction } from '../../services/functions';
 import { uploadProfilePhoto } from '../../services/storage';
 import { StarRating } from '../../components/StarRating';
 import { IS_MOCK } from '../../utils/env';
@@ -115,6 +116,16 @@ export default function ProfileScreen() {
     } else if (profile?.role === 'CLEANER') {
       updateProfile({ role: 'CUSTOMER' });
     }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert('Delete account?', 'You must have signed in recently. Active bookings or unresolved payments must be completed first. This cannot be undone.', [
+      { text: 'Keep account', style: 'cancel' },
+      { text: 'Delete permanently', style: 'destructive', onPress: async () => {
+        try { await callFunction('deleteAccount', { confirmation: 'DELETE' }); }
+        catch (error: any) { Alert.alert('Cannot delete account', error?.message ?? 'Please sign in again and retry.'); }
+      } },
+    ]);
   };
 
   const handleSignOut = () => {
@@ -353,6 +364,10 @@ export default function ProfileScreen() {
             </View>
           </View>
         ))}
+
+        <TouchableOpacity onPress={handleDeleteAccount} className="mx-5 mb-3 py-4 rounded-3xl items-center border border-red-200" activeOpacity={0.8}>
+          <Text className="text-red-600 font-black text-sm uppercase tracking-wider">Delete Account</Text>
+        </TouchableOpacity>
 
         {/* Sign out */}
         <TouchableOpacity

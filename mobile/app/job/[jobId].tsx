@@ -75,7 +75,7 @@ export default function CleanerJobDetailScreen() {
       return;
     }
     if (!user || !profile) return;
-    if (job?.status !== JobStatus.BIDDING) {
+    if (job?.status !== JobStatus.PENDING) {
       Alert.alert('Too Late', 'This job is no longer accepting bids.');
       return;
     }
@@ -116,7 +116,7 @@ export default function CleanerJobDetailScreen() {
     );
   }
 
-  const isTaken = job.status !== JobStatus.BIDDING;
+  const isTaken = job.status !== JobStatus.PENDING;
   const distance = IS_MOCK
     ? '2.3 km away'
     : currentLocation && job.location?.lat && job.location?.lng

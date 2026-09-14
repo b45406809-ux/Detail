@@ -73,7 +73,10 @@
         {
           "icon": "./assets/notification-icon.png",
           "color": "#3906d2",
-          "sounds": []
+          "sounds": [
+            "./assets/sounds/booking.wav",
+            "./assets/sounds/urgent.wav"
+          ]
         }
       ],
       "@react-native-community/datetimepicker",
