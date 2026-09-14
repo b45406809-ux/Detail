@@ -1,5 +1,13 @@
 {
   "projects": {
     "default": "new1-4bb94"
+  },
+  "targets": {
+    "new1-4bb94": {
+      "hosting": {
+        "marketing": ["detail-marketing"],
+        "dashboard": ["detail-dashboard"]
+      }
+    }
   }
 }

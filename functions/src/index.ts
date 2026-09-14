@@ -22,6 +22,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions';
 import * as admin from 'firebase-admin';
+import { createHash } from 'crypto';
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -35,6 +36,8 @@ const PLATFORM_COMMISSION = 0.1;
 
 const PESEPAY_INTEGRATION_KEY = defineSecret('PESEPAY_INTEGRATION_KEY');
 const PESEPAY_ENCRYPTION_KEY = defineSecret('PESEPAY_ENCRYPTION_KEY');
+const TURNSTILE_SECRET = defineSecret('TURNSTILE_SECRET');
+const RESEND_API_KEY = defineSecret('RESEND_API_KEY');
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -1034,3 +1037,65 @@ export const onMessageCreated = onDocumentCreated('messages/{messageId}', async 
     jobId: message.jobId,
   });
 });
+
+/* ───────────────────────── public beta waitlist ───────────────────────── */
+const cleanText = (value: unknown, max: number) =>
+  typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, max) : '';
+const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
+
+export const joinWaitlist = onCall(
+  { secrets: [TURNSTILE_SECRET, RESEND_API_KEY], cors: ['https://detailapp.co.zw', 'https://www.detailapp.co.zw', /localhost/] },
+  async (request) => {
+    const input = (request.data ?? {}) as Record<string, unknown>;
+    // Honeypot fields are intentionally accepted by the transport, then silently rejected.
+    if (cleanText(input.website, 100)) throw new HttpsError('invalid-argument', 'Unable to submit this form.');
+
+    const role = cleanText(input.role, 10).toLowerCase();
+    const name = cleanText(input.name, 100);
+    const email = cleanText(input.email, 254).toLowerCase();
+    const phone = cleanText(input.phone, 30).replace(/[\s()-]/g, '');
+    const city = cleanText(input.city, 100);
+    const referralSource = cleanText(input.referralSource, 80);
+    const consent = input.consent === true;
+    const serviceValues = Array.isArray(input.services) ? input.services : [];
+    const allowedServices = ['Home', 'Office', 'Vehicle', 'Specialist'];
+    const services = serviceValues.map((v) => cleanText(v, 30)).filter((v) => allowedServices.includes(v));
+    if (!['customer', 'cleaner'].includes(role) || name.length < 2 || !/^\S+@\S+\.\S+$/.test(email) || !/^\+?[0-9]{7,15}$/.test(phone) || city.length < 2 || !referralSource || !consent) {
+      throw new HttpsError('invalid-argument', 'Please check every required field and try again.');
+    }
+
+    const forwarded = request.rawRequest.headers['x-forwarded-for'];
+    const ip = (Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0]) || request.rawRequest.ip || 'unknown';
+    const ipHash = sha256(ip + process.env.GCLOUD_PROJECT);
+    const hour = new Date().toISOString().slice(0, 13);
+    const rateRef = db.collection('_waitlist_rate_limits').doc(sha256(`${ipHash}:${hour}`));
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(rateRef); const count = Number(snap.data()?.count ?? 0);
+      if (count >= 8) throw new HttpsError('resource-exhausted', 'Too many attempts. Please try again in an hour.');
+      tx.set(rateRef, { count: count + 1, expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 2 * 60 * 60 * 1000) }, { merge: true });
+    });
+
+    const turnstileSecret = TURNSTILE_SECRET.value();
+    if (turnstileSecret) {
+      const token = cleanText(input.turnstileToken, 2048);
+      if (!token) throw new HttpsError('failed-precondition', 'Please complete the anti-bot check.');
+      const verification = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ secret: turnstileSecret, response: token, remoteip: ip }) });
+      const result = await verification.json() as { success?: boolean };
+      if (!result.success) throw new HttpsError('permission-denied', 'The anti-bot check failed. Please retry.');
+    }
+
+    const id = sha256(`${role}:${email}`);
+    const ref = db.collection('beta_waitlist').doc(id);
+    const existing = await ref.get();
+    if (existing.exists) return { success: true, duplicate: true };
+    const campaignInput = (input.campaign && typeof input.campaign === 'object') ? input.campaign as Record<string, unknown> : {};
+    await ref.create({ role, name, email, phone, city, referralSource, services: role === 'cleaner' ? services : [], consent: { granted: true, timestamp: FieldValue.serverTimestamp(), source: 'detailapp.co.zw/waitlist', version: '2026-09-13' }, campaign: { source: cleanText(campaignInput.source, 100), medium: cleanText(campaignInput.medium, 100), campaign: cleanText(campaignInput.campaign, 100) }, createdAt: FieldValue.serverTimestamp(), status: 'pending', ipHash });
+
+    const resendKey = RESEND_API_KEY.value();
+    if (resendKey) {
+      const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: `Bearer ${resendKey}`, 'content-type': 'application/json' }, body: JSON.stringify({ from: 'Detail <hello@detailapp.co.zw>', to: [email], reply_to: 'support@detailapp.co.zw', subject: 'Your place on the Detail waitlist', html: `<div style="font-family:Arial,sans-serif;color:#17352d;max-width:560px;margin:auto"><h1>You're on the Detail list.</h1><p>Hi ${name.replace(/[<>&"']/g, '')},</p><p>Thanks for joining as a ${role}. We'll let you know when early access reaches ${city.replace(/[<>&"']/g, '')}.</p><p>Questions? Reply to this email or contact <a href="mailto:support@detailapp.co.zw">support@detailapp.co.zw</a>.</p><p>— The Detail team</p></div>` }) });
+      if (!response.ok) logger.error('Waitlist confirmation email failed', { status: response.status, waitlistId: id });
+    }
+    return { success: true, duplicate: false };
+  }
+);
