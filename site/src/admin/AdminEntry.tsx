@@ -2,8 +2,14 @@ import { useEffect, useState } from 'react';
 import { GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, type User } from 'firebase/auth';
 import { auth } from '../firebase';
 import { AdminDashboard } from './AdminDashboard';
+import { InviteAcceptance } from './InviteAcceptance';
 
 export function AdminEntry() {
+  if (location.pathname.startsWith('/admin/accept-invite')) return <InviteAcceptance/>;
+  return <AdminSignIn/>;
+}
+
+function AdminSignIn() {
   const [user, setUser] = useState<User | null>();
   const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
   useEffect(() => onAuthStateChanged(auth, setUser), []);

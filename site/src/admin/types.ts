@@ -1,4 +1,4 @@
-export type AdminRoute = 'overview' | 'bookings' | 'customers' | 'cleaners' | 'payments' | 'products' | 'analytics' | 'support' | 'waitlist' | 'settings';
+export type AdminRoute = 'overview' | 'bookings' | 'customers' | 'cleaners' | 'payments' | 'products' | 'analytics' | 'support' | 'waitlist' | 'admins' | 'settings';
 
 export interface AdminClaims { admin: boolean; permissions: string[]; elevated: boolean }
 export interface Metric { label: string; value: number; format?: 'money' | 'number'; error?: string }

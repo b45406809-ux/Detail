@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { BarChart3, CalendarDays, CreditCard, Headphones, LayoutDashboard, LogOut, Mail, Menu, Package, Settings as SettingsIcon, Sparkles, Users, X } from 'lucide-react';
+import { BarChart3, CalendarDays, CreditCard, Headphones, LayoutDashboard, LogOut, Mail, Menu, Package, Settings as SettingsIcon, ShieldCheck, Sparkles, Users, X } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase';
 import { verifiedAdminClaims } from './api';
@@ -9,6 +9,7 @@ import { Overview } from './Overview';
 import { DataModule } from './Modules';
 import { Settings } from './Settings';
 import { Waitlist } from './Waitlist';
+import { Admins } from './Admins';
 import './admin.css';
 
 const routes: Array<[AdminRoute, string, LucideIcon]> = [
@@ -17,6 +18,7 @@ const routes: Array<[AdminRoute, string, LucideIcon]> = [
   ['payments', 'Payments / Refunds', CreditCard], ['products', 'Products', Package],
   ['analytics', 'Analytics', BarChart3], ['support', 'Support Cases', Headphones],
   ['waitlist', 'Waitlist & Email', Mail],
+  ['admins', 'Admins & Security', ShieldCheck],
   ['settings', 'Settings', SettingsIcon],
 ];
 
@@ -47,6 +49,6 @@ export function AdminDashboard() {
       <nav>{routes.map(([id, label, Icon]) => <button key={id} className={route === id ? 'active' : ''} onClick={() => go(id)}><Icon size={17}/>{label}</button>)}</nav>
       <footer><span>Verified admin · {claims.elevated ? 'Elevated' : 'Standard'}</span><button onClick={() => signOut(auth)}><LogOut size={14}/> Sign out</button></footer>
     </aside>
-    <div className="admin-content"><button className="menu-button" onClick={() => setMenu(!menu)}>{menu ? <X/> : <Menu/>}</button>{route === 'overview' ? <Overview navigate={go}/> : route === 'settings' ? <Settings/> : route === 'waitlist' ? <Waitlist/> : <DataModule kind={route} focusId={focus}/>}</div>
+    <div className="admin-content"><button className="menu-button" onClick={() => setMenu(!menu)}>{menu ? <X/> : <Menu/>}</button>{route === 'overview' ? <Overview navigate={go}/> : route === 'settings' ? <Settings/> : route === 'waitlist' ? <Waitlist/> : route === 'admins' ? <Admins/> : <DataModule kind={route} focusId={focus}/>}</div>
   </main>;
 }

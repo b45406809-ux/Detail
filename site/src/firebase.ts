@@ -9,13 +9,14 @@ export const functions = getFunctions(app, import.meta.env.VITE_FIREBASE_FUNCTIO
 export const joinWaitlist = httpsCallable(functions, 'joinWaitlist');
 
 export type BetaConfig = { bookingEnabled: boolean; waitlistEnabled: boolean; message: string; whatsapp: string };
+export const SUPPORT_WHATSAPP = '263714885936';
 export async function loadBetaConfig(): Promise<BetaConfig> {
-  const defaults: BetaConfig = { bookingEnabled: false, waitlistEnabled: true, message: 'Bookings are being prepared for beta. Join the waitlist and we’ll let you know when your area opens.', whatsapp: '263785832211' };
+  const defaults: BetaConfig = { bookingEnabled: false, waitlistEnabled: true, message: 'Bookings are being prepared for beta. Join the waitlist and we’ll let you know when your area opens.', whatsapp: SUPPORT_WHATSAPP };
   try {
     const rc = getRemoteConfig(app);
     rc.settings.minimumFetchIntervalMillis = import.meta.env.DEV ? 0 : 60 * 60 * 1000;
     rc.defaultConfig = { booking_enabled: defaults.bookingEnabled, waitlist_enabled: defaults.waitlistEnabled, maintenance_message: defaults.message, whatsapp_number: defaults.whatsapp };
     await fetchAndActivate(rc);
-    return { bookingEnabled: getBoolean(rc, 'booking_enabled'), waitlistEnabled: getBoolean(rc, 'waitlist_enabled'), message: getString(rc, 'maintenance_message') || defaults.message, whatsapp: getString(rc, 'whatsapp_number') || defaults.whatsapp };
+    return { bookingEnabled: getBoolean(rc, 'booking_enabled'), waitlistEnabled: getBoolean(rc, 'waitlist_enabled'), message: getString(rc, 'maintenance_message') || defaults.message, whatsapp: SUPPORT_WHATSAPP };
   } catch { return defaults; }
 }

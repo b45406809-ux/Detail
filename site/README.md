@@ -1,6 +1,6 @@
 # Detail marketing site
 
-Vite/React web package for the public site at `https://detailapp.co.zw` and the protected admin dashboard at `https://dashboard.detailapp.co.zw`. The customer and cleaner application lives in `mobile/`; the retired root web prototype has been removed.
+Vite/React web package for the public site at `https://detail.co.zw` and the protected admin dashboard at `https://dashboard.detail.co.zw`. The customer and cleaner application lives in `mobile/`; the retired root web prototype has been removed.
 
 ## Architecture
 
@@ -42,7 +42,7 @@ The site uses Firebase Remote Config in project `new1-4bb94`, the same backend u
 | `booking_enabled` | Boolean | `false` | Shows whether beta booking is open |
 | `waitlist_enabled` | Boolean | `true` | Independently enables submissions |
 | `maintenance_message` | String | built-in honest beta message | Customer-facing availability detail |
-| `whatsapp_number` | String | `263785832211` | International number without `+` |
+| `whatsapp_number` | String | `263714885936` | International number without `+` |
 
 When Remote Config cannot load, safe local defaults keep bookings described as closed and the waitlist open. Changing `booking_enabled` does not disable waitlist collection.
 
@@ -64,7 +64,7 @@ For an end-to-end submission, build Functions and run Firebase emulators from th
 `firebase.json` defines two Hosting targets:
 
 - `marketing` -> `site/dist` -> `detailapp.co.zw`
-- `dashboard` -> `site/dist` (`/admin`) -> `dashboard.detailapp.co.zw`
+- `dashboard` -> `site/dist` (`/admin`) -> `dashboard.detail.co.zw`
 
 The checked-in `.firebaserc` maps them to the expected Firebase Hosting site IDs `detail-marketing` and `detail-dashboard`. If the console uses different site IDs, run once:
 
@@ -73,7 +73,7 @@ firebase target:apply hosting marketing <actual-marketing-site-id>
 firebase target:apply hosting dashboard <actual-dashboard-site-id>
 ```
 
-In Firebase Console, add each custom domain to its matching Hosting site. Add the exact A/AAAA or CNAME verification records Firebase displays at the DNS provider; do not copy addresses from another Firebase project. Remove conflicting proxy/parking records, keep both records during certificate provisioning, and redirect `www.detailapp.co.zw` to the apex if desired. DNS and managed TLS propagation may take up to 24 hours.
+In Firebase Console, add each custom domain to its matching Hosting site. Add the exact A/AAAA or CNAME verification records Firebase displays at the DNS provider; do not copy addresses from another Firebase project. Remove conflicting proxy/parking records, keep both records during certificate provisioning, and redirect `www.detail.co.zw` to the apex if desired. DNS and managed TLS propagation may take up to 24 hours.
 
 ## Deploy
 

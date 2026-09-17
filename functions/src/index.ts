@@ -1134,7 +1134,7 @@ const cleanText = (value: unknown, max: number) =>
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
 export const joinWaitlist = onCall(
-  { secrets: [TURNSTILE_SECRET, RESEND_API_KEY], cors: ['https://detailapp.co.zw', 'https://www.detailapp.co.zw', /localhost/] },
+  { secrets: [TURNSTILE_SECRET, RESEND_API_KEY], cors: ['https://detail.co.zw', 'https://www.detail.co.zw', 'https://dashboard.detail.co.zw', 'https://detailapp.co.zw', 'https://www.detailapp.co.zw', 'https://dashboard.detailapp.co.zw', /localhost/] },
   async (request) => {
     const input = (request.data ?? {}) as Record<string, unknown>;
     // Honeypot fields are intentionally accepted by the transport, then silently rejected.
@@ -1180,15 +1180,19 @@ export const joinWaitlist = onCall(
     const campaignInput = (input.campaign && typeof input.campaign === 'object') ? input.campaign as Record<string, unknown> : {};
     const submittedAt = FieldValue.serverTimestamp();
     const unsubscribeToken = existing.data()?.unsubscribeToken ?? randomUUID();
-    const waitlistRecord = { fullName: name, name, email, phone, country, city, area, preferredLanguage, serviceInterest, marketingEmailPermission: marketingChoice, marketingConsent: { granted: marketingChoice === 'YES', timestamp: submittedAt, source: 'detailapp.co.zw/waitlist', version: '2026-09-17' }, privacyConsent: { granted: true, timestamp: submittedAt, source: 'detailapp.co.zw/waitlist', version: '2026-09-17' }, campaign: { source: cleanText(campaignInput.source, 100), medium: cleanText(campaignInput.medium, 100), campaign: cleanText(campaignInput.campaign, 100) }, updatedAt: submittedAt, schemaVersion: 2, status: existing.data()?.status ?? 'pending', unsubscribeToken, ipHash };
+    const waitlistRecord = { fullName: name, name, email, phone, country, city, area, preferredLanguage, serviceInterest, marketingEmailPermission: marketingChoice, marketingConsent: { granted: marketingChoice === 'YES', timestamp: submittedAt, source: 'detail.co.zw/waitlist', version: '2026-09-17' }, privacyConsent: { granted: true, timestamp: submittedAt, source: 'detail.co.zw/waitlist', version: '2026-09-17' }, campaign: { source: cleanText(campaignInput.source, 100), medium: cleanText(campaignInput.medium, 100), campaign: cleanText(campaignInput.campaign, 100) }, updatedAt: submittedAt, schemaVersion: 2, status: existing.data()?.status ?? 'pending', unsubscribeToken, ipHash };
     if (existing.exists) await ref.set(waitlistRecord, { merge: true });
     else await ref.create({ ...waitlistRecord, createdAt: submittedAt });
     await db.collection('marketing_unsubscribe_tokens').doc(unsubscribeToken).set({ waitlistId: id, email, createdAt: submittedAt });
 
     const resendKey = RESEND_API_KEY.value();
-    if (resendKey) {
-      const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: `Bearer ${resendKey}`, 'content-type': 'application/json' }, body: JSON.stringify({ from: 'Detail <hello@detailapp.co.zw>', to: [email], reply_to: 'support@detailapp.co.zw', subject: 'Your place on the Detail waitlist', html: `<div style="font-family:Arial,sans-serif;color:#17352d;max-width:560px;margin:auto"><h1>You're on the Detail list.</h1><p>Hi ${name.replace(/[<>&"']/g, '')},</p><p>We'll let you know when ${serviceInterest === 'BOTH' ? 'house and car cleaning' : serviceInterest === 'HOUSE' ? 'house cleaning' : 'car cleaning'} reaches ${area.replace(/[<>&"']/g, '')}, ${city.replace(/[<>&"']/g, '')}.</p><p>Questions? Reply to this email or contact <a href="mailto:support@detailapp.co.zw">support@detailapp.co.zw</a>.</p><p>— The Detail team</p></div>` }) });
+    if (resendKey) try {
+      const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: `Bearer ${resendKey}`, 'content-type': 'application/json' }, body: JSON.stringify({ from: 'Detail <hello@detailapp.co.zw>', to: [email], reply_to: 'support@detailapp.co.zw', subject: 'Your place on the Detail waitlist', html: `<div style="font-family:Arial,sans-serif;color:#0F0B2E;max-width:560px;margin:auto"><h1>You're on the Detail list.</h1><p>Hi ${name.replace(/[<>&"']/g, '')},</p><p>We'll let you know when ${serviceInterest === 'BOTH' ? 'house and car cleaning' : serviceInterest === 'HOUSE' ? 'house cleaning' : 'car cleaning'} reaches ${area.replace(/[<>&"']/g, '')}, ${city.replace(/[<>&"']/g, '')}.</p><p>Questions? Reply to this email or contact <a href="mailto:support@detailapp.co.zw">support@detailapp.co.zw</a>.</p><p>— The Detail team</p></div>` }) });
       if (!response.ok) logger.error('Waitlist confirmation email failed', { status: response.status, waitlistId: id });
+    } catch (error) {
+      // The signup is already durable. A provider/network issue must not turn a
+      // successful waitlist write into the opaque callable error `internal[0]`.
+      logger.error('Waitlist confirmation email unavailable', { waitlistId: id, error });
     }
     return { success: true, duplicate: existing.exists };
   }
@@ -1223,10 +1227,50 @@ export const adminSendMarketingCampaign = onCall({ secrets: [RESEND_API_KEY] }, 
   const resendKey = RESEND_API_KEY.value();
   if (!resendKey) { await campaignRef.update({status:'FAILED',failureReason:'PROVIDER_NOT_CONFIGURED'}); throw new HttpsError('failed-precondition', 'Email provider is not configured.'); }
   const escapeHtml = (value: string) => value.replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]!));
-  const emails = matches.map(docSnap => { const row=docSnap.data(); const link=`https://us-central1-${process.env.GCLOUD_PROJECT}.cloudfunctions.net/marketingUnsubscribe?token=${encodeURIComponent(row.unsubscribeToken)}`; return {from:'Detail <hello@detailapp.co.zw>',to:[row.email],subject,html:`<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#17352d"><p>Hi ${escapeHtml(row.fullName || row.name || 'there')},</p><p>${escapeHtml(message).replace(/\n/g,'<br>')}</p><hr><p style="font-size:12px;color:#61716c">You received this because you opted in on the Detail waitlist. <a href="${link}">Unsubscribe</a>.</p></div>`}; });
+  const emails = matches.map(docSnap => { const row=docSnap.data(); const link=`https://us-central1-${process.env.GCLOUD_PROJECT}.cloudfunctions.net/marketingUnsubscribe?token=${encodeURIComponent(row.unsubscribeToken)}`; return {from:'Detail <hello@detailapp.co.zw>',to:[row.email],subject,html:`<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#0F0B2E"><p>Hi ${escapeHtml(row.fullName || row.name || 'there')},</p><p>${escapeHtml(message).replace(/\n/g,'<br>')}</p><hr><p style="font-size:12px;color:#61716c">You received this because you opted in on the Detail waitlist. <a href="${link}">Unsubscribe</a>.</p></div>`}; });
   const providerResponse = await fetch('https://api.resend.com/emails/batch', { method:'POST', headers:{authorization:`Bearer ${resendKey}`,'content-type':'application/json'}, body:JSON.stringify(emails) });
   if (!providerResponse.ok) { logger.error('Marketing campaign failed', { status: providerResponse.status }); await campaignRef.update({status:'FAILED',failureReason:'PROVIDER_REJECTED',providerStatus:providerResponse.status}); throw new HttpsError('internal','The email provider rejected this campaign.'); }
   await campaignRef.update({recipientCount: matches.length, status:'SENT', sentAt:FieldValue.serverTimestamp()});
   await db.collection('adminAuditEvents').doc(`campaign_${campaignRef.id}`).create({ action:'marketing_campaign_sent', actorId, targetId:campaignRef.id, reason:`Campaign: ${subject}`, recipientCount:matches.length, createdAt:FieldValue.serverTimestamp(), immutable:true });
   return { success:true, duplicate:false, campaignId:campaignRef.id, recipientCount:matches.length };
+});
+
+const ADMIN_PERMISSION_ALLOWLIST = ['marketing.read','marketing.send','finance.read','audit.read','admins.manage'] as const;
+
+export const createAdminInvite = onCall(async request => {
+  const actorId = requireAdminPermission(request, 'admins.manage');
+  const email = cleanText(request.data?.email, 254).toLowerCase();
+  const requested = Array.isArray(request.data?.permissions) ? request.data.permissions.map((value: unknown) => cleanText(value, 50)) : [];
+  const permissions = [...new Set(requested.filter((value: string) => (ADMIN_PERMISSION_ALLOWLIST as readonly string[]).includes(value)))];
+  if (!/^\S+@\S+\.\S+$/.test(email)) throw new HttpsError('invalid-argument','A valid email is required.');
+  const token = randomUUID() + randomUUID();
+  const inviteId = sha256(token);
+  const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  await db.collection('adminInvites').doc(inviteId).create({email,permissions,elevated:false,status:'PENDING',createdBy:actorId,createdAt:FieldValue.serverTimestamp(),expiresAt});
+  await db.collection('adminAuditEvents').doc(`invite_${inviteId}`).create({action:'admin_invite_created',actorId,targetId:inviteId,inviteEmail:email,permissions,createdAt:FieldValue.serverTimestamp(),immutable:true});
+  return {inviteId,email,expiresAt:expiresAt.toDate().toISOString(),inviteUrl:`https://dashboard.detail.co.zw/admin/accept-invite?token=${encodeURIComponent(token)}`};
+});
+
+export const acceptAdminInvite = onCall(async request => {
+  const uid = request.auth?.uid;
+  const authenticatedEmail = cleanText(request.auth?.token.email,254).toLowerCase();
+  if (!uid || !authenticatedEmail) throw new HttpsError('unauthenticated','Sign in with the invited email first.');
+  const token = cleanText(request.data?.token,160);
+  const inviteRef = db.collection('adminInvites').doc(sha256(token));
+  const inviteSnap = await inviteRef.get();
+  if (!inviteSnap.exists) throw new HttpsError('not-found','This admin invitation is invalid.');
+  const invite = inviteSnap.data()!;
+  if (invite.status !== 'PENDING' || invite.expiresAt?.toMillis?.() < Date.now()) throw new HttpsError('failed-precondition','This admin invitation has expired or was already used.');
+  if (invite.email !== authenticatedEmail) throw new HttpsError('permission-denied','Sign in with the email address on the invitation.');
+  const currentUser = await admin.auth().getUser(uid);
+  await admin.auth().setCustomUserClaims(uid,{...(currentUser.customClaims||{}),admin:true,elevated:false,permissions:invite.permissions||[]});
+  await inviteRef.update({status:'ACCEPTED',acceptedBy:uid,acceptedAt:FieldValue.serverTimestamp()});
+  await db.collection('adminAuditEvents').doc(`invite_accepted_${inviteRef.id}`).create({action:'admin_invite_accepted',actorId:uid,targetId:inviteRef.id,inviteEmail:authenticatedEmail,createdAt:FieldValue.serverTimestamp(),immutable:true});
+  return {success:true};
+});
+
+export const adminDirectory = onCall(async request => {
+  requireAdminPermission(request,'admins.manage');
+  const [usersResult,invitesSnap]=await Promise.all([admin.auth().listUsers(500),db.collection('adminInvites').orderBy('createdAt','desc').limit(100).get()]);
+  return {admins:usersResult.users.filter(user=>user.customClaims?.admin===true).map(user=>({uid:user.uid,email:user.email||'',disabled:user.disabled,elevated:user.customClaims?.elevated===true,permissions:Array.isArray(user.customClaims?.permissions)?user.customClaims.permissions:[],lastSignInAt:user.metadata.lastSignInTime||null})),invites:invitesSnap.docs.map(invite=>{const data=invite.data();return {id:invite.id,email:data.email,status:data.status,permissions:data.permissions||[],createdAt:data.createdAt?.toDate?.().toISOString(),expiresAt:data.expiresAt?.toDate?.().toISOString()};})};
 });

@@ -2,12 +2,12 @@
 
 ## Architecture
 
-The marketing site and dashboard intentionally share one Vite build (`site/dist`). The app selects the protected dashboard when the hostname is `dashboard.detailapp.co.zw` or the path starts with `/admin`. CI uploads the same immutable artifact to:
+The marketing site and dashboard intentionally share one Vite build (`site/dist`). The app selects the protected dashboard when the hostname is `dashboard.detail.co.zw` or the path starts with `/admin`. CI uploads the same immutable artifact to:
 
 - `public_html/` for the main domain;
 - `public_html/dashboard/` for the dashboard subdomain document root.
 
-In cPanel, create `dashboard.detailapp.co.zw` and set its document root to `public_html/dashboard`. Add the DNS record supplied by Webzim and enable AutoSSL. Do not expose Firebase service-account credentials in cPanel: all administrative writes use deployed callable Cloud Functions.
+In cPanel, create `dashboard.detail.co.zw` and set its document root to `public_html/dashboard`. Add the DNS record supplied by Webzim and enable AutoSSL. Do not expose Firebase service-account credentials in cPanel: all administrative writes use deployed callable Cloud Functions.
 
 ## Apache SPA routing
 
@@ -52,3 +52,27 @@ Although Firebase web configuration is public in the generated browser bundle, A
 8. Confirm Firebase Auth authorized domains include both production hostnames.
 9. Verify CSP/security headers with Webzim; `.htaccess` supplies baseline nosniff/referrer/frame headers.
 10. Roll back by redeploying a known-good commit from Actions. Keep a cPanel backup for first launch.
+
+## First administrator bootstrap
+
+Admin passwords and claims must never be committed to the SPA. In Firebase Console, you may create the first email/password user and set claims with a trusted Admin SDK environment, or run the repository helper with Application Default Credentials:
+
+```bash
+cd functions
+GOOGLE_APPLICATION_CREDENTIALS=/secure/path/service-account.json \
+ADMIN_EMAIL=owner@example.com \
+ADMIN_PASSWORD='one-time-password' \
+npm run bootstrap-admin
+```
+
+The helper creates or updates the Firebase Auth user and grants the elevated `admins.manage`, marketing, finance, and audit claims. Sign in at `https://dashboard.detail.co.zw`, then immediately use **Admins & Security → Change my password**. Further admins should be created with email-restricted, seven-day manual invitation links from that page; do not share passwords.
+
+## Firebase backend deployment
+
+The FTPS workflow deploys browser assets only. After changing waitlist CORS, signup handling, invitations, claims, or email Functions, deploy the Firebase backend separately from a trusted workstation or protected Firebase workflow:
+
+```bash
+firebase deploy --only functions:joinWaitlist,functions:createAdminInvite,functions:acceptAdminInvite,functions:adminDirectory,functions:marketingUnsubscribe,functions:adminSendMarketingCampaign
+```
+
+Until this Functions deployment completes, the live SPA will continue calling the previous backend and cannot benefit from the `internal[0]` signup fix or admin invitations.
