@@ -97,3 +97,7 @@ Deploy Functions first so the public form has a backend. Before production, subm
 ## Operational privacy and accessibility
 
 Restrict `beta_waitlist` access to authorized staff through IAM/Admin tooling; Firestore rules' catch-all deny prevents browser reads and writes. Establish a retention window and deletion workflow before launch. The UI uses semantic landmarks and headings, native labelled fields, visible focus, reduced-motion support, live status/error announcements, contrast-conscious colors, and responsive layouts. Run Lighthouse and manual keyboard/screen-reader checks against the deployed build because network and production headers affect final results.
+
+## cPanel / Webzim deployment
+
+Production Apache routing, FTPS GitHub Actions setup, dashboard subdomain architecture, required secrets, and the launch checklist are documented in [`docs/cpanel-deployment.md`](../docs/cpanel-deployment.md). The waitlist stores explicit marketing permission separately from privacy acceptance; bulk campaigns in the dashboard require both `marketing.read` / `marketing.send` custom-claim permissions and server-side consent enforcement.

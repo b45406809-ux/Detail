@@ -18,3 +18,8 @@ All scenarios run with the Firestore emulator and Functions emulator. Seed at le
 | Customer | Edit note/state and inspect sensitive profile with/without permission | Mutations audited; sensitive fields permission-gated |
 | Cleaner | Deactivate cleaner with historic paid jobs, then request destructive deletion | History remains; destructive operation rejected |
 | Large data | Seed 10,000 bookings and paginate while writes occur | Bounded response size, deterministic cursor behavior, usable latency |
+| Waitlist | Submit every required field with marketing Yes and No, then resubmit same email with changed preference | One normalized record per email; profile fields and latest timestamped preference are retained |
+| Marketing permission | Attempt list/send without `marketing.read` / `marketing.send`, then with each claim | Unauthorized calls are denied; authorized staff see records and can send |
+| Bulk email | Filter by country, city, language and service; reuse an idempotency key; exceed 100 recipients | Only opted-in matches receive one message; duplicate is not resent; oversized send is rejected |
+| Unsubscribe | Follow a campaign unsubscribe link and attempt a later campaign | Preference becomes No with a server timestamp and recipient is excluded from later campaigns |
+| cPanel routing | Deploy artifact to root and dashboard document roots; hard-refresh nested routes | Apache returns the SPA while preserving real assets and `.htaccess` is present in both roots |
