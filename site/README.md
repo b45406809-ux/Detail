@@ -1,10 +1,11 @@
 # Detail marketing site
 
-Standalone Vite/React landing site for `https://detailapp.co.zw`. The existing root application remains the admin dashboard and is deployed separately to `https://dashboard.detailapp.co.zw`.
+Vite/React web package for the public site at `https://detail.co.zw` and the protected admin dashboard at `https://dashboard.detail.co.zw`. The customer and cleaner application lives in `mobile/`; the retired root web prototype has been removed.
 
 ## Architecture
 
 - Browser code reads Firebase Remote Config, but **never writes Firestore**. `joinWaitlist` is an HTTPS callable Cloud Function using the Admin SDK.
+- `/admin/*` renders the dashboard from `site/src/admin`. Firebase Authentication establishes the session, a refreshed ID token must contain `admin: true`, and elevated controls additionally require `elevated: true`. Administrative writes remain callable-only.
 - Waitlist records use a deterministic SHA-256 document ID from role + normalized email, preventing duplicate entries without a query race. The function validates/normalizes fields, limits an IP hash to eight attempts per UTC hour, checks a honeypot, optionally verifies Cloudflare Turnstile, and records consent time, source and policy version.
 - Confirmation mail is sent through Resend. A mail-provider failure is logged without losing an accepted waitlist record.
 - PostHog is disabled until explicit consent. Autocapture, session recording and person profiles are disabled. Only allow-listed interaction metadata, section names, role and UTM parameters are sent—never form values.
@@ -41,7 +42,7 @@ The site uses Firebase Remote Config in project `new1-4bb94`, the same backend u
 | `booking_enabled` | Boolean | `false` | Shows whether beta booking is open |
 | `waitlist_enabled` | Boolean | `true` | Independently enables submissions |
 | `maintenance_message` | String | built-in honest beta message | Customer-facing availability detail |
-| `whatsapp_number` | String | `263785832211` | International number without `+` |
+| `whatsapp_number` | String | `263714885936` | International number without `+` |
 
 When Remote Config cannot load, safe local defaults keep bookings described as closed and the waitlist open. Changing `booking_enabled` does not disable waitlist collection.
 
@@ -63,7 +64,7 @@ For an end-to-end submission, build Functions and run Firebase emulators from th
 `firebase.json` defines two Hosting targets:
 
 - `marketing` -> `site/dist` -> `detailapp.co.zw`
-- `dashboard` -> root `dist` -> `dashboard.detailapp.co.zw`
+- `dashboard` -> `site/dist` (`/admin`) -> `dashboard.detail.co.zw`
 
 The checked-in `.firebaserc` maps them to the expected Firebase Hosting site IDs `detail-marketing` and `detail-dashboard`. If the console uses different site IDs, run once:
 
@@ -72,14 +73,13 @@ firebase target:apply hosting marketing <actual-marketing-site-id>
 firebase target:apply hosting dashboard <actual-dashboard-site-id>
 ```
 
-In Firebase Console, add each custom domain to its matching Hosting site. Add the exact A/AAAA or CNAME verification records Firebase displays at the DNS provider; do not copy addresses from another Firebase project. Remove conflicting proxy/parking records, keep both records during certificate provisioning, and redirect `www.detailapp.co.zw` to the apex if desired. DNS and managed TLS propagation may take up to 24 hours.
+In Firebase Console, add each custom domain to its matching Hosting site. Add the exact A/AAAA or CNAME verification records Firebase displays at the DNS provider; do not copy addresses from another Firebase project. Remove conflicting proxy/parking records, keep both records during certificate provisioning, and redirect `www.detail.co.zw` to the apex if desired. DNS and managed TLS propagation may take up to 24 hours.
 
 ## Deploy
 
 ```bash
 # from repository root
-npm --prefix site ci && npm --prefix site run build
-npm run build
+npm --prefix site install && npm --prefix site run build
 npm --prefix functions ci && npm --prefix functions run build
 firebase deploy --only functions:joinWaitlist
 firebase deploy --only hosting:marketing,hosting:dashboard
@@ -97,3 +97,7 @@ Deploy Functions first so the public form has a backend. Before production, subm
 ## Operational privacy and accessibility
 
 Restrict `beta_waitlist` access to authorized staff through IAM/Admin tooling; Firestore rules' catch-all deny prevents browser reads and writes. Establish a retention window and deletion workflow before launch. The UI uses semantic landmarks and headings, native labelled fields, visible focus, reduced-motion support, live status/error announcements, contrast-conscious colors, and responsive layouts. Run Lighthouse and manual keyboard/screen-reader checks against the deployed build because network and production headers affect final results.
+
+## cPanel / Webzim deployment
+
+Production Apache routing, FTPS GitHub Actions setup, dashboard subdomain architecture, required secrets, and the launch checklist are documented in [`docs/cpanel-deployment.md`](../docs/cpanel-deployment.md). The waitlist stores explicit marketing permission separately from privacy acceptance; bulk campaigns in the dashboard require both `marketing.read` / `marketing.send` custom-claim permissions and server-side consent enforcement.
