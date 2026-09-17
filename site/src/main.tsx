@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { ArrowRight, BadgeCheck, Banknote, Building2, Car, Check, ChevronDown, Clock3, Home, MapPin, ShieldCheck, Sparkles, Star, Users } from 'lucide-react';
 import { existingConsent, setAnalyticsConsent, track } from './analytics';
 import { joinWaitlist, loadBetaConfig, type BetaConfig } from './firebase';
+import { AdminEntry } from './admin/AdminEntry';
 import './styles.css';
 
 const services = [{ icon: Home, name: 'Home cleaning', text: 'Regular refreshes and deep cleans.' }, { icon: Building2, name: 'Office & commercial', text: 'Reliable care for productive spaces.' }, { icon: Car, name: 'Vehicle detailing', text: 'Interior and exterior care, wherever you park.' }, { icon: Sparkles, name: 'Specialist services', text: 'Move-in, post-build and event clean-ups.' }];
@@ -48,4 +49,6 @@ function App(){const [config,setConfig]=useState<BetaConfig>({bookingEnabled:fal
  <footer><div className="footer-top"><a className="logo light" href="#top"><i>D</i>DETAIL</a><p>Trusted cleaning, coordinated with clarity.</p><div><b>Support</b><a href="mailto:support@detailapp.co.zw">support@detailapp.co.zw</a><b>General enquiries</b><a href="mailto:info@detailapp.co.zw">info@detailapp.co.zw</a></div></div><div className="footer-bottom"><span>© {new Date().getFullYear()} Detail Technologies. Zimbabwe.</span><span><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="#faq">FAQs</a></span></div></footer>
  {cookie===null&&<div className="cookie" role="dialog" aria-label="Analytics preferences"><p><b>Help us improve Detail?</b><br/>Allow anonymous usage analytics. We don’t record form contents or session replays.</p><div><button onClick={()=>{setAnalyticsConsent(false);setCookie('no')}}>No thanks</button><button className="primary" onClick={()=>{setAnalyticsConsent(true);setCookie('yes')}}>Allow analytics</button></div></div>}</>}
 
-createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
+const root = createRoot(document.getElementById('root')!);
+const isAdminHost = location.hostname === 'dashboard.detailapp.co.zw' || location.pathname.startsWith('/admin');
+root.render(<React.StrictMode>{isAdminHost ? <AdminEntry/> : <App/>}</React.StrictMode>);
