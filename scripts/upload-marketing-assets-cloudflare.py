@@ -11,7 +11,9 @@ if not ACCOUNT or not TOKEN:raise SystemExit('CLOUDFLARE_ACCOUNT_ID and CLOUDFLA
 BASE=f'https://api.cloudflare.com/client/v4/accounts/{ACCOUNT}'
 
 def api(method,path,data=None,content_type='application/json'):
- body=None if data is None else (json.dumps(data).encode() if content_type=='application/json' else data)
+ # JSON callers may pass a Python value or an already encoded payload (for
+ # example, the pretty-printed manifest). Never try to json.dumps bytes.
+ body=None if data is None else (json.dumps(data).encode() if content_type=='application/json' and not isinstance(data,(bytes,bytearray)) else data)
  request=Request(BASE+path,data=body,method=method,headers={'authorization':f'Bearer {TOKEN}','content-type':content_type})
  try:
   with urlopen(request,timeout=90) as response: raw=response.read();return json.loads(raw) if raw else {}
