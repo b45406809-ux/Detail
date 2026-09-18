@@ -1,0 +1,33 @@
+name: Emergency Git Fix
+
+on:
+  workflow_dispatch: # Allows you to trigger it manually with a single click
+
+jobs:
+  fix-git:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository with Full History
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetches all history so we can reset branches
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git Identity
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+
+      - name: 1. Fix the Codex Branch (Undo Accidental Merge)
+        run: |
+          git checkout codex/separate-dashboard-into-routed-modules-sl5iac
+          git reset --hard HEAD~1
+          git push origin codex/separate-dashboard-into-routed-modules-sl5iac --force
+
+      - name: 2. Update the Claude Branch with Codex Changes
+        run: |
+          git checkout claude/cleaning-marketplace-concept-84t4wk
+          git pull origin claude/cleaning-marketplace-concept-84t4wk
+          git merge codex/separate-dashboard-into-routed-modules-sl5iac --no-edit
+          git push origin claude/cleaning-marketplace-concept-84t4wk
+          
