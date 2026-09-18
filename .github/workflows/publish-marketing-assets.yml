@@ -1,0 +1,41 @@
+name: Publish marketing assets to Cloudflare KV
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/generate-instagram-carousel.py
+      - scripts/requirements-marketing.txt
+      - cloudflare/marketing-assets-worker.mjs
+      - marketing/README.md
+      - marketing/fonts/OFL.txt
+      - .github/workflows/publish-marketing-assets.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/requirements-marketing.txt
+      - name: Install deterministic asset tooling
+        run: python -m pip install -r scripts/requirements-marketing.txt
+      - name: Generate PDFs and PNGs
+        run: python scripts/generate-instagram-carousel.py
+      - name: Verify generated artifact count
+        run: test "$(find marketing/generated -type f | wc -l)" -eq 14
+      - name: Upload to Cloudflare KV and publish download Worker via API
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_KV_NAMESPACE: detail-marketing-assets
+          CLOUDFLARE_WORKER_NAME: detail-marketing-assets
+        run: python scripts/upload-marketing-assets-cloudflare.py
