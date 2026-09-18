@@ -7,3 +7,5 @@ coverage/
 *.tsbuildinfo
 .env*
 !.env.example
+.cache/
+marketing/generated/

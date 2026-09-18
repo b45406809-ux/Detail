@@ -27,3 +27,5 @@ All scenarios run with the Firestore emulator and Functions emulator. Seed at le
 | Manual admin invite | Create an email-restricted link, copy it, accept with the wrong and right email, then reuse after acceptance | Wrong email and replay are denied; matching user receives only selected claims |
 | Password change | Submit a wrong current password, weak new password and valid credentials | Firebase reauthentication is required; only the valid change succeeds; password is never logged |
 | Waitlist domain | Submit from `detail.co.zw` with Resend unavailable | CORS succeeds, Firestore record persists and signup succeeds despite confirmation-email failure |
+| Waitlist role | Submit customer and cleaner entries for House, Car and Both | Participant type and service interest are stored and displayed; cleaner copy says services offered |
+| Firebase deployment | Deploy static site without Functions, then run backend workflow | Old callable fails before backend deploy; updated callable accepts `detail.co.zw` and persists the new schema afterward |

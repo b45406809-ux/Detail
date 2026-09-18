@@ -101,3 +101,7 @@ Restrict `beta_waitlist` access to authorized staff through IAM/Admin tooling; F
 ## cPanel / Webzim deployment
 
 Production Apache routing, FTPS GitHub Actions setup, dashboard subdomain architecture, required secrets, and the launch checklist are documented in [`docs/cpanel-deployment.md`](../docs/cpanel-deployment.md). The waitlist stores explicit marketing permission separately from privacy acceptance; bulk campaigns in the dashboard require both `marketing.read` / `marketing.send` custom-claim permissions and server-side consent enforcement.
+
+## Firebase clients and administrator setup
+
+The web and mobile Firebase registrations share project services when they use project `new1-4bb94` and the same Firestore database ID. Admin bootstrap, `auth/invalid-credential`, waitlist `internal[0]`, authorized-domain checks, deployment, and service-account handling are documented in [`docs/firebase-setup-and-troubleshooting.md`](../docs/firebase-setup-and-troubleshooting.md).

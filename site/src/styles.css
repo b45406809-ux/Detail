@@ -7,3 +7,4 @@
 
 /* Detail mobile brand alignment */
 .logo .brand-mark{flex:none}.primary{background:#3906D2}.primary:hover{background:#2F05B0}.phone>button,.maintenance,.final,.recruit .primary,.areas{color:#fff}.service-grid>article>svg,.seal,.success>span{color:#fff}.dark-card{background:#0D0A24}.trust-visual{background:linear-gradient(155deg,#3906D2,#150256)}
+.role-tabs label{border:0;background:none;border-radius:999px;padding:11px;cursor:pointer;color:var(--ink);text-align:center;font-size:13px}.role-tabs label.active{background:white;box-shadow:0 3px 10px #0F0B2E12;font-weight:700}.role-tabs label input{position:absolute;opacity:0;pointer-events:none}

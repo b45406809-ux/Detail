@@ -513,7 +513,7 @@ export const adminQuery = onCall(async request => {
   let q: FirebaseFirestore.Query=db.collection(collectionName).orderBy('createdAt','desc').limit(pageSize+1);
   if(request.data?.cursor){const cursor=await db.collection(collectionName).doc(String(request.data.cursor)).get();if(cursor.exists)q=q.startAfter(cursor);}
   const snap=await q.get(), docs=snap.docs.slice(0,pageSize);
-  return {rows:docs.map(d=>{const data=d.data();if(moduleName==='waitlist'){return {id:d.id,fullName:data.fullName||data.name,email:data.email,phone:data.phone,country:data.country||'',city:data.city||'',area:data.area||'',preferredLanguage:data.preferredLanguage||'',serviceInterest:data.serviceInterest||'',marketingEmailPermission:data.marketingEmailPermission||'NO',status:data.status,createdAt:data.createdAt?.toDate?.().toISOString()};}return {id:d.id,...data,createdAt:data.createdAt?.toDate?.().toISOString()};}),nextCursor:snap.docs.length>pageSize?docs[docs.length-1].id:null};
+  return {rows:docs.map(d=>{const data=d.data();if(moduleName==='waitlist'){return {id:d.id,participantType:data.participantType||String(data.role||'CUSTOMER').toUpperCase(),fullName:data.fullName||data.name,email:data.email,phone:data.phone,country:data.country||'',city:data.city||'',area:data.area||'',preferredLanguage:data.preferredLanguage||'',serviceInterest:data.serviceInterest||'',marketingEmailPermission:data.marketingEmailPermission||'NO',status:data.status,createdAt:data.createdAt?.toDate?.().toISOString()};}return {id:d.id,...data,createdAt:data.createdAt?.toDate?.().toISOString()};}),nextCursor:snap.docs.length>pageSize?docs[docs.length-1].id:null};
 });
 
 export const adminMutation = onCall(async request => {
@@ -1140,6 +1140,7 @@ export const joinWaitlist = onCall(
     // Honeypot fields are intentionally accepted by the transport, then silently rejected.
     if (cleanText(input.website, 100)) throw new HttpsError('invalid-argument', 'Unable to submit this form.');
 
+    const participantType = cleanText(input.participantType, 10).toUpperCase();
     const name = cleanText(input.fullName, 100);
     const email = cleanText(input.email, 254).toLowerCase();
     const phone = cleanText(input.phone, 30).replace(/[\s()-]/g, '');
@@ -1150,7 +1151,7 @@ export const joinWaitlist = onCall(
     const serviceInterest = cleanText(input.serviceInterest, 10).toUpperCase();
     const marketingChoice = cleanText(input.marketingEmailPermission, 3).toUpperCase();
     const privacyAccepted = input.privacyAccepted === true;
-    if (name.length < 2 || !/^\S+@\S+\.\S+$/.test(email) || !/^\+?[0-9]{7,15}$/.test(phone) || country.length < 2 || city.length < 2 || area.length < 2 || !['English', 'Shona', 'Ndebele', 'Other'].includes(preferredLanguage) || !['HOUSE', 'CAR', 'BOTH'].includes(serviceInterest) || !['YES', 'NO'].includes(marketingChoice) || !privacyAccepted) {
+    if (!['CUSTOMER', 'CLEANER'].includes(participantType) || name.length < 2 || !/^\S+@\S+\.\S+$/.test(email) || !/^\+?[0-9]{7,15}$/.test(phone) || country.length < 2 || city.length < 2 || area.length < 2 || !['English', 'Shona', 'Ndebele', 'Other'].includes(preferredLanguage) || !['HOUSE', 'CAR', 'BOTH'].includes(serviceInterest) || !['YES', 'NO'].includes(marketingChoice) || !privacyAccepted) {
       throw new HttpsError('invalid-argument', 'Please check every required field and try again.');
     }
 
@@ -1180,14 +1181,14 @@ export const joinWaitlist = onCall(
     const campaignInput = (input.campaign && typeof input.campaign === 'object') ? input.campaign as Record<string, unknown> : {};
     const submittedAt = FieldValue.serverTimestamp();
     const unsubscribeToken = existing.data()?.unsubscribeToken ?? randomUUID();
-    const waitlistRecord = { fullName: name, name, email, phone, country, city, area, preferredLanguage, serviceInterest, marketingEmailPermission: marketingChoice, marketingConsent: { granted: marketingChoice === 'YES', timestamp: submittedAt, source: 'detail.co.zw/waitlist', version: '2026-09-17' }, privacyConsent: { granted: true, timestamp: submittedAt, source: 'detail.co.zw/waitlist', version: '2026-09-17' }, campaign: { source: cleanText(campaignInput.source, 100), medium: cleanText(campaignInput.medium, 100), campaign: cleanText(campaignInput.campaign, 100) }, updatedAt: submittedAt, schemaVersion: 2, status: existing.data()?.status ?? 'pending', unsubscribeToken, ipHash };
+    const waitlistRecord = { participantType, role: participantType.toLowerCase(), fullName: name, name, email, phone, country, city, area, preferredLanguage, serviceInterest, marketingEmailPermission: marketingChoice, marketingConsent: { granted: marketingChoice === 'YES', timestamp: submittedAt, source: 'detail.co.zw/waitlist', version: '2026-09-17' }, privacyConsent: { granted: true, timestamp: submittedAt, source: 'detail.co.zw/waitlist', version: '2026-09-17' }, campaign: { source: cleanText(campaignInput.source, 100), medium: cleanText(campaignInput.medium, 100), campaign: cleanText(campaignInput.campaign, 100) }, updatedAt: submittedAt, schemaVersion: 2, status: existing.data()?.status ?? 'pending', unsubscribeToken, ipHash };
     if (existing.exists) await ref.set(waitlistRecord, { merge: true });
     else await ref.create({ ...waitlistRecord, createdAt: submittedAt });
     await db.collection('marketing_unsubscribe_tokens').doc(unsubscribeToken).set({ waitlistId: id, email, createdAt: submittedAt });
 
     const resendKey = RESEND_API_KEY.value();
     if (resendKey) try {
-      const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: `Bearer ${resendKey}`, 'content-type': 'application/json' }, body: JSON.stringify({ from: 'Detail <hello@detailapp.co.zw>', to: [email], reply_to: 'support@detailapp.co.zw', subject: 'Your place on the Detail waitlist', html: `<div style="font-family:Arial,sans-serif;color:#0F0B2E;max-width:560px;margin:auto"><h1>You're on the Detail list.</h1><p>Hi ${name.replace(/[<>&"']/g, '')},</p><p>We'll let you know when ${serviceInterest === 'BOTH' ? 'house and car cleaning' : serviceInterest === 'HOUSE' ? 'house cleaning' : 'car cleaning'} reaches ${area.replace(/[<>&"']/g, '')}, ${city.replace(/[<>&"']/g, '')}.</p><p>Questions? Reply to this email or contact <a href="mailto:support@detailapp.co.zw">support@detailapp.co.zw</a>.</p><p>— The Detail team</p></div>` }) });
+      const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: `Bearer ${resendKey}`, 'content-type': 'application/json' }, body: JSON.stringify({ from: 'Detail <hello@detailapp.co.zw>', to: [email], reply_to: 'support@detailapp.co.zw', subject: 'Your place on the Detail waitlist', html: `<div style="font-family:Arial,sans-serif;color:#0F0B2E;max-width:560px;margin:auto"><h1>You're on the Detail list.</h1><p>Hi ${name.replace(/[<>&"']/g, '')},</p><p>Thanks for joining as ${participantType === 'CLEANER' ? 'a cleaning professional' : 'a customer'}. We'll let you know when ${serviceInterest === 'BOTH' ? 'house and car cleaning' : serviceInterest === 'HOUSE' ? 'house cleaning' : 'car cleaning'} reaches ${area.replace(/[<>&"']/g, '')}, ${city.replace(/[<>&"']/g, '')}.</p><p>Questions? Reply to this email or contact <a href="mailto:support@detailapp.co.zw">support@detailapp.co.zw</a>.</p><p>— The Detail team</p></div>` }) });
       if (!response.ok) logger.error('Waitlist confirmation email failed', { status: response.status, waitlistId: id });
     } catch (error) {
       // The signup is already durable. A provider/network issue must not turn a
