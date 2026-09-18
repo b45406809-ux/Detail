@@ -26,7 +26,8 @@ jobs:
           node-version: 20
 
       - name: Run Repomix with compression
-        run: npx --yes repomix --compress
+        run: npx --yes repomix --output uncompressed_repomix.xml --ignore "**/*.xml"
+        
 
       - name: Commit and push Repomix output
         run: |
