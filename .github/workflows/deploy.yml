@@ -45,7 +45,7 @@ jobs:
           curl --fail --silent --show-error --retry 5 --retry-all-errors \
             --retry-delay 3 "$WAITLIST_API_URL/health" | grep -q '"storage":"cloudflare-d1"'
           curl --fail --silent --show-error --request OPTIONS \
-            --header 'Origin: https://detail.co.zw' \
+            --header 'Origin: https://detailapp.co.zw' \
             --header 'Access-Control-Request-Method: POST' \
             --dump-header /tmp/waitlist-cors.txt --output /dev/null \
             "$WAITLIST_API_URL/api/waitlist"
