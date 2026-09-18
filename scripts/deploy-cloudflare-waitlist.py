@@ -50,12 +50,12 @@ existing = api('POST', f'/d1/database/{database_id}/query', {'sql':'SELECT id,mu
 existing_rows = existing[0].get('results') or []
 if not existing_rows:
     salt = secrets.token_urlsafe(32)
-    password_hash = hashlib.pbkdf2_hmac('sha256', admin_password.encode(), salt.encode(), 210000, 32).hex()
+    password_hash = hashlib.pbkdf2_hmac('sha256', admin_password.encode(), salt.encode(), 50000, 32).hex()
     api('POST', f'/d1/database/{database_id}/query', {'sql':"INSERT INTO admins(id,email,password_hash,password_salt,elevated,permissions_json,must_change_password,created_at) VALUES(?,?,?,?,1,?,1,?)",'params':[secrets.token_hex(16),admin_email,password_hash,salt,json.dumps(['marketing.read','marketing.send','finance.read','audit.read','admins.manage']),__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat()]})
 elif existing_rows[0].get('must_change_password'):
     # Repair an incomplete bootstrap without ever overwriting a password the owner has changed.
     salt = secrets.token_urlsafe(32)
-    password_hash = hashlib.pbkdf2_hmac('sha256', admin_password.encode(), salt.encode(), 210000, 32).hex()
+    password_hash = hashlib.pbkdf2_hmac('sha256', admin_password.encode(), salt.encode(), 50000, 32).hex()
     api('POST', f'/d1/database/{database_id}/query', {'sql':'UPDATE admins SET password_hash=?,password_salt=? WHERE id=?','params':[password_hash,salt,existing_rows[0]['id']]})
 
 metadata = {'main_module': 'worker.mjs', 'compatibility_date': '2026-09-18', 'bindings': [
