@@ -1,10 +1,10 @@
 name: Emergency Git Fix
 
 permissions:
-  contents: write
+  contents: write # Grants the workflow permission to force push updates
 
 on:
-  workflow_dispatch: # Allows you to trigger it manually with a single click
+  workflow_dispatch:
 
 jobs:
   fix-git:
@@ -13,7 +13,7 @@ jobs:
       - name: Checkout Repository with Full History
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Fetches all history so we can reset branches
+          fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure Git Identity
@@ -23,14 +23,14 @@ jobs:
 
       - name: 1. Fix the Codex Branch (Undo Accidental Merge)
         run: |
-          git checkout codex/separate-dashboard-into-routed-modules-sl5iac
+          git checkout codex/separate-dashboard-into-routed-modules-vkfdvy
           git reset --hard HEAD~1
-          git push origin codex/separate-dashboard-into-routed-modules-sl5iac --force
+          git push origin codex/separate-dashboard-into-routed-modules-vkfdvy --force
 
       - name: 2. Update the Claude Branch with Codex Changes
         run: |
           git checkout claude/cleaning-marketplace-concept-84t4wk
           git pull origin claude/cleaning-marketplace-concept-84t4wk
-          git merge codex/separate-dashboard-into-routed-modules-sl5iac --no-edit
+          git merge codex/separate-dashboard-into-routed-modules-vkfdvy --no-edit
           git push origin claude/cleaning-marketplace-concept-84t4wk
           
