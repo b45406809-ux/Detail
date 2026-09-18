@@ -10,14 +10,12 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
-    "firebase": "^12.11.0",
     "lucide-react": "^0.546.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.4",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
