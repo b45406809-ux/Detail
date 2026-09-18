@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Download, Mail, RefreshCw, ShieldCheck } from 'lucide-react';
-import { adminCall } from './api';
+import { waitlistAdminCall } from './api';
 
 interface WaitlistRow { id:string; participantType:string; fullName:string; phone:string; email:string; country:string; city:string; area:string; preferredLanguage:string; serviceInterest:string; marketingEmailPermission:'YES'|'NO'; status:string; createdAt:string }
 interface WaitlistResult { rows:WaitlistRow[]; nextCursor:string|null }
@@ -9,10 +9,10 @@ export function Waitlist() {
   const [result,setResult]=useState<WaitlistResult>({rows:[],nextCursor:null}); const [cursor,setCursor]=useState<string>(); const [loading,setLoading]=useState(true); const [error,setError]=useState('');
   const [subject,setSubject]=useState(''); const [message,setMessage]=useState(''); const [sending,setSending]=useState(false); const [sent,setSent]=useState('');
   const [filters,setFilters]=useState({country:'',city:'',serviceInterest:'',preferredLanguage:''});
-  const load=(next?:string)=>{setLoading(true);setError('');adminCall<WaitlistResult>('adminQuery',{module:'waitlist',cursor:next,pageSize:50}).then(data=>{setResult(data);setCursor(next)}).catch(e=>setError(e.message)).finally(()=>setLoading(false));};
+  const load=(next?:string)=>{setLoading(true);setError('');waitlistAdminCall<WaitlistResult>(`/api/admin/waitlist?limit=50${next?`&cursor=${encodeURIComponent(next)}`:''}`).then(data=>{setResult(data);setCursor(next)}).catch(e=>setError(e.message)).finally(()=>setLoading(false));};
   useEffect(()=>load(),[]);
   const download=()=>{const columns=['participantType','fullName','phone','email','country','city','area','preferredLanguage','serviceInterest','marketingEmailPermission','status','createdAt'] as const;const csv=[columns.join(','),...result.rows.map(row=>columns.map(key=>`"${String(row[key]??'').replaceAll('"','""')}"`).join(','))].join('\n');const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));link.download=`detail-waitlist-${new Date().toISOString().slice(0,10)}.csv`;link.click();URL.revokeObjectURL(link.href)};
-  const send=async()=>{if(!subject.trim()||!message.trim())return setError('Enter a campaign subject and message.');if(!confirm('Send this campaign only to waitlist members who explicitly selected Yes to marketing email?'))return;setSending(true);setError('');setSent('');try{const response=await adminCall<{recipientCount:number}>('adminSendMarketingCampaign',{subject,message,filters,idempotencyKey:crypto.randomUUID()});setSent(`Campaign sent to ${response.recipientCount} opted-in recipient${response.recipientCount===1?'':'s'}.`);setSubject('');setMessage('')}catch(e:any){setError(e.message)}finally{setSending(false)}};
+  const send=async()=>{if(!subject.trim()||!message.trim())return setError('Enter a campaign subject and message.');if(!confirm('Send this campaign only to waitlist members who explicitly selected Yes to marketing email?'))return;setSending(true);setError('');setSent('');try{const response=await waitlistAdminCall<{recipientCount:number}>('/api/admin/campaign',{method:'POST',body:{subject,message,filters,idempotencyKey:crypto.randomUUID()}});setSent(`Campaign sent to ${response.recipientCount} opted-in recipient${response.recipientCount===1?'':'s'}.`);setSubject('');setMessage('')}catch(e:any){setError(e.message)}finally{setSending(false)}};
   return <section><header className="module-header"><div><h1>Waitlist & Email</h1><p>Contact preferences, service demand and consent-safe marketing</p></div><button onClick={()=>load(cursor)}><RefreshCw size={16}/> Refresh</button></header>
     <article className="panel consent-note"><ShieldCheck size={20}/><div><b>Consent enforced server-side</b><p>Campaigns are sent only to records whose latest marketing choice is Yes. Each message includes an unsubscribe link and every send is audited.</p></div></article>
     {error&&<div className="inline-error">{error}</div>}{sent&&<div className="inline-success">{sent}</div>}

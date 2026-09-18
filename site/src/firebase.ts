@@ -1,12 +1,19 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getFunctions } from 'firebase/functions';
 import { fetchAndActivate, getBoolean, getRemoteConfig, getString } from 'firebase/remote-config';
 
 export const app = initializeApp({ apiKey: import.meta.env.VITE_FIREBASE_API_KEY, authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN, projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID, appId: import.meta.env.VITE_FIREBASE_APP_ID });
 export const auth = getAuth(app);
 export const functions = getFunctions(app, import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || 'us-central1');
-export const joinWaitlist = httpsCallable(functions, 'joinWaitlist');
+const waitlistApiUrl = String(import.meta.env.VITE_WAITLIST_API_URL || '').replace(/\/$/, '');
+export async function joinWaitlist(data: Record<string, unknown>) {
+  if (!waitlistApiUrl) throw new Error('Waitlist service is not configured. Please use WhatsApp support.');
+  const result = await fetch(`${waitlistApiUrl}/api/waitlist`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) });
+  const body = await result.json().catch(() => ({})) as { error?: string };
+  if (!result.ok) throw new Error(body.error || 'We could not save your place. Please try again.');
+  return body;
+}
 
 export type BetaConfig = { bookingEnabled: boolean; waitlistEnabled: boolean; message: string; whatsapp: string };
 export const SUPPORT_WHATSAPP = '263714885936';
