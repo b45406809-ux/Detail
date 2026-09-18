@@ -1,5 +1,8 @@
 name: Emergency Git Fix
 
+permissions:
+  contents: write
+
 on:
   workflow_dispatch: # Allows you to trigger it manually with a single click
 
