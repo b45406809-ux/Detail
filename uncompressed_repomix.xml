@@ -311,103 +311,6 @@ jobs:
         run: rm -f "$RUNNER_TEMP/firebase-service-account.json"
 </file>
 
-<file path=".github/workflows/deploy.yml">
-name: Build and deploy site and dashboard
-
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-concurrency:
-  group: production-cpanel
-  cancel-in-progress: true
-
-permissions:
-  contents: read
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Create D1 waitlist database and deploy API Worker
-        id: waitlist
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          TURNSTILE_SECRET: ${{ secrets.TURNSTILE_SECRET }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          INITIAL_ADMIN_EMAIL: ${{ vars.INITIAL_ADMIN_EMAIL || 'crzzphillip@gmail.com' }}
-          INITIAL_ADMIN_PASSWORD: ${{ secrets.INITIAL_ADMIN_PASSWORD }}
-          WAITLIST_ALLOWED_ORIGINS: https://detail.co.zw,https://www.detail.co.zw,https://dashboard.detail.co.zw
-        run: python3 scripts/deploy-cloudflare-waitlist.py
-
-      - name: Verify Cloudflare API before building either site
-        env:
-          WAITLIST_API_URL: ${{ steps.waitlist.outputs.api_url }}
-        run: |
-          test -n "$WAITLIST_API_URL"
-          curl --fail --silent --show-error --retry 5 --retry-all-errors \
-            --retry-delay 3 "$WAITLIST_API_URL/health" | grep -q '"storage":"cloudflare-d1"'
-          curl --fail --silent --show-error --request OPTIONS \
-            --header 'Origin: https://detail.co.zw' \
-            --header 'Access-Control-Request-Method: POST' \
-            --dump-header /tmp/waitlist-cors.txt --output /dev/null \
-            "$WAITLIST_API_URL/api/waitlist"
-          grep -qi '^access-control-allow-origin: https://detail.co.zw' /tmp/waitlist-cors.txt
-
-      - name: Install site dependencies
-        run: npm ci --prefix site --no-audit --no-fund
-
-      - name: Type-check and build production SPA
-        run: npm run build
-        env:
-          VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
-          VITE_POSTHOG_HOST: ${{ vars.VITE_POSTHOG_HOST }}
-          VITE_TURNSTILE_SITE_KEY: ${{ secrets.VITE_TURNSTILE_SITE_KEY }}
-          VITE_WAITLIST_API_URL: ${{ steps.waitlist.outputs.api_url }}
-
-      - name: Verify Apache routing file is in the artifact
-        run: test -f site/dist/.htaccess
-
-      - name: Deploy main site over explicit FTPS
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftps
-          port: 21
-          local-dir: site/dist/
-          server-dir: public_html/
-          exclude: |
-            **/.git*
-            **/.git*/**
-
-      - name: Deploy dashboard subdomain artifact over explicit FTPS
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftps
-          port: 21
-          local-dir: site/dist/
-          server-dir: public_html/dashboard/
-          exclude: |
-            **/.git*
-            **/.git*/**
-</file>
-
 <file path=".github/workflows/publish-marketing-assets.yml">
 name: Publish marketing assets to Cloudflare KV
 
@@ -4629,6 +4532,103 @@ legacy-peer-deps=true
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]
 }
+</file>
+
+<file path=".github/workflows/deploy.yml">
+name: Build and deploy site and dashboard
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: production-cpanel
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Create D1 waitlist database and deploy API Worker
+        id: waitlist
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TURNSTILE_SECRET: ${{ secrets.TURNSTILE_SECRET }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          INITIAL_ADMIN_EMAIL: ${{ vars.INITIAL_ADMIN_EMAIL || 'crzzphillip@gmail.com' }}
+          INITIAL_ADMIN_PASSWORD: ${{ secrets.INITIAL_ADMIN_PASSWORD }}
+          WAITLIST_ALLOWED_ORIGINS: https://detailapp.co.zw,https://www.detailapp.co.zw,https://dashboard.detailapp.co.zw
+        run: python3 scripts/deploy-cloudflare-waitlist.py
+
+      - name: Verify Cloudflare API before building either site
+        env:
+          WAITLIST_API_URL: ${{ steps.waitlist.outputs.api_url }}
+        run: |
+          test -n "$WAITLIST_API_URL"
+          curl --fail --silent --show-error --retry 5 --retry-all-errors \
+            --retry-delay 3 "$WAITLIST_API_URL/health" | grep -q '"storage":"cloudflare-d1"'
+          curl --fail --silent --show-error --request OPTIONS \
+            --header 'Origin: https://detail.co.zw' \
+            --header 'Access-Control-Request-Method: POST' \
+            --dump-header /tmp/waitlist-cors.txt --output /dev/null \
+            "$WAITLIST_API_URL/api/waitlist"
+          grep -qi '^access-control-allow-origin: https://detailapp.co.zw' /tmp/waitlist-cors.txt
+
+      - name: Install site dependencies
+        run: npm ci --prefix site --no-audit --no-fund
+
+      - name: Type-check and build production SPA
+        run: npm run build
+        env:
+          VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
+          VITE_POSTHOG_HOST: ${{ vars.VITE_POSTHOG_HOST }}
+          VITE_TURNSTILE_SITE_KEY: ${{ secrets.VITE_TURNSTILE_SITE_KEY }}
+          VITE_WAITLIST_API_URL: ${{ steps.waitlist.outputs.api_url }}
+
+      - name: Verify Apache routing file is in the artifact
+        run: test -f site/dist/.htaccess
+
+      - name: Deploy main site over explicit FTPS
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          port: 21
+          local-dir: site/dist/
+          server-dir: public_html/
+          exclude: |
+            **/.git*
+            **/.git*/**
+
+      - name: Deploy dashboard subdomain artifact over explicit FTPS
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          port: 21
+          local-dir: site/dist/
+          server-dir: public_html/dashboard/
+          exclude: |
+            **/.git*
+            **/.git*/**
 </file>
 
 <file path="functions/README.md">
