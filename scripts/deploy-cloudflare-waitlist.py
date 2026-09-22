@@ -60,7 +60,7 @@ elif existing_rows[0].get('must_change_password'):
 
 metadata = {'main_module': 'worker.mjs', 'compatibility_date': '2026-09-18', 'bindings': [
     {'type': 'd1', 'name': 'DB', 'id': database_id},
-    {'type': 'plain_text', 'name': 'ALLOWED_ORIGINS', 'text': os.environ.get('WAITLIST_ALLOWED_ORIGINS', 'https://detail.co.zw,https://www.detail.co.zw,https://dashboard.detail.co.zw')},
+    {'type': 'plain_text', 'name': 'ALLOWED_ORIGINS', 'text': os.environ.get('WAITLIST_ALLOWED_ORIGINS', 'https://detailapp.co.zw,https://www.detailapp.co.zw,https://dashboard.detailapp.co.zw,https://blog.detailapp.co.zw')},
 ]}
 body, content_type = multipart([('metadata', None, 'application/json', json.dumps(metadata).encode()), ('worker.mjs', 'worker.mjs', 'application/javascript+module', (ROOT / 'cloudflare' / 'waitlist-worker.mjs').read_bytes())])
 api('PUT', f'/workers/scripts/{WORKER_NAME}', body, content_type)
