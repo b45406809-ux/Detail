@@ -1,5 +1,5 @@
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
-const allowedOrigins = env => new Set((env.ALLOWED_ORIGINS || 'https://detail.co.zw,https://www.detail.co.zw,https://dashboard.detail.co.zw').split(',').map(value => value.trim()));
+const allowedOrigins = env => new Set((env.ALLOWED_ORIGINS || 'https://detailapp.co.zw,https://www.detailapp.co.zw,https://dashboard.detailapp.co.zw,https://blog.detailapp.co.zw').split(',').map(value => value.trim()));
 
 function response(body, status = 200, origin = '') {
   return new Response(JSON.stringify(body), { status, headers: { ...JSON_HEADERS, 'access-control-allow-origin': origin, vary: 'Origin' } });
@@ -89,7 +89,16 @@ async function listWaitlist(request, env, origin) {
   return response({ rows, nextCursor: results.length > limit ? page.at(-1).created_at : null }, 200, origin);
 }
 
+const blogPost = row => ({id:row.id,slug:row.slug,title:row.title,excerpt:row.excerpt,content:row.content,keywords:row.keywords,status:row.status,publishedAt:row.published_at,createdAt:row.created_at,updatedAt:row.updated_at});
+async function publicBlog(request,env,origin){
+  const slug=clean(new URL(request.url).searchParams.get('slug'),90);
+  if(slug){const row=await env.DB.prepare("SELECT * FROM blog_posts WHERE slug=? AND status='PUBLISHED'").bind(slug).first();return row?response({post:blogPost(row)},200,origin):response({error:'Article not found.'},404,origin)}
+  const {results}=await env.DB.prepare("SELECT * FROM blog_posts WHERE status='PUBLISHED' ORDER BY published_at DESC").all();return response({posts:results.map(blogPost)},200,origin);
+}
+
 async function dashboardRpc(request,env,origin){const admin=await requireAdmin(request,env),input=await request.json(),name=clean(input.name,80),data=input.data||{};
+ if(name==='blogList'){const {results}=await env.DB.prepare('SELECT * FROM blog_posts ORDER BY updated_at DESC').all();return response({posts:results.map(blogPost)},200,origin)}
+ if(name==='blogSave'){const id=clean(data.id,80)||crypto.randomUUID(),slug=clean(data.slug,90).toLowerCase(),title=clean(data.title,180),excerpt=clean(data.excerpt,300),content=clean(data.content,30000),keywords=clean(data.keywords,500),status=data.status==='PUBLISHED'?'PUBLISHED':'DRAFT',now=new Date().toISOString();if(!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)||!title||!excerpt||!content)return response({error:'A valid slug, title, excerpt and article are required.'},400,origin);const existing=await env.DB.prepare('SELECT created_at,published_at FROM blog_posts WHERE id=?').bind(id).first();const publishedAt=status==='PUBLISHED'?(existing?.published_at||now):null;try{await env.DB.prepare(`INSERT INTO blog_posts(id,slug,title,excerpt,content,keywords,status,author_id,created_at,updated_at,published_at) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET slug=excluded.slug,title=excluded.title,excerpt=excluded.excerpt,content=excluded.content,keywords=excluded.keywords,status=excluded.status,author_id=excluded.author_id,updated_at=excluded.updated_at,published_at=excluded.published_at`).bind(id,slug,title,excerpt,content,keywords,status,admin.id,existing?.created_at||now,now,publishedAt).run()}catch{return response({error:'That URL slug is already used by another article.'},409,origin)}const row=await env.DB.prepare('SELECT * FROM blog_posts WHERE id=?').bind(id).first();return response({post:blogPost(row)},200,origin)}
  if(name==='adminOverview'){const labels=['Total bookings today','Upcoming bookings','Completed jobs','Cancelled jobs','Revenue today','Revenue this week','Revenue this month','Active cleaners','New customers','Pending payments'];return response({asOf:new Date().toISOString(),timezone:'Africa/Harare',currency:'USD',metrics:labels.map(label=>({label,value:0,format:label.startsWith('Revenue')?'money':'number'})),revenue:[],attention:[]},200,origin)}
  if(name==='adminQuery'){if(data.module==='settings'){const {results}=await env.DB.prepare('SELECT key,value_json FROM dashboard_settings').all();const values=Object.fromEntries(results.map(row=>[row.key,JSON.parse(row.value_json)]));return response({switches:values.switches||{},supportCopy:values.supportCopy||''},200,origin)}return response({rows:[],nextCursor:null},200,origin)}
  if(name==='adminMutation'){await env.DB.prepare('INSERT INTO admin_audit(id,actor_id,action,payload_json,created_at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(),admin.id,clean(data.action,100),JSON.stringify(data),new Date().toISOString()).run();return response({ok:true,auditId:crypto.randomUUID()},200,origin)}
@@ -108,6 +117,7 @@ export default { async fetch(request, env) {
     const path = new URL(request.url).pathname;
     if (path.startsWith('/api/auth/') && ['GET','POST'].includes(request.method)) return await auth(request,env,corsOrigin,path);
     if (path === '/api/admin/rpc' && request.method === 'POST') return await dashboardRpc(request,env,corsOrigin);
+    if (path === '/api/blog' && request.method === 'GET') return await publicBlog(request,env,corsOrigin);
     if (path === '/api/waitlist' && request.method === 'POST') return await joinWaitlist(request, env, corsOrigin);
     if (path === '/api/admin/waitlist' && request.method === 'GET') return await listWaitlist(request, env, corsOrigin);
     if (path === '/api/admin/campaign' && request.method === 'POST') return await sendCampaign(request, env, corsOrigin);

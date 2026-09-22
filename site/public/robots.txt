@@ -1,3 +1,14 @@
 User-agent: *
 Allow: /
-Sitemap: https://detail.co.zw/sitemap.xml
+Disallow: /admin/
+
+# AI crawlers may discover and cite our public, human-readable content.
+User-agent: GPTBot
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+
+Sitemap: https://detailapp.co.zw/sitemap.xml
+Sitemap: https://blog.detailapp.co.zw/sitemap.xml

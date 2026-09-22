@@ -34,7 +34,7 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           INITIAL_ADMIN_EMAIL: ${{ vars.INITIAL_ADMIN_EMAIL || 'crzzphillip@gmail.com' }}
           INITIAL_ADMIN_PASSWORD: ${{ secrets.INITIAL_ADMIN_PASSWORD }}
-          WAITLIST_ALLOWED_ORIGINS: https://detailapp.co.zw,https://www.detailapp.co.zw,https://dashboard.detailapp.co.zw
+          WAITLIST_ALLOWED_ORIGINS: https://detailapp.co.zw,https://www.detailapp.co.zw,https://dashboard.detailapp.co.zw,https://blog.detailapp.co.zw
         run: python3 scripts/deploy-cloudflare-waitlist.py
 
       - name: Verify Cloudflare API before building either site
@@ -89,6 +89,20 @@ jobs:
           port: 21
           local-dir: site/dist/
           server-dir: public_html/dashboard/
+          exclude: |
+            **/.git*
+            **/.git*/**
+
+      - name: Deploy blog subdomain artifact over explicit FTPS
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          port: 21
+          local-dir: site/dist/
+          server-dir: public_html/blog/
           exclude: |
             **/.git*
             **/.git*/**
