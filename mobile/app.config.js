@@ -5,4 +5,20 @@ const { generateNotificationSounds } = require('./scripts/generate-notification-
 // artifacts exist for expo-notifications without committing binary files.
 generateNotificationSounds();
 
-module.exports = appJson.expo;
+const config = appJson.expo;
+const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+if (googleMapsApiKey) {
+  config.android = {
+    ...config.android,
+    config: {
+      ...config.android?.config,
+      googleMaps: {
+        ...config.android?.config?.googleMaps,
+        apiKey: googleMapsApiKey,
+      },
+    },
+  };
+}
+
+module.exports = config;

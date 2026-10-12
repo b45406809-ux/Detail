@@ -10,11 +10,10 @@ export const IS_PROD = !__DEV__;
 // a configured Maps API key and otherwise crashes standalone Android builds).
 export const IS_DEMO = process.env.EXPO_PUBLIC_DEMO_MODE === 'true';
 
-// "Safe to mock" — true in either a local dev-server session or a demo
-// build. Existing DEV-only mock branches (phone OTP, payments, recaptcha)
-// use this so the same mocked, backend-free behavior is reachable from a
-// real installed APK, not just `expo start`.
-export const IS_MOCK = IS_DEV || IS_DEMO;
+// "Safe to mock" is now opt-in only. Expo dev builds should still exercise
+// Firebase Auth, callable Functions, Storage, PesePay, and native maps so the
+// app behaves like production while it is being tested.
+export const IS_MOCK = IS_DEMO;
 
 // TEMPORARY: Cloud Functions can't be deployed yet (needs Firebase Blaze
 // billing, not enabled), so every callFunction(...) call would otherwise
@@ -30,3 +29,17 @@ export const IS_MOCK = IS_DEV || IS_DEMO;
 // status. Flip to false (and re-tighten firestore.rules) once Blaze is
 // enabled and the real Functions are deployed.
 export const IS_SIMULATING_FUNCTIONS = process.env.EXPO_PUBLIC_SIMULATE_FUNCTIONS === 'true';
+
+/** Runtime-selectable infrastructure providers. Firebase remains a supported
+ * fallback so a Cloudflare rollout can be reversed by environment only. */
+export type BackendProvider = 'cloudflare' | 'firebase';
+export type StorageProvider = 'cloudflare-r2' | 'firebase';
+export type MapProvider = 'mapbox' | 'google';
+
+export const BACKEND_PROVIDER: BackendProvider =
+  process.env.EXPO_PUBLIC_BACKEND_PROVIDER === 'firebase' ? 'firebase' : 'cloudflare';
+export const STORAGE_PROVIDER: StorageProvider =
+  process.env.EXPO_PUBLIC_STORAGE_PROVIDER === 'firebase' ? 'firebase' : 'cloudflare-r2';
+export const MAP_PROVIDER: MapProvider =
+  process.env.EXPO_PUBLIC_MAP_PROVIDER === 'google' ? 'google' : 'mapbox';
+export const CLOUDFLARE_API_URL = (process.env.EXPO_PUBLIC_CLOUDFLARE_API_URL ?? '').replace(/\/$/, '');

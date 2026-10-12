@@ -49,6 +49,8 @@ import { Logo } from '../../components/Logo';
 import { haversineDistanceKm, rankJobsByProximity } from '../../services/matching';
 import { GlassCard, GlassSheet, GlassIconButton, RoleToggle } from '../../components/glass';
 import { MapPlaceholder } from '../../components/MapPlaceholder';
+import { MapboxMap } from '../../components/MapboxMap';
+import { MAP_PROVIDER } from '../../utils/env';
 import { IS_DEMO } from '../../utils/env';
 
 const FALLBACK_REGION = { latitude: 37.7749, longitude: -122.4194, latitudeDelta: 0.04, longitudeDelta: 0.04 };
@@ -205,6 +207,8 @@ export default function HomeScreen() {
     <View className="flex-1 bg-[#EDEBFA]">
       {IS_DEMO ? (
         <MapPlaceholder style={{ flex: 1 }} />
+      ) : MAP_PROVIDER === 'mapbox' ? (
+        <MapboxMap style={{ flex: 1 }} region={region} />
       ) : (
         <MapView
           ref={mapRef}

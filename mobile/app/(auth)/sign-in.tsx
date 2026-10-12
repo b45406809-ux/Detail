@@ -152,6 +152,7 @@ export default function SignInScreen() {
                   {(['phone', 'email'] as AuthTab[]).map((t) => (
                     <TouchableOpacity
                       key={t}
+                      testID={`auth-${t}-tab`}
                       onPress={() => setTab(t)}
                       className={`flex-1 flex-row items-center justify-center gap-2 py-3 rounded-xl ${
                         tab === t ? 'bg-white shadow-sm' : ''
@@ -191,6 +192,7 @@ export default function SignInScreen() {
                         </TouchableOpacity>
 
                         <TextInput
+                          testID="auth-phone-input"
                           className="flex-1 px-4 py-4 text-base font-medium text-ink"
                           placeholder={selectedCountry.placeholder || '000 000 0000'}
                           placeholderTextColor="rgba(21,2,86,0.35)"
@@ -239,6 +241,7 @@ export default function SignInScreen() {
                     </TouchableOpacity>
 
                     <TouchableOpacity
+                      testID="auth-phone-submit"
                       onPress={handlePhoneContinue}
                       activeOpacity={0.85}
                       className="w-full bg-accent py-5 rounded-[24px] items-center mt-2 shadow-lg shadow-accent/30"
@@ -252,7 +255,7 @@ export default function SignInScreen() {
                       <Text className="text-sm font-bold text-ink/70">
                         {isNewAccount ? 'Create a new account' : 'Sign in to existing account'}
                       </Text>
-                      <TouchableOpacity onPress={() => setIsNewAccount(!isNewAccount)}>
+                      <TouchableOpacity testID="auth-register-toggle" onPress={() => setIsNewAccount(!isNewAccount)}>
                         <Text className="text-sm font-black text-accent">
                           {isNewAccount ? 'Sign in' : 'Register'}
                         </Text>
@@ -262,6 +265,7 @@ export default function SignInScreen() {
                     <View>
                       <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-2">Email</Text>
                       <TextInput
+                        testID="auth-email-input"
                         className="border border-white/40 rounded-2xl px-4 py-4 text-base font-medium text-ink bg-white/50"
                         placeholder="you@example.com"
                         placeholderTextColor="rgba(21,2,86,0.35)"
@@ -286,6 +290,7 @@ export default function SignInScreen() {
                         )}
                       </View>
                       <TextInput
+                        testID="auth-password-input"
                         className="border border-white/40 rounded-2xl px-4 py-4 text-base font-medium text-ink bg-white/50"
                         placeholder="••••••••"
                         placeholderTextColor="rgba(21,2,86,0.35)"
@@ -297,6 +302,7 @@ export default function SignInScreen() {
 
                     {/* Terms acceptance checkbox */}
                     <TouchableOpacity
+                      testID="auth-terms-toggle"
                       onPress={() => setHasAcceptedTerms(!hasAcceptedTerms)}
                       activeOpacity={0.7}
                       className="flex-row items-start gap-3 py-1"
@@ -329,6 +335,7 @@ export default function SignInScreen() {
                     </TouchableOpacity>
 
                     <TouchableOpacity
+                      testID="auth-email-submit"
                       onPress={handleEmailAuth}
                       disabled={isLoading}
                       activeOpacity={0.85}

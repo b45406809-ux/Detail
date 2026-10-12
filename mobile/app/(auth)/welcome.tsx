@@ -50,7 +50,7 @@ export default function WelcomeScreen() {
       <View className="flex-row items-center justify-between px-6 pt-2">
         <Wordmark size={20} color="#150256" />
         {!isLast && (
-          <TouchableOpacity onPress={() => router.push('/(auth)/sign-in')}>
+          <TouchableOpacity testID="welcome-skip" onPress={() => router.push('/(auth)/sign-in')}>
             <Text className="text-ink/40 text-sm font-bold">Skip</Text>
           </TouchableOpacity>
         )}
@@ -96,6 +96,7 @@ export default function WelcomeScreen() {
         </View>
 
         <TouchableOpacity
+          testID="welcome-next"
           onPress={goNext}
           activeOpacity={0.88}
           className="w-full bg-accent py-5 rounded-[28px] items-center flex-row justify-center gap-2 shadow-lg shadow-accent/30"
@@ -106,7 +107,7 @@ export default function WelcomeScreen() {
         </TouchableOpacity>
 
         {isLast && (
-          <TouchableOpacity onPress={() => router.push('/(auth)/sign-in')} className="mt-5 items-center">
+          <TouchableOpacity testID="welcome-login" onPress={() => router.push('/(auth)/sign-in')} className="mt-5 items-center">
             <Text className="text-ink/40 text-sm font-bold">
               Already have an account? <Text className="text-accent font-black">Log In</Text>
             </Text>

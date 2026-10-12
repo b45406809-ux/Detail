@@ -1,0 +1,21 @@
+appId: ${APP_ID}
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: welcome-skip
+- tapOn:
+    id: auth-email-tab
+- tapOn:
+    id: auth-email-input
+- inputText: ${E2E_EMAIL}
+- tapOn:
+    id: auth-password-input
+- inputText: ${E2E_PASSWORD}
+- tapOn:
+    id: auth-terms-toggle
+- tapOn:
+    id: auth-email-submit
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 15000

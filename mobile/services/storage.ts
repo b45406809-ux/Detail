@@ -17,7 +17,7 @@
  * Remove this branch once Blaze unlocks a real bucket.
  */
 import { auth } from './firebase';
-import { IS_SIMULATING_FUNCTIONS } from '../utils/env';
+import { CLOUDFLARE_API_URL, IS_SIMULATING_FUNCTIONS, STORAGE_PROVIDER } from '../utils/env';
 
 const USE_EMULATOR =
   process.env.EXPO_PUBLIC_USE_FIREBASE_EMULATOR === 'true' ||
@@ -40,6 +40,26 @@ async function getStorageModule() {
 }
 
 async function uploadUri(uri: string, path: string, onProgress?: (pct: number) => void) {
+  if (STORAGE_PROVIDER === 'cloudflare-r2') {
+    if (!CLOUDFLARE_API_URL) {
+      throw new Error('Cloudflare R2 is selected but EXPO_PUBLIC_CLOUDFLARE_API_URL is missing.');
+    }
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) throw new Error('Please sign in before uploading a photo.');
+    const source = await fetch(uri);
+    const blob = await source.blob();
+    const query = new URLSearchParams({ kind: path.split('/')[0], filename: path.split('/').at(-1) ?? 'upload.jpg' });
+    const response = await fetch(`${CLOUDFLARE_API_URL}/v1/uploads?${query}`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': blob.type || 'image/jpeg' },
+      body: blob,
+    });
+    const uploaded = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(uploaded.error ?? 'Photo upload failed.');
+    onProgress?.(1);
+    return uploaded.url as string;
+  }
+
   if (IS_SIMULATING_FUNCTIONS && !USE_EMULATOR) {
     onProgress?.(1);
     return uri;

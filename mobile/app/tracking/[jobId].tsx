@@ -52,9 +52,10 @@ import {
 import { callFunction } from '../../services/functions';
 import { uploadCompletionPhoto } from '../../services/storage';
 import { Job, JobStatus } from '../../types';
-import { IS_MOCK, IS_DEMO } from '../../utils/env';
+import { IS_MOCK, IS_DEMO, MAP_PROVIDER } from '../../utils/env';
 import { GlassCard, GlassSheet, GlassIconButton } from '../../components/glass';
 import { MapPlaceholder } from '../../components/MapPlaceholder';
+import { MapboxMap } from '../../components/MapboxMap';
 import { haversineDistanceKm } from '../../services/matching';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -452,6 +453,16 @@ export default function TrackingScreen() {
     <View className="flex-1 bg-white">
       {IS_DEMO ? (
         <MapPlaceholder style={{ flex: 1 }} />
+      ) : MAP_PROVIDER === 'mapbox' && mapRegion ? (
+        <MapboxMap
+          style={{ flex: 1 }}
+          region={mapRegion}
+          markers={[
+            { latitude: job.location.lat, longitude: job.location.lng, label: 'Job Location', color: '#3906D2' },
+            ...(isCustomer && job.cleanerLocation ? [{ latitude: job.cleanerLocation.lat, longitude: job.cleanerLocation.lng, label: job.cleanerName ?? 'Your Cleaner', color: '#10B981' }] : []),
+          ]}
+          line={isCustomer && job.cleanerLocation ? [{ latitude: job.cleanerLocation.lat, longitude: job.cleanerLocation.lng }, { latitude: job.location.lat, longitude: job.location.lng }] : []}
+        />
       ) : mapRegion ? (
         <MapView style={{ flex: 1 }} provider={PROVIDER_DEFAULT} initialRegion={mapRegion} showsUserLocation showsMyLocationButton={false}>
           <Marker coordinate={{ latitude: job.location.lat, longitude: job.location.lng }} title="Job Location">
