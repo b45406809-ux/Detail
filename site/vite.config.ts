@@ -14,5 +14,11 @@ export default defineConfig({
       },
     },
   ],
-  build: { target: 'es2022', cssMinify: true },
+  build: {
+    target: 'es2022',
+    cssMinify: true,
+    rollupOptions: {
+      input: [new URL('./index.html', import.meta.url).pathname, new URL('./dashboard.html', import.meta.url).pathname],
+    },
+  },
 });

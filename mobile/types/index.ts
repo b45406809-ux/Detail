@@ -102,12 +102,13 @@ export interface UserProfile {
   // hasAgreedToTerms, before profile.tsx's role switch will flip role to
   // CLEANER. All owner-writable (not in firestore.rules' users update denylist).
   cleanerOnboardingComplete?: boolean;
+  cleanerAgreementAccepted?: boolean;
   serviceCategories?: ServiceCategory[];
   serviceRadiusKm?: number;
   experienceYears?: number;
   address?: string;
   proofOfResidenceUrl?: string;
-  verificationStatus?: 'PENDING' | 'VERIFIED';
+  verificationStatus?: 'PENDING' | 'VERIFIED' | 'REJECTED';
 }
 
 export interface Job {

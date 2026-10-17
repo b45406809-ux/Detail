@@ -80,7 +80,9 @@ export default function CreateProfileScreen() {
           email: user.email ?? '',
           displayName: name.trim(),
           photoURL: photoURL.trim(),
-          role,
+          // Cleaner role is granted only after provider verified identity and
+          // the Cleaner Agreement is accepted.
+          role: role === 'CLEANER' ? 'CUSTOMER' : role,
           balance: 0,
           status: 'AVAILABLE',
           hasCompletedProfile: true,
@@ -91,7 +93,7 @@ export default function CreateProfileScreen() {
         { merge: true }
       );
       await refreshProfile();
-      router.replace('/(auth)/permissions');
+      router.replace(role === 'CLEANER' ? '/register-cleaner' : '/(auth)/permissions');
     } catch (err: any) {
       Alert.alert('Error', 'Failed to save profile. Please try again.');
     } finally {

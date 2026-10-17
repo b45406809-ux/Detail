@@ -19,7 +19,7 @@ const SECTIONS = [
   },
   {
     title: '4. Sharing of Information',
-    body: 'We share your information with cleaners you book, payment processors, and service providers that help us operate the platform. We do not sell your personal data.',
+    body: 'We share your information with cleaners you book, payment processors, and service providers that help us operate the platform. If you register as a cleaner, you may choose to complete identity verification through Didit. Didit collects and processes the identity information, document images, and any selfie or liveness data required by the verification workflow under its own privacy terms. Detail receives the verification decision and session status; identity documents are submitted directly to Didit and are not stored by Detail. We do not sell your personal data.',
   },
   {
     title: '5. Data Security',

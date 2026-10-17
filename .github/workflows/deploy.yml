@@ -55,6 +55,12 @@ jobs:
       - name: Verify Apache routing file is in the artifact
         run: test -f site/dist/.htaccess
 
+      - name: Prepare dashboard-specific link preview
+        run: |
+          mkdir -p site/dashboard-deploy
+          cp -a site/dist/. site/dashboard-deploy/
+          cp site/dist/dashboard.html site/dashboard-deploy/index.html
+
       - name: Deploy main site over explicit FTPS
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
@@ -77,7 +83,7 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftps
           port: 21
-          local-dir: site/dist/
+          local-dir: site/dashboard-deploy/
           server-dir: public_html/dashboard/
           exclude: |
             **/.git*

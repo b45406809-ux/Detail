@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft, CheckCircle } from 'lucide-react-native';
-import { useAuth } from '../context/AuthContext';
+import { callFunction } from '../services/functions';
 
 // Full text of the Detail Cleaner Agreement (Catalyst Labs (PRIVATE) LIMITED,
 // trading as Detail — Zimbabwe). Condensed section-by-section from the source
@@ -85,21 +85,17 @@ const TERMS = [
 ];
 
 export default function CleanerAgreementScreen() {
-  const { profile, updateProfile } = useAuth();
   const [isAccepting, setIsAccepting] = useState(false);
   const [accepted, setAccepted] = useState(false);
 
   const handleAccept = async () => {
     setIsAccepting(true);
     try {
-      // Accepting the agreement is also the moment a fully-registered cleaner
-      // (see register-cleaner.tsx) actually flips into cleaner mode — role
-      // switching is gated on both cleanerOnboardingComplete AND this flag.
-      await updateProfile({
-        hasAgreedToTerms: true,
-        ...(profile?.role !== 'CLEANER' ? { role: 'CLEANER' } : {}),
-      });
+      // The server requires a successful Didit decision before granting cleaner access.
+      await callFunction('acceptCleanerAgreement');
       setAccepted(true);
+    } catch (error) {
+      Alert.alert('Could not activate cleaner account', (error as { message?: string })?.message || 'Complete identity verification and try again.');
     } finally {
       setIsAccepting(false);
     }

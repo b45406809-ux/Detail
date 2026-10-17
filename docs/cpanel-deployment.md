@@ -2,10 +2,10 @@
 
 ## Architecture
 
-The marketing site and dashboard intentionally share one Vite build (`site/dist`). The app selects the protected dashboard when the hostname is `dashboard.detail.co.zw` or the path starts with `/admin`. CI uploads the same immutable artifact to:
+The marketing site and dashboard intentionally share one Vite build (`site/dist`). The app selects the protected dashboard when the hostname is `dashboard.detail.co.zw` or the path starts with `/admin`. CI uploads the build to both domains, with a dashboard-specific `index.html` in the dashboard document root so social link previews show the dashboard card. The JavaScript and static assets are shared:
 
 - `public_html/` for the main domain;
-- `public_html/dashboard/` for the dashboard subdomain document root.
+- `public_html/dashboard/` for the dashboard subdomain document root (the dashboard metadata page is copied to `index.html`).
 
 In cPanel, create `dashboard.detail.co.zw` and set its document root to `public_html/dashboard`. Add the DNS record supplied by Webzim and enable AutoSSL. Do not expose Firebase service-account credentials in cPanel: all administrative writes use deployed callable Cloud Functions.
 

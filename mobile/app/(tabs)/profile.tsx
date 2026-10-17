@@ -108,7 +108,8 @@ export default function ProfileScreen() {
   // is instant. Going CLEANER -> CUSTOMER never needs a gate.
   const handleSwitchRole = () => {
     if (profile?.role === 'CUSTOMER') {
-      if (profile.cleanerOnboardingComplete && profile.hasAgreedToTerms) {
+      if (profile.cleanerOnboardingComplete && profile.hasAgreedToTerms
+        && profile.cleanerAgreementAccepted && profile.verificationStatus === 'VERIFIED') {
         updateProfile({ role: 'CLEANER' });
       } else {
         router.push('/register-cleaner');

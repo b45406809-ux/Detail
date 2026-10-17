@@ -1,6 +1,7 @@
 node_modules/
 build/
 dist/
+site/dashboard-deploy/
 coverage/
 .DS_Store
 *.log

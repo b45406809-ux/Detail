@@ -47,6 +47,10 @@ service cloud.firestore {
       allow read: if isAdmin() || (isAuth() && (resource.id == request.auth.uid || resource.data.role == 'CLEANER'));
 
       allow create: if isOwner(userId)
+        && request.resource.data.role != 'CLEANER'
+        && !('verificationStatus' in request.resource.data)
+        && !('verificationLevel' in request.resource.data)
+        && !('cleanerAgreementAccepted' in request.resource.data)
         && request.resource.data.balance == 0
         && (!('jobsCompleted' in request.resource.data) || request.resource.data.jobsCompleted == 0)
         && (!('ratingAverage' in request.resource.data) || request.resource.data.ratingAverage == 0)
@@ -58,8 +62,11 @@ service cloud.firestore {
         isOwner(userId)
         && !changed([
           'commissionOwed', 'isSuspended', 'isBanned', 'verificationLevel',
+          'verificationStatus', 'cleanerAgreementAccepted',
           'uid', 'email'
         ])
+        && (resource.data.role == 'CLEANER' || request.resource.data.role != 'CLEANER'
+          || (resource.data.cleanerAgreementAccepted == true && resource.data.verificationStatus == 'VERIFIED'))
       );
 
       allow delete: if false;

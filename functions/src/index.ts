@@ -19,7 +19,7 @@
 import { onCall, onRequest, HttpsError } from 'firebase-functions/v2/https';
 import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { defineSecret } from 'firebase-functions/params';
+import { defineSecret, defineString } from 'firebase-functions/params';
 import { logger } from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { createHash, randomUUID } from 'crypto';
@@ -38,6 +38,123 @@ const PESEPAY_INTEGRATION_KEY = defineSecret('PESEPAY_INTEGRATION_KEY');
 const PESEPAY_ENCRYPTION_KEY = defineSecret('PESEPAY_ENCRYPTION_KEY');
 const TURNSTILE_SECRET = defineSecret('TURNSTILE_SECRET');
 const RESEND_API_KEY = defineSecret('RESEND_API_KEY');
+const DIDIT_API_KEY = defineSecret('DIDIT_API_KEY');
+const DIDIT_WORKFLOW_ID = defineString('DIDIT_WORKFLOW_ID');
+
+const DIDIT_API_BASE = 'https://verification.didit.me/v2';
+
+/** Create an identity session without exposing the provider key to the app. */
+export const startCleanerIdentityVerification = onCall({ secrets: [DIDIT_API_KEY] }, async request => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in to verify your identity.');
+  if (request.data?.consent !== true) throw new HttpsError('failed-precondition', 'Consent to the Didit privacy notice is required.');
+
+  const workflowId = DIDIT_WORKFLOW_ID.value();
+  if (!workflowId || !DIDIT_API_KEY.value()) {
+    throw new HttpsError('failed-precondition', 'Identity verification is not configured.');
+  }
+
+  const userRef = db.collection('users').doc(uid);
+  const privateRef = userRef.collection('private').doc('kyc');
+  const [user, privateData] = await Promise.all([userRef.get(), privateRef.get()]);
+  if (!user.exists) throw new HttpsError('not-found', 'Create your profile before starting verification.');
+  if (user.data()?.verificationStatus === 'VERIFIED') {
+    throw new HttpsError('already-exists', 'Your identity is already verified.');
+  }
+
+  const current = privateData.data();
+  if (current?.sessionId && current?.sessionUrl && current?.status === 'Pending') {
+    return { sessionUrl: current.sessionUrl, status: 'Pending' };
+  }
+
+  const response = await fetch(`${DIDIT_API_BASE}/session/`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': DIDIT_API_KEY.value() },
+    body: JSON.stringify({ workflow_id: workflowId, vendor_data: uid }),
+  });
+  const payload = await response.json().catch(() => ({})) as {
+    session_id?: string; session_url?: string; url?: string; status?: string; message?: string;
+  };
+  const sessionUrl = payload.session_url ?? payload.url;
+  let validSessionUrl = false;
+  try {
+    const parsedUrl = new URL(sessionUrl ?? '');
+    validSessionUrl = parsedUrl.protocol === 'https:'
+      && (parsedUrl.hostname === 'didit.me' || parsedUrl.hostname.endsWith('.didit.me'));
+  } catch { /* Invalid provider URL is rejected below. */ }
+  if (!response.ok || !payload.session_id || !sessionUrl || !validSessionUrl) {
+    logger.error('Didit session creation failed', { uid, status: response.status, message: payload.message });
+    throw new HttpsError('unavailable', 'Could not start identity verification. Please try again.');
+  }
+
+  await privateRef.set({
+    provider: 'didit', sessionId: payload.session_id, sessionUrl,
+    status: 'Pending', consentedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+  await userRef.set({ verificationStatus: 'PENDING' }, { merge: true });
+  return { sessionUrl, status: 'Pending' };
+});
+
+/** Fetch the decision from Didit on the server; client-submitted outcomes are never trusted. */
+export const refreshCleanerIdentityVerification = onCall({ secrets: [DIDIT_API_KEY] }, async request => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in to check your verification.');
+  if (!DIDIT_API_KEY.value()) throw new HttpsError('failed-precondition', 'Identity verification is not configured.');
+
+  const userRef = db.collection('users').doc(uid);
+  const privateRef = userRef.collection('private').doc('kyc');
+  const privateData = await privateRef.get();
+  const sessionId = privateData.data()?.sessionId;
+  if (!sessionId) throw new HttpsError('failed-precondition', 'Start identity verification first.');
+
+  const response = await fetch(`${DIDIT_API_BASE}/session/${encodeURIComponent(sessionId)}/decision/`, {
+    headers: { 'x-api-key': DIDIT_API_KEY.value() },
+  });
+  const decision = await response.json().catch(() => ({})) as { status?: string; session_id?: string };
+  if (!response.ok || (decision.session_id && decision.session_id !== sessionId)) {
+    logger.error('Didit decision lookup failed', { uid, status: response.status });
+    throw new HttpsError('unavailable', 'Could not check verification yet. Please try again.');
+  }
+
+  const normalized = String(decision.status ?? 'Pending').toLowerCase();
+  const status = ['approved', 'verified'].includes(normalized) ? 'VERIFIED'
+    : ['declined', 'rejected', 'failed', 'expired', 'abandoned', 'cancelled', 'canceled'].includes(normalized) ? 'REJECTED' : 'PENDING';
+  const result = await db.runTransaction(async transaction => {
+    const fresh = await transaction.get(userRef);
+    const fields: Record<string, unknown> = {
+      verificationStatus: status,
+      verificationLevel: status === 'VERIFIED' ? 2 : 1,
+    };
+    transaction.set(userRef, fields, { merge: true });
+    transaction.set(privateRef, {
+      status: decision.status ?? 'Pending', updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return status;
+  });
+  return { status: result };
+});
+
+/** Grant cleaner access only after server-confirmed identity verification and agreement acceptance. */
+export const acceptCleanerAgreement = onCall(async request => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in to continue.');
+  const userRef = db.collection('users').doc(uid);
+  await db.runTransaction(async transaction => {
+    const user = await transaction.get(userRef);
+    const profile = user.data();
+    if (!profile?.cleanerOnboardingComplete) {
+      throw new HttpsError('failed-precondition', 'Complete cleaner registration first.');
+    }
+    if (profile.verificationStatus !== 'VERIFIED') {
+      throw new HttpsError('failed-precondition', 'Complete identity verification first.');
+    }
+    transaction.set(userRef, {
+      role: 'CLEANER', hasAgreedToTerms: true, cleanerAgreementAccepted: true,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+  return { ok: true };
+});
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -101,7 +218,9 @@ export const deleteAccount = onCall(async request => {
   const batch=db.batch(); const deletedLabel='Deleted user';
   for(const snap of all.values()){const job=snap.data();batch.update(snap.ref,uid===job.customerId?{customerId:`deleted_${uid.slice(0,8)}`,customerName:deletedLabel,customerPhoto:FieldValue.delete(),description:FieldValue.delete()}:{cleanerId:`deleted_${uid.slice(0,8)}`,cleanerName:deletedLabel,cleanerPhoto:FieldValue.delete()});}
   for(const collectionName of ['favorites','notifications']){const docs=await db.collection(collectionName).where(collectionName==='favorites'?'customerId':'userId','==',uid).get();docs.forEach(d=>batch.delete(d.ref));}
-  batch.delete(db.collection('users').doc(uid)); await batch.commit();
+  batch.delete(db.collection('users').doc(uid));
+  batch.delete(db.collection('users').doc(uid).collection('private').doc('kyc'));
+  await batch.commit();
   await admin.auth().revokeRefreshTokens(uid); await admin.auth().deleteUser(uid);
   return {success:true};
 });

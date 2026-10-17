@@ -80,7 +80,10 @@ export default function HomeScreen() {
 
   const handleRoleToggle = (newRole: 'CUSTOMER' | 'CLEANER') => {
     if (newRole === 'CLEANER') {
-      const isRegistered = profile?.cleanerOnboardingComplete && profile?.hasAgreedToTerms;
+      const isRegistered = profile?.cleanerOnboardingComplete
+        && profile?.hasAgreedToTerms
+        && profile?.cleanerAgreementAccepted
+        && profile?.verificationStatus === 'VERIFIED';
       if (!isRegistered) {
         Alert.alert(
           'Cleaner Registration Required',
