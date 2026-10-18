@@ -52,6 +52,9 @@ export type CarCondition = 'CLEAN' | 'AVERAGE' | 'VERY_DIRTY';
 /** Step-by-step checklist captured while booking a house cleaning. */
 export interface HouseChecklist {
   category: 'HOUSE';
+  packageId?: string;
+  selections?: Record<string, string[]>;
+  choices?: Record<string, string>;
   propertySizeSqm?: number;
   storiesCount?: number; // Number of stories/floors in property (e.g. 1, 2, 3)
   roomsCount?: number; // Number of rooms to be cleaned
@@ -65,6 +68,9 @@ export interface HouseChecklist {
 /** Step-by-step checklist captured while booking a car cleaning. */
 export interface CarChecklist {
   category: 'CAR';
+  packageId?: string;
+  selections?: Record<string, string[]>;
+  choices?: Record<string, string>;
   vehicleType?: string; // Sedan, SUV, Truck, Van, Other
   registrationNumber?: string; // e.g. ABC-1234 — shown to the cleaner so they wash the correct car
   cleaningTypes: string[]; // Exterior, Interior, Full Service, Other

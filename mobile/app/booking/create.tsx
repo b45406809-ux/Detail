@@ -30,24 +30,12 @@ import {
   CalendarDays,
   DollarSign,
   Sparkles,
-  CheckCircle2,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { db, addDoc, collection, serverTimestamp, Timestamp } from '../../services/firebase';
 import { uploadJobPhoto } from '../../services/storage';
 import { JobStatus, ServiceCategory, HouseChecklist, CarChecklist } from '../../types';
-import {
-  HOUSE_AREAS,
-  HOUSE_CLEANING_TYPES,
-  HOUSE_CONDITIONS,
-  HOUSE_ADD_ONS,
-  CAR_CLEANING_TYPES,
-  CAR_CONDITIONS,
-  CAR_EXTERIOR_SERVICES,
-  CAR_INTERIOR_SERVICES,
-  CAR_DEEP_SERVICES,
-  TIME_OPTIONS,
-} from '../../constants/services';
+import * as Catalog from '../../constants/services';
 
 // A posted job stays open to new bids for 30 minutes — see offers.tsx for
 // the countdown UI and the increase-budget/cancel actions available while
@@ -57,7 +45,7 @@ const BIDDING_WINDOW_MS = 30 * 60 * 1000;
 /** Derive a concrete Date for every schedule preset so every job — not just
  * CUSTOM ones — has one queryable scheduledDateTime for the reminder system. */
 function resolveScheduledDate(
-  preference: (typeof TIME_OPTIONS)[number]['id'],
+  preference: (typeof Catalog.TIME_OPTIONS)[number]['id'],
   customDate: Date | null
 ): Date {
   const now = new Date();
@@ -80,23 +68,13 @@ export default function CreateBookingScreen() {
   const [stepIndex, setStepIndex] = useState(preselectedCategory ? 1 : 0);
   const [category, setCategory] = useState<ServiceCategory | null>(preselectedCategory ?? null);
 
-  // House checklist state
-  const [propertySizeSqm, setPropertySizeSqm] = useState('');
-  const [storiesCount, setStoriesCount] = useState('1');
-  const [roomsCount, setRoomsCount] = useState('3');
-  const [bathroomsCount, setBathroomsCount] = useState('2');
-  const [areas, setAreas] = useState<string[]>([]);
-  const [houseCleaningTypes, setHouseCleaningTypes] = useState<string[]>([]);
-  const [houseCondition, setHouseCondition] = useState<HouseChecklist['condition']>();
-  const [addOns, setAddOns] = useState<string[]>([]);
-
-  // Car checklist state
-  const [carCleaningTypes, setCarCleaningTypes] = useState<string[]>([]);
-  const [carCondition, setCarCondition] = useState<CarChecklist['condition']>();
-  const [registrationNumber, setRegistrationNumber] = useState('');
-  const [exteriorServices, setExteriorServices] = useState<string[]>([]);
-  const [interiorServices, setInteriorServices] = useState<string[]>([]);
-  const [deepServices, setDeepServices] = useState<string[]>([]);
+  const [serviceId, setServiceId] = useState('');
+  const [selections, setSelections] = useState<Record<string, string[]>>({});
+  const [choices, setChoices] = useState<Record<string, string>>({});
+  const setGroup = (key: string, value: string[]) => setSelections((prev) => ({ ...prev, [key]: value }));
+  const toggleGroup = (key: string, value: string) => setSelections((prev) => ({ ...prev, [key]: toggleItem(prev[key] ?? [], value) }));
+  const setChoice = (key: string, value: string) => setChoices((prev) => ({ ...prev, [key]: value }));
+  const resetDetails = () => { setSelections({}); setChoices({}); };
 
   const [description, setDescription] = useState('');
   const [photoUris, setPhotoUris] = useState<string[]>([]);
@@ -106,7 +84,7 @@ export default function CreateBookingScreen() {
   const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(null);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
 
-  const [timePreference, setTimePreference] = useState<(typeof TIME_OPTIONS)[number]['id']>('ASAP');
+  const [timePreference, setTimePreference] = useState<(typeof Catalog.TIME_OPTIONS)[number]['id']>('ASAP');
   const [customDateTime, setCustomDateTime] = useState<Date | null>(null);
   const [pickerMode, setPickerMode] = useState<'date' | 'time' | null>(null);
   const [budgetOption, setBudgetOption] = useState<'NOT_SURE' | 'FIXED'>('NOT_SURE');
@@ -176,7 +154,12 @@ export default function CreateBookingScreen() {
       case 'CATEGORY':
         return !!category;
       case 'CHECKLIST':
-        return category === 'HOUSE' ? houseCleaningTypes.length > 0 : carCleaningTypes.length > 0;
+        if (!serviceId || !category) return false;
+        if (category === 'HOUSE') {
+          if (serviceId === 'SPECIFIC_ROOM') return !!choices.areaSize && ((selections.rooms?.length ?? 0) > 0 || (selections.parts?.length ?? 0) > 0);
+          return !!choices.propertyType && !!choices.propertySize && !!choices.bedrooms && !!choices.bathrooms && !!choices.condition;
+        }
+        return !!choices.vehicleType && !!choices.vehicleSize && !!choices.condition && (serviceId === 'EXTERIOR_WASH' || !!choices.seats) && (serviceId !== 'DEEP_DETAIL' || !!choices.exteriorCondition);
       case 'DETAILS':
         return true;
       case 'LOCATION':
@@ -191,38 +174,17 @@ export default function CreateBookingScreen() {
   };
 
   const serviceLabel = () => {
-    if (category === 'HOUSE') {
-      return houseCleaningTypes.map((id) => HOUSE_CLEANING_TYPES.find((t) => t.id === id)?.label).filter(Boolean).join(' + ') || 'House Cleaning';
-    }
-    return carCleaningTypes.map((id) => CAR_CLEANING_TYPES.find((t) => t.id === id)?.label).filter(Boolean).join(' + ') || 'Car Cleaning';
+    const packages = category ? Catalog.SERVICE_PACKAGES[category] : [];
+    return packages.find((item) => item.id === serviceId)?.label ?? 'Cleaning';
   };
 
   const handleSubmit = async () => {
     if (!user || !category) return;
     setIsSubmitting(true);
     try {
-      const checklist: HouseChecklist | CarChecklist =
-        category === 'HOUSE'
-          ? {
-              category: 'HOUSE',
-              propertySizeSqm: propertySizeSqm ? Number(propertySizeSqm) : undefined,
-              storiesCount: storiesCount ? Number(storiesCount) : undefined,
-              roomsCount: roomsCount ? Number(roomsCount) : undefined,
-              bathroomsCount: bathroomsCount ? Number(bathroomsCount) : undefined,
-              areas,
-              cleaningTypes: houseCleaningTypes,
-              condition: houseCondition,
-              addOns,
-            }
-          : {
-              category: 'CAR',
-              registrationNumber: registrationNumber.trim() || undefined,
-              cleaningTypes: carCleaningTypes,
-              condition: carCondition,
-              exteriorServices,
-              interiorServices,
-              deepServices,
-            };
+      const checklist: HouseChecklist | CarChecklist = category === 'HOUSE'
+        ? { category: 'HOUSE', packageId: serviceId, selections, choices, areas: selections.areas ?? [], cleaningTypes: [serviceId], condition: choices.condition as HouseChecklist['condition'], addOns: selections.additions ?? [] }
+        : { category: 'CAR', packageId: serviceId, selections, choices, vehicleType: choices.vehicleType, cleaningTypes: [serviceId], condition: choices.condition as CarChecklist['condition'], exteriorServices: selections.exterior ?? [], interiorServices: selections.interior ?? [], deepServices: selections.deep ?? [] };
 
       const scheduledDateTime = resolveScheduledDate(timePreference, customDateTime);
       const now = Date.now();
@@ -298,7 +260,7 @@ export default function CreateBookingScreen() {
                 ).map(({ id, label, desc, icon: Icon }) => (
                   <TouchableOpacity
                     key={id}
-                    onPress={() => setCategory(id)}
+                    onPress={() => { setCategory(id); setServiceId(''); resetDetails(); }}
                     activeOpacity={0.85}
                     className={`flex-row items-center gap-4 p-5 rounded-3xl border-2 ${
                       category === id ? 'border-accent bg-accent/5' : 'border-ink/10 bg-ink/[0.02]'
@@ -317,194 +279,8 @@ export default function CreateBookingScreen() {
             </View>
           )}
 
-          {step === 'CHECKLIST' && category === 'HOUSE' && (
-            <View className="gap-7">
-              <View>
-                <SectionLabel n={1} title="Property Size & Stories" />
-                <View className="gap-4">
-                  <View>
-                    <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-2">
-                      Number of Stories (Floors)
-                    </Text>
-                    <View className="flex-row gap-2 flex-wrap">
-                      {[
-                        { id: '1', label: '1 Story (Single Level)' },
-                        { id: '2', label: '2 Stories' },
-                        { id: '3', label: '3 Stories' },
-                        { id: '4', label: '4+ Stories' },
-                      ].map((item) => (
-                        <TouchableOpacity
-                          key={item.id}
-                          onPress={() => setStoriesCount(item.id)}
-                          className={`px-4 py-3 rounded-2xl border ${
-                            storiesCount === item.id
-                              ? 'border-accent bg-accent/10'
-                              : 'border-ink/10 bg-ink/[0.02]'
-                          }`}
-                        >
-                          <Text
-                            className={`text-xs font-black ${
-                              storiesCount === item.id ? 'text-accent' : 'text-ink/70'
-                            }`}
-                          >
-                            {item.label}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-
-                  <View>
-                    <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-2">
-                      Number of Rooms to Clean
-                    </Text>
-                    <View className="flex-row gap-2 flex-wrap">
-                      {['1 Room', '2 Rooms', '3 Rooms', '4 Rooms', '5 Rooms', '6+ Rooms'].map((label, idx) => {
-                        const val = String(idx + 1);
-                        return (
-                          <TouchableOpacity
-                            key={label}
-                            onPress={() => setRoomsCount(val)}
-                            className={`px-4 py-3 rounded-2xl border ${
-                              roomsCount === val
-                                ? 'border-accent bg-accent/10'
-                                : 'border-ink/10 bg-ink/[0.02]'
-                            }`}
-                          >
-                            <Text
-                              className={`text-xs font-black ${
-                                roomsCount === val ? 'text-accent' : 'text-ink/70'
-                              }`}
-                            >
-                              {label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-
-                  <View>
-                    <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-2">
-                      Number of Bathrooms
-                    </Text>
-                    <View className="flex-row gap-2 flex-wrap">
-                      {['1 Bath', '2 Baths', '3 Baths', '4+ Baths'].map((label, idx) => {
-                        const val = String(idx + 1);
-                        return (
-                          <TouchableOpacity
-                            key={label}
-                            onPress={() => setBathroomsCount(val)}
-                            className={`px-4 py-3 rounded-2xl border ${
-                              bathroomsCount === val
-                                ? 'border-accent bg-accent/10'
-                                : 'border-ink/10 bg-ink/[0.02]'
-                            }`}
-                          >
-                            <Text
-                              className={`text-xs font-black ${
-                                bathroomsCount === val ? 'text-accent' : 'text-ink/70'
-                              }`}
-                            >
-                              {label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-
-                  <View>
-                    <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-2">
-                      Approximate Property Size (m²) · Optional
-                    </Text>
-                    <TextInput
-                      className="border-2 border-ink/10 rounded-2xl px-4 py-3.5 text-sm font-medium text-ink bg-ink/[0.02]"
-                      placeholder="e.g. 120"
-                      placeholderTextColor="#9C94C4"
-                      keyboardType="number-pad"
-                      value={propertySizeSqm}
-                      onChangeText={setPropertySizeSqm}
-                    />
-                  </View>
-                </View>
-              </View>
-              <View>
-                <SectionLabel n={2} title="Areas to Clean" />
-                <ChipGrid options={HOUSE_AREAS as unknown as string[]} selected={areas} onToggle={(v) => setAreas(toggleItem(areas, v))} />
-              </View>
-              <View>
-                <SectionLabel n={3} title="Cleaning Required" />
-                <View className="gap-3">
-                  {HOUSE_CLEANING_TYPES.map(({ id, label, desc }) => (
-                    <OptionRow key={id} label={label} desc={desc} selected={houseCleaningTypes.includes(id)} onPress={() => setHouseCleaningTypes(toggleItem(houseCleaningTypes, id))} />
-                  ))}
-                </View>
-              </View>
-              <View>
-                <SectionLabel n={4} title="House Condition" />
-                <View className="flex-row gap-2">
-                  {HOUSE_CONDITIONS.map(({ id, label }) => (
-                    <Pill key={id} label={label} selected={houseCondition === id} onPress={() => setHouseCondition(id)} />
-                  ))}
-                </View>
-              </View>
-              <View>
-                <SectionLabel n={5} title="Additional Services" optional />
-                <ChipGrid options={HOUSE_ADD_ONS as unknown as string[]} selected={addOns} onToggle={(v) => setAddOns(toggleItem(addOns, v))} />
-              </View>
-            </View>
-          )}
-
-          {step === 'CHECKLIST' && category === 'CAR' && (
-            <View className="gap-7">
-              <View>
-                <SectionLabel n={1} title="Type of Cleaning Required" />
-                <View className="gap-3">
-                  {CAR_CLEANING_TYPES.map(({ id, label, desc }) => (
-                    <OptionRow key={id} label={label} desc={desc} selected={carCleaningTypes.includes(id)} onPress={() => setCarCleaningTypes(toggleItem(carCleaningTypes, id))} />
-                  ))}
-                </View>
-              </View>
-              <View>
-                <SectionLabel n={2} title="Vehicle Condition" />
-                <View className="flex-row gap-2 flex-wrap">
-                  {CAR_CONDITIONS.map(({ id, label }) => (
-                    <Pill key={id} label={label} selected={carCondition === id} onPress={() => setCarCondition(id)} />
-                  ))}
-                </View>
-              </View>
-              <View>
-                <SectionLabel n={3} title="Registration Number" optional />
-                <View className="border-2 border-ink/10 rounded-2xl bg-ink/[0.02] flex-row items-center gap-3 px-4">
-                  <Text className="text-sm font-black text-ink/30">#</Text>
-                  <TextInput
-                    className="flex-1 py-4 text-sm font-bold text-ink uppercase"
-                    placeholder="e.g. ABC 1234"
-                    placeholderTextColor="#9C94C4"
-                    autoCapitalize="characters"
-                    value={registrationNumber}
-                    onChangeText={(v) => setRegistrationNumber(v.toUpperCase())}
-                  />
-                </View>
-                <Text className="text-[11px] text-ink/40 font-medium mt-1.5 ml-1">
-                  Helps the cleaner identify your car on arrival
-                </Text>
-              </View>
-
-              <View>
-                <SectionLabel n={4} title="Exterior Cleaning" optional />
-                <ChipGrid options={CAR_EXTERIOR_SERVICES as unknown as string[]} selected={exteriorServices} onToggle={(v) => setExteriorServices(toggleItem(exteriorServices, v))} />
-              </View>
-              <View>
-                <SectionLabel n={5} title="Interior Cleaning" optional />
-                <ChipGrid options={CAR_INTERIOR_SERVICES as unknown as string[]} selected={interiorServices} onToggle={(v) => setInteriorServices(toggleItem(interiorServices, v))} />
-              </View>
-              <View>
-                <SectionLabel n={6} title="Deep Cleaning" optional />
-                <ChipGrid options={CAR_DEEP_SERVICES as unknown as string[]} selected={deepServices} onToggle={(v) => setDeepServices(toggleItem(deepServices, v))} />
-              </View>
-            </View>
+          {step === 'CHECKLIST' && category && (
+            <ServiceChecklist category={category} serviceId={serviceId} setServiceId={(value) => { setServiceId(value); resetDetails(); }} selections={selections} setGroup={setGroup} toggleGroup={toggleGroup} choices={choices} setChoice={setChoice} />
           )}
 
           {step === 'DETAILS' && (
@@ -628,7 +404,7 @@ export default function CreateBookingScreen() {
               <Text className="text-2xl font-black text-ink mb-1">When do you need it?</Text>
               <Text className="text-sm text-ink/50 font-medium mb-6">Pick a time that works for you</Text>
               <View className="gap-3">
-                {TIME_OPTIONS.map(({ id, label, sub }) => (
+        {Catalog.TIME_OPTIONS.map(({ id, label, sub }) => (
                   <TouchableOpacity
                     key={id}
                     onPress={() => {
@@ -831,12 +607,7 @@ export default function CreateBookingScreen() {
               <View className="bg-ink/[0.03] rounded-3xl p-5 border border-ink/10 gap-3">
                 <Text className="text-xs font-black text-ink/40 uppercase tracking-widest">Review Request</Text>
                 <SummaryRow label="Service" value={serviceLabel()} />
-                {category === 'HOUSE' && (
-                  <SummaryRow
-                    label="Layout"
-                    value={`${storiesCount} ${Number(storiesCount) > 1 ? 'Stories' : 'Story'} · ${roomsCount} Rooms · ${bathroomsCount} Baths`}
-                  />
-                )}
+                <SummaryRow label={category === 'HOUSE' ? 'Property' : 'Vehicle'} value={choices.propertyType || choices.vehicleType || 'Details added in checklist'} />
                 <SummaryRow
                   label="Budget"
                   value={budgetOption === 'NOT_SURE' ? 'Open to cleaner bids' : budget ? `$${budget}` : 'Not set'}
@@ -847,7 +618,7 @@ export default function CreateBookingScreen() {
                   value={
                     timePreference === 'CUSTOM' && customDateTime
                       ? customDateTime.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
-                      : TIME_OPTIONS.find((t) => t.id === timePreference)?.label ?? ''
+                      : Catalog.TIME_OPTIONS.find((t) => t.id === timePreference)?.label ?? ''
                   }
                 />
                 <SummaryRow
@@ -878,6 +649,111 @@ export default function CreateBookingScreen() {
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
+}
+
+type ChecklistProps = {
+  category: ServiceCategory;
+  serviceId: string;
+  setServiceId: (value: string) => void;
+  selections: Record<string, string[]>;
+  setGroup: (key: string, value: string[]) => void;
+  toggleGroup: (key: string, value: string) => void;
+  choices: Record<string, string>;
+  setChoice: (key: string, value: string) => void;
+};
+
+function ServiceChecklist({ category, serviceId, setServiceId, selections, setGroup, toggleGroup, choices, setChoice }: ChecklistProps) {
+  const packages = Catalog.SERVICE_PACKAGES[category] as readonly { id: string; label: string; price: string; description: string }[];
+  const isHouse = category === 'HOUSE';
+  const service = serviceId;
+  const group = (key: string, title: string, options: string[]) => (
+    <MultiSelectGroup key={key} title={title} options={options} selected={selections[key] ?? []} onToggle={(value) => toggleGroup(key, value)} onSelectAll={(values) => setGroup(key, values)} />
+  );
+  const choice = (key: string, title: string, options: string[]) => (
+    <ChoiceGroup key={key} title={title} options={options} selected={choices[key] ?? ''} onSelect={(value) => setChoice(key, value)} />
+  );
+  const conditions = isHouse ? ['Light', 'Normal', 'Heavy'] : ['Light dirt', 'Normal dirt', 'Heavy dirt', 'Very dirty'];
+  const propertyBasics = () => <>
+    {choice('propertyType', 'Property type', Catalog.PROPERTY_TYPES)}
+    {choice('propertySize', 'Property size · approximate total area', Catalog.PROPERTY_SIZES)}
+    {choice('bedrooms', 'Bedrooms', Catalog.BEDROOMS)}
+    {choice('bathrooms', 'Bathrooms', Catalog.BATHROOMS)}
+  </>;
+  const vehicleBasics = () => <>
+    {choice('vehicleType', 'Vehicle type', Catalog.VEHICLE_TYPES)}
+    {choice('vehicleSize', 'Vehicle size', Catalog.VEHICLE_SIZES)}
+  </>;
+
+  return <View className="gap-7">
+    <View>
+      <Text className="text-2xl font-black text-ink mb-1">{isHouse ? 'House Cleaning' : 'Car Cleaning'}</Text>
+      <Text className="text-sm text-ink/50 font-medium mb-4">Choose one service to get started</Text>
+      <View className="gap-3">
+        {packages.map((item) => <TouchableOpacity key={item.id} onPress={() => setServiceId(item.id)} activeOpacity={0.85} className={`p-4 rounded-3xl border-2 ${serviceId === item.id ? 'border-accent bg-accent/5' : 'border-ink/10 bg-ink/[0.02]'}`}>
+          <View className="flex-row items-center justify-between gap-3"><Text className={`flex-1 text-base font-black ${serviceId === item.id ? 'text-accent' : 'text-ink'}`}>{item.label}</Text><Text className="text-sm font-black text-accent">Starting from {item.price}</Text></View>
+          <Text className="text-xs text-ink/50 font-medium mt-1">{item.description}</Text>
+        </TouchableOpacity>)}
+      </View>
+    </View>
+
+    {!!service && isHouse && <>
+      {service === 'SPECIFIC_ROOM' ? <>
+        {group('rooms', 'What do you want cleaned? · Rooms', Catalog.ROOM_OPTIONS)}
+        {group('parts', 'Specific parts', Catalog.ROOM_PARTS)}
+        {choice('areaSize', 'Area size', Catalog.AREA_SIZES)}
+        <View className="gap-5">
+          <Text className="text-sm font-black text-ink">What should be done?</Text>
+          {Object.entries(Catalog.ROOM_TASKS).filter(([room]) => room === 'Windows' ? (selections.parts ?? []).includes('Windows') : (selections.rooms ?? []).includes(room)).map(([room, tasks]) => group(`roomTasks:${room}`, room, tasks))}
+        </View>
+      </> : <>
+        {group('included', 'What’s included', Catalog.HOUSE_TASKS[service] ?? [])}
+        {propertyBasics()}
+        {service === 'BASIC_HOUSE' && group('areas', 'Areas to clean', Catalog.HOUSE_AREAS)}
+        {service === 'STANDARD_HOUSE' && group('areas', 'Additional areas', Catalog.STANDARD_AREAS)}
+        {service === 'BASIC_HOUSE' && group('additions', 'Optional additions', Catalog.BASIC_ADDITIONS)}
+        {service === 'STANDARD_HOUSE' && group('additions', 'Optional additions', Catalog.STANDARD_ADDITIONS)}
+        {service === 'DEEP_HOUSE' && <View className="gap-5"><Text className="text-sm font-black text-ink">Areas requiring extra attention</Text>{Object.entries(Catalog.DEEP_HOUSE_ATTENTION).map(([area, options]) => group(`attention:${area}`, area, options))}</View>}
+        {service !== 'DEEP_HOUSE' && choice('condition', 'Property condition', conditions)}
+        {service === 'DEEP_HOUSE' && choice('condition', 'Condition', ['Light', 'Moderate', 'Heavy', 'Very Heavy'])}
+      </>}
+    </>}
+
+    {!!service && !isHouse && <>
+      {service === 'EXTERIOR_WASH' && group('included', 'Included', Catalog.CAR_EXTERIOR_TASKS)}
+      {service === 'FULL_CAR' && <>{group('exterior', 'Exterior', Catalog.FULL_CAR_EXTERIOR)}{group('interior', 'Interior', Catalog.FULL_CAR_INTERIOR)}</>}
+      {service === 'DEEP_DETAIL' && <>{group('deepInterior', 'Interior deep detail', Catalog.DEEP_CAR_INTERIOR)}{group('deepExterior', 'Exterior deep detail', Catalog.DEEP_CAR_EXTERIOR)}</>}
+      {vehicleBasics()}
+      {service !== 'EXTERIOR_WASH' && choice('seats', 'Number of seats', Catalog.CAR_SEATS)}
+      {service === 'EXTERIOR_WASH' && choice('condition', 'Exterior condition', conditions)}
+      {service !== 'EXTERIOR_WASH' && choice('condition', 'Interior condition', service === 'DEEP_DETAIL' ? ['Light', 'Moderate', 'Heavy', 'Severe'] : ['Light', 'Normal', 'Heavy', 'Very dirty'])}
+      {service === 'DEEP_DETAIL' && choice('exteriorCondition', 'Exterior condition', ['Light dirt', 'Normal dirt', 'Heavy dirt', 'Severe'])}
+      {service === 'EXTERIOR_WASH' && group('additions', 'Optional additions', Catalog.CAR_EXTERIOR_ADDITIONS)}
+      {service === 'FULL_CAR' && group('additions', 'Optional additions', Catalog.FULL_CAR_ADDITIONS)}
+      {service === 'DEEP_DETAIL' && group('attention', 'Areas requiring extra attention', Catalog.DEEP_CAR_ATTENTION)}
+    </>}
+  </View>;
+}
+
+function MultiSelectGroup({ title, options, selected, onToggle, onSelectAll }: { title: string; options: string[]; selected: string[]; onToggle: (value: string) => void; onSelectAll: (values: string[]) => void }) {
+  const allSelected = options.length > 0 && selected.length === options.length;
+  const checkbox = (checked: boolean) => <View className={`w-5 h-5 rounded-md border-2 items-center justify-center ${checked ? 'border-accent bg-accent' : 'border-ink/25 bg-white'}`}>{checked && <Text className="text-[11px] font-black text-white">✓</Text>}</View>;
+  return <View>
+    <Text className="text-sm font-black text-ink mb-2">{title}</Text>
+    <View className="rounded-2xl border border-ink/10 overflow-hidden">
+      <TouchableOpacity onPress={() => onSelectAll(allSelected ? [] : options)} className="flex-row items-center gap-3 px-4 py-3 bg-accent/5 border-b border-ink/5">{checkbox(allSelected)}<Text className="text-xs font-black text-accent uppercase tracking-wide">Select All</Text></TouchableOpacity>
+      {options.map((option, index) => { const checked = selected.includes(option); return <TouchableOpacity key={option} onPress={() => onToggle(option)} className={`flex-row items-center gap-3 px-4 py-3 ${index < options.length - 1 ? 'border-b border-ink/5' : ''}`}>
+        {checkbox(checked)}<Text className={`flex-1 text-sm font-medium ${checked ? 'text-ink' : 'text-ink/70'}`}>{option}</Text>
+      </TouchableOpacity>; })}
+    </View>
+  </View>;
+}
+
+function ChoiceGroup({ title, options, selected, onSelect }: { title: string; options: string[]; selected: string; onSelect: (value: string) => void }) {
+  return <View><Text className="text-sm font-black text-ink mb-2">{title}</Text><Text className="text-[11px] text-ink/40 font-medium mb-2">Select one</Text><View className="gap-2">
+    {options.map((option) => { const checked = selected === option; return <TouchableOpacity key={option} onPress={() => onSelect(option)} className={`flex-row items-center gap-3 px-4 py-3 rounded-2xl border ${checked ? 'border-accent bg-accent/5' : 'border-ink/10 bg-white'}`}>
+      <View className={`w-5 h-5 rounded-full border-2 items-center justify-center ${checked ? 'border-accent' : 'border-ink/25'}`}>{checked && <View className="w-2.5 h-2.5 rounded-full bg-accent" />}</View><Text className={`text-sm font-medium ${checked ? 'text-accent' : 'text-ink/70'}`}>{option}</Text>
+    </TouchableOpacity>; })}
+  </View></View>;
 }
 
 function SectionLabel({ n, title, optional }: { n: number; title: string; optional?: boolean }) {
