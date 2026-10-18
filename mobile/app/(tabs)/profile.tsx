@@ -25,6 +25,7 @@ import {
   Heart,
   Repeat,
   Camera,
+  Building2,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Linking } from 'react-native';
@@ -160,6 +161,16 @@ export default function ProfileScreen() {
                 label: 'Favorites',
                 sub: 'Your saved cleaners',
                 onPress: () => router.push('/favorites'),
+              },
+            ]
+          : []),
+        ...(profile?.role === 'CUSTOMER'
+          ? [
+              {
+                icon: Building2,
+                label: profile?.accountType === 'ORGANIZATION' ? 'Organization Dashboard' : 'Register Organization',
+                sub: profile?.accountType === 'ORGANIZATION' ? 'Invite and manage your cleaners' : 'Manage your cleaning team and KYC status',
+                onPress: () => router.push('/organization'),
               },
             ]
           : []),

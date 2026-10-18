@@ -24,10 +24,16 @@ Required GitHub production configuration for backend deployment:
 - Variable `FIREBASE_PRIVATE_KEY_ID`
 - Secret `FIREBASE_PRIVATE_KEY` (complete PEM including BEGIN/END lines)
 - Optional variables `FIREBASE_CLIENT_EMAIL` and `FIREBASE_CLIENT_ID` (the workflow has this project's current non-secret defaults)
-- Variable `INITIAL_ADMIN_EMAIL` (defaults to the initial owner email in the workflow)
+- Variable `INITIAL_ADMIN_EMAIL` (required when manually bootstrapping the initial administrator; no email address is prefilled)
 - Secret `INITIAL_ADMIN_PASSWORD` (temporary; rotate immediately in the dashboard)
 
 Also enable **Email/Password** under Firebase Console → Authentication → Sign-in method, and add `detail.co.zw` plus `dashboard.detail.co.zw` to Authentication → Authorized domains.
+
+## Mobile email-code and SMS-code sign-in
+
+The mobile sign-in screen offers **SMS Code** and **Email Code**. Email codes are six digits, expire after ten minutes, allow five verification attempts, and have per-address and per-IP send limits. They are sent from `hello@detailapp.co.zw` through Resend; configure the Firebase Functions secret `RESEND_API_KEY` and verify that sending domain with Resend. The existing SMS option continues to use Firebase Phone Auth and its reCAPTCHA setup.
+
+Email-code verification signs users in with a Firebase custom token. Ensure the Functions runtime service account can sign custom tokens (`iam.serviceAccounts.signBlob`, typically granted through **Service Account Token Creator**) before enabling this option in production.
 
 ## Why the waitlist showed `internal[0]`
 

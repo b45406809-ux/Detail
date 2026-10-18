@@ -16,3 +16,5 @@ The repository contains three deployable parts:
 
 
 See `mobile/README.md`, `site/README.md`, and `functions/README.md` for package-specific setup. Root `npm run dev`, `npm run build`, and `npm run lint` delegate to the web package.
+
+For a complete live API test environment, credential inventory, provider setup links, and secret placement, see [`docs/live-api-credentials.md`](docs/live-api-credentials.md).

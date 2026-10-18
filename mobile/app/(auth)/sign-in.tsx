@@ -26,8 +26,10 @@ import { GlassCard } from '../../components/glass';
 import { SocialSignInButtons } from '../../components/SocialSignInButtons';
 import { CountryPickerModal } from '../../components/CountryPickerModal';
 import { DEFAULT_COUNTRY, Country } from '../../constants/countries';
+import { sendEmailLoginCode } from '../../services/emailAuth';
 
 type AuthTab = 'phone' | 'email';
+type EmailAuthMode = 'CODE' | 'PASSWORD';
 
 export default function SignInScreen() {
   const [tab, setTab] = useState<AuthTab>('phone');
@@ -35,6 +37,7 @@ export default function SignInScreen() {
   const [selectedCountry, setSelectedCountry] = useState<Country>(DEFAULT_COUNTRY);
   const [isCountryPickerOpen, setIsCountryPickerOpen] = useState(false);
   const [email, setEmail] = useState('');
+  const [emailAuthMode, setEmailAuthMode] = useState<EmailAuthMode>('CODE');
   const [password, setPassword] = useState('');
   const [isNewAccount, setIsNewAccount] = useState(false);
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
@@ -75,8 +78,28 @@ export default function SignInScreen() {
   };
 
   const handleEmailAuth = async () => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert('Missing fields', 'Please enter your email and password.');
+    if (!email.trim()) {
+      Alert.alert('Email required', 'Please enter your email address.');
+      return;
+    }
+    if (emailAuthMode === 'CODE') {
+      if (isNewAccount && !hasAcceptedTerms) {
+        Alert.alert(
+          'Accept Terms & Conditions',
+          'Please review and accept Detail’s Terms of Service and Privacy Policy to create an account.',
+          [
+            { text: 'Review Terms', onPress: () => router.push('/customer-agreement') },
+            { text: 'I Agree', onPress: () => { setHasAcceptedTerms(true); void sendEmailCode(); } },
+            { text: 'Cancel', style: 'cancel' },
+          ]
+        );
+        return;
+      }
+      await sendEmailCode();
+      return;
+    }
+    if (!password.trim()) {
+      Alert.alert('Password required', 'Please enter your password.');
       return;
     }
     if (isNewAccount && !hasAcceptedTerms) {
@@ -92,6 +115,19 @@ export default function SignInScreen() {
       return;
     }
     await proceedWithEmailAuth();
+  };
+
+  const sendEmailCode = async () => {
+    setIsLoading(true);
+    try {
+      const intent = isNewAccount ? 'REGISTER' : 'SIGN_IN';
+      await sendEmailLoginCode(email, intent, hasAcceptedTerms || isNewAccount);
+      router.push({ pathname: '/(auth)/verify-email', params: { email: email.trim().toLowerCase(), intent } });
+    } catch (err: any) {
+      Alert.alert('Could not send code', err?.message ?? 'Please check the email address and try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const proceedWithEmailAuth = async () => {
@@ -166,7 +202,7 @@ export default function SignInScreen() {
                         className={`text-sm font-black uppercase tracking-wider`}
                         style={{ color: tab === t ? '#3906D2' : 'rgba(21,2,86,0.5)' }}
                       >
-                        {t === 'phone' ? 'Phone' : 'Email'}
+                        {t === 'phone' ? 'SMS Code' : 'Email Code'}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -248,6 +284,16 @@ export default function SignInScreen() {
                   </View>
                 ) : (
                   <View className="gap-4">
+                    <View className="flex-row bg-white/40 rounded-xl p-1">
+                      {([
+                        ['CODE', 'Email code'],
+                        ['PASSWORD', 'Password'],
+                      ] as const).map(([mode, label]) => (
+                        <TouchableOpacity key={mode} onPress={() => setEmailAuthMode(mode)} className={`flex-1 items-center py-2.5 rounded-lg ${emailAuthMode === mode ? 'bg-white shadow-sm' : ''}`}>
+                          <Text className={`text-xs font-black ${emailAuthMode === mode ? 'text-accent' : 'text-ink/50'}`}>{label}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
                     <View className="flex-row items-center justify-between mb-1">
                       <Text className="text-sm font-bold text-ink/70">
                         {isNewAccount ? 'Create a new account' : 'Sign in to existing account'}
@@ -273,7 +319,7 @@ export default function SignInScreen() {
                       />
                     </View>
 
-                    <View>
+                    {emailAuthMode === 'PASSWORD' && <View>
                       <View className="flex-row items-center justify-between mb-2">
                         <Text className="text-xs font-black text-ink/50 uppercase tracking-widest">Password</Text>
                         {!isNewAccount && (
@@ -293,9 +339,10 @@ export default function SignInScreen() {
                         value={password}
                         onChangeText={setPassword}
                       />
-                    </View>
+                    </View>}
 
                     {/* Terms acceptance checkbox */}
+                    {isNewAccount && (
                     <TouchableOpacity
                       onPress={() => setHasAcceptedTerms(!hasAcceptedTerms)}
                       activeOpacity={0.7}
@@ -327,6 +374,7 @@ export default function SignInScreen() {
                         </Text>
                       </View>
                     </TouchableOpacity>
+                    )}
 
                     <TouchableOpacity
                       onPress={handleEmailAuth}
@@ -338,7 +386,7 @@ export default function SignInScreen() {
                         <ActivityIndicator color="#fff" />
                       ) : (
                         <Text className="text-white font-black text-sm uppercase tracking-widest">
-                          {isNewAccount ? 'Create Account' : 'Sign In'}
+                          {emailAuthMode === 'CODE' ? 'Send Email Code' : isNewAccount ? 'Create Account' : 'Sign In'}
                         </Text>
                       )}
                     </TouchableOpacity>

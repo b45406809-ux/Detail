@@ -22,7 +22,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { defineSecret, defineString } from 'firebase-functions/params';
 import { logger } from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import { createHash, randomUUID } from 'crypto';
+import { createHash, randomUUID, randomInt } from 'crypto';
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -1251,6 +1251,151 @@ export const onMessageCreated = onDocumentCreated('messages/{messageId}', async 
 const cleanText = (value: unknown, max: number) =>
   typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, max) : '';
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
+
+export const sendEmailLoginCode = onCall({ secrets: [RESEND_API_KEY] }, async request => {
+  const email = cleanText(request.data?.email, 254).toLowerCase();
+  const intent = cleanText(request.data?.intent, 16).toUpperCase();
+  const termsAccepted = request.data?.termsAccepted === true;
+  if (!/^\S+@\S+\.\S+$/.test(email) || !['SIGN_IN', 'REGISTER'].includes(intent)) throw new HttpsError('invalid-argument', 'Enter a valid email address.');
+  if (intent === 'REGISTER' && !termsAccepted) throw new HttpsError('failed-precondition', 'Accept the Terms and Privacy Policy before creating an account.');
+  const resendKey = RESEND_API_KEY.value();
+  if (!resendKey) throw new HttpsError('failed-precondition', 'Email sign-in is not configured.');
+  const forwarded = request.rawRequest.headers['x-forwarded-for'];
+  const ip = (Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0]) || request.rawRequest.ip || 'unknown';
+  const emailRef = db.collection('_email_auth_codes').doc(sha256(email));
+  const ipRef = db.collection('_email_auth_rate_limits').doc(sha256(ip + process.env.GCLOUD_PROJECT));
+  const now = Date.now();
+  const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+  await db.runTransaction(async transaction => {
+    const [emailSnap, ipSnap] = await Promise.all([transaction.get(emailRef), transaction.get(ipRef)]);
+    const emailData = emailSnap.data() ?? {};
+    const ipData = ipSnap.data() ?? {};
+    if (Number(emailData.lastSentAt ?? 0) > now - 60_000) throw new HttpsError('resource-exhausted', 'Please wait before requesting another email code.');
+    const emailWindow = Number(emailData.windowStartAt ?? 0) > now - 60 * 60_000 ? Number(emailData.sendsInWindow ?? 0) : 0;
+    const ipWindow = Number(ipData.windowStartAt ?? 0) > now - 60 * 60_000 ? Number(ipData.sendsInWindow ?? 0) : 0;
+    if (emailWindow >= 5 || ipWindow >= 20) throw new HttpsError('resource-exhausted', 'Too many code requests. Try again later.');
+    transaction.set(emailRef, { lastSentAt: now, windowStartAt: emailWindow ? emailData.windowStartAt : now, sendsInWindow: emailWindow + 1 }, { merge: true });
+    transaction.set(ipRef, { windowStartAt: ipWindow ? ipData.windowStartAt : now, sendsInWindow: ipWindow + 1 }, { merge: true });
+  });
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${resendKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ from: 'Detail <hello@detailapp.co.zw>', to: [email], reply_to: 'support@detailapp.co.zw', subject: 'Your Detail sign-in code', html: `<div style="font-family:Arial,sans-serif;color:#0F0B2E;max-width:520px;margin:auto"><h1>Your Detail code</h1><p>Enter this six-digit code in the app to continue:</p><p style="font-size:32px;font-weight:800;letter-spacing:8px">${code}</p><p>This code expires in 10 minutes. If you did not request it, you can ignore this email.</p></div>` })
+  });
+  if (!response.ok) { logger.error('Email login code delivery failed', { status: response.status }); throw new HttpsError('unavailable', 'Could not send your email code. Try again shortly.'); }
+  await emailRef.set({ codeHash: sha256(`${email}:${code}`), intent, termsAccepted, expiresAt: now + 10 * 60_000, attempts: 0, consumedAt: null }, { merge: true });
+  return { success: true, message: 'If this address can receive Detail codes, an email will arrive shortly.' };
+});
+
+export const verifyEmailLoginCode = onCall(async request => {
+  const email = cleanText(request.data?.email, 254).toLowerCase();
+  const code = cleanText(request.data?.code, 6);
+  const intent = cleanText(request.data?.intent, 16).toUpperCase();
+  if (!/^\S+@\S+\.\S+$/.test(email) || !/^\d{6}$/.test(code) || !['SIGN_IN', 'REGISTER'].includes(intent)) throw new HttpsError('invalid-argument', 'Enter the six-digit code from your email.');
+  const codeRef = db.collection('_email_auth_codes').doc(sha256(email));
+  let valid = false;
+  await db.runTransaction(async transaction => {
+    const snap = await transaction.get(codeRef);
+    const data = snap.data();
+    if (!data || data.consumedAt || data.intent !== intent || Number(data.expiresAt ?? 0) < Date.now() || Number(data.attempts ?? 0) >= 5) return;
+    if (data.codeHash === sha256(`${email}:${code}`)) {
+      valid = true;
+      transaction.set(codeRef, { consumedAt: Date.now(), codeHash: null }, { merge: true });
+    } else {
+      transaction.set(codeRef, { attempts: Number(data.attempts ?? 0) + 1 }, { merge: true });
+    }
+  });
+  if (!valid) throw new HttpsError('permission-denied', 'That code is invalid or expired. Request a new one and try again.');
+  let user: admin.auth.UserRecord;
+  try {
+    user = await admin.auth().getUserByEmail(email);
+    if (intent === 'REGISTER') throw new HttpsError('already-exists', 'An account already uses this email. Choose Sign In instead.');
+  } catch (error: any) {
+    if (error instanceof HttpsError) throw error;
+    if (error.code !== 'auth/user-not-found' || intent !== 'REGISTER') throw new HttpsError('permission-denied', 'Could not sign in with that email and code.');
+    try { user = await admin.auth().createUser({ email, emailVerified: true }); }
+    catch (createError: any) {
+      if (createError.code !== 'auth/email-already-exists') throw new HttpsError('internal', 'Could not create your account. Please try again.');
+      user = await admin.auth().getUserByEmail(email);
+    }
+  }
+  if (user.disabled) throw new HttpsError('permission-denied', 'This account is disabled. Contact Detail support.');
+  if (!user.emailVerified) user = await admin.auth().updateUser(user.uid, { emailVerified: true });
+  return { customToken: await admin.auth().createCustomToken(user.uid) };
+});
+
+export const searchVerifiedCleaners = onCall(async request => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Sign in to find cleaners.');
+  const search = cleanText(request.data?.search, 100).toLowerCase();
+  const snapshot = await db.collection('users').where('role', '==', 'CLEANER').where('verificationStatus', '==', 'VERIFIED').limit(500).get();
+  const cleaners = snapshot.docs.filter(docSnap => !docSnap.data().isSuspended && !docSnap.data().isBanned).map(docSnap => {
+    const data = docSnap.data();
+    return { uid: docSnap.id, displayName: cleanText(data.displayName, 120), photoURL: cleanText(data.photoURL, 1000), ratingAverage: Number(data.ratingAverage ?? 0), ratingCount: Number(data.ratingCount ?? 0), serviceCategories: Array.isArray(data.serviceCategories) ? data.serviceCategories.filter((item: unknown) => item === 'HOUSE' || item === 'CAR') : [], serviceArea: cleanText(data.serviceArea, 100) };
+  }).filter(cleaner => !search || [cleaner.displayName, cleaner.serviceArea, ...cleaner.serviceCategories].join(' ').toLowerCase().includes(search)).sort((a, b) => b.ratingAverage - a.ratingAverage).slice(0, 100);
+  return { cleaners };
+});
+
+export const registerOrganization = onCall(async request => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in to register an organization.');
+  const name = cleanText(request.data?.name, 120);
+  const registrationNumber = cleanText(request.data?.registrationNumber, 80);
+  const phone = cleanText(request.data?.phone, 32);
+  const country = cleanText(request.data?.country, 80);
+  const city = cleanText(request.data?.city, 80);
+  if (name.length < 2 || registrationNumber.length < 2 || phone.length < 7 || country.length < 2 || city.length < 2) {
+    throw new HttpsError('invalid-argument', 'Organization name, registration number, phone, country, and city are required.');
+  }
+  const userRef = db.collection('users').doc(uid);
+  const organizationRef = db.collection('organizations').doc(uid);
+  await db.runTransaction(async transaction => {
+    const [userSnap, organizationSnap] = await Promise.all([transaction.get(userRef), transaction.get(organizationRef)]);
+    if (!userSnap.exists || userSnap.data()?.role !== 'CUSTOMER') throw new HttpsError('failed-precondition', 'Complete a customer profile before registering an organization.');
+    if (organizationSnap.exists) throw new HttpsError('already-exists', 'An organization is already registered for this account.');
+    transaction.create(organizationRef, { ownerId: uid, name, registrationNumber, phone, country, city, status: 'ACTIVE', createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+    transaction.update(userRef, { accountType: 'ORGANIZATION', organizationId: uid, updatedAt: FieldValue.serverTimestamp() });
+  });
+  return { organizationId: uid };
+});
+
+export const createOrganizationCleanerInvite = onCall(async request => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in to invite a cleaner.');
+  const cleanerName = cleanText(request.data?.cleanerName, 120);
+  const email = cleanText(request.data?.email, 254).toLowerCase();
+  if (cleanerName.length < 2 || !/^\S+@\S+\.\S+$/.test(email)) throw new HttpsError('invalid-argument', 'Enter the cleaner’s name and a valid email address.');
+  const organizationRef = db.collection('organizations').doc(uid);
+  const organizationSnap = await organizationRef.get();
+  if (!organizationSnap.exists || organizationSnap.data()?.ownerId !== uid) throw new HttpsError('permission-denied', 'Register your organization before inviting cleaners.');
+  const code = randomUUID().replace(/-/g, '').slice(0, 16).toUpperCase();
+  const inviteRef = db.collection('organizationInvites').doc(sha256(code));
+  await inviteRef.create({ organizationId: uid, organizationName: organizationSnap.data()?.name ?? '', cleanerName, email, status: 'PENDING', createdAt: FieldValue.serverTimestamp(), expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000) });
+  return { code };
+});
+
+export const joinOrganization = onCall(async request => {
+  const uid = request.auth?.uid;
+  const email = cleanText(request.auth?.token.email, 254).toLowerCase();
+  if (!uid || !email || request.auth?.token.email_verified !== true) throw new HttpsError('unauthenticated', 'Verify your email and sign in with the address on the organization invitation.');
+  const code = cleanText(request.data?.code, 32).toUpperCase();
+  if (!code) throw new HttpsError('invalid-argument', 'Enter the organization invitation code.');
+  const userRef = db.collection('users').doc(uid);
+  const inviteRef = db.collection('organizationInvites').doc(sha256(code));
+  await db.runTransaction(async transaction => {
+    const [userSnap, inviteSnap] = await Promise.all([transaction.get(userRef), transaction.get(inviteRef)]);
+    if (!userSnap.exists) throw new HttpsError('failed-precondition', 'Complete your cleaner profile first.');
+    const cleaner = userSnap.data()!;
+    if (cleaner.verificationStatus !== 'VERIFIED' || cleaner.cleanerOnboardingComplete !== true) throw new HttpsError('failed-precondition', 'Complete cleaner registration and identity verification before joining the organization.');
+    if (!inviteSnap.exists) throw new HttpsError('not-found', 'That organization invitation code is not valid.');
+    const invite = inviteSnap.data()!;
+    if (invite.status !== 'PENDING' || invite.email !== email || invite.expiresAt?.toMillis?.() < Date.now()) throw new HttpsError('permission-denied', 'This invitation is no longer valid or belongs to a different email address.');
+    const memberRef = db.collection('organizationMembers').doc(uid);
+    transaction.set(memberRef, { organizationId: invite.organizationId, cleanerId: uid, cleanerName: cleaner.displayName ?? invite.cleanerName, email, verificationStatus: cleaner.verificationStatus, joinedAt: FieldValue.serverTimestamp() });
+    transaction.update(userRef, { organizationId: invite.organizationId, updatedAt: FieldValue.serverTimestamp() });
+    transaction.update(inviteRef, { status: 'ACCEPTED', cleanerId: uid, acceptedAt: FieldValue.serverTimestamp() });
+  });
+  return { success: true };
+});
 
 export const joinWaitlist = onCall(
   { secrets: [TURNSTILE_SECRET, RESEND_API_KEY], cors: ['https://detail.co.zw', 'https://www.detail.co.zw', 'https://dashboard.detail.co.zw', 'https://detailapp.co.zw', 'https://www.detailapp.co.zw', 'https://dashboard.detailapp.co.zw', /localhost/] },

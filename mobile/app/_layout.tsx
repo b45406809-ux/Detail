@@ -104,6 +104,8 @@ export default function RootLayout() {
             <Stack.Screen name="job/[jobId]" />
             <Stack.Screen name="history" />
             <Stack.Screen name="favorites" />
+            <Stack.Screen name="cleaners" />
+            <Stack.Screen name="organization" />
             <Stack.Screen name="notifications" />
             <Stack.Screen name="reviews" />
             <Stack.Screen name="help" />

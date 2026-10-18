@@ -31,6 +31,7 @@ import {
   Home as HomeIcon,
   Car,
   Heart,
+  Search,
 } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
@@ -350,6 +351,12 @@ function CustomerPanel({ favorites, recentJobs }: { favorites: Favorite[]; recen
           <Text className="text-xs font-black text-slate-900">Car</Text>
         </TouchableOpacity>
       </View>
+
+      <TouchableOpacity onPress={() => router.push('/cleaners')} className="flex-row items-center gap-3 bg-white border border-slate-100 rounded-2xl px-4 py-3.5 mb-5">
+        <View className="w-9 h-9 bg-accent/10 rounded-xl items-center justify-center"><Search size={17} color="#3906D2" /></View>
+        <View className="flex-1"><Text className="text-sm font-black text-ink">Find a cleaner</Text><Text className="text-[11px] text-ink/45">Search verified professionals and save favorites</Text></View>
+        <ChevronRight size={17} color="#9C94C4" />
+      </TouchableOpacity>
 
       {favorites.length > 0 && (
         <View className="mb-5">

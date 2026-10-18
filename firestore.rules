@@ -48,6 +48,8 @@ service cloud.firestore {
 
       allow create: if isOwner(userId)
         && request.resource.data.role != 'CLEANER'
+        && !('organizationId' in request.resource.data)
+        && (!('accountType' in request.resource.data) || request.resource.data.accountType == 'INDIVIDUAL')
         && !('verificationStatus' in request.resource.data)
         && !('verificationLevel' in request.resource.data)
         && !('cleanerAgreementAccepted' in request.resource.data)
@@ -62,7 +64,7 @@ service cloud.firestore {
         isOwner(userId)
         && !changed([
           'commissionOwed', 'isSuspended', 'isBanned', 'verificationLevel',
-          'verificationStatus', 'cleanerAgreementAccepted',
+          'verificationStatus', 'cleanerAgreementAccepted', 'organizationId', 'accountType',
           'uid', 'email'
         ])
         && (resource.data.role == 'CLEANER' || request.resource.data.role != 'CLEANER'
@@ -169,6 +171,23 @@ service cloud.firestore {
       allow create: if isAuth() && request.resource.data.customerId == request.auth.uid;
       allow delete: if isAuth() && resource.data.customerId == request.auth.uid;
       allow update: if false;
+    }
+
+    // Organization membership and invitations are managed by callable Functions.
+    match /organizations/{organizationId} {
+      allow read: if isAuth() && resource.data.ownerId == request.auth.uid;
+      allow write: if false;
+    }
+    match /organizationMembers/{memberId} {
+      allow read: if isAuth() && (
+        resource.data.cleanerId == request.auth.uid ||
+        get(/databases/$(database)/documents/organizations/$(resource.data.organizationId)).data.ownerId == request.auth.uid
+      );
+      allow write: if false;
+    }
+    match /organizationInvites/{inviteId} {
+      allow read: if isAuth() && resource.data.organizationId == request.auth.uid;
+      allow write: if false;
     }
 
     // ───────────────────────── notifications ─────────────────────────

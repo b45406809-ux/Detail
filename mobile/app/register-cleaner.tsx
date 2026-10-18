@@ -44,9 +44,11 @@ export default function RegisterCleanerScreen() {
   const [fullName, setFullName] = useState(profile?.displayName ?? '');
   const [phone, setPhone] = useState(profile?.phone ?? '');
   const [address, setAddress] = useState('');
+  const [serviceArea, setServiceArea] = useState('');
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [radius, setRadius] = useState('15');
   const [experience, setExperience] = useState('');
+  const [organizationCode, setOrganizationCode] = useState('');
   const [isCheckingIdentity, setIsCheckingIdentity] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -145,11 +147,16 @@ export default function RegisterCleanerScreen() {
         displayName: fullName.trim(),
         phone: phone.trim(),
         address: address.trim(),
+        serviceArea: serviceArea.trim(),
         serviceCategories: categories,
         serviceRadiusKm: Number(radius) || 15,
         experienceYears: Number(experience) || 0,
         cleanerOnboardingComplete: true,
       });
+      if (organizationCode.trim()) {
+        await auth.currentUser?.getIdToken(true);
+        await callFunction('joinOrganization', { code: organizationCode.trim() });
+      }
       router.push('/cleaner-agreement');
     } catch {
       Alert.alert('Error', 'Failed to submit your registration. Please try again.');
@@ -183,6 +190,7 @@ export default function RegisterCleanerScreen() {
             <LabeledInput icon={User} label="Full Name" value={fullName} onChangeText={setFullName} placeholder="Your full legal name" />
             <LabeledInput icon={User} label="Phone Number" value={phone} onChangeText={setPhone} placeholder="+263 7X XXX XXXX" keyboardType="phone-pad" />
             <LabeledInput icon={MapPin} label="Physical Address" value={address} onChangeText={setAddress} placeholder="Street, suburb, city" multiline />
+            <LabeledInput icon={MapPin} label="Service Area (Optional)" value={serviceArea} onChangeText={setServiceArea} placeholder="City or suburbs you serve" />
           </View>
 
           {/* Email verification */}
@@ -240,6 +248,11 @@ export default function RegisterCleanerScreen() {
             <View className="flex-1">
               <LabeledInput label="Years of Experience" value={experience} onChangeText={setExperience} keyboardType="number-pad" />
             </View>
+          </View>
+
+          <View className="mb-6">
+            <LabeledInput label="Organization invitation code (Optional)" value={organizationCode} onChangeText={setOrganizationCode} placeholder="Enter a code from your organization" />
+            <Text className="text-[11px] text-slate-400 font-medium mt-1">If an organization invited you, enter its code after completing your identity check.</Text>
           </View>
 
           {/* Didit identity check */}

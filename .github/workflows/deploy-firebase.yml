@@ -75,7 +75,7 @@ jobs:
       - name: Bootstrap initial elevated admin
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.bootstrap_admin }}
         env:
-          ADMIN_EMAIL: ${{ vars.INITIAL_ADMIN_EMAIL || 'crzzphillip@gmail.com' }}
+          ADMIN_EMAIL: ${{ vars.INITIAL_ADMIN_EMAIL }}
           ADMIN_PASSWORD: ${{ secrets.INITIAL_ADMIN_PASSWORD }}
         run: npm run bootstrap-admin --prefix functions
 

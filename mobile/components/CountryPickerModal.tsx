@@ -71,7 +71,7 @@ export function CountryPickerModal({
               </View>
               <View>
                 <Text className="text-lg font-black text-ink">Select Country</Text>
-                <Text className="text-xs text-ink/40 font-medium">Choose your phone number code</Text>
+                <Text className="text-xs text-ink/40 font-medium">Choose from all {COUNTRIES.length} supported country and region codes</Text>
               </View>
             </View>
             <TouchableOpacity

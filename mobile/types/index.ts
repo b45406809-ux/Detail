@@ -88,6 +88,8 @@ export interface UserProfile {
   displayName: string;
   photoURL: string;
   role: UserRole;
+  accountType?: 'INDIVIDUAL' | 'ORGANIZATION';
+  organizationId?: string;
   balance: number;
   status: 'AVAILABLE' | 'BUSY' | 'OFFLINE';
   hasAgreedToTerms?: boolean;
@@ -113,6 +115,7 @@ export interface UserProfile {
   serviceRadiusKm?: number;
   experienceYears?: number;
   address?: string;
+  serviceArea?: string;
   proofOfResidenceUrl?: string;
   verificationStatus?: 'PENDING' | 'VERIFIED' | 'REJECTED';
 }
