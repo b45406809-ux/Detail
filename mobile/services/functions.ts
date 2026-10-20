@@ -11,15 +11,9 @@
  * real deployed project. DEV builds exercise the exact same server code as
  * production instead of any client-side shortcut.
  *
- * TEMPORARY: while EXPO_PUBLIC_SIMULATE_FUNCTIONS is 'true' (Cloud Functions
- * can't be deployed yet — needs Blaze billing), named functions are routed
- * through services/functionSimulators.ts instead of the real
- * httpsCallable — see that file's header comment for details. Remove this
- * branch once real Functions are deployed.
+ * Local client simulators can run only in a development build connected to
+ * the Firebase emulator. Production always calls deployed callable functions.
  */
-import { IS_SIMULATING_FUNCTIONS } from '../utils/env';
-import { FUNCTION_SIMULATORS } from './functionSimulators';
-
 const USE_EMULATOR =
   process.env.EXPO_PUBLIC_USE_FIREBASE_EMULATOR === 'true' ||
   process.env.EXPO_PUBLIC_USE_FUNCTIONS_EMULATOR === 'true';
@@ -31,10 +25,6 @@ export async function callFunction<TData = any, TResult = any>(
   name: string,
   data?: TData
 ): Promise<TResult> {
-  if (IS_SIMULATING_FUNCTIONS && FUNCTION_SIMULATORS[name]) {
-    return FUNCTION_SIMULATORS[name](data) as Promise<TResult>;
-  }
-
   const { getFunctions, httpsCallable, connectFunctionsEmulator } = await import('firebase/functions');
   const { getApp } = await import('firebase/app');
   const functions = getFunctions(getApp());

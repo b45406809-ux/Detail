@@ -38,11 +38,11 @@ module.exports = {
         glass: "0 8px 32px rgba(57, 6, 210, 0.15)",
       },
       fontFamily: {
-        sans: ["PublicSans_400Regular"],
-        "sans-medium": ["PublicSans_500Medium"],
-        "sans-bold": ["PublicSans_700Bold"],
-        "sans-black": ["PublicSans_900Black"],
-        display: ["PublicSans_900Black"],
+        sans: ["DMSans_400Regular"],
+        "sans-medium": ["DMSans_500Medium"],
+        "sans-bold": ["DMSans_700Bold"],
+        "sans-black": ["DMSans_700Bold"],
+        display: ["Manrope_800ExtraBold"],
       },
       borderRadius: {
         "4xl": "2rem",

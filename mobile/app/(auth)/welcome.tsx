@@ -51,7 +51,7 @@ export default function WelcomeScreen() {
         <Wordmark size={20} color="#150256" />
         {!isLast && (
           <TouchableOpacity onPress={() => router.push('/(auth)/sign-in')}>
-            <Text className="text-ink/40 text-sm font-bold">Skip</Text>
+            <Text className="font-sans text-ink/40 text-sm font-bold">Skip</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -69,7 +69,7 @@ export default function WelcomeScreen() {
             <GlassCard variant="brand" fillContent style={{ height: 300, marginBottom: 32 }}>
               <View className="flex-1 items-center justify-center">
                 <View className="absolute top-5 left-5 bg-white/15 border border-white/25 px-3 py-1.5 rounded-full">
-                  <Text className="text-white text-[11px] font-black tracking-wide">{badge}</Text>
+                  <Text className="text-white text-[11px] font-display font-black tracking-wide">{badge}</Text>
                 </View>
                 <View className="w-24 h-24 rounded-[28px] bg-white/15 border border-white/25 items-center justify-center">
                   <Icon size={44} color="#fff" strokeWidth={1.75} />
@@ -77,10 +77,10 @@ export default function WelcomeScreen() {
               </View>
             </GlassCard>
 
-            <Text className="text-ink text-[34px] leading-[38px] font-black tracking-tight mb-3">
+            <Text className="text-ink text-[34px] leading-[38px] font-display font-black tracking-tight mb-3">
               {title}
             </Text>
-            <Text className="text-ink/50 text-base font-medium leading-relaxed">{sub}</Text>
+            <Text className="font-sans text-ink/50 text-base font-medium leading-relaxed">{sub}</Text>
           </View>
         ))}
       </ScrollView>
@@ -100,15 +100,15 @@ export default function WelcomeScreen() {
           activeOpacity={0.88}
           className="w-full bg-accent py-5 rounded-[28px] items-center flex-row justify-center gap-2 shadow-lg shadow-accent/30"
         >
-          <Text className="text-white font-black text-sm uppercase tracking-widest">
+          <Text className="text-white font-display font-black text-sm uppercase tracking-widest">
             {isLast ? 'Get Started' : 'Continue'}
           </Text>
         </TouchableOpacity>
 
         {isLast && (
           <TouchableOpacity onPress={() => router.push('/(auth)/sign-in')} className="mt-5 items-center">
-            <Text className="text-ink/40 text-sm font-bold">
-              Already have an account? <Text className="text-accent font-black">Log In</Text>
+            <Text className="font-sans text-ink/40 text-sm font-bold">
+              Already have an account? <Text className="text-accent font-display font-black">Log In</Text>
             </Text>
           </TouchableOpacity>
         )}

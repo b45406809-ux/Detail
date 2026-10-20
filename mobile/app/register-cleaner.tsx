@@ -40,7 +40,7 @@ const CATEGORY_OPTIONS: { id: ServiceCategory; label: string; icon: any }[] = [
 ];
 
 export default function RegisterCleanerScreen() {
-  const { profile, updateProfile } = useAuth();
+  const { profile } = useAuth();
   const [fullName, setFullName] = useState(profile?.displayName ?? '');
   const [phone, setPhone] = useState(profile?.phone ?? '');
   const [address, setAddress] = useState('');
@@ -143,15 +143,12 @@ export default function RegisterCleanerScreen() {
 
     setIsSubmitting(true);
     try {
-      await updateProfile({
-        displayName: fullName.trim(),
-        phone: phone.trim(),
-        address: address.trim(),
-        serviceArea: serviceArea.trim(),
-        serviceCategories: categories,
-        serviceRadiusKm: Number(radius) || 15,
-        experienceYears: Number(experience) || 0,
-        cleanerOnboardingComplete: true,
+      await auth.currentUser?.reload();
+      await auth.currentUser?.getIdToken(true);
+      await callFunction('submitCleanerApplication', {
+        fullName: fullName.trim(), phone: phone.trim(), address: address.trim(),
+        serviceArea: serviceArea.trim(), serviceCategories: categories,
+        serviceRadiusKm: Number(radius) || 15, experienceYears: Number(experience) || 0,
       });
       if (organizationCode.trim()) {
         await auth.currentUser?.getIdToken(true);
@@ -175,15 +172,15 @@ export default function RegisterCleanerScreen() {
           <ArrowLeft size={18} color="#0f172a" />
         </TouchableOpacity>
         <View>
-          <Text className="text-xl font-black text-slate-900">Become a Cleaner</Text>
-          <Text className="text-xs text-slate-400 font-medium">Register to start accepting jobs</Text>
+          <Text className="text-xl font-display font-black text-slate-900">Become a Cleaner</Text>
+          <Text className="font-sans text-xs text-slate-400 font-medium">Register to start accepting jobs</Text>
         </View>
       </View>
 
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerClassName="px-5 pt-6 pb-10" keyboardShouldPersistTaps="handled">
           {/* Identity */}
-          <Text className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">
+          <Text className="text-xs font-display font-black text-slate-400 uppercase tracking-widest mb-3">
             Your Details
           </Text>
           <View className="gap-3 mb-6">
@@ -194,7 +191,7 @@ export default function RegisterCleanerScreen() {
           </View>
 
           {/* Email verification */}
-          <Text className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">
+          <Text className="text-xs font-display font-black text-slate-400 uppercase tracking-widest mb-3">
             Email Verification
           </Text>
           <View className="bg-slate-50 rounded-3xl p-4 border border-slate-100 mb-6 flex-row items-center gap-3">
@@ -202,10 +199,10 @@ export default function RegisterCleanerScreen() {
               {emailVerified ? <CheckCircle2 size={18} color="#10b981" /> : <Mail size={18} color="#3906D2" />}
             </View>
             <View className="flex-1">
-              <Text className="text-sm font-black text-slate-900">
+              <Text className="text-sm font-display font-black text-slate-900">
                 {emailVerified ? 'Email verified' : 'Verify your email'}
               </Text>
-              <Text className="text-xs text-slate-400 font-medium mt-0.5">
+              <Text className="font-sans text-xs text-slate-400 font-medium mt-0.5">
                 {emailVerified ? "You're all set" : 'Confirms this is really your email address'}
               </Text>
             </View>
@@ -214,13 +211,13 @@ export default function RegisterCleanerScreen() {
                 onPress={verificationSent ? handleCheckVerification : handleSendVerification}
                 className="bg-accent px-3 py-2 rounded-xl"
               >
-                <Text className="text-white text-xs font-black">{verificationSent ? 'Check' : 'Send'}</Text>
+                <Text className="text-white text-xs font-display font-black">{verificationSent ? 'Check' : 'Send'}</Text>
               </TouchableOpacity>
             )}
           </View>
 
           {/* Service details */}
-          <Text className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">
+          <Text className="text-xs font-display font-black text-slate-400 uppercase tracking-widest mb-3">
             Services You Offer
           </Text>
           <View className="flex-row gap-3 mb-4">
@@ -252,11 +249,11 @@ export default function RegisterCleanerScreen() {
 
           <View className="mb-6">
             <LabeledInput label="Organization invitation code (Optional)" value={organizationCode} onChangeText={setOrganizationCode} placeholder="Enter a code from your organization" />
-            <Text className="text-[11px] text-slate-400 font-medium mt-1">If an organization invited you, enter its code after completing your identity check.</Text>
+            <Text className="font-sans text-[11px] text-slate-400 font-medium mt-1">If an organization invited you, enter its code after completing your identity check.</Text>
           </View>
 
           {/* Didit identity check */}
-          <Text className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">
+          <Text className="text-xs font-display font-black text-slate-400 uppercase tracking-widest mb-3">
             Identity Verification
           </Text>
           <View className="bg-slate-50 rounded-3xl p-4 border border-slate-100 mb-6 flex-row items-center gap-3">
@@ -264,10 +261,10 @@ export default function RegisterCleanerScreen() {
               {isIdentityVerified ? <CheckCircle2 size={18} color="#10b981" /> : <ShieldCheck size={18} color="#3906D2" />}
             </View>
             <View className="flex-1">
-              <Text className="text-sm font-black text-slate-900">
+              <Text className="text-sm font-display font-black text-slate-900">
                 {isIdentityVerified ? 'Identity verified' : verificationStatus === 'REJECTED' ? 'Verification needs attention' : 'Verify with Didit'}
               </Text>
-              <Text className="text-xs text-slate-500 font-medium mt-0.5">
+              <Text className="font-sans text-xs text-slate-500 font-medium mt-0.5">
                 {isIdentityVerified ? 'Your identity check is complete.' : 'Complete a secure identity check to register as a cleaner.'}
               </Text>
             </View>
@@ -278,12 +275,12 @@ export default function RegisterCleanerScreen() {
                 className="bg-accent px-3 py-2 rounded-xl"
               >
                 {isCheckingIdentity ? <ActivityIndicator color="#fff" size="small" /> : (
-                  <Text className="text-white text-xs font-black">{verificationStatus === 'PENDING' ? 'Check' : 'Start'}</Text>
+                  <Text className="text-white text-xs font-display font-black">{verificationStatus === 'PENDING' ? 'Check' : 'Start'}</Text>
                 )}
               </TouchableOpacity>
             )}
           </View>
-          <Text className="text-[11px] text-slate-400 font-medium mb-8 leading-relaxed">
+          <Text className="font-sans text-[11px] text-slate-400 font-medium mb-8 leading-relaxed">
             Didit securely checks your identity. Detail receives the verification result and does not store your ID images.
           </Text>
 
@@ -298,7 +295,7 @@ export default function RegisterCleanerScreen() {
                 <ActivityIndicator color="#fff" />
               </View>
             ) : (
-              <Text className="text-white font-black text-sm uppercase tracking-widest">
+              <Text className="text-white font-display font-black text-sm uppercase tracking-widest">
                 Continue to Agreement
               </Text>
             )}
@@ -328,11 +325,11 @@ function LabeledInput({
 }) {
   return (
     <View>
-      <Text className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5">{label}</Text>
+      <Text className="text-xs font-display font-black text-slate-500 uppercase tracking-widest mb-1.5">{label}</Text>
       <View className="flex-row items-center border-2 border-slate-100 rounded-2xl px-4 bg-slate-50">
         {Icon && <Icon size={16} color="#94a3b8" style={{ marginRight: 8 }} />}
         <TextInput
-          className="flex-1 py-3.5 text-sm font-bold text-slate-900"
+          className="font-sans flex-1 py-3.5 text-sm font-bold text-slate-900"
           placeholder={placeholder}
           placeholderTextColor="#94a3b8"
           value={value}

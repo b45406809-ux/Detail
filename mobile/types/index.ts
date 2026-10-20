@@ -91,6 +91,8 @@ export interface UserProfile {
   accountType?: 'INDIVIDUAL' | 'ORGANIZATION';
   organizationId?: string;
   balance: number;
+  earningsBalance?: number;
+  commissionBalance?: number;
   status: 'AVAILABLE' | 'BUSY' | 'OFFLINE';
   hasAgreedToTerms?: boolean;
   commissionOwed?: number;
@@ -125,9 +127,11 @@ export interface Job {
   customerId: string;
   customerName?: string;
   customerPhoto?: string;
+  customerPhone?: string;
   cleanerId?: string;
   cleanerName?: string;
   cleanerPhoto?: string;
+  cleanerPhone?: string;
   cleanerRating?: number;
   category?: ServiceCategory;
   serviceType: string;
@@ -158,6 +162,8 @@ export interface Job {
   cleanerLocation?: { lat: number; lng: number };
   paidAt?: any;
   paymentMethod?: string;
+  paymentStatus?: 'INITIATING' | 'PENDING' | 'CAPTURED' | 'AUTHORIZED' | 'ESCROWED' | 'DELIVERED' | 'PAID' | 'DISPUTED' | 'REFUNDED' | 'FAILED' | string;
+  earnings?: { gross: number; commission: number; net: number; finalized: boolean };
   rating?: number;
   ratedAt?: any;
   isFavoriteRebook?: boolean;

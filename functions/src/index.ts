@@ -8,8 +8,9 @@
  *
  *   settleJobPayment   — atomically debit customer, credit cleaner, write ledger
  *   submitRating       — write a review + recompute the cleaner's rating average
- *   createPesePayPayment — start a PesePay hosted checkout for a wallet top-up
- *   pesepayWebhook     — PesePay calls this when a payment completes; credits wallet
+ *   paynowWebhook      — verify Paynow status updates and release cleaner earnings
+ *   createPesePayPayment — legacy PesePay hosted checkout for wallet top-ups
+ *   pesepayWebhook     — legacy PesePay callback for wallet top-ups
  *
  * Deploy:  firebase deploy --only functions
  * Secrets: firebase functions:secrets:set PESEPAY_INTEGRATION_KEY
@@ -36,6 +37,8 @@ const PLATFORM_COMMISSION = 0.1;
 
 const PESEPAY_INTEGRATION_KEY = defineSecret('PESEPAY_INTEGRATION_KEY');
 const PESEPAY_ENCRYPTION_KEY = defineSecret('PESEPAY_ENCRYPTION_KEY');
+const PAYNOW_INTEGRATION_ID = defineSecret('PAYNOW_INTEGRATION_ID');
+const PAYNOW_INTEGRATION_KEY = defineSecret('PAYNOW_INTEGRATION_KEY');
 const TURNSTILE_SECRET = defineSecret('TURNSTILE_SECRET');
 const RESEND_API_KEY = defineSecret('RESEND_API_KEY');
 const DIDIT_API_KEY = defineSecret('DIDIT_API_KEY');
@@ -156,7 +159,126 @@ export const acceptCleanerAgreement = onCall(async request => {
   return { ok: true };
 });
 
+export const submitCleanerApplication = onCall(async request => {
+  const uid=request.auth?.uid;
+  if(!uid) throw new HttpsError('unauthenticated','Sign in to continue.');
+  const input=request.data??{};
+  const fullName=String(input.fullName??'').trim(); const phone=String(input.phone??'').trim();
+  const address=String(input.address??'').trim(); const serviceArea=String(input.serviceArea??'').trim();
+  const categories=Array.isArray(input.serviceCategories)?Array.from(new Set((input.serviceCategories as unknown[]).filter((x):x is string=>typeof x==='string'&&['HOUSE','CAR'].includes(x)))):[];
+  const radius=Number(input.serviceRadiusKm??15); const experience=Number(input.experienceYears??0);
+  if(fullName.length<2||phone.length<7||address.length<5||serviceArea.length<2||!categories.length||radius<1||radius>100||experience<0||experience>60) throw new HttpsError('invalid-argument','Complete all cleaner application fields with valid values.');
+  const ref=db.collection('users').doc(uid); const snap=await ref.get(); const profile=snap.data()??{};
+  if(profile.verificationStatus!=='VERIFIED') throw new HttpsError('failed-precondition','Complete identity verification before submitting your application.');
+  if(!request.auth?.token.email_verified) throw new HttpsError('failed-precondition','Verify your email before submitting your application.');
+  await ref.set({displayName:fullName,phone,address,serviceArea,serviceCategories:categories,serviceRadiusKm:radius,experienceYears:experience,cleanerOnboardingComplete:true,updatedAt:FieldValue.serverTimestamp()},{merge:true});
+  return {ok:true};
+});
+
+export const setActiveRole = onCall(async request => {
+  const uid=request.auth?.uid; if(!uid) throw new HttpsError('unauthenticated','Sign in to continue.');
+  const role=request.data?.role; if(!['CUSTOMER','CLEANER'].includes(role)) throw new HttpsError('invalid-argument','Invalid role.');
+  const ref=db.collection('users').doc(uid); const snap=await ref.get(); const user=snap.data()??{};
+  if(role==='CLEANER'&&(user.verificationStatus!=='VERIFIED'||user.cleanerAgreementAccepted!==true||user.cleanerOnboardingComplete!==true||user.isSuspended||user.isBanned)) throw new HttpsError('failed-precondition','Complete verification, registration, and the cleaner agreement before switching to cleaner mode.');
+  await ref.update({role,updatedAt:FieldValue.serverTimestamp()}); return {ok:true};
+});
+
+export const updateCleanerPresence = onCall(async request => {
+  const uid=request.auth?.uid; if(!uid) throw new HttpsError('unauthenticated','Sign in to continue.');
+  const status=request.data?.status; if(!['AVAILABLE','OFFLINE'].includes(status)) throw new HttpsError('invalid-argument','Invalid availability.');
+  const ref=db.collection('users').doc(uid); const snap=await ref.get(); const user=snap.data()??{};
+  if(user.role!=='CLEANER'||user.verificationStatus!=='VERIFIED'||user.cleanerAgreementAccepted!==true||user.isSuspended||user.isBanned) throw new HttpsError('permission-denied','Only an approved cleaner can change availability.');
+  await ref.update({status,updatedAt:FieldValue.serverTimestamp()}); return {ok:true};
+});
+
+export const updateCleanerLocation = onCall(async request => {
+  const uid=request.auth?.uid; if(!uid) throw new HttpsError('unauthenticated','Sign in to continue.');
+  const lat=Number(request.data?.lat), lng=Number(request.data?.lng);
+  if(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180) throw new HttpsError('invalid-argument','Invalid coordinates.');
+  const ref=db.collection('users').doc(uid); const snap=await ref.get(); const user=snap.data()??{};
+  if(user.role!=='CLEANER'||user.verificationStatus!=='VERIFIED'||user.cleanerAgreementAccepted!==true) throw new HttpsError('permission-denied','Only approved cleaners can share their location.');
+  await ref.update({location:{lat,lng},updatedAt:FieldValue.serverTimestamp()}); return {ok:true};
+});
+
+export const updateActiveJobLocation = onCall(async request => {
+  const uid=request.auth?.uid; if(!uid) throw new HttpsError('unauthenticated','Sign in to continue.');
+  const {jobId}=request.data??{}; const lat=Number(request.data?.lat),lng=Number(request.data?.lng);
+  if(!jobId||!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180) throw new HttpsError('invalid-argument','Invalid job location.');
+  const ref=db.collection('jobs').doc(jobId); const snap=await ref.get(); const job=snap.data();
+  if(!job||job.cleanerId!==uid||!['ASSIGNED','EN_ROUTE','IN_PROGRESS'].includes(job.status)) throw new HttpsError('permission-denied','Only the assigned cleaner can share location during an active booking.');
+  await ref.update({cleanerLocation:{lat,lng},cleanerLocationUpdatedAt:FieldValue.serverTimestamp()}); return {ok:true};
+});
+
+export const addCompletionPhoto = onCall(async request => {
+  const uid=request.auth?.uid; if(!uid) throw new HttpsError('unauthenticated','Sign in to continue.');
+  const {jobId,url}=request.data??{};
+  if(!jobId||typeof url!=='string'||url.length>2500||!url.startsWith('https://firebasestorage.googleapis.com/')) throw new HttpsError('invalid-argument','A valid uploaded photo is required.');
+  const ref=db.collection('jobs').doc(jobId);
+  await db.runTransaction(async tx=>{const snap=await tx.get(ref);const job=snap.data();if(!job||job.cleanerId!==uid||!['ASSIGNED','EN_ROUTE','IN_PROGRESS'].includes(job.status))throw new HttpsError('permission-denied','Only the assigned cleaner can add completion photos to an active booking.');const photos=Array.isArray(job.completionPhotos)?job.completionPhotos:[];if(photos.length>=6)throw new HttpsError('resource-exhausted','This booking already has six completion photos.');tx.update(ref,{completionPhotos:FieldValue.arrayUnion(url)});});
+  return {ok:true};
+});
+
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+function createPaynowClient(projectId: string) {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { Paynow } = require('paynow');
+  const paynow = new Paynow(PAYNOW_INTEGRATION_ID.value(), PAYNOW_INTEGRATION_KEY.value());
+  paynow.resultUrl = `https://us-central1-${projectId}.cloudfunctions.net/paynowWebhook`;
+  paynow.returnUrl = 'https://www.paynow.co.zw/';
+  return paynow;
+}
+
+async function savePaynowCheckout(paymentRef: FirebaseFirestore.DocumentReference,
+  jobRef: FirebaseFirestore.DocumentReference, pollUrl: string, redirectUrl: string) {
+  await db.runTransaction(async tx => {
+    const [paymentSnap, jobSnap] = await Promise.all([tx.get(paymentRef), tx.get(jobRef)]);
+    if (!paymentSnap.exists || !jobSnap.exists) throw new Error('Booking was removed during Paynow checkout.');
+    const paymentStatus = String(paymentSnap.data()?.status ?? 'INITIATING');
+    const jobStatus = String(jobSnap.data()?.paymentStatus ?? 'INITIATING');
+    tx.update(paymentRef, { pollUrl, redirectUrl, initiatedAt: FieldValue.serverTimestamp(),
+      ...(paymentStatus === 'INITIATING' ? { status: 'PENDING' } : {}) });
+    if (jobStatus === 'INITIATING') tx.update(jobRef, { paymentStatus: 'PENDING' });
+  });
+}
+
+async function failPaynowCheckout(paymentRef: FirebaseFirestore.DocumentReference,
+  jobRef: FirebaseFirestore.DocumentReference) {
+  return db.runTransaction(async tx => {
+    const [paymentSnap, jobSnap] = await Promise.all([tx.get(paymentRef), tx.get(jobRef)]);
+    if (!paymentSnap.exists || !jobSnap.exists) return 'FAILED';
+    const status = String(paymentSnap.data()?.status ?? 'INITIATING');
+    if (status === 'INITIATING') {
+      tx.update(paymentRef, { status: 'FAILED', failureReason: 'INITIATION_FAILED', updatedAt: FieldValue.serverTimestamp() });
+      if (String(jobSnap.data()?.paymentStatus ?? '') === 'INITIATING') tx.update(jobRef, { paymentStatus: 'FAILED' });
+      return 'FAILED';
+    }
+    return status;
+  });
+}
+
+function releasePaynowEarnings(tx: FirebaseFirestore.Transaction, jobRef: FirebaseFirestore.DocumentReference,
+  job: FirebaseFirestore.DocumentData, paymentRef: FirebaseFirestore.DocumentReference,
+  payment: FirebaseFirestore.DocumentData) {
+  if (payment.status !== 'PAID' || job.status !== 'COMPLETED' || payment.releasedAt) return;
+  const gross = round2(Number(payment.amount));
+  const commission = round2(gross * PLATFORM_COMMISSION);
+  const net = round2(gross - commission);
+  tx.update(db.collection('users').doc(job.cleanerId), {
+    balance: FieldValue.increment(net), earningsBalance: FieldValue.increment(net), jobsCompleted: FieldValue.increment(1),
+  });
+  tx.create(db.collection('transactions').doc(`paynow_earning_${jobRef.id}`), {
+    userId: job.cleanerId, type: 'CREDIT', amount: net,
+    description: `Paynow earnings from ${job.serviceType ?? 'cleaning'} (90% after 10% commission)`,
+    jobId: jobRef.id, paymentProvider: 'PAYNOW', status: 'COMPLETED', createdAt: FieldValue.serverTimestamp(),
+  });
+  tx.set(db.collection('platformTransactions').doc(`paynow_commission_${jobRef.id}`), {
+    jobId: jobRef.id, amount: commission, rate: PLATFORM_COMMISSION, source: 'PAYNOW',
+    status: 'COMPLETED', createdAt: FieldValue.serverTimestamp(),
+  });
+  tx.update(paymentRef, { releasedAt: FieldValue.serverTimestamp(), commission, cleanerNet: net });
+  tx.update(jobRef, { earnings: { gross, commission, net, finalized: true }, earningsReleasedAt: FieldValue.serverTimestamp() });
+}
 
 /** Admin endpoints trust custom claims only. A mutable profile role is never authorization. */
 function requireAdmin(request: { auth?: { uid: string; token: Record<string, unknown> } }, elevated = false) {
@@ -289,10 +411,10 @@ async function notifyUser(
  * Input:  { jobId: string, paymentMethod: 'WALLET' | 'CASH' }
  * Output: { success: true }
  *
- * WALLET: balance must cover the price; we debit the customer, credit the
- *         cleaner (price minus commission), and write two ledger entries.
- * CASH:   the customer hands cash to the cleaner; we only mark the job paid
- *         and bump the cleaner's completed-jobs count (no wallet movement).
+ * WALLET: funds are reserved at bid acceptance; customer completion releases
+ *         90% to the cleaner and records Detail's 10% commission.
+ * CASH:   the customer pays the cleaner directly; completion debits the 10%
+ *         commission from the cleaner's Detail balance.
  */
 export const settleJobPayment = onCall(async (request) => {
   const uid = request.auth?.uid;
@@ -300,9 +422,9 @@ export const settleJobPayment = onCall(async (request) => {
 
   const { jobId, paymentMethod } = (request.data ?? {}) as {
     jobId?: string;
-    paymentMethod?: 'WALLET' | 'CASH';
+  paymentMethod?: 'WALLET' | 'CASH' | 'ECOCASH' | 'INNBUCKS';
   };
-  if (!jobId || (paymentMethod !== 'WALLET' && paymentMethod !== 'CASH')) {
+  if (!jobId || !['WALLET', 'CASH', 'ECOCASH', 'INNBUCKS'].includes(String(paymentMethod))) {
     throw new HttpsError('invalid-argument', 'jobId and a valid paymentMethod are required.');
   }
 
@@ -316,43 +438,30 @@ export const settleJobPayment = onCall(async (request) => {
     if (job.customerId !== uid) {
       throw new HttpsError('permission-denied', 'Only the job customer can pay.');
     }
-    if (job.paidAt) throw new HttpsError('failed-precondition', 'This job is already paid.');
+    if (job.paidAt || job.paymentMethod === 'PAYNOW') throw new HttpsError('failed-precondition', 'This job is already paid or uses Paynow escrow.');
     if (!job.cleanerId) throw new HttpsError('failed-precondition', 'No cleaner is assigned.');
+    if (job.status !== 'COMPLETED') throw new HttpsError('failed-precondition', 'The cleaner must mark the job complete first.');
+    if (job.paymentMethod && job.paymentMethod !== paymentMethod) throw new HttpsError('failed-precondition', 'Payment method cannot be changed after booking.');
+    const paymentRef = db.collection('payments').doc(`${jobId}_booking`);
+    const paymentSnap = await tx.get(paymentRef);
 
     const price = Number(job.price);
     if (!price || price <= 0) {
       throw new HttpsError('failed-precondition', 'This job has no valid price.');
     }
 
-    const customerRef = db.collection('users').doc(uid);
     const cleanerRef = db.collection('users').doc(job.cleanerId);
     const cleanerAmount = round2(price * (1 - PLATFORM_COMMISSION));
 
     if (paymentMethod === 'WALLET') {
-      const customerSnap = await tx.get(customerRef);
-      const balance = Number(customerSnap.data()?.balance ?? 0);
-      if (balance < price) {
-        throw new HttpsError(
-          'failed-precondition',
-          `Insufficient balance. You have $${balance.toFixed(2)} but need $${price.toFixed(2)}.`
-        );
-      }
-
-      tx.update(customerRef, { balance: FieldValue.increment(-price) });
+      // Wallet bookings are charged when the bid is accepted; this step is the
+      // customer's completion confirmation and releases the held ledger amount.
       tx.update(cleanerRef, {
         balance: FieldValue.increment(cleanerAmount),
+        earningsBalance: FieldValue.increment(cleanerAmount),
         jobsCompleted: FieldValue.increment(1),
       });
 
-      tx.set(db.collection('transactions').doc(), {
-        userId: uid,
-        type: 'DEBIT',
-        amount: price,
-        description: `Payment for ${job.serviceType}`,
-        jobId,
-        status: 'COMPLETED',
-        createdAt: FieldValue.serverTimestamp(),
-      });
       tx.set(db.collection('transactions').doc(), {
         userId: job.cleanerId,
         type: 'CREDIT',
@@ -363,34 +472,84 @@ export const settleJobPayment = onCall(async (request) => {
         createdAt: FieldValue.serverTimestamp(),
       });
     } else {
-      // CASH — the cleaner keeps the full amount from the customer directly,
-      // but Detail's commission is still owed (Cleaner Agreement §11: "A cash
-      // payment does not remove your obligation to pay the applicable Detail
-      // commission"). Debited from the cleaner's wallet balance immediately,
-      // same day as the job — not batched into a weekly invoice — so it can
-      // go negative; submitBid's balance gate then blocks new bids until
-      // they top up, which is what actually prevents the "take cash all
-      // week and vanish" risk described in the commission model.
-      const commission = round2(price * PLATFORM_COMMISSION);
+      // Direct payment (cash, EcoCash, or InnBucks) was prepaid from the
+      // cleaner commission wallet at bid acceptance. Do not charge twice.
       tx.update(cleanerRef, {
-        balance: FieldValue.increment(-commission),
         jobsCompleted: FieldValue.increment(1),
       });
-      tx.set(db.collection('transactions').doc(), {
-        userId: job.cleanerId,
-        type: 'DEBIT',
-        amount: commission,
-        description: `Commission on cash job — ${job.serviceType}`,
-        jobId,
-        status: 'COMPLETED',
-        createdAt: FieldValue.serverTimestamp(),
-      });
     }
-
-    tx.update(jobRef, { paidAt: FieldValue.serverTimestamp(), paymentMethod });
+    const commission = round2(price * PLATFORM_COMMISSION);
+    tx.set(db.collection('platformTransactions').doc(`commission_${jobId}`), {
+      jobId, amount: commission, rate: PLATFORM_COMMISSION, source: paymentMethod,
+      status: 'COMPLETED', createdAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    tx.update(jobRef, { paidAt: FieldValue.serverTimestamp(), paymentMethod, paymentStatus: 'PAID',
+      earnings: { gross: price, commission, net: cleanerAmount, finalized: true } });
+    if (paymentSnap.exists) tx.update(paymentRef, { status: 'PAID', settledAt: FieldValue.serverTimestamp(), commission, cleanerNet: cleanerAmount });
   });
 
   return { success: true };
+});
+
+/** Cleaner payout requests reserve earned funds. Detail transfers these manually
+ * until a Zimbabwe payout rail is configured; admin settlement records the proof. */
+export const requestCleanerPayout = onCall(async request => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in required.');
+  const amount = round2(Number(request.data?.amount));
+  const method = cleanText(request.data?.method, 30).toUpperCase();
+  const accountName = cleanText(request.data?.accountName, 100);
+  const accountNumber = cleanText(request.data?.accountNumber, 120);
+  if (!(amount >= 5) || !['ECOCASH', 'INNBUCKS', 'BANK'].includes(method) || !accountName || !accountNumber) {
+    throw new HttpsError('invalid-argument', 'Enter an amount of at least $5, payout method, account name and destination.');
+  }
+  const userRef = db.collection('users').doc(uid);
+  const requestRef = db.collection('payoutRequests').doc();
+  await db.runTransaction(async tx => {
+    const userSnap = await tx.get(userRef);
+    if (!userSnap.exists || userSnap.data()?.role !== 'CLEANER') throw new HttpsError('permission-denied', 'Only cleaners can request payouts.');
+    const available = Math.max(0, Number(userSnap.data()?.balance ?? 0) - Number(userSnap.data()?.commissionBalance ?? 0));
+    if (available < amount) throw new HttpsError('failed-precondition', `Only $${available.toFixed(2)} in cleared earnings is available.`);
+    tx.update(userRef, { balance: FieldValue.increment(-amount), earningsBalance: round2(available - amount) });
+    tx.create(requestRef, { cleanerId: uid, amount, method, accountName, accountNumber, status: 'PENDING', createdAt: FieldValue.serverTimestamp() });
+    tx.create(db.collection('transactions').doc(`payout_hold_${requestRef.id}`), { userId: uid, type: 'DEBIT', amount, description: 'Payout requested — funds reserved', payoutRequestId: requestRef.id, status: 'PENDING', createdAt: FieldValue.serverTimestamp() });
+  });
+  return { success: true, payoutRequestId: requestRef.id, status: 'PENDING' };
+});
+
+export const listPayoutRequests = onCall(async request => {
+  requireAdminPermission(request, 'finance.read');
+  const snap = await db.collection('payoutRequests').where('status', '==', 'PENDING').orderBy('createdAt', 'asc').limit(100).get();
+  return { requests: snap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.().toISOString() })) };
+});
+
+export const settlePayoutRequest = onCall(async request => {
+  const actorId = requireAdminPermission(request, 'finance.read');
+  const payoutId = cleanText(request.data?.payoutRequestId, 120);
+  const decision = cleanText(request.data?.decision, 20).toUpperCase();
+  const transferReference = cleanText(request.data?.transferReference, 120);
+  if (!payoutId || !['PAID', 'REJECTED'].includes(decision) || (decision === 'PAID' && !transferReference)) {
+    throw new HttpsError('invalid-argument', 'A payout id and PAID/REJECTED decision are required; paid requests need a transfer reference.');
+  }
+  const payoutRef = db.collection('payoutRequests').doc(payoutId);
+  let cleanerId = '';
+  await db.runTransaction(async tx => {
+    const payoutSnap = await tx.get(payoutRef);
+    if (!payoutSnap.exists || payoutSnap.data()?.status !== 'PENDING') throw new HttpsError('failed-precondition', 'Payout request is not pending.');
+    const payout = payoutSnap.data()!;
+    cleanerId = String(payout.cleanerId);
+    if (decision === 'REJECTED') {
+      tx.update(db.collection('users').doc(payout.cleanerId), { balance: FieldValue.increment(Number(payout.amount)), earningsBalance: FieldValue.increment(Number(payout.amount)) });
+      tx.update(db.collection('transactions').doc(`payout_hold_${payoutId}`), { status: 'REVERSED', description: 'Payout rejected — earnings returned' });
+    } else {
+      tx.update(db.collection('transactions').doc(`payout_hold_${payoutId}`), { status: 'COMPLETED', description: `Payout sent (${transferReference})` });
+      tx.create(db.collection('transactions').doc(`payout_paid_${payoutId}`), { userId: payout.cleanerId, type: 'DEBIT', amount: Number(payout.amount), description: `Payout sent (${transferReference})`, payoutRequestId: payoutId, status: 'COMPLETED', createdAt: FieldValue.serverTimestamp() });
+    }
+    tx.update(payoutRef, { status: decision, transferReference: decision === 'PAID' ? transferReference : null, reviewedBy: actorId, reviewedAt: FieldValue.serverTimestamp() });
+    tx.create(db.collection('adminAuditEvents').doc(`payout_${payoutId}`), { action: `cleaner_payout_${decision.toLowerCase()}`, actorId, targetId: payoutId, amount: payout.amount, createdAt: FieldValue.serverTimestamp(), immutable: true });
+  });
+  if (cleanerId) await notifyUser(cleanerId, { type: 'PAYOUT_UPDATE', title: decision === 'PAID' ? 'Payout sent' : 'Payout request declined', body: decision === 'PAID' ? `Your $${Number((await payoutRef.get()).data()?.amount ?? 0).toFixed(2)} payout was sent.` : 'Your payout request was declined and the funds returned to your earnings balance.' });
+  return { success: true, status: decision };
 });
 
 /* ───────────────────────── submitRating ───────────────────────── */
@@ -660,15 +819,20 @@ export const acceptBid = onCall(async (request) => {
   if (!uid) throw new HttpsError('unauthenticated', 'You must be signed in.');
   const { jobId, bidId, paymentMethod } = request.data ?? {};
   const idempotencyKey = requireIdempotencyKey(request.data?.idempotencyKey);
-  if (!jobId || !bidId || !['WALLET', 'CASH'].includes(paymentMethod)) {
+  if (!jobId || !bidId || !['WALLET', 'CASH', 'ECOCASH', 'INNBUCKS', 'PAYNOW'].includes(paymentMethod)) {
     throw new HttpsError('invalid-argument', 'jobId, bidId, and a paymentMethod are required.');
+  }
+  const idempotentEvent = await eventRef(jobId, idempotencyKey).get();
+  if (idempotentEvent.exists) {
+    const payment = (await db.collection('payments').doc(`${jobId}_booking`).get()).data();
+    return { success: true, state: 'ASSIGNED', payment: { status: payment?.status, amount: payment?.amount }, redirectUrl: payment?.redirectUrl ?? null };
   }
   const betaConfig = (await db.collection('configuration').doc('beta').get()).data() ?? {};
   if (betaConfig.maintenanceMode || betaConfig.disablePayments) throw new HttpsError('unavailable', 'PAYMENTS_DISABLED');
   const jobRef = db.collection('jobs').doc(jobId);
   const bidRef = db.collection('bids').doc(bidId);
   const bidsQuery = db.collection('bids').where('jobId', '==', jobId).where('status', 'in', ['PENDING', 'COUNTERED']);
-  let cleanerId = ''; let cleanerName = ''; let amount = 0;
+  let cleanerId = ''; let cleanerName = ''; let amount = 0; let customerEmail = '';
   await db.runTransaction(async tx => {
     const replay = await tx.get(eventRef(jobId, idempotencyKey));
     if (replay.exists) return;
@@ -682,31 +846,227 @@ export const acceptBid = onCall(async (request) => {
     if (!(amount > 0)) throw new HttpsError('failed-precondition', 'INVALID_BID_AMOUNT');
     const customerRef = db.collection('users').doc(uid);
     const customer = await tx.get(customerRef);
+    const directCleaner = await tx.get(db.collection('users').doc(cleanerId));
     if (!customer.exists || (paymentMethod === 'WALLET' && Number(customer.data()?.balance ?? 0) < amount)) {
       tx.set(db.collection('paymentFailures').doc(idempotencyKey), { jobId, customerId: uid, amount, code: 'INSUFFICIENT_FUNDS', createdAt: FieldValue.serverTimestamp() });
       throw new HttpsError('failed-precondition', 'INSUFFICIENT_FUNDS', { code: 'INSUFFICIENT_FUNDS', amount, available: Number(customer.data()?.balance ?? 0) });
     }
-    // Immediate wallet capture. Cash is recorded as a verified pay-on-completion method.
-    if (paymentMethod === 'WALLET') tx.update(customerRef, { balance: FieldValue.increment(-amount) });
+    customerEmail = String(request.auth?.token.email ?? customer.data()?.email ?? '');
+    if (paymentMethod === 'PAYNOW' && !customerEmail) throw new HttpsError('failed-precondition', 'Add an email address to your account before paying with Paynow.');
+    // Customer wallet is charged at acceptance; Paynow enters BuySafe escrow.
+    // For direct-to-cleaner payments, reserve 10% commission from the
+    // separately funded commission wallet before the cleaner accepts work.
+    if (paymentMethod === 'WALLET') {
+      tx.update(customerRef, { balance: FieldValue.increment(-amount) });
+      tx.set(db.collection('transactions').doc(`booking_capture_${jobId}`), {
+        userId: uid, type: 'DEBIT', amount, description: `Held for ${job.serviceType ?? 'cleaning'} booking`,
+        jobId, status: 'COMPLETED', createdAt: FieldValue.serverTimestamp(),
+      });
+    }
+    if (['CASH', 'ECOCASH', 'INNBUCKS'].includes(paymentMethod)) {
+      const cleanerRef = db.collection('users').doc(cleanerId);
+      const commission = round2(amount * PLATFORM_COMMISSION);
+      const commissionBalance = Number(directCleaner?.data()?.commissionBalance ?? 0);
+      if (!directCleaner?.exists || commissionBalance < commission) {
+        throw new HttpsError('failed-precondition', `This cleaner needs $${commission.toFixed(2)} in prepaid commission credit to accept direct payment. Choose BuySafe or ask the cleaner to top up.`);
+      }
+      tx.update(cleanerRef, { commissionBalance: FieldValue.increment(-commission), balance: FieldValue.increment(-commission) });
+      tx.set(db.collection('transactions').doc(`commission_reserve_${jobId}`), {
+        userId: cleanerId, type: 'DEBIT', amount: commission,
+        description: `Prepaid commission reserved for ${paymentMethod} booking`, jobId,
+        status: 'COMPLETED', createdAt: FieldValue.serverTimestamp(),
+      });
+    }
     const paymentRef = db.collection('payments').doc(`${jobId}_booking`);
-    tx.create(paymentRef, { jobId, customerId: uid, cleanerId, amount, method: paymentMethod,
-      status: paymentMethod === 'WALLET' ? 'CAPTURED' : 'AUTHORIZED', originalSource: paymentMethod,
+    const paymentReference = paymentMethod === 'PAYNOW' ? `${jobId}-${randomUUID()}` : null;
+    tx.set(paymentRef, { jobId, customerId: uid, cleanerId, amount, method: paymentMethod,
+      provider: paymentMethod === 'PAYNOW' ? 'PAYNOW' : null,
+      status: paymentMethod === 'WALLET' ? 'CAPTURED' : paymentMethod === 'PAYNOW' ? 'INITIATING' : 'AUTHORIZED',
+      originalSource: paymentMethod, reference: paymentReference,
       idempotencyKey, createdAt: FieldValue.serverTimestamp() });
     bids.docs.forEach(d => tx.update(d.ref, { status: d.id === bidId ? 'ACCEPTED' : 'REJECTED' }));
     const previous = job.status as BookingState;
     // Acceptance confirms and assigns atomically; event log retains both canonical steps.
     tx.update(jobRef, { status: 'ASSIGNED', cleanerId, cleanerName: bid.cleanerName ?? null,
       cleanerPhoto: bid.cleanerPhoto ?? null, cleanerRating: bid.cleanerRating ?? null, price: amount,
-      paymentMethod, paymentStatus: paymentMethod === 'WALLET' ? 'CAPTURED' : 'AUTHORIZED', acceptedAt: FieldValue.serverTimestamp() });
+      cleanerPhone: typeof directCleaner.data()?.phone === 'string' ? directCleaner.data()!.phone.slice(0,40) : null,
+      customerPhone: typeof customer.data()?.phone === 'string' ? customer.data()!.phone.slice(0,40) : null,
+      paymentMethod, paymentStatus: paymentMethod === 'WALLET' ? 'CAPTURED' : paymentMethod === 'PAYNOW' ? 'INITIATING' : 'AUTHORIZED', acceptedAt: FieldValue.serverTimestamp() });
+    tx.delete(db.collection('openJobs').doc(jobId));
     if (previous === 'PENDING') writeEvent(tx, jobId, { type: 'PAYMENT_CONFIRMED', actorId: uid, actorRole: 'CUSTOMER', previousState: 'PENDING', newState: 'CONFIRMED', idempotencyKey: `${idempotencyKey}_confirmed`, metadata: { paymentMethod, amount } });
     writeEvent(tx, jobId, { type: 'BID_ACCEPTED', actorId: uid, actorRole: 'CUSTOMER', previousState: 'CONFIRMED',
       newState: 'ASSIGNED', idempotencyKey, metadata: { bidId, paymentMethod, amount } });
   });
-  if (cleanerId) await Promise.all([
-    notifyUser(cleanerId, { type: 'BID_ACCEPTED', title: 'Quote accepted! 🎉', body: 'The customer accepted your quote.', jobId }),
-    notifyUser(uid, { type: 'BID_ACCEPTED', title: 'Cleaner assigned', body: `${cleanerName} is assigned to your booking.`, jobId }),
-  ]);
-  return { success: true, state: 'ASSIGNED', payment: { status: paymentMethod === 'WALLET' ? 'CAPTURED' : 'AUTHORIZED', amount } };
+  let redirectUrl: string | null = null;
+  if (paymentMethod === 'PAYNOW' && cleanerId) {
+    const paymentRef = db.collection('payments').doc(`${jobId}_booking`);
+    const paymentDoc = (await paymentRef.get()).data()!;
+    try {
+      const paynow = createPaynowClient(process.env.GCLOUD_PROJECT!);
+      const checkout = paynow.createPayment(String(paymentDoc.reference), customerEmail);
+      checkout.add(`Detail cleaning with ${cleanerName} (${jobId})`, amount);
+      const response = await paynow.send(checkout);
+      if (!response?.success || !response?.redirectUrl || !response?.pollUrl) {
+        throw new Error(String(response?.error ?? 'Paynow did not return a checkout URL.'));
+      }
+      redirectUrl = String(response.redirectUrl);
+      await savePaynowCheckout(paymentRef, jobRef, String(response.pollUrl), redirectUrl);
+    } catch (error) {
+      logger.error('Paynow booking checkout initiation failed', { jobId, error: String(error) });
+      const status = await failPaynowCheckout(paymentRef, jobRef);
+      if (['ESCROWED', 'DELIVERED', 'PAID', 'DISPUTED', 'REFUNDED'].includes(status)) {
+        redirectUrl = (await paymentRef.get()).data()?.redirectUrl ?? null;
+      } else {
+        throw new HttpsError('unavailable', 'Paynow could not start this payment. Open the booking and retry checkout.');
+      }
+    }
+  }
+  if (cleanerId) await Promise.all(paymentMethod === 'PAYNOW'
+    ? [notifyUser(uid, { type: 'BID_ACCEPTED', title: 'Quote accepted', body: 'Complete Paynow BuySafe checkout to confirm your booking.', jobId })]
+    : [
+      notifyUser(cleanerId, { type: 'BID_ACCEPTED', title: 'Quote accepted! 🎉', body: 'The customer accepted your quote.', jobId }),
+      notifyUser(uid, { type: 'BID_ACCEPTED', title: 'Cleaner assigned', body: `${cleanerName} is assigned to your booking.`, jobId }),
+    ]);
+  return { success: true, state: 'ASSIGNED', payment: { status: paymentMethod === 'WALLET' ? 'CAPTURED' : paymentMethod === 'PAYNOW' ? 'PENDING' : 'AUTHORIZED', amount }, redirectUrl };
+});
+
+async function applyPaynowStatus(reference: string, statusInput: string, amountInput: string) {
+  const paymentQuery = await db.collection('payments').where('reference', '==', reference).limit(1).get();
+  if (paymentQuery.empty) throw new Error('Paynow reference not found.');
+  const paymentRef = paymentQuery.docs[0].ref;
+  const paymentData = paymentQuery.docs[0].data();
+  const jobRef = db.collection('jobs').doc(String(paymentData.jobId));
+  const status = statusInput.trim().toLowerCase().replace(/[_-]+/g, ' ');
+  const normalized = status === 'awaiting delivery' ? 'ESCROWED'
+    : status === 'delivered' ? 'DELIVERED'
+    : status === 'paid' ? 'PAID'
+    : status === 'disputed' ? 'DISPUTED'
+    : status === 'refunded' ? 'REFUNDED'
+    : null;
+  if (!normalized) return { status: 'IGNORED' };
+  if (Math.abs(Number(amountInput) - Number(paymentData.amount)) > 0.009) {
+    throw new Error('Paynow callback amount does not match the booking.');
+  }
+  let cleanerToNotify = '';
+  await db.runTransaction(async tx => {
+    const [paymentSnap, jobSnap] = await Promise.all([tx.get(paymentRef), tx.get(jobRef)]);
+    if (!paymentSnap.exists || !jobSnap.exists) throw new Error('Paynow booking payment no longer exists.');
+    const payment = paymentSnap.data()!; const job = jobSnap.data()!;
+    const current = String(payment.status ?? 'PENDING');
+    const terminal = ['DISPUTED', 'REFUNDED'];
+    if (terminal.includes(current) || (current === 'PAID' && normalized !== 'REFUNDED')) return;
+    const rank: Record<string, number> = { INITIATING: 0, PENDING: 1, ESCROWED: 2, DELIVERED: 3, PAID: 4 };
+    if (rank[current] != null && rank[normalized] != null && rank[normalized] < rank[current]) return;
+    tx.update(paymentRef, { status: normalized, providerStatus: statusInput,
+      statusUpdatedAt: FieldValue.serverTimestamp(), ...(normalized === 'DELIVERED' ? { deliveredAt: FieldValue.serverTimestamp() } : {}),
+      ...(normalized === 'PAID' ? { releasedByPaynowAt: FieldValue.serverTimestamp() } : {}) });
+    tx.update(jobRef, { paymentStatus: normalized });
+    if (normalized === 'ESCROWED' && !['ESCROWED', 'DELIVERED', 'PAID'].includes(current)) cleanerToNotify = String(job.cleanerId ?? '');
+    if (normalized === 'DISPUTED') {
+      tx.set(db.collection('reviewCases').doc(`paynow_${jobRef.id}`), {
+        jobId: jobRef.id, reporterId: job.customerId, reportedRole: 'CLEANER',
+        notes: 'Customer opened a Paynow Buysafe dispute.', status: 'PAYNOW_DISPUTE',
+        createdAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      tx.update(jobRef, { reviewState: 'PAYNOW_DISPUTE' });
+    }
+    if (normalized === 'REFUNDED' && current === 'PAID') {
+      tx.set(db.collection('reviewCases').doc(`paynow_refund_${jobRef.id}`), {
+        jobId: jobRef.id, reporterId: job.customerId, reportedRole: 'CLEANER',
+        notes: 'Paynow reported a refund after the escrow payment had already been released. Manual cleaner payout recovery is required.',
+        status: 'PAYNOW_REFUND_AFTER_RELEASE', createdAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      tx.update(jobRef, { reviewState: 'PAYNOW_REFUND_AFTER_RELEASE' });
+    }
+    if (normalized === 'PAID') releasePaynowEarnings(tx, jobRef, { ...job, paymentStatus: 'PAID' }, paymentRef, { ...payment, status: 'PAID' });
+  });
+  if (cleanerToNotify) await notifyUser(cleanerToNotify, { type: 'PAYMENT_ESCROWED', title: 'Booking funded with BuySafe', body: 'Paynow is holding the customer payment. You can now start the booking.', jobId: String(paymentData.jobId) });
+  return { status: normalized };
+}
+
+/** Hash-verified Paynow result URL callback. Cleaner earnings release only after Paynow says Paid. */
+export const paynowWebhook = onRequest({ secrets: [PAYNOW_INTEGRATION_ID, PAYNOW_INTEGRATION_KEY] }, async (req, res) => {
+  try {
+    const raw = req.rawBody?.toString('utf8') ?? '';
+    if (!raw) { res.status(400).send('Missing status payload'); return; }
+    const paynow = createPaynowClient(process.env.GCLOUD_PROJECT!);
+    const update = paynow.parseStatusUpdate(raw);
+    if (!update?.reference || !update?.status) { res.status(400).send('Invalid status payload'); return; }
+    await applyPaynowStatus(String(update.reference), String(update.status), String(update.amount));
+    res.status(200).send('OK');
+  } catch (error) {
+    logger.error('Paynow callback rejected or failed', { error: String(error) });
+    res.status(400).send('Invalid Paynow callback');
+  }
+});
+
+/** Polls Paynow's signed status endpoint if a callback was delayed or missed. */
+export const refreshPaynowBookingPayment = onCall({ secrets: [PAYNOW_INTEGRATION_ID, PAYNOW_INTEGRATION_KEY] }, async request => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in to refresh payment status.');
+  const jobId = String(request.data?.jobId ?? '');
+  if (!jobId) throw new HttpsError('invalid-argument', 'jobId is required.');
+  const job = await db.collection('jobs').doc(jobId).get();
+  if (!job.exists || job.data()?.customerId !== uid) throw new HttpsError('permission-denied', 'Only the customer can refresh this payment.');
+  const payment = (await db.collection('payments').doc(`${jobId}_booking`).get()).data();
+  if (payment?.provider !== 'PAYNOW' || !payment.pollUrl) throw new HttpsError('failed-precondition', 'Paynow checkout has not been created.');
+  let pollUrl: URL;
+  try { pollUrl = new URL(String(payment.pollUrl)); } catch { throw new HttpsError('failed-precondition', 'Paynow poll URL is invalid.'); }
+  if (pollUrl.protocol !== 'https:' || !['paynow.co.zw', 'www.paynow.co.zw'].includes(pollUrl.hostname)) {
+    throw new HttpsError('failed-precondition', 'Paynow poll URL is not trusted.');
+  }
+  try {
+    const paynow = createPaynowClient(process.env.GCLOUD_PROJECT!);
+    const update = await paynow.pollTransaction(String(payment.pollUrl));
+    const result = await applyPaynowStatus(String(update.reference), String(update.status), String(update.amount));
+    return { success: true, status: result.status };
+  } catch (error) {
+    logger.error('Paynow status poll failed', { jobId, error: String(error) });
+    throw new HttpsError('unavailable', 'Could not refresh Paynow status yet.');
+  }
+});
+
+/** Start a fresh checkout after a failed Paynow initiation or cancelled checkout. */
+export const retryPaynowBookingPayment = onCall({ secrets: [PAYNOW_INTEGRATION_ID, PAYNOW_INTEGRATION_KEY] }, async request => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in to retry payment.');
+  const jobId = String(request.data?.jobId ?? '');
+  if (!jobId) throw new HttpsError('invalid-argument', 'jobId is required.');
+  const jobRef = db.collection('jobs').doc(jobId);
+  const paymentRef = db.collection('payments').doc(`${jobId}_booking`);
+  const user = await db.collection('users').doc(uid).get();
+  const email = String(request.auth?.token.email ?? user.data()?.email ?? '');
+  if (!email) throw new HttpsError('failed-precondition', 'Add an email address to your account before paying with Paynow.');
+  const reference = `${jobId}-${randomUUID()}`;
+  let amount = 0; let cleanerName = 'Cleaner'; let serviceType = 'cleaning';
+  await db.runTransaction(async tx => {
+    const [jobSnap, paymentSnap] = await Promise.all([tx.get(jobRef), tx.get(paymentRef)]);
+    if (!jobSnap.exists || !paymentSnap.exists || jobSnap.data()?.customerId !== uid) throw new HttpsError('permission-denied', 'This booking payment is unavailable.');
+    const job = jobSnap.data()!; const payment = paymentSnap.data()!;
+    if (job.paymentMethod !== 'PAYNOW' || !['FAILED', 'CANCELLED'].includes(String(payment.status))) {
+      throw new HttpsError('failed-precondition', 'This Paynow payment cannot be retried yet.');
+    }
+    amount = Number(payment.amount);
+    cleanerName = String(job.cleanerName ?? cleanerName);
+    serviceType = String(job.serviceType ?? serviceType);
+    tx.update(paymentRef, { status: 'INITIATING', reference, updatedAt: FieldValue.serverTimestamp(), pollUrl: FieldValue.delete(), redirectUrl: FieldValue.delete() });
+    tx.update(jobRef, { paymentStatus: 'INITIATING' });
+  });
+  try {
+    const paynow = createPaynowClient(process.env.GCLOUD_PROJECT!);
+    const checkout = paynow.createPayment(reference, email);
+    checkout.add(`Detail ${serviceType} with ${cleanerName} (${jobId})`, amount);
+    const response = await paynow.send(checkout);
+    if (!response?.success || !response?.redirectUrl || !response?.pollUrl) throw new Error(String(response?.error ?? 'Paynow did not return a checkout URL.'));
+    const redirectUrl = String(response.redirectUrl);
+    await savePaynowCheckout(paymentRef, jobRef, String(response.pollUrl), redirectUrl);
+    return { success: true, redirectUrl };
+  } catch (error) {
+    logger.error('Paynow booking payment retry failed', { jobId, error: String(error) });
+    const status = await failPaynowCheckout(paymentRef, jobRef);
+    if (['ESCROWED', 'DELIVERED', 'PAID', 'DISPUTED', 'REFUNDED'].includes(status)) return { success: true, redirectUrl: '' };
+    throw new HttpsError('unavailable', 'Paynow could not start this payment. Please try again later.');
+  }
 });
 
 
@@ -721,8 +1081,24 @@ export const createBooking = onCall(async request => {
   const config=(await db.collection('configuration').doc('beta').get()).data()??{};
   if(config.maintenanceMode||config.disableNewBookings) throw new HttpsError('unavailable','BOOKINGS_DISABLED',{contactUrl:config.contactUrl??'https://wa.me/'});
   const key=requireIdempotencyKey(request.data?.idempotencyKey); const ref=db.collection('jobs').doc(key.replace(/[^a-zA-Z0-9_-]/g,'_'));
-  const allowed=request.data?.booking??{}; if(!allowed.serviceType||!allowed.location)throw new HttpsError('invalid-argument','Service and location are required.');
-  await db.runTransaction(async tx=>{const existing=await tx.get(ref);if(existing.exists)return;tx.create(ref,{...allowed,customerId:uid,status:'PENDING',createdAt:FieldValue.serverTimestamp()});writeEvent(tx,ref.id,{type:'CREATION',actorId:uid,actorRole:'CUSTOMER',previousState:null,newState:'PENDING',idempotencyKey:`created_${key}`});});
+  const input=request.data?.booking??{};
+  if(!['HOUSE','CAR'].includes(input.category)||typeof input.serviceType!=='string'||!input.serviceType.trim()||typeof input.location?.address!=='string'||!input.location.address.trim()) throw new HttpsError('invalid-argument','Service and location are required.');
+  const budget=Number(input.budget??0);
+  if(!Number.isFinite(budget)||budget<0||budget>10000) throw new HttpsError('invalid-argument','Budget must be between 0 and 10000.');
+  const location={lat:Number(input.location.lat)||0,lng:Number(input.location.lng)||0,address:String(input.location.address).trim().slice(0,300)};
+  if(Math.abs(location.lat)>90||Math.abs(location.lng)>180) throw new HttpsError('invalid-argument','Invalid location coordinates.');
+  if(!input.checklist||typeof input.checklist!=='object'||Array.isArray(input.checklist)||JSON.stringify(input.checklist).length>20000) throw new HttpsError('invalid-argument','A valid cleaning checklist is required.');
+  const photos=Array.isArray(input.photos)?input.photos.filter((p:any)=>typeof p==='string').slice(0,6):[];
+  for(const photo of photos){
+    try { const parsed=new URL(photo); if(parsed.hostname!=='firebasestorage.googleapis.com'||!decodeURIComponent(parsed.pathname).includes(`/job-photos/${uid}/`)) throw new Error('bad path'); }
+    catch { throw new HttpsError('invalid-argument','Booking photos must be uploaded to your private booking-photo folder.'); }
+  }
+  const customerProfile=(await db.collection('users').doc(uid).get()).data()??{};
+  const job={customerId:uid,customerPhone:typeof customerProfile.phone==='string'?customerProfile.phone.slice(0,40):null,category:input.category,serviceType:input.serviceType.trim().slice(0,120),checklist:input.checklist,description:String(input.description??'').trim().slice(0,3000),location,scheduledTime:String(input.scheduledTime??'ASAP').slice(0,30),timePreference:String(input.timePreference??'ASAP').slice(0,30),scheduledDateTime:input.scheduledDateTime??FieldValue.serverTimestamp(),status:'PENDING',pricingStrategy:'RECEIVE_BIDS',budget,photos,biddingExpiresAt:admin.firestore.Timestamp.fromMillis(Date.now()+30*60*1000),reminderSent:false,customerUnread:0,cleanerUnread:0,createdAt:FieldValue.serverTimestamp()};
+  const publicChecklist={...job.checklist};
+  delete publicChecklist.registrationNumber;
+  const feed={category:job.category,serviceType:job.serviceType,checklist:publicChecklist,description:job.description,budget:job.budget,pricingStrategy:job.pricingStrategy,scheduledTime:job.scheduledTime,timePreference:job.timePreference,scheduledDateTime:job.scheduledDateTime,status:job.status,biddingExpiresAt:job.biddingExpiresAt,createdAt:job.createdAt,location:{lat:Number(location.lat.toFixed(2)),lng:Number(location.lng.toFixed(2)),address:'Approximate area; exact location shared after assignment'},photos:job.photos};
+  await db.runTransaction(async tx=>{const existing=await tx.get(ref);if(existing.exists)return;tx.create(ref,job);tx.create(db.collection('openJobs').doc(ref.id),feed);writeEvent(tx,ref.id,{type:'CREATION',actorId:uid,actorRole:'CUSTOMER',previousState:null,newState:'PENDING',idempotencyKey:`created_${key}`});});
   return {success:true,jobId:ref.id};
 });
 
@@ -742,6 +1118,9 @@ export const transitionBooking = onCall(async request => {
     assertTransition(previous, newState);
     const cleanerDriven = ['EN_ROUTE', 'IN_PROGRESS'].includes(newState);
     if ((cleanerDriven && job.cleanerId !== uid) || (!cleanerDriven && job.customerId !== uid)) throw new HttpsError('permission-denied', 'You cannot perform this transition.');
+    if (cleanerDriven && job.paymentMethod === 'PAYNOW' && !['ESCROWED', 'DELIVERED', 'PAID'].includes(job.paymentStatus)) {
+      throw new HttpsError('failed-precondition', 'Wait for Paynow to confirm that BuySafe is holding the booking payment.');
+    }
     tx.update(ref, { status: newState, [`${String(newState).toLowerCase()}At`]: FieldValue.serverTimestamp() });
     writeEvent(tx, jobId, { type: 'STATUS_TRANSITION', actorId: uid, actorRole: cleanerDriven ? 'CLEANER' : 'CUSTOMER', previousState: previous, newState, idempotencyKey: key });
     recipient = cleanerDriven ? job.customerId : job.cleanerId;
@@ -757,17 +1136,29 @@ export const cancelBooking = onCall(async request => {
   if (!jobId || typeof reason !== 'string' || !reason.trim()) throw new HttpsError('invalid-argument', 'A cancellation reason is required.');
   let recipients: string[] = []; let refundStatus = 'NOT_REQUIRED'; let refundAmount = 0;
   await db.runTransaction(async tx => {
-    const ref = db.collection('jobs').doc(jobId); const [snap, replay] = await Promise.all([tx.get(ref), tx.get(eventRef(jobId, key))]);
+    const ref = db.collection('jobs').doc(jobId); const reserveRef = db.collection('transactions').doc(`commission_reserve_${jobId}`);
+    const [snap, replay, reserveSnap] = await Promise.all([tx.get(ref), tx.get(eventRef(jobId, key)), tx.get(reserveRef)]);
     if (replay.exists) return; if (!snap.exists) throw new HttpsError('not-found', 'Job not found.');
     const job = snap.data()!; if (![job.customerId, job.cleanerId].includes(uid)) throw new HttpsError('permission-denied', 'Not a booking participant.');
     assertTransition(job.status, 'CANCELLED');
+    const returnCommissionReserve = ['CASH', 'ECOCASH', 'INNBUCKS'].includes(job.paymentMethod) && reserveSnap.exists && reserveSnap.data()?.status !== 'REVERSED';
+    if (job.paymentMethod === 'PAYNOW' && ['INITIATING', 'PENDING', 'ESCROWED', 'DELIVERED', 'PAID', 'DISPUTED'].includes(job.paymentStatus)) {
+      throw new HttpsError('failed-precondition', 'This booking has a Paynow BuySafe payment in progress. Check its status in Paynow and contact support before cancelling.');
+    }
     const late = ['EN_ROUTE', 'IN_PROGRESS'].includes(job.status); const captured = Number(job.payment?.capturedAmount ?? (job.paymentMethod === 'WALLET' ? job.price : 0));
     refundAmount = round2(captured * (late ? 0.5 : 1)); refundStatus = refundAmount ? 'REFUNDED' : 'NOT_REQUIRED';
     if (refundAmount) {
       tx.update(db.collection('users').doc(job.customerId), { balance: FieldValue.increment(refundAmount) });
       tx.set(db.collection('transactions').doc(`refund_${key}`), { userId: job.customerId, jobId, type: 'CREDIT', amount: refundAmount, status: 'COMPLETED', originalSource: job.paymentMethod, idempotencyKey: key, createdAt: FieldValue.serverTimestamp() });
     }
+    if (returnCommissionReserve) {
+      const reserved = Number(reserveSnap.data()?.amount ?? 0);
+      tx.update(db.collection('users').doc(job.cleanerId), { commissionBalance: FieldValue.increment(reserved), balance: FieldValue.increment(reserved) });
+      tx.update(reserveRef, { status: 'REVERSED', reversedAt: FieldValue.serverTimestamp() });
+      tx.set(db.collection('transactions').doc(`commission_reserve_refund_${jobId}`), { userId: job.cleanerId, type: 'CREDIT', amount: reserved, description: 'Prepaid commission returned after booking cancellation', jobId, status: 'COMPLETED', createdAt: FieldValue.serverTimestamp() });
+    }
     tx.update(ref, { status: 'CANCELLED', cancellation: { reason: reason.trim(), actorId: uid, refundAmount, refundStatus }, payment: { ...(job.payment ?? {}), refundStatus, refundedAmount: refundAmount }, cancelledAt: FieldValue.serverTimestamp() });
+    tx.delete(db.collection('openJobs').doc(jobId));
     writeEvent(tx, jobId, { type: refundAmount ? 'REFUND' : 'CANCELLATION', actorId: uid, actorRole: uid === job.customerId ? 'CUSTOMER' : 'CLEANER', previousState: job.status, newState: 'CANCELLED', idempotencyKey: key, metadata: { refundAmount } });
     recipients = [job.customerId, job.cleanerId].filter(Boolean);
   });
@@ -794,11 +1185,15 @@ export const completeBooking = onCall(async request => {
   let customerId='';
   await db.runTransaction(async tx=>{ const ref=db.collection('jobs').doc(jobId); const [snap,replay]=await Promise.all([tx.get(ref),tx.get(eventRef(jobId,key))]); if(replay.exists)return;
     if(!snap.exists) throw new HttpsError('not-found','Job not found.'); const job=snap.data()!; if(job.cleanerId!==uid)throw new HttpsError('permission-denied','Only the assigned cleaner can complete.'); assertTransition(job.status,'COMPLETED');
-    const amount=round2(Number(job.price??0)); const earnings=round2(amount*(1-PLATFORM_COMMISSION));
-    if(job.paymentMethod==='WALLET') tx.update(db.collection('users').doc(uid),{balance:FieldValue.increment(earnings),jobsCompleted:FieldValue.increment(1)}); else tx.update(db.collection('users').doc(uid),{balance:FieldValue.increment(-round2(amount*PLATFORM_COMMISSION)),jobsCompleted:FieldValue.increment(1)});
-    tx.update(ref,{status:'COMPLETED',completedAt:FieldValue.serverTimestamp(),earnings:{gross:amount,commission:round2(amount*PLATFORM_COMMISSION),net:earnings,finalized:true}});
+    const paynowPaymentRef = db.collection('payments').doc(`${jobId}_booking`);
+    const paynowPaymentSnap = job.paymentMethod === 'PAYNOW' ? await tx.get(paynowPaymentRef) : null;
+    const amount=round2(Number(job.price??0)); const commission=round2(amount*PLATFORM_COMMISSION); const net=round2(amount-commission);
+    tx.update(ref,{status:'COMPLETED',completedAt:FieldValue.serverTimestamp(),earnings:{gross:amount,commission,net,finalized:false}});
+    if (paynowPaymentSnap?.exists) {
+      releasePaynowEarnings(tx, ref, { ...job, status: 'COMPLETED' }, paynowPaymentRef, paynowPaymentSnap.data()!);
+    }
     writeEvent(tx,jobId,{type:'COMPLETION',actorId:uid,actorRole:'CLEANER',previousState:job.status,newState:'COMPLETED',idempotencyKey:key,metadata:{repeatBooking:!!job.isFavoriteRebook}}); customerId=job.customerId;
-  }); if(customerId)await notifyUser(customerId,{type:'COMPLETED',title:'Booking completed',body:'Your cleaning is complete. Please leave a rating.',jobId}); return {success:true};
+  }); if(customerId)await notifyUser(customerId,{type:'COMPLETED',title:'Booking completed',body:'Your cleaning is complete. Confirm delivery in Paynow BuySafe, then leave a rating.',jobId}); return {success:true};
 });
 
 export const rejectBid = onCall(async request => { const uid=request.auth?.uid; const {jobId,bidId}=request.data??{}; if(!uid)throw new HttpsError('unauthenticated','Sign in required.');
@@ -842,6 +1237,9 @@ export const submitBid = onCall(async (request) => {
   if (cleaner.role !== 'CLEANER') {
     throw new HttpsError('permission-denied', 'Only cleaners can submit bids.');
   }
+  if (cleaner.verificationStatus !== 'VERIFIED' || cleaner.cleanerAgreementAccepted !== true || cleaner.cleanerOnboardingComplete !== true) {
+    throw new HttpsError('failed-precondition', 'Complete identity verification, cleaner onboarding, and the cleaner agreement before bidding.');
+  }
   // Cash-commission balance gate (Cleaner Agreement §11-15 / §12): commission
   // on cash jobs is debited immediately on completion (see settleJobPayment),
   // so a negative balance means unpaid commission — block new bids until
@@ -855,6 +1253,7 @@ export const submitBid = onCall(async (request) => {
   if (cleaner.isSuspended || cleaner.isBanned) {
     throw new HttpsError('permission-denied', 'Your account cannot submit bids right now.');
   }
+  if (job.biddingExpiresAt?.toMillis?.() < Date.now()) throw new HttpsError('failed-precondition', 'This booking is no longer accepting bids.');
 
   const bidRef = await db.collection('bids').add({
     jobId,
@@ -912,6 +1311,7 @@ export const increaseJobBudget = onCall(async (request) => {
     budget: round2(newBudget),
     biddingExpiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 30 * 60 * 1000),
   });
+  await db.collection('openJobs').doc(jobId).update({budget:round2(newBudget),biddingExpiresAt:admin.firestore.Timestamp.fromMillis(Date.now()+30*60*1000)}).catch(()=>undefined);
 
   return { success: true };
 });
@@ -1050,9 +1450,12 @@ export const pesepayWebhook = onRequest(
 
       if (result?.success && result?.paid) {
         await db.runTransaction(async (t) => {
+          const userRef = db.collection('users').doc(tx.userId);
+          const userSnap = await t.get(userRef);
           t.update(txDoc.ref, { status: 'COMPLETED', settledAt: FieldValue.serverTimestamp() });
-          t.update(db.collection('users').doc(tx.userId), {
+          t.update(userRef, {
             balance: FieldValue.increment(Number(tx.amount)),
+            ...(userSnap.data()?.role === 'CLEANER' ? { commissionBalance: FieldValue.increment(Number(tx.amount)) } : {}),
           });
         });
         res.status(200).send('OK');
@@ -1100,7 +1503,7 @@ const DEFAULT_SERVICE_RADIUS_KM = 15;
 // this data hasn't been populated for them yet.
 export const onJobCreated = onDocumentCreated('jobs/{jobId}', async (event) => {
   const job = event.data?.data();
-  if (!job || job.status !== 'BIDDING') return;
+  if (!job || !['BIDDING','PENDING'].includes(job.status)) return;
 
   // A job with no usable coordinates (customer typed an address instead of
   // using "current location") can't be distance-filtered — fall back to the
@@ -1109,7 +1512,7 @@ export const onJobCreated = onDocumentCreated('jobs/{jobId}', async (event) => {
 
   const cleanersSnap = await db.collection('users').where('role', '==', 'CLEANER').get();
   const targetCleanerIds = cleanersSnap.docs
-    .filter((d) => !d.data().isSuspended && !d.data().isBanned)
+    .filter((d) => !d.data().isSuspended && !d.data().isBanned && d.data().verificationStatus === 'VERIFIED' && d.data().cleanerAgreementAccepted === true)
     .filter((d) => {
       if (!jobHasLocation) return true;
       const cleaner = d.data();
@@ -1119,22 +1522,16 @@ export const onJobCreated = onDocumentCreated('jobs/{jobId}', async (event) => {
     })
     .map((d) => d.id);
 
-  const firstPhoto: string | undefined = Array.isArray(job.photos) && job.photos.length > 0
-    ? job.photos[0]
-    : undefined;
   const photoNote = Array.isArray(job.photos) && job.photos.length > 0
     ? ` · ${job.photos.length} photo${job.photos.length > 1 ? 's' : ''}`
     : '';
-  const regNote = job.checklist?.registrationNumber ? ` · Reg: ${job.checklist.registrationNumber}` : '';
-
   await Promise.all(
     targetCleanerIds.map((cleanerId) =>
       notifyUser(cleanerId, {
         type: 'JOB_UPDATE',
         title: 'New job posted 🧹',
-        body: `${job.serviceType ?? 'A new job'} near ${job.location?.address ?? 'you'} — $${job.budget ?? '—'}${photoNote}${regNote}`,
+        body: `${job.serviceType ?? 'A new job'} nearby — $${job.budget ?? '—'}${photoNote}`,
         jobId: event.params.jobId,
-        imageUrl: firstPhoto,
       })
     )
   );
@@ -1142,6 +1539,12 @@ export const onJobCreated = onDocumentCreated('jobs/{jobId}', async (event) => {
 
 // Every 15 minutes: remind the assigned cleaner about jobs scheduled within
 // the next hour, once (reminderSent guards against re-notifying on the next run).
+export const expireOpenJobs = onSchedule('every 5 minutes', async () => {
+  const expired=await db.collection('openJobs').where('biddingExpiresAt','<=',admin.firestore.Timestamp.now()).limit(300).get();
+  if(expired.empty)return;
+  const batch=db.batch(); expired.docs.forEach(d=>batch.delete(d.ref)); await batch.commit();
+});
+
 export const sendJobReminders = onSchedule('every 15 minutes', async () => {
   const now = admin.firestore.Timestamp.now();
   const soon = admin.firestore.Timestamp.fromMillis(now.toMillis() + 60 * 60 * 1000);

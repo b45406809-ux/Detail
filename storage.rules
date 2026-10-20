@@ -14,20 +14,35 @@ service firebase.storage {
       return request.resource.size < 10 * 1024 * 1024; // 10 MB
     }
 
-    // Booking photos ("Add Photos" step) — uploaded by the customer before a
-    // cleanerId even exists, so any signed-in user may read (cleaners need to
-    // see them to bid) but only the uploader's own uid segment is writable.
+    function isJobParticipant(jobId) {
+      let job = firestore.get(/databases/(default)/documents/jobs/$(jobId)).data;
+      return isAuth() && (job.customerId == request.auth.uid || job.cleanerId == request.auth.uid);
+    }
+
+    function isApprovedCleaner() {
+      let user = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+      return isAuth() && user.role == 'CLEANER' && user.verificationStatus == 'VERIFIED'
+        && user.cleanerAgreementAccepted == true && user.isSuspended != true && user.isBanned != true;
+    }
+
+    // Booking photos are private to their uploader and the assigned job parties.
     match /job-photos/{uid}/{allPaths=**} {
-      allow read: if isAuth();
+      allow read: if isAuth() && (request.auth.uid == uid || isApprovedCleaner());
       allow write: if isAuth() && request.auth.uid == uid && isImage() && underSizeLimit();
     }
 
-    // Chat attachments, scoped per job. Any authenticated participant can
-    // read; write is allowed for any signed-in user since job membership is
-    // enforced by the Firestore `messages` rule the client writes through.
+    // Chat attachments are accessible only to the booking parties.
     match /chat-photos/{jobId}/{allPaths=**} {
-      allow read: if isAuth();
-      allow write: if isAuth() && isImage() && underSizeLimit();
+      allow read: if isJobParticipant(jobId);
+      allow write: if isJobParticipant(jobId) && isImage() && underSizeLimit();
+    }
+
+    match /job-completion/{jobId}/{cleanerId}/{allPaths=**} {
+      allow read: if isJobParticipant(jobId);
+      allow write: if isAuth() && request.auth.uid == cleanerId && isJobParticipant(jobId)
+        && firestore.get(/databases/(default)/documents/jobs/$(jobId)).data.cleanerId == request.auth.uid
+        && firestore.get(/databases/(default)/documents/jobs/$(jobId)).data.status in ['ASSIGNED','EN_ROUTE','IN_PROGRESS']
+        && isImage() && underSizeLimit();
     }
 
     // Profile photos.

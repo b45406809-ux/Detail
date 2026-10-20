@@ -109,16 +109,16 @@ export default function VerifyScreen() {
           <ArrowLeft size={20} color="#150256" />
         </TouchableOpacity>
 
-        <Text className="text-3xl font-black text-ink tracking-tight mb-2">Enter the code</Text>
-        <Text className="text-base text-ink/50 font-medium mb-10">
+        <Text className="text-3xl font-display font-black text-ink tracking-tight mb-2">Enter the code</Text>
+        <Text className="font-sans text-base text-ink/50 font-medium mb-10">
           {IS_MOCK ? 'DEV mode — enter any 6 digits to continue' : `We sent a 6-digit code to\n`}
-          {!IS_MOCK && <Text className="text-ink font-black">{displayPhone || phone}</Text>}
+          {!IS_MOCK && <Text className="text-ink font-display font-black">{displayPhone || phone}</Text>}
         </Text>
 
         {isSending && (
           <View className="flex-row items-center gap-2 mb-6">
             <ActivityIndicator size="small" color="#3906D2" />
-            <Text className="text-sm text-ink/40 font-medium">Sending code…</Text>
+            <Text className="font-sans text-sm text-ink/40 font-medium">Sending code…</Text>
           </View>
         )}
 
@@ -130,7 +130,7 @@ export default function VerifyScreen() {
                 ref={(ref) => {
                   inputRefs.current[index] = ref;
                 }}
-                className="w-12 h-14 rounded-2xl text-center text-xl font-black text-ink"
+                className="w-12 h-14 rounded-2xl text-center text-xl font-display font-black text-ink"
                 style={{
                   backgroundColor: digit ? 'rgba(57,6,210,0.12)' : 'rgba(15,11,46,0.03)',
                   borderWidth: 2,
@@ -159,7 +159,7 @@ export default function VerifyScreen() {
             <ActivityIndicator color="#fff" />
           ) : (
             <Text
-              className="font-black text-sm uppercase tracking-widest"
+              className="font-display font-black text-sm uppercase tracking-widest"
               style={{ color: isComplete && !isSending ? '#fff' : 'rgba(15,11,46,0.3)' }}
             >
               Verify Code
@@ -168,12 +168,12 @@ export default function VerifyScreen() {
         </TouchableOpacity>
 
         <View className="flex-row items-center justify-center mt-6">
-          <Text className="text-sm text-ink/40 font-medium">Didn't receive it? </Text>
+          <Text className="font-sans text-sm text-ink/40 font-medium">Didn't receive it? </Text>
           {resendTimer > 0 ? (
-            <Text className="text-sm font-black text-ink/25">Resend in {resendTimer}s</Text>
+            <Text className="text-sm font-display font-black text-ink/25">Resend in {resendTimer}s</Text>
           ) : (
             <TouchableOpacity onPress={handleResend} disabled={isSending}>
-              <Text className="text-sm font-black text-accent">Resend Code</Text>
+              <Text className="text-sm font-display font-black text-accent">Resend Code</Text>
             </TouchableOpacity>
           )}
         </View>

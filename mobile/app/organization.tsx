@@ -73,7 +73,7 @@ export default function OrganizationScreen() {
   return <SafeAreaView className="flex-1 bg-[#F3F1FC]">
     <View className="flex-row items-center gap-3 px-5 pt-4 pb-4 bg-white">
       <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 bg-ink/5 rounded-2xl items-center justify-center"><ArrowLeft size={18} color="#150256" /></TouchableOpacity>
-      <View><Text className="text-xl font-black text-ink">Organization</Text><Text className="text-xs text-ink/40">Register and manage cleaner membership</Text></View>
+      <View><Text className="text-xl font-display font-black text-ink">Organization</Text><Text className="font-sans text-xs text-ink/40">Register and manage cleaner membership</Text></View>
     </View>
     {loading ? <View className="flex-1 items-center justify-center"><ActivityIndicator color="#3906D2" /></View> : !organization ? <FlatList
       data={[{ key: 'form' }]}
@@ -81,36 +81,36 @@ export default function OrganizationScreen() {
       contentContainerClassName="p-5 pb-10"
       renderItem={() => <View className="bg-white rounded-3xl p-5 gap-3">
         <Building2 size={30} color="#3906D2" />
-        <Text className="text-xl font-black text-ink">Register your organization</Text>
-        <Text className="text-sm text-ink/50 mb-2">After registering, invite cleaners to join your team. Each cleaner completes their own identity check and shares only their verification status.</Text>
+        <Text className="text-xl font-display font-black text-ink">Register your organization</Text>
+        <Text className="font-sans text-sm text-ink/50 mb-2">After registering, invite cleaners to join your team. Each cleaner completes their own identity check and shares only their verification status.</Text>
         <Field label="Organization name" value={name} onChangeText={setName} placeholder="Company or organization name" />
         <Field label="Registration number" value={registrationNumber} onChangeText={setRegistrationNumber} placeholder="Business registration number" />
         <Field label="Contact phone" value={phone} onChangeText={setPhone} placeholder="+263…" keyboardType="phone-pad" />
         <Field label="Country" value={country} onChangeText={setCountry} placeholder="Country" />
         <Field label="City" value={city} onChangeText={setCity} placeholder="City" />
-        <TouchableOpacity disabled={saving} onPress={register} className="bg-accent rounded-2xl p-4 items-center mt-2">{saving ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-black">Register organization</Text>}</TouchableOpacity>
+        <TouchableOpacity disabled={saving} onPress={register} className="bg-accent rounded-2xl p-4 items-center mt-2">{saving ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-display font-black">Register organization</Text>}</TouchableOpacity>
       </View>}
     /> : <FlatList
       data={members}
       keyExtractor={(item) => item.id}
       contentContainerClassName="p-5 pb-10 gap-4"
       ListHeaderComponent={<View className="gap-4">
-        <View className="bg-white rounded-3xl p-5"><Text className="text-xs font-black text-accent uppercase tracking-widest">Registered organization</Text><Text className="text-xl font-black text-ink mt-1">{organization.name}</Text><Text className="text-sm text-ink/50 mt-1">{organization.registrationNumber} · {organization.city}, {organization.country}</Text></View>
+        <View className="bg-white rounded-3xl p-5"><Text className="text-xs font-display font-black text-accent uppercase tracking-widest">Registered organization</Text><Text className="text-xl font-display font-black text-ink mt-1">{organization.name}</Text><Text className="font-sans text-sm text-ink/50 mt-1">{organization.registrationNumber} · {organization.city}, {organization.country}</Text></View>
         <View className="bg-white rounded-3xl p-5 gap-3">
-          <View className="flex-row items-center gap-2"><UserPlus size={18} color="#3906D2" /><Text className="text-base font-black text-ink">Add a cleaner</Text></View>
-          <Text className="text-xs text-ink/50">Create an invitation code for the cleaner. They sign in with the invited email, complete their own Didit KYC, and enter the code to join your organization.</Text>
+          <View className="flex-row items-center gap-2"><UserPlus size={18} color="#3906D2" /><Text className="text-base font-display font-black text-ink">Add a cleaner</Text></View>
+          <Text className="font-sans text-xs text-ink/50">Create an invitation code for the cleaner. They sign in with the invited email, complete their own Didit KYC, and enter the code to join your organization.</Text>
           <Field label="Cleaner name" value={cleanerName} onChangeText={setCleanerName} placeholder="Cleaner’s full name" />
           <Field label="Cleaner email" value={cleanerEmail} onChangeText={setCleanerEmail} placeholder="name@example.com" keyboardType="email-address" />
-          <TouchableOpacity disabled={saving} onPress={invite} className="bg-accent rounded-2xl p-4 items-center">{saving ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-black">Create invitation code</Text>}</TouchableOpacity>
+          <TouchableOpacity disabled={saving} onPress={invite} className="bg-accent rounded-2xl p-4 items-center">{saving ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-display font-black">Create invitation code</Text>}</TouchableOpacity>
         </View>
-        <Text className="text-xs font-black text-ink/40 uppercase tracking-widest">Verified cleaners · {members.length}</Text>
+        <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest">Verified cleaners · {members.length}</Text>
       </View>}
-      ListEmptyComponent={<View className="bg-white rounded-3xl p-5"><Text className="text-sm text-ink/50">No cleaners have joined yet. Invite a cleaner using their account email.</Text></View>}
-      renderItem={({ item }) => <View className="bg-white rounded-2xl p-4"><Text className="font-black text-ink">{item.cleanerName}</Text><Text className="text-xs text-ink/50 mt-1">{item.email} · Identity verified</Text></View>}
+      ListEmptyComponent={<View className="bg-white rounded-3xl p-5"><Text className="font-sans text-sm text-ink/50">No cleaners have joined yet. Invite a cleaner using their account email.</Text></View>}
+      renderItem={({ item }) => <View className="bg-white rounded-2xl p-4"><Text className="font-display font-black text-ink">{item.cleanerName}</Text><Text className="font-sans text-xs text-ink/50 mt-1">{item.email} · Identity verified</Text></View>}
     />}
   </SafeAreaView>;
 }
 
 function Field({ label, ...props }: { label: string; value: string; onChangeText: (value: string) => void; placeholder: string; keyboardType?: 'default' | 'phone-pad' | 'email-address' }) {
-  return <View><Text className="text-xs font-black text-ink/50 mb-1.5">{label}</Text><TextInput {...props} autoCapitalize={props.keyboardType === 'email-address' ? 'none' : 'words'} className="border border-ink/10 rounded-2xl bg-white px-4 py-3 text-sm text-ink" placeholderTextColor="#9C94C4" /></View>;
+  return <View><Text className="text-xs font-display font-black text-ink/50 mb-1.5">{label}</Text><TextInput {...props} autoCapitalize={props.keyboardType === 'email-address' ? 'none' : 'words'} className="font-sans border border-ink/10 rounded-2xl bg-white px-4 py-3 text-sm text-ink" placeholderTextColor="#9C94C4" /></View>;
 }

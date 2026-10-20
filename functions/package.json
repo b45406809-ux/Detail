@@ -1,6 +1,6 @@
 {
   "name": "detail-functions",
-  "description": "Cloud Functions for Detail — payment settlement, rating aggregation, PesePay",
+  "description": "Cloud Functions for Detail — payment settlement, Paynow BuySafe, PesePay wallet top-ups",
   "engines": {
     "node": "20"
   },
@@ -17,6 +17,7 @@
   "dependencies": {
     "firebase-admin": "^12.6.0",
     "firebase-functions": "^6.1.0",
+    "paynow": "^2.2.2",
     "pesepay": "^1.0.4"
   },
   "devDependencies": {

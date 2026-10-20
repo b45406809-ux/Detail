@@ -19,8 +19,6 @@
       "usesAppleSignIn": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Detail uses your location to find nearby cleaners.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Detail tracks your location during active jobs.",
-        "NSMicrophoneUsageDescription": "Detail uses the microphone for calls with cleaners.",
         "NSCameraUsageDescription": "Detail uses the camera to take job photos."
       }
     },
@@ -30,11 +28,10 @@
         "backgroundColor": "#3906d2"
       },
       "package": "com.detail.app",
+      "blockedPermissions": ["android.permission.RECORD_AUDIO", "android.permission.ACCESS_BACKGROUND_LOCATION"],
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_BACKGROUND_LOCATION",
-        "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE"

@@ -35,7 +35,7 @@ const FAQS = [
   },
   {
     q: 'How does payment work?',
-    a: 'Payment is processed through your Detail Wallet or paid in cash. Securely top up your wallet before booking — the amount is held and released to the cleaner after you confirm the job is complete.',
+    a: 'New bookings are paid through Paynow BuySafe. Paynow holds the payment while the service is underway. After cleaning, confirm delivery in your Paynow account; Paynow releases funds to Detail after its 24-hour dispute window. Detail then credits the cleaner’s 90% share to their in-app balance. Existing Detail Wallet balances and permitted cash bookings may also be used.',
   },
   {
     q: 'How do I become a cleaner on Detail?',
@@ -56,7 +56,7 @@ function FAQItem({ q, a }: { q: string; a: string }) {
       className="bg-white rounded-3xl px-5 py-4 border border-slate-100"
     >
       <View className="flex-row items-center justify-between gap-3">
-        <Text className="flex-1 text-sm font-black text-slate-900 leading-snug">{q}</Text>
+        <Text className="flex-1 text-sm font-display font-black text-slate-900 leading-snug">{q}</Text>
         {expanded ? (
           <ChevronUp size={18} color="#94a3b8" />
         ) : (
@@ -64,7 +64,7 @@ function FAQItem({ q, a }: { q: string; a: string }) {
         )}
       </View>
       {expanded && (
-        <Text className="text-sm text-slate-500 font-medium leading-relaxed mt-3">{a}</Text>
+        <Text className="font-sans text-sm text-slate-500 font-medium leading-relaxed mt-3">{a}</Text>
       )}
     </TouchableOpacity>
   );
@@ -88,8 +88,8 @@ export default function HelpScreen() {
           <ArrowLeft size={18} color="#0f172a" />
         </TouchableOpacity>
         <View className="flex-1">
-          <Text className="text-xl font-black text-slate-900">Help & Support</Text>
-          <Text className="text-xs text-slate-400 font-medium">FAQs and contact options</Text>
+          <Text className="text-xl font-display font-black text-slate-900">Help & Support</Text>
+          <Text className="font-sans text-xs text-slate-400 font-medium">FAQs and contact options</Text>
         </View>
       </View>
 
@@ -107,10 +107,10 @@ export default function HelpScreen() {
             <View className="w-12 h-12 bg-accent/10 rounded-2xl items-center justify-center">
               <Mail size={22} color="#3906d2" />
             </View>
-            <Text className="text-xs font-black text-slate-900 uppercase tracking-wider">
+            <Text className="text-xs font-display font-black text-slate-900 uppercase tracking-wider">
               Email Us
             </Text>
-            <Text className="text-[10px] text-slate-400 font-medium text-center">
+            <Text className="font-sans text-[10px] text-slate-400 font-medium text-center">
               {SUPPORT_EMAIL}
             </Text>
           </TouchableOpacity>
@@ -131,10 +131,10 @@ export default function HelpScreen() {
             <View className="w-12 h-12 bg-emerald-50 rounded-2xl items-center justify-center">
               <MessageCircle size={22} color="#10b981" />
             </View>
-            <Text className="text-xs font-black text-slate-900 uppercase tracking-wider">
+            <Text className="text-xs font-display font-black text-slate-900 uppercase tracking-wider">
               Live Chat
             </Text>
-            <Text className="text-[10px] text-slate-400 font-medium text-center">
+            <Text className="font-sans text-[10px] text-slate-400 font-medium text-center">
               Mon–Fri 09:00–16:30 CAT
             </Text>
           </TouchableOpacity>
@@ -142,10 +142,10 @@ export default function HelpScreen() {
 
         {IS_MOCK && (
           <View className="mx-5 mb-5 bg-amber-50 rounded-2xl px-4 py-3 border border-amber-100">
-            <Text className="text-xs font-black text-amber-700 uppercase tracking-wider mb-0.5">
+            <Text className="text-xs font-display font-black text-amber-700 uppercase tracking-wider mb-0.5">
               DEV Mode
             </Text>
-            <Text className="text-xs text-amber-600 font-medium">
+            <Text className="font-sans text-xs text-amber-600 font-medium">
               Live chat and some contact features are mocked. In production these connect to the
               real support system (Mon–Fri 09:00 AM – 4:30 PM CAT).
             </Text>
@@ -153,7 +153,7 @@ export default function HelpScreen() {
         )}
 
         {/* FAQ list */}
-        <Text className="text-xs font-black text-slate-400 uppercase tracking-widest px-5 mb-3">
+        <Text className="text-xs font-display font-black text-slate-400 uppercase tracking-widest px-5 mb-3">
           Frequently Asked Questions
         </Text>
         <View className="px-5 gap-3">
@@ -164,10 +164,10 @@ export default function HelpScreen() {
 
         {/* Response time note */}
         <View className="mx-5 mt-6 bg-white rounded-3xl p-4 border border-slate-100">
-          <Text className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">
+          <Text className="text-xs font-display font-black text-slate-400 uppercase tracking-widest mb-1">
             Response Times
           </Text>
-          <Text className="text-sm text-slate-600 font-medium leading-relaxed">
+          <Text className="font-sans text-sm text-slate-600 font-medium leading-relaxed">
             Email: within 24 hours{'\n'}Live chat: Mon–Fri 09:00 AM – 4:30 PM CAT (typically under 5 minutes)
           </Text>
         </View>

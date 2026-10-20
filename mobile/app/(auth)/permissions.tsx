@@ -84,8 +84,8 @@ export default function PermissionsScreen() {
           <View className="w-16 h-16 bg-accent/10 border border-accent/20 rounded-3xl items-center justify-center mb-6">
             <Shield size={32} color="#3906D2" />
           </View>
-          <Text className="text-3xl font-black text-ink tracking-tight mb-2">Allow permissions</Text>
-          <Text className="text-base text-ink/50 font-medium mb-8 leading-relaxed">
+          <Text className="text-3xl font-display font-black text-ink tracking-tight mb-2">Allow permissions</Text>
+          <Text className="font-sans text-base text-ink/50 font-medium mb-8 leading-relaxed">
             Detail needs a few permissions to match you with cleaners and keep you updated.
           </Text>
 
@@ -101,16 +101,16 @@ export default function PermissionsScreen() {
                   </View>
                   <View className="flex-1">
                     <View className="flex-row items-center gap-2 mb-1">
-                      <Text className="text-sm font-black text-ink">{title}</Text>
+                      <Text className="text-sm font-display font-black text-ink">{title}</Text>
                       {required && (
                         <View className="bg-accent/10 px-2 py-0.5 rounded-full">
-                          <Text className="text-[10px] font-black text-accent uppercase tracking-wider">
+                          <Text className="text-[10px] font-display font-black text-accent uppercase tracking-wider">
                             Required
                           </Text>
                         </View>
                       )}
                     </View>
-                    <Text className="text-xs text-ink/50 font-medium leading-relaxed">{sub}</Text>
+                    <Text className="font-sans text-xs text-ink/50 font-medium leading-relaxed">{sub}</Text>
                   </View>
                 </View>
 
@@ -120,7 +120,7 @@ export default function PermissionsScreen() {
                     activeOpacity={0.8}
                     className="mt-4 bg-accent py-3 rounded-2xl items-center"
                   >
-                    <Text className="text-white font-black text-xs uppercase tracking-widest">
+                    <Text className="text-white font-display font-black text-xs uppercase tracking-widest">
                       Allow {title}
                     </Text>
                   </TouchableOpacity>
@@ -139,7 +139,7 @@ export default function PermissionsScreen() {
           {isLoading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text className="font-black text-sm uppercase tracking-widest text-white">Continue to App</Text>
+            <Text className="font-display font-black text-sm uppercase tracking-widest text-white">Continue to App</Text>
           )}
         </TouchableOpacity>
       </View>

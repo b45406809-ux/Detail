@@ -179,8 +179,8 @@ export default function SignInScreen() {
             <ArrowLeft size={20} color="#150256" />
           </TouchableOpacity>
 
-          <Text className="text-3xl font-black text-ink tracking-tight mb-2">Welcome back</Text>
-          <Text className="text-base text-ink/50 font-medium mb-8">Sign in to your Detail account</Text>
+          <Text className="text-3xl font-display font-black text-ink tracking-tight mb-2">Welcome back</Text>
+          <Text className="font-sans text-base text-ink/50 font-medium mb-8">Sign in to your Detail account</Text>
 
           <GlassCard style={{ padding: 20 }}>
                 {/* Tab switcher */}
@@ -211,7 +211,7 @@ export default function SignInScreen() {
                 {tab === 'phone' ? (
                   <View className="gap-4">
                     <View>
-                      <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-2">
+                      <Text className="text-xs font-display font-black text-ink/50 uppercase tracking-widest mb-2">
                         Phone Number
                       </Text>
                       <View className="flex-row items-center border border-white/40 rounded-2xl overflow-hidden bg-white/50">
@@ -222,12 +222,12 @@ export default function SignInScreen() {
                           className="flex-row items-center gap-1.5 px-3.5 py-4 border-r border-white/40 bg-ink/[0.02]"
                         >
                           <Text style={{ fontSize: 18 }}>{selectedCountry.flag}</Text>
-                          <Text className="text-sm font-bold text-ink">{selectedCountry.dialCode}</Text>
+                          <Text className="font-sans text-sm font-bold text-ink">{selectedCountry.dialCode}</Text>
                           <ChevronDown size={14} color="rgba(21,2,86,0.5)" />
                         </TouchableOpacity>
 
                         <TextInput
-                          className="flex-1 px-4 py-4 text-base font-medium text-ink"
+                          className="font-sans flex-1 px-4 py-4 text-base font-medium text-ink"
                           placeholder={selectedCountry.placeholder || '000 000 0000'}
                           placeholderTextColor="rgba(21,2,86,0.35)"
                           keyboardType="phone-pad"
@@ -236,7 +236,7 @@ export default function SignInScreen() {
                           autoFocus
                         />
                       </View>
-                      <Text className="text-xs text-ink/50 font-medium mt-2 px-1">
+                      <Text className="font-sans text-xs text-ink/50 font-medium mt-2 px-1">
                         We'll send a verification code to {selectedCountry.dialCode} {phone || '…'}
                       </Text>
                     </View>
@@ -255,7 +255,7 @@ export default function SignInScreen() {
                         {hasAcceptedTerms && <Check size={14} color="#fff" strokeWidth={3} />}
                       </View>
                       <View className="flex-1">
-                        <Text className="text-xs text-ink/70 leading-relaxed font-medium">
+                        <Text className="font-sans text-xs text-ink/70 leading-relaxed font-medium">
                           I agree to Detail's{' '}
                           <Text
                             onPress={() => router.push('/customer-agreement')}
@@ -279,7 +279,7 @@ export default function SignInScreen() {
                       activeOpacity={0.85}
                       className="w-full bg-accent py-5 rounded-[24px] items-center mt-2 shadow-lg shadow-accent/30"
                     >
-                      <Text className="text-white font-black text-sm uppercase tracking-widest">Send Code</Text>
+                      <Text className="text-white font-display font-black text-sm uppercase tracking-widest">Send Code</Text>
                     </TouchableOpacity>
                   </View>
                 ) : (
@@ -295,20 +295,20 @@ export default function SignInScreen() {
                       ))}
                     </View>
                     <View className="flex-row items-center justify-between mb-1">
-                      <Text className="text-sm font-bold text-ink/70">
+                      <Text className="font-sans text-sm font-bold text-ink/70">
                         {isNewAccount ? 'Create a new account' : 'Sign in to existing account'}
                       </Text>
                       <TouchableOpacity onPress={() => setIsNewAccount(!isNewAccount)}>
-                        <Text className="text-sm font-black text-accent">
+                        <Text className="text-sm font-display font-black text-accent">
                           {isNewAccount ? 'Sign in' : 'Register'}
                         </Text>
                       </TouchableOpacity>
                     </View>
 
                     <View>
-                      <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-2">Email</Text>
+                      <Text className="text-xs font-display font-black text-ink/50 uppercase tracking-widest mb-2">Email</Text>
                       <TextInput
-                        className="border border-white/40 rounded-2xl px-4 py-4 text-base font-medium text-ink bg-white/50"
+                        className="font-sans border border-white/40 rounded-2xl px-4 py-4 text-base font-medium text-ink bg-white/50"
                         placeholder="you@example.com"
                         placeholderTextColor="rgba(21,2,86,0.35)"
                         keyboardType="email-address"
@@ -321,18 +321,18 @@ export default function SignInScreen() {
 
                     {emailAuthMode === 'PASSWORD' && <View>
                       <View className="flex-row items-center justify-between mb-2">
-                        <Text className="text-xs font-black text-ink/50 uppercase tracking-widest">Password</Text>
+                        <Text className="text-xs font-display font-black text-ink/50 uppercase tracking-widest">Password</Text>
                         {!isNewAccount && (
                           <TouchableOpacity
                             onPress={() => router.push('/(auth)/forgot-password')}
                             activeOpacity={0.7}
                           >
-                            <Text className="text-xs font-bold text-accent">Forgot password?</Text>
+                            <Text className="font-sans text-xs font-bold text-accent">Forgot password?</Text>
                           </TouchableOpacity>
                         )}
                       </View>
                       <TextInput
-                        className="border border-white/40 rounded-2xl px-4 py-4 text-base font-medium text-ink bg-white/50"
+                        className="font-sans border border-white/40 rounded-2xl px-4 py-4 text-base font-medium text-ink bg-white/50"
                         placeholder="••••••••"
                         placeholderTextColor="rgba(21,2,86,0.35)"
                         secureTextEntry
@@ -356,7 +356,7 @@ export default function SignInScreen() {
                         {hasAcceptedTerms && <Check size={14} color="#fff" strokeWidth={3} />}
                       </View>
                       <View className="flex-1">
-                        <Text className="text-xs text-ink/70 leading-relaxed font-medium">
+                        <Text className="font-sans text-xs text-ink/70 leading-relaxed font-medium">
                           I agree to Detail's{' '}
                           <Text
                             onPress={() => router.push('/customer-agreement')}
@@ -385,7 +385,7 @@ export default function SignInScreen() {
                       {isLoading ? (
                         <ActivityIndicator color="#fff" />
                       ) : (
-                        <Text className="text-white font-black text-sm uppercase tracking-widest">
+                        <Text className="text-white font-display font-black text-sm uppercase tracking-widest">
                           {emailAuthMode === 'CODE' ? 'Send Email Code' : isNewAccount ? 'Create Account' : 'Sign In'}
                         </Text>
                       )}
@@ -400,20 +400,20 @@ export default function SignInScreen() {
 
           {/* Legal footer links */}
           <View className="mt-8 pt-6 border-t border-ink/10 items-center">
-            <Text className="text-[11px] font-black text-ink/40 uppercase tracking-widest mb-3">
+            <Text className="text-[11px] font-display font-black text-ink/40 uppercase tracking-widest mb-3">
               Legal & Platform Policies
             </Text>
             <View className="flex-row flex-wrap items-center justify-center gap-x-3 gap-y-2">
               <TouchableOpacity onPress={() => router.push('/customer-agreement')} activeOpacity={0.7}>
-                <Text className="text-xs font-bold text-ink/60">Customer Agreement</Text>
+                <Text className="font-sans text-xs font-bold text-ink/60">Customer Agreement</Text>
               </TouchableOpacity>
-              <Text className="text-ink/30">•</Text>
+              <Text className="font-sans text-ink/30">•</Text>
               <TouchableOpacity onPress={() => router.push('/cleaner-agreement')} activeOpacity={0.7}>
-                <Text className="text-xs font-bold text-ink/60">Cleaner Agreement</Text>
+                <Text className="font-sans text-xs font-bold text-ink/60">Cleaner Agreement</Text>
               </TouchableOpacity>
-              <Text className="text-ink/30">•</Text>
+              <Text className="font-sans text-ink/30">•</Text>
               <TouchableOpacity onPress={() => router.push('/privacy-policy')} activeOpacity={0.7}>
-                <Text className="text-xs font-bold text-ink/60">Privacy Policy</Text>
+                <Text className="font-sans text-xs font-bold text-ink/60">Privacy Policy</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -422,7 +422,7 @@ export default function SignInScreen() {
             <View className="w-4 h-4 rounded-full bg-accent/10 items-center justify-center">
               <View className="w-1.5 h-1.5 rounded-full bg-accent" />
             </View>
-            <Text className="text-ink/40 text-xs font-bold">Bank-grade encryption. Fully verified pros.</Text>
+            <Text className="font-sans text-ink/40 text-xs font-bold">Bank-grade encryption. Fully verified pros.</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

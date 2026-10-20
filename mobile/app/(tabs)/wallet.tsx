@@ -30,6 +30,7 @@ import {
   limit,
 } from '../../services/firebase';
 import { addFundsToWallet, getPaymentMethods } from '../../services/payments';
+import { callFunction } from '../../services/functions';
 import { IS_MOCK } from '../../utils/env';
 import { WalletTransaction } from '../../types';
 
@@ -44,6 +45,11 @@ export default function WalletScreen() {
   const [isAddFundsOpen, setIsAddFundsOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isPayoutOpen, setIsPayoutOpen] = useState(false);
+  const [payoutAmount, setPayoutAmount] = useState('');
+  const [payoutMethod, setPayoutMethod] = useState<'ECOCASH' | 'INNBUCKS' | 'BANK'>('ECOCASH');
+  const [payoutName, setPayoutName] = useState('');
+  const [payoutDestination, setPayoutDestination] = useState('');
 
   const paymentMethods = getPaymentMethods();
 
@@ -93,24 +99,37 @@ export default function WalletScreen() {
   };
 
   const balance = profile?.balance ?? 0;
+  const isCleaner = profile?.role === 'CLEANER';
+  const availableEarnings = isCleaner ? Math.max(0, Number(profile?.balance ?? 0) - Number(profile?.commissionBalance ?? 0)) : 0;
+
+  const requestPayout = async () => {
+    setIsLoading(true);
+    try {
+      await callFunction('requestCleanerPayout', { amount: Number(payoutAmount), method: payoutMethod, accountName: payoutName, accountNumber: payoutDestination });
+      setIsPayoutOpen(false); setPayoutAmount(''); setPayoutName(''); setPayoutDestination('');
+      Alert.alert('Payout requested', 'Your cleared earnings are reserved. Detail will send the transfer and update the request status.');
+    } catch (error: any) {
+      Alert.alert('Could not request payout', error?.message ?? 'Please check the amount and payout details.');
+    } finally { setIsLoading(false); }
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-[#F2F1F5]">
       {/* Header */}
       <View className="px-5 pt-4 pb-4">
-        <Text className="text-2xl font-black text-slate-900 tracking-tight">Wallet</Text>
+        <Text className="text-2xl font-display font-black text-slate-900 tracking-tight">Wallet</Text>
       </View>
 
       {/* Balance card */}
       <View className="mx-5 mb-6 bg-accent rounded-4xl p-6 shadow-xl shadow-accent/30">
         <View className="flex-row items-center gap-2 mb-4">
           <Wallet size={18} color="rgba(255,255,255,0.7)" />
-          <Text className="text-xs font-black text-white/70 uppercase tracking-widest">
-            Available Balance
+          <Text className="text-xs font-display font-black text-white/70 uppercase tracking-widest">
+            {isCleaner ? 'Available earnings' : 'Available Balance'}
           </Text>
         </View>
-        <Text className="text-4xl font-black text-white mb-1">${balance.toFixed(2)}</Text>
-        <Text className="text-sm text-white/60 font-medium">Detail Wallet</Text>
+        <Text className="text-4xl font-display font-black text-white mb-1">${(isCleaner ? availableEarnings : balance).toFixed(2)}</Text>
+        <Text className="font-sans text-sm text-white/60 font-medium">{isCleaner ? `Cleared earnings · $${Number(profile?.commissionBalance ?? 0).toFixed(2)} commission credit` : 'Detail Wallet'}</Text>
 
         <View className="flex-row gap-3 mt-6">
           <TouchableOpacity
@@ -119,20 +138,15 @@ export default function WalletScreen() {
             activeOpacity={0.8}
           >
             <Plus size={16} color="#fff" />
-            <Text className="text-white font-black text-xs uppercase tracking-wider">Add Funds</Text>
+            <Text className="text-white font-display font-black text-xs uppercase tracking-wider">{isCleaner ? 'Top up commission' : 'Add Funds'}</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() =>
-              Alert.alert(
-                'Withdraw',
-                'Withdrawals are processed within 1–3 business days to your linked account. Contact support to initiate.'
-              )
-            }
+            onPress={() => isCleaner ? setIsPayoutOpen(true) : Alert.alert('Withdraw', 'Withdrawals are available for cleaner earnings.')}
             className="flex-1 bg-white/20 py-3 rounded-2xl flex-row items-center justify-center gap-2"
             activeOpacity={0.8}
           >
             <ArrowUpRight size={16} color="#fff" />
-            <Text className="text-white font-black text-xs uppercase tracking-wider">Withdraw</Text>
+            <Text className="text-white font-display font-black text-xs uppercase tracking-wider">{isCleaner ? 'Request payout' : 'Withdraw'}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -147,8 +161,8 @@ export default function WalletScreen() {
             <ArrowUpRight size={18} color="#ef4444" />
           </View>
           <View className="flex-1">
-            <Text className="text-sm font-black text-red-700">Outstanding commission balance</Text>
-            <Text className="text-xs text-red-500 font-medium mt-0.5">
+            <Text className="text-sm font-display font-black text-red-700">Outstanding commission balance</Text>
+            <Text className="font-sans text-xs text-red-500 font-medium mt-0.5">
               Add funds to bring your balance to $0 and keep bidding on jobs
             </Text>
           </View>
@@ -157,9 +171,9 @@ export default function WalletScreen() {
 
       {/* Payment methods (informational — the processor handles selection on its hosted page) */}
       <View className="mx-5 mb-6">
-        <Text className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">
+        <Text className="text-xs font-display font-black text-slate-400 uppercase tracking-widest mb-3">
           Accepted Payment Methods
-          {IS_MOCK && <Text className="text-amber-500"> [DEV — simulated]</Text>}
+          {IS_MOCK && <Text className="font-sans text-amber-500"> [DEV — simulated]</Text>}
         </Text>
         <View className="bg-white rounded-3xl border border-slate-100 overflow-hidden">
           {paymentMethods.map(({ id, label, sub }, idx) => {
@@ -175,8 +189,8 @@ export default function WalletScreen() {
                   <Icon size={18} color="#3906d2" />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-sm font-black text-slate-900">{label}</Text>
-                  <Text className="text-xs text-slate-400 font-medium mt-0.5">{sub}</Text>
+                  <Text className="text-sm font-display font-black text-slate-900">{label}</Text>
+                  <Text className="font-sans text-xs text-slate-400 font-medium mt-0.5">{sub}</Text>
                 </View>
               </View>
             );
@@ -186,13 +200,13 @@ export default function WalletScreen() {
 
       {/* Transactions */}
       <View className="flex-1 px-5">
-        <Text className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">
+        <Text className="text-xs font-display font-black text-slate-400 uppercase tracking-widest mb-3">
           Recent Transactions
         </Text>
         {transactions.length === 0 ? (
           <View className="bg-white rounded-3xl p-8 items-center border border-slate-100">
-            <Text className="text-3xl mb-3">💳</Text>
-            <Text className="text-sm font-black text-slate-600 text-center">
+            <Text className="font-sans text-3xl mb-3">💳</Text>
+            <Text className="text-sm font-display font-black text-slate-600 text-center">
               No transactions yet
             </Text>
           </View>
@@ -216,8 +230,8 @@ export default function WalletScreen() {
                   )}
                 </View>
                 <View className="flex-1">
-                  <Text className="text-sm font-black text-slate-900">{item.description}</Text>
-                  <Text className="text-xs text-slate-400 font-medium mt-0.5">
+                  <Text className="text-sm font-display font-black text-slate-900">{item.description}</Text>
+                  <Text className="font-sans text-xs text-slate-400 font-medium mt-0.5">
                     {item.createdAt?.toDate?.()?.toLocaleDateString() ?? 'Recent'}
                   </Text>
                 </View>
@@ -230,7 +244,7 @@ export default function WalletScreen() {
                     {item.type === 'CREDIT' ? '+' : '-'}${item.amount.toFixed(2)}
                   </Text>
                   {(item as any).status === 'PENDING' && (
-                    <Text className="text-[10px] font-black text-amber-500 uppercase tracking-wider mt-0.5">
+                    <Text className="text-[10px] font-display font-black text-amber-500 uppercase tracking-wider mt-0.5">
                       Pending
                     </Text>
                   )}
@@ -250,20 +264,20 @@ export default function WalletScreen() {
           />
           <View className="bg-white rounded-t-[32px] p-6 pb-10">
             <View className="flex-row items-center justify-between mb-1">
-              <Text className="text-xl font-black text-slate-900">Add Funds</Text>
+              <Text className="text-xl font-display font-black text-slate-900">{isCleaner ? 'Top up commission credit' : 'Add Funds'}</Text>
               <TouchableOpacity onPress={() => setIsAddFundsOpen(false)}>
                 <X size={22} color="#94a3b8" />
               </TouchableOpacity>
             </View>
-            <Text className="text-xs text-slate-400 font-medium mb-6">
-              {IS_MOCK ? 'DEV mode — no real charge' : 'Secure payment · EcoCash, Card & more'}
+            <Text className="font-sans text-xs text-slate-400 font-medium mb-6">
+              {IS_MOCK ? 'DEV mode — no real charge' : isCleaner ? 'Prepaid credit for direct-payment booking commissions' : 'Secure payment · EcoCash, Card & more'}
             </Text>
 
-            <Text className="text-xs font-black text-slate-500 uppercase tracking-widest mb-2">
+            <Text className="text-xs font-display font-black text-slate-500 uppercase tracking-widest mb-2">
               Amount (USD)
             </Text>
             <TextInput
-              className="border-2 border-slate-100 rounded-2xl px-4 py-4 text-2xl font-black text-slate-900 bg-slate-50 mb-4"
+              className="border-2 border-slate-100 rounded-2xl px-4 py-4 text-2xl font-display font-black text-slate-900 bg-slate-50 mb-4"
               placeholder="0.00"
               placeholderTextColor="#94a3b8"
               keyboardType="decimal-pad"
@@ -302,13 +316,24 @@ export default function WalletScreen() {
               {isLoading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text className="text-white font-black text-sm uppercase tracking-widest">
+                <Text className="text-white font-display font-black text-sm uppercase tracking-widest">
                   {IS_MOCK ? `[DEV] Add $${amount || '0.00'}` : `Pay $${amount || '0.00'}`}
                 </Text>
               )}
             </TouchableOpacity>
           </View>
         </View>
+      </Modal>
+      <Modal visible={isPayoutOpen} transparent animationType="slide">
+        <View className="flex-1 justify-end bg-black/50"><View className="bg-white rounded-t-[32px] p-6 pb-10">
+          <View className="flex-row justify-between items-center mb-4"><Text className="text-xl font-display font-black">Request payout</Text><TouchableOpacity onPress={() => setIsPayoutOpen(false)}><X size={22} color="#94a3b8" /></TouchableOpacity></View>
+          <Text className="font-sans text-sm text-slate-500 mb-3">Available cleared earnings: ${availableEarnings.toFixed(2)}. Minimum payout $5. Transfers are sent manually while payout integrations are unavailable.</Text>
+          <TextInput className="font-sans border border-slate-200 rounded-xl p-4 mb-3" placeholder="Amount in USD" keyboardType="decimal-pad" value={payoutAmount} onChangeText={setPayoutAmount} />
+          <View className="flex-row gap-2 mb-3">{(['ECOCASH','INNBUCKS','BANK'] as const).map(m => <TouchableOpacity key={m} onPress={() => setPayoutMethod(m)} className={`flex-1 p-3 rounded-xl ${payoutMethod === m ? 'bg-accent' : 'bg-slate-100'}`}><Text className={`text-center text-xs font-bold ${payoutMethod === m ? 'text-white' : 'text-slate-700'}`}>{m}</Text></TouchableOpacity>)}</View>
+          <TextInput className="font-sans border border-slate-200 rounded-xl p-4 mb-3" placeholder="Account / wallet holder name" value={payoutName} onChangeText={setPayoutName} />
+          <TextInput className="font-sans border border-slate-200 rounded-xl p-4 mb-4" placeholder={payoutMethod === 'BANK' ? 'Bank account number and bank' : 'Mobile money number'} value={payoutDestination} onChangeText={setPayoutDestination} />
+          <TouchableOpacity disabled={isLoading} onPress={requestPayout} className="bg-accent rounded-2xl p-4 items-center">{isLoading ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-display font-black">Submit payout request</Text>}</TouchableOpacity>
+        </View></View>
       </Modal>
     </SafeAreaView>
   );

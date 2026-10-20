@@ -45,17 +45,17 @@ export default function PrivacyPolicyScreen() {
         >
           <ArrowLeft size={18} color="#0f172a" />
         </TouchableOpacity>
-        <Text className="text-xl font-black text-slate-900">Privacy Policy</Text>
+        <Text className="text-xl font-display font-black text-slate-900">Privacy Policy</Text>
       </View>
 
       <ScrollView contentContainerClassName="px-5 pt-6 pb-16" showsVerticalScrollIndicator={false}>
-        <Text className="text-xs text-slate-400 font-medium mb-6">
+        <Text className="font-sans text-xs text-slate-400 font-medium mb-6">
           Last updated: January 2025
         </Text>
         {SECTIONS.map(({ title, body }) => (
           <View key={title} className="mb-6">
-            <Text className="text-base font-black text-slate-900 mb-2">{title}</Text>
-            <Text className="text-sm text-slate-600 font-medium leading-relaxed">{body}</Text>
+            <Text className="text-base font-display font-black text-slate-900 mb-2">{title}</Text>
+            <Text className="font-sans text-sm text-slate-600 font-medium leading-relaxed">{body}</Text>
           </View>
         ))}
       </ScrollView>

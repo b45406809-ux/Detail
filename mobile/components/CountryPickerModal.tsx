@@ -70,8 +70,8 @@ export function CountryPickerModal({
                 <Globe size={18} color="#3906D2" />
               </View>
               <View>
-                <Text className="text-lg font-black text-ink">Select Country</Text>
-                <Text className="text-xs text-ink/40 font-medium">Choose from all {COUNTRIES.length} supported country and region codes</Text>
+                <Text className="text-lg font-display font-black text-ink">Select Country</Text>
+                <Text className="font-sans text-xs text-ink/40 font-medium">Choose from all {COUNTRIES.length} supported country and region codes</Text>
               </View>
             </View>
             <TouchableOpacity
@@ -88,7 +88,7 @@ export function CountryPickerModal({
             <View className="flex-row items-center bg-ink/[0.03] border border-ink/10 rounded-2xl px-3.5 py-2.5">
               <Search size={18} color="rgba(21,2,86,0.4)" style={{ marginRight: 8 }} />
               <TextInput
-                className="flex-1 text-sm font-medium text-ink p-0"
+                className="font-sans flex-1 text-sm font-medium text-ink p-0"
                 placeholder="Search country or code (e.g. Zimbabwe, +263, US)..."
                 placeholderTextColor="rgba(21,2,86,0.35)"
                 value={searchQuery}
@@ -132,7 +132,7 @@ export function CountryPickerModal({
                       >
                         {item.name}
                       </Text>
-                      <Text className="text-xs text-ink/40 font-medium">{item.code}</Text>
+                      <Text className="font-sans text-xs text-ink/40 font-medium">{item.code}</Text>
                     </View>
                   </View>
 
@@ -161,8 +161,8 @@ export function CountryPickerModal({
             }}
             ListEmptyComponent={
               <View className="items-center justify-center py-12 px-6">
-                <Text className="text-base font-bold text-ink/60 mb-1">No countries found</Text>
-                <Text className="text-xs text-ink/40 text-center font-medium">
+                <Text className="font-sans text-base font-bold text-ink/60 mb-1">No countries found</Text>
+                <Text className="font-sans text-xs text-ink/40 text-center font-medium">
                   Try searching with a different name or dial code like "263" or "Zimbabwe"
                 </Text>
               </View>

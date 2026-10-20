@@ -38,7 +38,7 @@ export default function FavoritesScreen() {
         <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 bg-white rounded-2xl items-center justify-center border border-ink/5">
           <ArrowLeft size={18} color="#150256" />
         </TouchableOpacity>
-        <Text className="text-xl font-black text-ink">Favorites</Text>
+        <Text className="text-xl font-display font-black text-ink">Favorites</Text>
       </View>
 
       {isLoading ? (
@@ -50,8 +50,8 @@ export default function FavoritesScreen() {
           <View className="w-20 h-20 bg-accent/10 rounded-3xl items-center justify-center mb-4">
             <Heart size={32} color="#3906D2" />
           </View>
-          <Text className="text-lg font-black text-ink text-center">No favorites yet</Text>
-          <Text className="text-sm text-ink/40 font-medium text-center mt-2">
+          <Text className="text-lg font-display font-black text-ink text-center">No favorites yet</Text>
+          <Text className="font-sans text-sm text-ink/40 font-medium text-center mt-2">
             Tap the heart on a cleaner after a job to save them for quick rebooking
           </Text>
         </View>
@@ -67,14 +67,14 @@ export default function FavoritesScreen() {
                 {item.cleanerPhoto ? (
                   <Image source={{ uri: item.cleanerPhoto }} style={{ width: 56, height: 56 }} />
                 ) : (
-                  <Text className="text-2xl">🧹</Text>
+                  <Text className="font-sans text-2xl">🧹</Text>
                 )}
               </View>
               <View className="flex-1">
-                <Text className="text-sm font-black text-ink">{item.cleanerName ?? 'Cleaner'}</Text>
+                <Text className="text-sm font-display font-black text-ink">{item.cleanerName ?? 'Cleaner'}</Text>
                 <View className="flex-row items-center gap-1 mt-1">
                   <Star size={11} color="#f59e0b" fill="#f59e0b" />
-                  <Text className="text-xs font-bold text-ink/50">Saved cleaner</Text>
+                  <Text className="font-sans text-xs font-bold text-ink/50">Saved cleaner</Text>
                 </View>
               </View>
               <TouchableOpacity

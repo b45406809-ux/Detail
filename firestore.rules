@@ -1,19 +1,4 @@
 rules_version = '2';
-// ═══════════════════════════════════════════════════════════════════════
-// TEMPORARY — SIMULATE MODE (search this repo for EXPO_PUBLIC_SIMULATE_FUNCTIONS)
-//
-// Cloud Functions can't be deployed yet (Firebase Blaze billing not
-// enabled), so the mobile app's services/functionSimulators.ts replicates
-// several Functions' writes directly from the client for testing purposes.
-// Every relaxation below is marked "SIMULATE MODE" and exists ONLY to let
-// those simulators write what the real Cloud Function would have written.
-//
-// MUST REVERT before real users or real money touch this app: once Blaze
-// is enabled and the real Functions in functions/src/index.ts are deployed,
-// undo every "SIMULATE MODE" block below (git history has the strict
-// version — see the commit that introduced this banner) and flip
-// EXPO_PUBLIC_SIMULATE_FUNCTIONS to false.
-// ═══════════════════════════════════════════════════════════════════════
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -29,6 +14,17 @@ service cloud.firestore {
       return isAuth() && request.auth.token.admin == true;
     }
 
+    function isJobParticipant(jobId) {
+      let job = get(/databases/$(database)/documents/jobs/$(jobId)).data;
+      return isAuth() && (job.customerId == request.auth.uid || job.cleanerId == request.auth.uid);
+    }
+
+    function cleanerIsApproved() {
+      let cleaner = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return isAuth() && cleaner.role == 'CLEANER' && cleaner.verificationStatus == 'VERIFIED'
+        && cleaner.cleanerAgreementAccepted == true && cleaner.isSuspended != true && cleaner.isBanned != true;
+    }
+
     function hasPermission(permission) {
       return isAdmin() && permission in request.auth.token.permissions;
     }
@@ -39,50 +35,28 @@ service cloud.firestore {
     }
 
     // ───────────────────────── users ─────────────────────────
-    // Anyone signed in can READ a profile (cleaner name/rating on bid cards).
-    // A user may only write their OWN document, and may NEVER set or change the
-    // money / trust fields — those are owned exclusively by Cloud Functions
-    // (settlement, rating aggregation, admin moderation) via the Admin SDK.
+    // User documents contain private contact, location, identity and wallet data.
+    // Cleaner discovery uses searchVerifiedCleaners, which returns a public projection.
     match /users/{userId} {
-      allow read: if isAdmin() || (isAuth() && (resource.id == request.auth.uid || resource.data.role == 'CLEANER'));
+      allow read: if isAdmin() || isOwner(userId);
 
       allow create: if isOwner(userId)
-        && request.resource.data.role != 'CLEANER'
-        && !('organizationId' in request.resource.data)
-        && (!('accountType' in request.resource.data) || request.resource.data.accountType == 'INDIVIDUAL')
-        && !('verificationStatus' in request.resource.data)
-        && !('verificationLevel' in request.resource.data)
-        && !('cleanerAgreementAccepted' in request.resource.data)
-        && request.resource.data.balance == 0
-        && (!('jobsCompleted' in request.resource.data) || request.resource.data.jobsCompleted == 0)
-        && (!('ratingAverage' in request.resource.data) || request.resource.data.ratingAverage == 0)
-        && (!('ratingCount' in request.resource.data) || request.resource.data.ratingCount == 0)
-        && (!('isSuspended' in request.resource.data) || request.resource.data.isSuspended == false)
-        && (!('isBanned' in request.resource.data) || request.resource.data.isBanned == false);
+        && request.resource.data.keys().hasOnly(['uid','email','displayName','photoURL','role','balance','status','hasCompletedProfile','hasSetupPermissions','hasAgreedToTerms','createdAt'])
+        && request.resource.data.role == 'CUSTOMER'
+        && request.resource.data.balance is number && request.resource.data.balance == 0;
 
       allow update: if (
         isOwner(userId)
-        && !changed([
-          'commissionOwed', 'isSuspended', 'isBanned', 'verificationLevel',
-          'verificationStatus', 'cleanerAgreementAccepted', 'organizationId', 'accountType',
-          'uid', 'email'
-        ])
-        && (resource.data.role == 'CLEANER' || request.resource.data.role != 'CLEANER'
-          || (resource.data.cleanerAgreementAccepted == true && resource.data.verificationStatus == 'VERIFIED'))
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName','photoURL','phone','address','hasSetupPermissions','hasCompletedProfile','hasAgreedToTerms','expoPushToken','updatedAt'])
+        && (!changed(['hasCompletedProfile']) || request.resource.data.hasCompletedProfile == true)
+        && (!changed(['hasAgreedToTerms']) || request.resource.data.hasAgreedToTerms == true)
       );
 
       allow delete: if false;
     }
 
     // ───────────────────────── transactions ─────────────────────────
-    // Immutable ledger. Read your own only. Normally ALL writes happen
-    // server-side (settlement, PesePay webhook). SIMULATE MODE: temporarily
-    // allowed to create a ledger entry for ANY userId (not just your own) —
-    // simulateSettleJobPayment writes the other party's (e.g. the customer
-    // writes the cleaner's earnings entry) ledger entry too, same
-    // cross-user shape as the users.balance relaxation above. Lower risk
-    // than that one: this is just a record, not the actual balance change.
-    // Still never editable/deletable.
+    // Immutable ledger. All writes happen server-side.
     match /transactions/{txId} {
       allow read: if isAdmin() || (isAuth() && resource.data.userId == request.auth.uid);
       allow create: if false;
@@ -92,39 +66,76 @@ service cloud.firestore {
     // ───────────────────────── jobs / bids ─────────────────────────
     // All booking state, assignment, bid, and payment writes are callable-only.
     match /jobs/{jobId} {
-      allow read: if isAdmin() || (isAuth() && (resource.data.customerId == request.auth.uid || resource.data.cleanerId == request.auth.uid || resource.data.status == 'PENDING'));
-      allow create, update, delete: if false;
+      allow read: if isAdmin() || (isAuth() && (resource.data.customerId == request.auth.uid || resource.data.cleanerId == request.auth.uid));
+      allow update: if isJobParticipant(jobId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage','lastMessageAt','customerUnread','cleanerUnread'])
+        && request.resource.data.customerId == resource.data.customerId
+        && request.resource.data.cleanerId == resource.data.cleanerId
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.customerUnread is int && request.resource.data.customerUnread >= 0
+        && request.resource.data.cleanerUnread is int && request.resource.data.cleanerUnread >= 0
+        && ((request.auth.uid == resource.data.customerId
+          && request.resource.data.customerUnread == 0
+          && request.resource.data.cleanerUnread == resource.data.cleanerUnread + 1
+          && request.resource.data.lastMessage is string
+          && request.resource.data.lastMessage.size() <= 2000
+          && request.resource.data.lastMessageAt is timestamp)
+          || (request.auth.uid == resource.data.cleanerId
+          && request.resource.data.cleanerUnread == 0
+          && request.resource.data.customerUnread == resource.data.customerUnread + 1
+          && request.resource.data.lastMessage is string
+          && request.resource.data.lastMessage.size() <= 2000
+          && request.resource.data.lastMessageAt is timestamp)
+          || (request.auth.uid == resource.data.customerId
+            && request.resource.data.customerUnread == 0
+            && request.resource.data.cleanerUnread == resource.data.cleanerUnread
+            && request.resource.data.lastMessage == resource.data.lastMessage
+            && request.resource.data.lastMessageAt == resource.data.lastMessageAt)
+          || (request.auth.uid == resource.data.cleanerId
+            && request.resource.data.cleanerUnread == 0
+            && request.resource.data.customerUnread == resource.data.customerUnread
+            && request.resource.data.lastMessage == resource.data.lastMessage
+            && request.resource.data.lastMessageAt == resource.data.lastMessageAt));
+      allow create, delete: if false;
       match /events/{eventId} {
         allow read: if isAdmin() || (isAuth() && (get(/databases/$(database)/documents/jobs/$(jobId)).data.customerId == request.auth.uid || get(/databases/$(database)/documents/jobs/$(jobId)).data.cleanerId == request.auth.uid));
         allow write: if false;
       }
     }
+    // Cleaner discovery feed contains only fields safe to show before assignment;
+    // exact service address, customer identity and contact details stay in jobs.
+    match /openJobs/{jobId} {
+      allow read: if cleanerIsApproved();
+      allow create, update, delete: if false;
+    }
     match /bids/{bidId} {
-      allow read: if isAdmin() || isAuth();
+      allow read: if isAdmin() || (isAuth() && (
+        resource.data.cleanerId == request.auth.uid
+        || get(/databases/$(database)/documents/jobs/$(resource.data.jobId)).data.customerId == request.auth.uid
+      ));
       allow write: if false;
     }
 
     // ───────────────────────── messages ─────────────────────────
     // Chat unlocks the instant a bid is accepted, not before: the sender must
-    // be a participant on the job AND the job must have left BIDDING (i.e.
+    // be a participant on the job AND the job must be assigned (i.e.
     // acceptBid has run and set cleanerId) — a real server-side guarantee,
     // not just a client-side convention.
     match /messages/{msgId} {
-      allow read: if isAuth();
+      allow read: if isAdmin() || isJobParticipant(resource.data.jobId);
       allow create: if isAuth()
         && request.resource.data.senderId == request.auth.uid
-        && get(/databases/$(database)/documents/jobs/$(request.resource.data.jobId)).data.status != 'BIDDING'
-        && (
-          get(/databases/$(database)/documents/jobs/$(request.resource.data.jobId)).data.customerId == request.auth.uid ||
-          get(/databases/$(database)/documents/jobs/$(request.resource.data.jobId)).data.cleanerId == request.auth.uid
-        );
+        && request.resource.data.keys().hasOnly(['jobId','senderId','senderName','text','imageUrl','createdAt'])
+        && isJobParticipant(request.resource.data.jobId)
+        && get(/databases/$(database)/documents/jobs/$(request.resource.data.jobId)).data.status in ['ASSIGNED','EN_ROUTE','IN_PROGRESS','COMPLETED']
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 2000
+        && (!('imageUrl' in request.resource.data) || request.resource.data.imageUrl.matches('https://firebasestorage.googleapis.com/.*'));
       allow update, delete: if false;
     }
 
     // ───────────────────────── reviews ─────────────────────────
-    // Normally written only by the submitRating function. SIMULATE MODE:
-    // temporarily allowed directly by the client (customerId == caller) so
-    // simulateSubmitRating can write it.
+    // Written only by the submitRating function.
     match /reviews/{reviewId} {
       allow read: if isAdmin() || isAuth();
       allow create: if false;
@@ -139,12 +150,7 @@ service cloud.firestore {
     }
 
     // ───────────────────────── disputes ─────────────────────────
-    // Normally filed via the reportJobIssue Cloud Function only (needs
-    // server-side validation that the job is COMPLETED and theirs).
-    // SIMULATE MODE: temporarily allowed directly by the client (customerId
-    // == caller) so simulateReportJobIssue can write it. Resolution/refunds
-    // stay function-only always (resolveDispute, staff-invoked) — not part
-    // of the simulate layer.
+    // Filed and resolved through validated server functions.
     match /disputes/{disputeId} {
       allow read: if isAdmin() || (isAuth() && (
         resource.data.customerId == request.auth.uid ||

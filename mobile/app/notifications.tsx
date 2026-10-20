@@ -46,7 +46,7 @@ export default function NotificationsScreen() {
         <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 bg-white rounded-2xl items-center justify-center border border-ink/5">
           <ArrowLeft size={18} color="#150256" />
         </TouchableOpacity>
-        <Text className="text-xl font-black text-ink">Notifications</Text>
+        <Text className="text-xl font-display font-black text-ink">Notifications</Text>
       </View>
 
       {isLoading ? (
@@ -58,8 +58,8 @@ export default function NotificationsScreen() {
           <View className="w-20 h-20 bg-accent/10 rounded-3xl items-center justify-center mb-4">
             <Bell size={32} color="#3906D2" />
           </View>
-          <Text className="text-lg font-black text-ink text-center">You're all caught up</Text>
-          <Text className="text-sm text-ink/40 font-medium text-center mt-2">
+          <Text className="text-lg font-display font-black text-ink text-center">You're all caught up</Text>
+          <Text className="font-sans text-sm text-ink/40 font-medium text-center mt-2">
             Job updates, new quotes, and messages will show up here
           </Text>
         </View>
@@ -82,7 +82,7 @@ export default function NotificationsScreen() {
                 </View>
                 <View className="flex-1">
                   <Text className={`text-sm ${item.read ? 'font-bold text-ink/70' : 'font-black text-ink'}`}>{item.title}</Text>
-                  <Text className="text-xs text-ink/40 font-medium mt-0.5">{item.body}</Text>
+                  <Text className="font-sans text-xs text-ink/40 font-medium mt-0.5">{item.body}</Text>
                 </View>
                 {!item.read && <View className="w-2 h-2 rounded-full bg-accent mt-1.5" />}
               </TouchableOpacity>

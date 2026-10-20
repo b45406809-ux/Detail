@@ -10,12 +10,14 @@ import {
   Image,
   Modal,
   TextInput,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import * as WebBrowser from 'expo-web-browser';
 import {
   ArrowLeft,
   MessageSquare,
@@ -39,7 +41,6 @@ import {
   db,
   doc,
   onSnapshot,
-  updateDoc,
   serverTimestamp,
   collection,
   query,
@@ -88,7 +89,7 @@ export default function TrackingScreen() {
   const [step, setStep] = useState<TrackingStep>('TRACKING');
   const [rating, setRating] = useState(0);
   const [problemDescription, setProblemDescription] = useState('');
-  const [selectedPayment, setSelectedPayment] = useState<'WALLET' | 'CASH'>('WALLET');
+  const [selectedPayment, setSelectedPayment] = useState<'WALLET' | 'CASH' | 'ECOCASH' | 'INNBUCKS'>('WALLET');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
   const [favoriteDocId, setFavoriteDocId] = useState<string | null>(null);
@@ -126,11 +127,7 @@ export default function TrackingScreen() {
     setIsUploadingDonePhoto(true);
     try {
       const url = await uploadCompletionPhoto(result.assets[0].uri, jobId);
-      const existing = job?.completionPhotos ?? [];
-      const updated = [...existing, url];
-      await updateDoc(doc(db, 'jobs', jobId), {
-        completionPhotos: updated,
-      });
+      await callFunction('addCompletionPhoto', { jobId, url });
       setPhotoTab('AFTER');
       Alert.alert('Photo Uploaded', 'Completion proof photo added to the job.');
     } catch {
@@ -156,6 +153,10 @@ export default function TrackingScreen() {
       (err) => console.error('Job listener error:', err)
     );
   }, [jobId, isCustomer, step]);
+
+  useEffect(() => {
+    if (['WALLET', 'CASH', 'ECOCASH', 'INNBUCKS'].includes(String(job?.paymentMethod))) setSelectedPayment(job!.paymentMethod as any);
+  }, [job?.paymentMethod]);
 
   // Check whether this cleaner is already in the customer's favorites
   useEffect(() => {
@@ -216,7 +217,7 @@ export default function TrackingScreen() {
     Location.watchPositionAsync({ accuracy: Location.Accuracy.Balanced, timeInterval: 10000, distanceInterval: 20 }, async (loc) => {
       if (!mounted) return;
       try {
-        await updateDoc(doc(db, 'jobs', jobId), { cleanerLocation: { lat: loc.coords.latitude, lng: loc.coords.longitude } });
+        await callFunction('updateActiveJobLocation', { jobId, lat: loc.coords.latitude, lng: loc.coords.longitude });
       } catch {}
     })
       .then((sub) => {
@@ -291,6 +292,32 @@ export default function TrackingScreen() {
     }
   };
 
+  const handlePaynowRefresh = async () => {
+    if (!jobId) return;
+    setIsSubmitting(true);
+    try {
+      const result = await callFunction<{ jobId: string }, { success: boolean; status: string }>('refreshPaynowBookingPayment', { jobId });
+      Alert.alert('Paynow status', `Current status: ${result.status.replace(/_/g, ' ')}.`);
+    } catch (err: any) {
+      Alert.alert('Could not refresh', err.message || 'Please try again shortly.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handlePaynowRetry = async () => {
+    if (!jobId) return;
+    setIsSubmitting(true);
+    try {
+      const result = await callFunction<{ jobId: string }, { success: boolean; redirectUrl: string }>('retryPaynowBookingPayment', { jobId });
+      if (result.redirectUrl) await WebBrowser.openBrowserAsync(result.redirectUrl, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET });
+    } catch (err: any) {
+      Alert.alert('Paynow unavailable', err.message || 'Could not start payment. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleRating = async () => {
     if (rating === 0) {
       Alert.alert('Rate your cleaner', 'Please select a star rating before submitting.');
@@ -317,9 +344,9 @@ export default function TrackingScreen() {
     );
   }
 
-  const mapRegion = job.location
+  const mapRegion = job.location && (job.location.lat !== 0 || job.location.lng !== 0)
     ? { latitude: job.location.lat, longitude: job.location.lng, latitudeDelta: 0.015, longitudeDelta: 0.015 }
-    : undefined;
+    : { latitude: -17.8252, longitude: 31.0335, latitudeDelta: 0.12, longitudeDelta: 0.12 };
 
   const etaMinutes =
     isCustomer && job.cleanerLocation && job.location
@@ -332,8 +359,8 @@ export default function TrackingScreen() {
         <View className="w-24 h-24 bg-emerald-50 rounded-4xl items-center justify-center mb-6">
           <CheckCircle size={48} color="#0FB77A" />
         </View>
-        <Text className="text-3xl font-black text-ink text-center mb-2">All done!</Text>
-        <Text className="text-base text-ink/50 font-medium text-center mb-10">
+        <Text className="text-3xl font-display font-black text-ink text-center mb-2">All done!</Text>
+        <Text className="font-sans text-base text-ink/50 font-medium text-center mb-10">
           Thanks for using Detail. We hope your space is sparkling clean.
         </Text>
         <TouchableOpacity
@@ -341,7 +368,7 @@ export default function TrackingScreen() {
           className="w-full bg-accent py-5 rounded-[32px] items-center shadow-lg shadow-accent/30"
           activeOpacity={0.85}
         >
-          <Text className="text-white font-black text-sm uppercase tracking-widest">Back to Home</Text>
+          <Text className="text-white font-display font-black text-sm uppercase tracking-widest">Back to Home</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -351,11 +378,11 @@ export default function TrackingScreen() {
     return (
       <SafeAreaView className="flex-1 bg-white">
         <View className="flex-1 px-6 pt-12 pb-10">
-          <Text className="text-3xl font-black text-ink text-center mb-2">Rate your cleaner</Text>
-          <Text className="text-base text-ink/50 font-medium text-center mb-10">How was {job.cleanerName ?? 'your cleaner'}?</Text>
+          <Text className="text-3xl font-display font-black text-ink text-center mb-2">Rate your cleaner</Text>
+          <Text className="font-sans text-base text-ink/50 font-medium text-center mb-10">How was {job.cleanerName ?? 'your cleaner'}?</Text>
 
           {rating > 0 && rating < 3 && (
-            <TextInput value={problemDescription} onChangeText={setProblemDescription} placeholder="Describe the problem (required)" multiline className="border border-red-200 bg-red-50 rounded-2xl p-4 mb-6 min-h-24" />
+            <TextInput value={problemDescription} onChangeText={setProblemDescription} placeholder="Describe the problem (required)" multiline className="font-sans border border-red-200 bg-red-50 rounded-2xl p-4 mb-6 min-h-24" />
           )}
 
           <View className="items-center mb-10">
@@ -367,7 +394,7 @@ export default function TrackingScreen() {
               ))}
             </View>
             {rating > 0 && (
-              <Text className="text-lg font-black text-ink/70 mt-4">{['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent!'][rating]}</Text>
+              <Text className="text-lg font-display font-black text-ink/70 mt-4">{['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent!'][rating]}</Text>
             )}
           </View>
 
@@ -387,7 +414,7 @@ export default function TrackingScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity onPress={() => setStep('SUCCESS')} className="mt-4 items-center">
-            <Text className="text-sm text-ink/40 font-medium">Skip</Text>
+            <Text className="font-sans text-sm text-ink/40 font-medium">Skip</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -395,20 +422,60 @@ export default function TrackingScreen() {
   }
 
   if (step === 'PAYMENT') {
+    if (job.paymentMethod === 'PAYNOW') {
+      const status = String(job.paymentStatus ?? 'PENDING');
+      const statusText: Record<string, string> = {
+        INITIATING: 'Starting secure checkout…', PENDING: 'Complete checkout in Paynow to place the payment in BuySafe escrow.',
+        ESCROWED: 'BuySafe is holding your payment. After the cleaning, confirm delivery in your Paynow account. Paynow releases funds after its 24-hour dispute window.',
+        DELIVERED: 'You confirmed delivery in Paynow. Funds remain in the 24-hour dispute period.',
+        PAID: 'Paynow released the funds to Detail after the dispute window. Cleaner earnings are being finalized.',
+        DISPUTED: 'A Paynow dispute is open. Detail will review the booking and coordinate with Paynow.',
+        REFUNDED: 'Paynow reports this payment was refunded.', FAILED: 'Paynow could not start the checkout. Retry to continue this booking.',
+      };
+      return (
+        <SafeAreaView className="flex-1 bg-white">
+          <View className="flex-1 px-6 pt-12 pb-10">
+            <Text className="text-3xl font-display font-black text-ink mb-2">Paynow BuySafe</Text>
+            <Text className="font-sans text-base text-ink/50 font-medium mb-4">Booking total: <Text className="font-display font-black text-ink">${job.price?.toFixed(2) ?? '—'}</Text></Text>
+            <View className="rounded-3xl bg-accent/5 border border-accent/10 p-5 mb-6">
+              <Text className="text-xs font-display font-black text-accent uppercase tracking-widest mb-2">{status.replace(/_/g, ' ')}</Text>
+              <Text className="font-sans text-sm text-ink/70 leading-6">{statusText[status] ?? 'Paynow is processing this booking payment.'}</Text>
+            </View>
+            {status === 'FAILED' ? (
+              <TouchableOpacity onPress={handlePaynowRetry} disabled={isSubmitting} className="bg-accent py-5 rounded-[32px] items-center mb-3">
+                {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-display font-black text-sm uppercase tracking-widest">Retry Paynow Checkout</Text>}
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={handlePaynowRefresh} disabled={isSubmitting} className="bg-accent py-5 rounded-[32px] items-center mb-3">
+                {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-display font-black text-sm uppercase tracking-widest">Refresh Paynow Status</Text>}
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={() => Linking.openURL('https://www.paynow.co.zw/').catch(() => Alert.alert('Could not open Paynow', 'Open paynow.co.zw in your browser.'))} className="py-4 items-center">
+              <Text className="font-sans text-accent font-bold">Open Paynow Customer Portal</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setStep('RATING')} className="mt-auto py-4 items-center">
+              <Text className="font-sans text-sm text-ink/40 font-medium">Continue to rating</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      );
+    }
     const PAYMENT_OPTIONS = [
       { id: 'WALLET', label: 'Detail Wallet', emoji: '👛', sub: `Balance: $${profile?.balance?.toFixed(2) ?? '0.00'} · top up in Wallet` },
       { id: 'CASH', label: 'Cash', emoji: '💵', sub: 'Pay cleaner directly' },
+      { id: 'ECOCASH', label: 'EcoCash', emoji: '📱', sub: 'Transfer directly to cleaner' },
+      { id: 'INNBUCKS', label: 'InnBucks', emoji: '📱', sub: 'Transfer directly to cleaner' },
     ] as const;
 
     return (
       <SafeAreaView className="flex-1 bg-white">
         <View className="flex-1 px-6 pt-12 pb-10">
-          <Text className="text-3xl font-black text-ink mb-2">Complete Payment</Text>
-          <Text className="text-base text-ink/50 font-medium mb-8">
-            Total: <Text className="font-black text-ink">${job.price?.toFixed(2) ?? '—'}</Text>
+          <Text className="text-3xl font-display font-black text-ink mb-2">Complete Payment</Text>
+          <Text className="font-sans text-base text-ink/50 font-medium mb-8">
+            Total: <Text className="font-display font-black text-ink">${job.price?.toFixed(2) ?? '—'}</Text>
           </Text>
 
-          <Text className="text-xs font-black text-ink/40 uppercase tracking-widest mb-3">Payment Method</Text>
+          <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest mb-3">Payment Method</Text>
           <View className="gap-3 mb-8">
             {PAYMENT_OPTIONS.map(({ id, label, emoji, sub }) => (
               <TouchableOpacity
@@ -419,10 +486,10 @@ export default function TrackingScreen() {
                   selectedPayment === id ? 'border-accent bg-accent/5' : 'border-ink/10 bg-ink/[0.02]'
                 }`}
               >
-                <Text className="text-3xl">{emoji}</Text>
+                <Text className="font-sans text-3xl">{emoji}</Text>
                 <View className="flex-1">
                   <Text className={`text-sm font-black ${selectedPayment === id ? 'text-accent' : 'text-ink'}`}>{label}</Text>
-                  <Text className="text-xs text-ink/40 font-medium mt-0.5">{sub}</Text>
+                  <Text className="font-sans text-xs text-ink/40 font-medium mt-0.5">{sub}</Text>
                 </View>
               </TouchableOpacity>
             ))}
@@ -437,7 +504,7 @@ export default function TrackingScreen() {
             {isSubmitting ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text className="text-white font-black text-sm uppercase tracking-widest">
+              <Text className="text-white font-display font-black text-sm uppercase tracking-widest">
                 {IS_MOCK ? '[DEV] ' : ''}Pay ${job.price?.toFixed(2) ?? '—'} via {selectedPayment}
               </Text>
             )}
@@ -481,7 +548,7 @@ export default function TrackingScreen() {
         </MapView>
       ) : (
         <View className="flex-1 bg-ink/5 items-center justify-center">
-          <Text className="text-ink/40 font-medium">Loading map…</Text>
+          <Text className="font-sans text-ink/40 font-medium">Loading map…</Text>
         </View>
       )}
 
@@ -492,7 +559,7 @@ export default function TrackingScreen() {
           </GlassIconButton>
 
           <GlassCard style={{ borderRadius: 999, paddingHorizontal: 18, paddingVertical: 10 }}>
-            <Text className="text-[10px] font-black text-ink uppercase tracking-widest">
+            <Text className="text-[10px] font-display font-black text-ink uppercase tracking-widest">
               {STATUS_LABELS[job.status] ?? job.status}
             </Text>
           </GlassCard>
@@ -508,14 +575,21 @@ export default function TrackingScreen() {
       </SafeAreaView>
 
       <GlassSheet style={{ position: 'absolute', bottom: 0, left: 0, right: 0, paddingBottom: 24 }}>
+        {isCustomer && job.paymentMethod === 'PAYNOW' && job.paymentStatus === 'FAILED' && (
+          <TouchableOpacity onPress={handlePaynowRetry} disabled={isSubmitting} className="bg-rose-50 border border-rose-200 rounded-2xl p-4 mb-4">
+            <Text className="text-sm font-display font-black text-rose-700">Paynow checkout needs attention</Text>
+            <Text className="font-sans text-xs text-rose-700/80 mt-1">The cleaner cannot start until BuySafe confirms the payment.</Text>
+            <Text className="text-xs font-display font-black text-rose-700 uppercase mt-3">{isSubmitting ? 'Opening…' : 'Retry checkout'}</Text>
+          </TouchableOpacity>
+        )}
         {isCustomer && etaMinutes != null && (
           <View className="flex-row items-center justify-between mb-4">
             <View>
-              <Text className="text-[10px] font-black text-ink/40 uppercase tracking-widest mb-1">Estimated Arrival</Text>
-              <Text className="text-3xl font-black text-accent">{etaMinutes} mins</Text>
+              <Text className="text-[10px] font-display font-black text-ink/40 uppercase tracking-widest mb-1">Estimated Arrival</Text>
+              <Text className="text-3xl font-display font-black text-accent">{etaMinutes} mins</Text>
             </View>
             <View className="bg-emerald-50 px-3 py-1.5 rounded-full">
-              <Text className="text-[10px] font-black text-emerald-700 uppercase">On Schedule</Text>
+              <Text className="text-[10px] font-display font-black text-emerald-700 uppercase">On Schedule</Text>
             </View>
           </View>
         )}
@@ -523,20 +597,20 @@ export default function TrackingScreen() {
         <View className="flex-row items-center gap-4 bg-white/60 rounded-3xl p-4 mb-4 border border-white">
           <View className="relative">
             <View className="w-14 h-14 bg-accent/10 rounded-[22px] items-center justify-center">
-              <Text className="text-2xl">🧹</Text>
+              <Text className="font-sans text-2xl">🧹</Text>
             </View>
             <View className="absolute -bottom-1.5 -right-1.5 w-7 h-7 bg-accent rounded-lg items-center justify-center border-2 border-white">
               <ShieldCheck size={12} color="#fff" />
             </View>
           </View>
           <View className="flex-1">
-            <Text className="text-base font-black text-ink tracking-tight">
+            <Text className="text-base font-display font-black text-ink tracking-tight">
               {isCustomer ? job.cleanerName ?? 'Your Cleaner' : job.customerName ?? 'Customer'}
             </Text>
             {isCustomer && (
               <View className="flex-row items-center gap-1 mt-0.5">
                 <Star size={12} color="#f59e0b" fill="#f59e0b" />
-                <Text className="text-xs font-black text-ink/60">
+                <Text className="text-xs font-display font-black text-ink/60">
                   {job.cleanerRating != null ? `${job.cleanerRating.toFixed(1)} Rating` : IS_MOCK ? '4.95 Excellent' : 'New Cleaner'}
                 </Text>
               </View>
@@ -589,11 +663,11 @@ export default function TrackingScreen() {
           >
             <View className="flex-row items-center gap-2">
               <Camera size={16} color="#3906D2" />
-              <Text className="text-xs font-black text-ink">
+              <Text className="text-xs font-display font-black text-ink">
                 Job Photos ({job.photos?.length ?? 0} Before · {job.completionPhotos?.length ?? 0} After)
               </Text>
             </View>
-            <Text className="text-[11px] font-black text-accent">View Photos →</Text>
+            <Text className="text-[11px] font-display font-black text-accent">View Photos →</Text>
           </TouchableOpacity>
         )}
 
@@ -603,15 +677,15 @@ export default function TrackingScreen() {
             <View className="flex-row items-center justify-between mb-2">
               <View className="flex-row items-center gap-2">
                 <Sparkles size={16} color="#3906D2" />
-                <Text className="text-xs font-black text-ink uppercase tracking-wider">
+                <Text className="text-xs font-display font-black text-ink uppercase tracking-wider">
                   Photos When Done (Proof of Work)
                 </Text>
               </View>
-              <Text className="text-[10px] font-bold text-accent">
+              <Text className="font-sans text-[10px] font-bold text-accent">
                 {job.completionPhotos?.length ?? 0}/6
               </Text>
             </View>
-            <Text className="text-xs text-ink/50 font-medium mb-3">
+            <Text className="font-sans text-xs text-ink/50 font-medium mb-3">
               Take photos of the clean space/car before marking the job complete.
             </Text>
 
@@ -625,7 +699,7 @@ export default function TrackingScreen() {
                   >
                     <Image source={{ uri: url }} style={{ width: 64, height: 64 }} />
                     <View className="absolute bottom-1 left-1 bg-emerald-700/80 px-1 rounded">
-                      <Text className="text-[8px] font-black text-white">Done</Text>
+                      <Text className="text-[8px] font-display font-black text-white">Done</Text>
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -644,7 +718,7 @@ export default function TrackingScreen() {
                 ) : (
                   <>
                     <Camera size={14} color="#fff" />
-                    <Text className="text-xs font-black text-white uppercase">Take Done Photo</Text>
+                    <Text className="text-xs font-display font-black text-white uppercase">Take Done Photo</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -660,7 +734,7 @@ export default function TrackingScreen() {
                 ) : (
                   <>
                     <ImageIcon size={14} color="#3906D2" />
-                    <Text className="text-xs font-black text-accent uppercase">Upload Gallery</Text>
+                    <Text className="text-xs font-display font-black text-accent uppercase">Upload Gallery</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -678,7 +752,7 @@ export default function TrackingScreen() {
             {isSubmitting ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text className="text-white font-black text-sm uppercase tracking-widest">{CLEANER_NEXT_STATUS[job.status]!.label}</Text>
+              <Text className="text-white font-display font-black text-sm uppercase tracking-widest">{CLEANER_NEXT_STATUS[job.status]!.label}</Text>
             )}
           </TouchableOpacity>
         )}
@@ -686,21 +760,25 @@ export default function TrackingScreen() {
         <View className="flex-row gap-4 mb-4">
           {[
             { id: 'message', label: 'Message', icon: MessageSquare, color: '#3906D2', action: () => router.push({ pathname: '/messages', params: { jobId } }) },
-            { id: 'call', label: 'Call', icon: Phone, color: '#0FB77A', action: () => Alert.alert('Calling', 'VoIP calling coming soon') },
+            { id: 'call', label: 'Call', icon: Phone, color: '#0FB77A', action: () => {
+              const phone = isCleaner ? job.customerPhone : job.cleanerPhone;
+              if (!phone) { Alert.alert('Phone unavailable', 'This account has not added a phone number.'); return; }
+              Linking.openURL(`tel:${phone}`).catch(() => Alert.alert('Call unavailable', 'Your device could not start a phone call.'));
+            } },
             { id: 'cancel', label: 'Abort', icon: ShieldAlert, color: '#E5484D', action: handleCancelJob },
           ].map(({ id, label, icon: Icon, color, action }) => (
             <TouchableOpacity key={id} onPress={action} className="flex-1 items-center gap-2" activeOpacity={0.7}>
               <View className="w-14 h-14 rounded-[22px] items-center justify-center bg-white/60 border border-white">
                 <Icon size={20} color={color} />
               </View>
-              <Text className="text-[9px] font-black text-ink/40 uppercase tracking-widest">{label}</Text>
+              <Text className="text-[9px] font-display font-black text-ink/40 uppercase tracking-widest">{label}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
         <View className="bg-emerald-50 rounded-2xl px-4 py-3 flex-row items-center gap-2">
           <ShieldCheck size={16} color="#0FB77A" />
-          <Text className="flex-1 text-[11px] font-bold text-emerald-800">
+          <Text className="font-sans flex-1 text-[11px] font-bold text-emerald-800">
             Detail Secure Service — your payment is protected until you review the service.
           </Text>
         </View>
@@ -716,7 +794,7 @@ export default function TrackingScreen() {
         <View className="flex-1 justify-end bg-black/50">
           <View className="bg-white rounded-t-[36px] px-6 pt-6 pb-10 max-h-[85%]">
             <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-xl font-black text-ink">Job Photos</Text>
+              <Text className="text-xl font-display font-black text-ink">Job Photos</Text>
               <TouchableOpacity
                 onPress={() => setShowPhotosModal(false)}
                 className="w-9 h-9 rounded-full bg-ink/5 items-center justify-center"
@@ -760,7 +838,7 @@ export default function TrackingScreen() {
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
               {photoTab === 'BEFORE' ? (
                 <View>
-                  <Text className="text-xs text-ink/50 font-medium mb-3">
+                  <Text className="font-sans text-xs text-ink/50 font-medium mb-3">
                     Customer uploaded these photos showing dirty areas / condition needing cleaning.
                   </Text>
                   {job.photos && job.photos.length > 0 ? (
@@ -774,20 +852,20 @@ export default function TrackingScreen() {
                         >
                           <Image source={{ uri: url }} style={{ width: '100%', height: '100%' }} />
                           <View className="absolute bottom-2 left-2 bg-black/75 px-2 py-1 rounded-lg">
-                            <Text className="text-[10px] font-black text-white uppercase">Dirty / Before</Text>
+                            <Text className="text-[10px] font-display font-black text-white uppercase">Dirty / Before</Text>
                           </View>
                         </TouchableOpacity>
                       ))}
                     </View>
                   ) : (
                     <View className="py-10 items-center">
-                      <Text className="text-sm font-bold text-ink/40">No before photos attached</Text>
+                      <Text className="font-sans text-sm font-bold text-ink/40">No before photos attached</Text>
                     </View>
                   )}
                 </View>
               ) : (
                 <View>
-                  <Text className="text-xs text-ink/50 font-medium mb-3">
+                  <Text className="font-sans text-xs text-ink/50 font-medium mb-3">
                     Cleaner uploaded these photos as proof of completed, sparkling clean work.
                   </Text>
                   {job.completionPhotos && job.completionPhotos.length > 0 ? (
@@ -801,14 +879,14 @@ export default function TrackingScreen() {
                         >
                           <Image source={{ uri: url }} style={{ width: '100%', height: '100%' }} />
                           <View className="absolute bottom-2 left-2 bg-emerald-700/85 px-2 py-1 rounded-lg">
-                            <Text className="text-[10px] font-black text-white uppercase">✨ Clean / Done</Text>
+                            <Text className="text-[10px] font-display font-black text-white uppercase">✨ Clean / Done</Text>
                           </View>
                         </TouchableOpacity>
                       ))}
                     </View>
                   ) : (
                     <View className="py-10 items-center">
-                      <Text className="text-sm font-bold text-ink/40 mb-3">No completion photos uploaded yet</Text>
+                      <Text className="font-sans text-sm font-bold text-ink/40 mb-3">No completion photos uploaded yet</Text>
                       {isCleaner && (
                         <TouchableOpacity
                           onPress={() => {
@@ -817,7 +895,7 @@ export default function TrackingScreen() {
                           }}
                           className="bg-accent px-4 py-2.5 rounded-xl"
                         >
-                          <Text className="text-xs font-black text-white uppercase">Take First Done Photo</Text>
+                          <Text className="text-xs font-display font-black text-white uppercase">Take First Done Photo</Text>
                         </TouchableOpacity>
                       )}
                     </View>

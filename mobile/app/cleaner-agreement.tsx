@@ -35,12 +35,12 @@ const TERMS = [
     body: 'You must accurately represent your prices with no hidden fees. The standard Detail commission is currently 10% of the Transaction value. Detail reserves the right to change, increase, or decrease commission and other fees at any time, subject to applicable law — changes will be communicated through the Platform and apply prospectively from their effective date. Attempting to avoid commission through false reporting or off-platform transactions is a breach of this Agreement.',
   },
   {
-    title: '11. Cash Payments',
-    body: 'Detail may permit Customers to pay you directly in cash. A cash payment does not remove your obligation to pay the applicable Detail commission — you must accurately record every cash Transaction and must never conceal or encourage a Customer to pay cash specifically to avoid commission or Platform records.',
+    title: '11. Direct Payments & Commission Credit',
+    body: 'Detail may permit Customers to pay you directly in cash, EcoCash, or InnBucks. Direct payments do not include Paynow BuySafe escrow. Before accepting a direct-payment booking, you must have prepaid commission credit equal to the 10% platform commission. Detail reserves that credit at booking acceptance and returns it if the booking is cancelled before travel or work begins. You must accurately record the payment and may not conceal transactions to avoid commission.',
   },
   {
     title: '12. Balance & Withdrawals',
-    body: 'Amounts in your Detail balance may be adjusted by commissions, refunds, and other lawful deductions. Withdrawals normally take 1 to 3 business days once systems are operating normally — this is an estimate, not a guarantee, and Detail may hold a withdrawal to investigate suspected fraud or disputes.',
+    body: 'Cleared earnings can be withdrawn through an in-app payout request to EcoCash, InnBucks, or a bank account. Detail reviews and manually transfers payouts while automated payout rails are unavailable. Requests reserve the requested earnings; rejected requests return the funds. Processing time depends on review and the receiving provider. Detail may hold a request to investigate suspected fraud or disputes.',
   },
   {
     title: '13–14. Customer Complaints & Refunds',
@@ -110,7 +110,7 @@ export default function CleanerAgreementScreen() {
         >
           <ArrowLeft size={18} color="#0f172a" />
         </TouchableOpacity>
-        <Text className="text-xl font-black text-slate-900">Cleaner Agreement</Text>
+        <Text className="text-xl font-display font-black text-slate-900">Cleaner Agreement</Text>
       </View>
 
       {accepted ? (
@@ -118,10 +118,10 @@ export default function CleanerAgreementScreen() {
           <View className="w-20 h-20 bg-emerald-50 rounded-3xl items-center justify-center mb-4">
             <CheckCircle size={40} color="#10b981" />
           </View>
-          <Text className="text-2xl font-black text-slate-900 text-center mb-2">
+          <Text className="text-2xl font-display font-black text-slate-900 text-center mb-2">
             Agreement Accepted
           </Text>
-          <Text className="text-sm text-slate-500 font-medium text-center mb-8">
+          <Text className="font-sans text-sm text-slate-500 font-medium text-center mb-8">
             You're now a verified Detail cleaner. Start accepting jobs!
           </Text>
           <TouchableOpacity
@@ -129,7 +129,7 @@ export default function CleanerAgreementScreen() {
             className="w-full bg-accent py-5 rounded-[32px] items-center shadow-lg shadow-accent/30"
             activeOpacity={0.85}
           >
-            <Text className="text-white font-black text-sm uppercase tracking-widest">
+            <Text className="text-white font-display font-black text-sm uppercase tracking-widest">
               Start Earning
             </Text>
           </TouchableOpacity>
@@ -140,19 +140,19 @@ export default function CleanerAgreementScreen() {
             contentContainerClassName="px-5 pt-6 pb-6"
             showsVerticalScrollIndicator={false}
           >
-            <Text className="text-xs text-slate-400 font-medium mb-1">
+            <Text className="font-sans text-xs text-slate-400 font-medium mb-1">
               Catalyst Labs (PRIVATE) LIMITED, trading as Detail — Zimbabwe
             </Text>
-            <Text className="text-xs text-slate-400 font-medium mb-6">
+            <Text className="font-sans text-xs text-slate-400 font-medium mb-6">
               Please read all terms before accepting
             </Text>
             {TERMS.map(({ title, body }) => (
               <View key={title} className="mb-6">
-                <Text className="text-base font-black text-slate-900 mb-2">{title}</Text>
-                <Text className="text-sm text-slate-600 font-medium leading-relaxed">{body}</Text>
+                <Text className="text-base font-display font-black text-slate-900 mb-2">{title}</Text>
+                <Text className="font-sans text-sm text-slate-600 font-medium leading-relaxed">{body}</Text>
               </View>
             ))}
-            <Text className="text-sm text-slate-600 font-medium leading-relaxed italic mb-2">
+            <Text className="font-sans text-sm text-slate-600 font-medium leading-relaxed italic mb-2">
               By accepting, you confirm you've read and understood this Agreement, that you
               operate as an independent service provider, and that all information you've
               provided to Detail is accurate and complete.
@@ -169,7 +169,7 @@ export default function CleanerAgreementScreen() {
               {isAccepting ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text className="text-white font-black text-sm uppercase tracking-widest">
+                <Text className="text-white font-display font-black text-sm uppercase tracking-widest">
                   Accept Agreement
                 </Text>
               )}

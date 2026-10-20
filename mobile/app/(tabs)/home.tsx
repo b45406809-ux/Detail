@@ -51,11 +51,12 @@ import { haversineDistanceKm, rankJobsByProximity } from '../../services/matchin
 import { GlassCard, GlassSheet, GlassIconButton, RoleToggle } from '../../components/glass';
 import { MapPlaceholder } from '../../components/MapPlaceholder';
 import { IS_DEMO } from '../../utils/env';
+import { callFunction } from '../../services/functions';
 
-const FALLBACK_REGION = { latitude: 37.7749, longitude: -122.4194, latitudeDelta: 0.04, longitudeDelta: 0.04 };
+const FALLBACK_REGION = { latitude: -17.8252, longitude: 31.0335, latitudeDelta: 0.12, longitudeDelta: 0.12 };
 
 export default function HomeScreen() {
-  const { user, profile, updateProfile } = useAuth();
+  const { user, profile } = useAuth();
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
   const [activeJob, setActiveJob] = useState<Job | null>(null);
@@ -100,11 +101,9 @@ export default function HomeScreen() {
         );
         return;
       }
-      setViewRole('CLEANER');
-      updateProfile({ role: 'CLEANER' }).catch(() => {});
+      callFunction('setActiveRole', { role: 'CLEANER' }).then(() => setViewRole('CLEANER')).catch((e:any) => Alert.alert('Could not switch role', e.message ?? 'Try again.'));
     } else {
-      setViewRole('CUSTOMER');
-      updateProfile({ role: 'CUSTOMER' }).catch(() => {});
+      callFunction('setActiveRole', { role: 'CUSTOMER' }).then(() => setViewRole('CUSTOMER')).catch((e:any) => Alert.alert('Could not switch role', e.message ?? 'Try again.'));
     }
   };
 
@@ -116,7 +115,7 @@ export default function HomeScreen() {
         // Persist the cleaner's last-known location so onJobCreated (Cloud
         // Functions) can notify nearby cleaners first, Uber-style — not
         // done for customers, who don't need this stored server-side.
-        if (!isCustomer) updateProfile({ location }).catch(() => {});
+        if (!isCustomer) callFunction('updateCleanerLocation', location).catch(() => {});
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -163,7 +162,7 @@ export default function HomeScreen() {
     // this by distance (nearest first, Uber-style), so a larger pool means
     // a genuinely-nearby job doesn't get missed just because it wasn't one
     // of the 10 most recently posted.
-    const q = query(collection(db, 'jobs'), where('status', '==', JobStatus.PENDING), orderBy('createdAt', 'desc'), limit(30));
+    const q = query(collection(db, 'openJobs'), where('status', '==', JobStatus.PENDING), orderBy('createdAt', 'desc'), limit(30));
     return onSnapshot(
       q,
       (snap) => setAvailableJobs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Job))),
@@ -183,8 +182,8 @@ export default function HomeScreen() {
 
   const toggleCleanerStatus = async () => {
     const next = cleanerStatus === 'AVAILABLE' ? 'OFFLINE' : 'AVAILABLE';
+    await callFunction('updateCleanerPresence', { status: next });
     setCleanerStatus(next);
-    await updateProfile({ status: next });
   };
 
   const onRefresh = useCallback(async () => {
@@ -257,10 +256,10 @@ export default function HomeScreen() {
                   <Navigation size={18} color="#fff" />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-[10px] font-black text-white/70 uppercase tracking-widest">
+                  <Text className="text-[10px] font-display font-black text-white/70 uppercase tracking-widest">
                     Active Job
                   </Text>
-                  <Text className="text-sm font-black text-white mt-0.5">{activeJob.serviceType}</Text>
+                  <Text className="text-sm font-display font-black text-white mt-0.5">{activeJob.serviceType}</Text>
                 </View>
                 <ChevronRight size={18} color="rgba(255,255,255,0.8)" />
               </View>
@@ -325,7 +324,7 @@ function CustomerPanel({ favorites, recentJobs }: { favorites: Favorite[]; recen
         <View className="w-9 h-9 bg-white/20 rounded-xl items-center justify-center">
           <Plus size={18} color="#fff" />
         </View>
-        <Text className="text-white font-black text-sm uppercase tracking-widest flex-1">Request Cleaning</Text>
+        <Text className="text-white font-display font-black text-sm uppercase tracking-widest flex-1">Request Cleaning</Text>
         <ChevronRight size={18} color="rgba(255,255,255,0.8)" />
       </TouchableOpacity>
 
@@ -338,7 +337,7 @@ function CustomerPanel({ favorites, recentJobs }: { favorites: Favorite[]; recen
           <View className="w-11 h-11 bg-accent/10 rounded-xl items-center justify-center mb-2">
             <HomeIcon size={20} color="#3906D2" />
           </View>
-          <Text className="text-xs font-black text-slate-900">House</Text>
+          <Text className="text-xs font-display font-black text-slate-900">House</Text>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => router.push({ pathname: '/booking/create', params: { category: 'CAR' } })}
@@ -348,22 +347,22 @@ function CustomerPanel({ favorites, recentJobs }: { favorites: Favorite[]; recen
           <View className="w-11 h-11 bg-accent/10 rounded-xl items-center justify-center mb-2">
             <Car size={20} color="#3906D2" />
           </View>
-          <Text className="text-xs font-black text-slate-900">Car</Text>
+          <Text className="text-xs font-display font-black text-slate-900">Car</Text>
         </TouchableOpacity>
       </View>
 
       <TouchableOpacity onPress={() => router.push('/cleaners')} className="flex-row items-center gap-3 bg-white border border-slate-100 rounded-2xl px-4 py-3.5 mb-5">
         <View className="w-9 h-9 bg-accent/10 rounded-xl items-center justify-center"><Search size={17} color="#3906D2" /></View>
-        <View className="flex-1"><Text className="text-sm font-black text-ink">Find a cleaner</Text><Text className="text-[11px] text-ink/45">Search verified professionals and save favorites</Text></View>
+        <View className="flex-1"><Text className="text-sm font-display font-black text-ink">Find a cleaner</Text><Text className="font-sans text-[11px] text-ink/45">Search verified professionals and save favorites</Text></View>
         <ChevronRight size={17} color="#9C94C4" />
       </TouchableOpacity>
 
       {favorites.length > 0 && (
         <View className="mb-5">
           <View className="flex-row items-center justify-between mb-3">
-            <Text className="text-xs font-black text-ink/40 uppercase tracking-widest">Favorites</Text>
+            <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest">Favorites</Text>
             <TouchableOpacity onPress={() => router.push('/favorites')}>
-              <Text className="text-xs font-black text-accent">See All</Text>
+              <Text className="text-xs font-display font-black text-accent">See All</Text>
             </TouchableOpacity>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
@@ -376,7 +375,7 @@ function CustomerPanel({ favorites, recentJobs }: { favorites: Favorite[]; recen
                     <Heart size={20} color="#3906D2" />
                   )}
                 </View>
-                <Text className="text-[10px] font-bold text-ink text-center" numberOfLines={1}>
+                <Text className="font-sans text-[10px] font-bold text-ink text-center" numberOfLines={1}>
                   {f.cleanerName ?? 'Cleaner'}
                 </Text>
               </View>
@@ -388,9 +387,9 @@ function CustomerPanel({ favorites, recentJobs }: { favorites: Favorite[]; recen
       {recentJobs.length > 0 && (
         <View>
           <View className="flex-row items-center justify-between mb-3">
-            <Text className="text-xs font-black text-ink/40 uppercase tracking-widest">Recent Jobs</Text>
+            <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest">Recent Jobs</Text>
             <TouchableOpacity onPress={() => router.push('/history')}>
-              <Text className="text-xs font-black text-accent">View All</Text>
+              <Text className="text-xs font-display font-black text-accent">View All</Text>
             </TouchableOpacity>
           </View>
           <View className="gap-3">
@@ -429,10 +428,10 @@ function CleanerPanel({
     <View className="pb-6">
       <View className="flex-row items-center justify-between mb-4">
         <View>
-          <Text className="text-[10px] font-black text-ink/40 uppercase tracking-widest mb-1">Your Status</Text>
+          <Text className="text-[10px] font-display font-black text-ink/40 uppercase tracking-widest mb-1">Your Status</Text>
           <View className="flex-row items-center gap-2">
             <View className={`w-2.5 h-2.5 rounded-full ${isAvailable ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-            <Text className="text-lg font-black text-ink">{isAvailable ? 'Online' : 'Offline'}</Text>
+            <Text className="text-lg font-display font-black text-ink">{isAvailable ? 'Online' : 'Offline'}</Text>
           </View>
         </View>
         <TouchableOpacity
@@ -443,7 +442,7 @@ function CleanerPanel({
         >
           <Power size={16} color={isAvailable ? '#150256' : '#fff'} />
           <Text
-            className="text-xs font-black uppercase tracking-widest"
+            className="text-xs font-display font-black uppercase tracking-widest"
             style={{ color: isAvailable ? '#150256' : '#fff' }}
           >
             {isAvailable ? 'Go Offline' : 'Go Online'}
@@ -459,15 +458,15 @@ function CleanerPanel({
         ].map(({ label, value, icon: Icon }) => (
           <View key={label} className="flex-1 bg-white rounded-2xl p-3 items-center border border-slate-100">
             <Icon size={16} color="#3906D2" />
-            <Text className="text-base font-black text-slate-900 mt-1">{String(value)}</Text>
-            <Text className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</Text>
+            <Text className="text-base font-display font-black text-slate-900 mt-1">{String(value)}</Text>
+            <Text className="font-sans text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</Text>
           </View>
         ))}
       </View>
 
       {isAvailable && (
         <View>
-          <Text className="text-xs font-black text-ink/40 uppercase tracking-widest mb-3">
+          <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest mb-3">
             Incoming Jobs{displayJobs.length > 0 ? ` (${displayJobs.length}) · Nearest first` : ''}
           </Text>
           {displayJobs.length === 0 ? (
@@ -475,8 +474,8 @@ function CleanerPanel({
               <View className="w-14 h-14 bg-accent/10 rounded-2xl items-center justify-center mb-3">
                 <CheckCircle size={28} color="#3906D2" />
               </View>
-              <Text className="text-sm font-black text-slate-900 text-center">No jobs nearby right now</Text>
-              <Text className="text-xs text-slate-400 font-medium text-center mt-1">
+              <Text className="text-sm font-display font-black text-slate-900 text-center">No jobs nearby right now</Text>
+              <Text className="font-sans text-xs text-slate-400 font-medium text-center mt-1">
                 You'll get a notification as soon as one is posted
               </Text>
             </View>
@@ -509,17 +508,17 @@ function CleanerPanel({
                     {/* Body */}
                     <View className="flex-1">
                       <View className="flex-row items-center justify-between mb-0.5">
-                        <Text className="text-sm font-black text-slate-900 flex-1" numberOfLines={1}>
+                        <Text className="text-sm font-display font-black text-slate-900 flex-1" numberOfLines={1}>
                           {job.serviceType}
                         </Text>
                         <View className="bg-accent px-2.5 py-1 rounded-lg ml-2">
-                          <Text className="text-xs font-black text-white">
+                          <Text className="text-xs font-display font-black text-white">
                             {job.budget ? `$${job.budget}` : 'Open'}
                           </Text>
                         </View>
                       </View>
 
-                      <Text className="text-xs text-slate-400 font-medium mb-1.5" numberOfLines={1}>
+                      <Text className="font-sans text-xs text-slate-400 font-medium mb-1.5" numberOfLines={1}>
                         {job.location?.address}
                       </Text>
 
@@ -527,22 +526,22 @@ function CleanerPanel({
                         {dist && (
                           <View className="flex-row items-center gap-1">
                             <MapPin size={11} color="#3906D2" />
-                            <Text className="text-[11px] font-bold text-slate-500">{dist}</Text>
+                            <Text className="font-sans text-[11px] font-bold text-slate-500">{dist}</Text>
                           </View>
                         )}
                         <View className="flex-row items-center gap-1">
                           <Clock size={11} color="#94a3b8" />
-                          <Text className="text-[11px] font-bold text-slate-400">
+                          <Text className="font-sans text-[11px] font-bold text-slate-400">
                             {job.estimatedDuration ? `${job.estimatedDuration}h` : '2–3h'}
                           </Text>
                         </View>
                         {regNum && (
                           <View className="bg-slate-100 px-2 py-0.5 rounded-md">
-                            <Text className="text-[10px] font-black text-slate-600 tracking-wider">{regNum}</Text>
+                            <Text className="text-[10px] font-display font-black text-slate-600 tracking-wider">{regNum}</Text>
                           </View>
                         )}
                         {Array.isArray(job.photos) && job.photos.length > 0 && (
-                          <Text className="text-[10px] font-bold text-slate-400">📷 {job.photos.length}</Text>
+                          <Text className="font-sans text-[10px] font-bold text-slate-400">📷 {job.photos.length}</Text>
                         )}
                       </View>
                     </View>
@@ -570,16 +569,16 @@ function JobCard({ job }: { job: Job }) {
   return (
     <View className="bg-white/70 rounded-3xl p-4 border border-white flex-row items-center gap-4">
       <View className="w-11 h-11 bg-accent/10 rounded-2xl items-center justify-center">
-        <Text className="text-lg">{job.category === 'CAR' ? '🚗' : '🧹'}</Text>
+        <Text className="font-sans text-lg">{job.category === 'CAR' ? '🚗' : '🧹'}</Text>
       </View>
       <View className="flex-1">
-        <Text className="text-sm font-black text-ink">{job.serviceType}</Text>
-        <Text className="text-xs text-ink/50 font-medium mt-0.5" numberOfLines={1}>
+        <Text className="text-sm font-display font-black text-ink">{job.serviceType}</Text>
+        <Text className="font-sans text-xs text-ink/50 font-medium mt-0.5" numberOfLines={1}>
           {job.location?.address}
         </Text>
       </View>
       <View className={`px-3 py-1.5 rounded-xl ${colorClass}`}>
-        <Text className="text-[10px] font-black uppercase tracking-wider">{job.status}</Text>
+        <Text className="text-[10px] font-display font-black uppercase tracking-wider">{job.status}</Text>
       </View>
     </View>
   );

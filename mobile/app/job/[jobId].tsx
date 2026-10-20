@@ -47,7 +47,7 @@ export default function CleanerJobDetailScreen() {
   useEffect(() => {
     if (!jobId) return;
     return onSnapshot(
-      doc(db, 'jobs', jobId),
+      doc(db, 'openJobs', jobId),
       (snap) => {
         if (snap.exists()) setJob({ id: snap.id, ...snap.data() } as Job);
         setIsLoading(false);
@@ -108,9 +108,9 @@ export default function CleanerJobDetailScreen() {
   if (!job) {
     return (
       <SafeAreaView className="flex-1 bg-white items-center justify-center px-6">
-        <Text className="text-lg font-black text-ink text-center">Job not found</Text>
+        <Text className="text-lg font-display font-black text-ink text-center">Job not found</Text>
         <TouchableOpacity onPress={() => router.back()} className="mt-4">
-          <Text className="text-accent font-black">Go Back</Text>
+          <Text className="text-accent font-display font-black">Go Back</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -135,19 +135,19 @@ export default function CleanerJobDetailScreen() {
             <ArrowLeft size={18} color="#150256" />
           </TouchableOpacity>
           <View className="flex-1">
-            <Text className="text-xl font-black text-ink">{job.serviceType}</Text>
-            <Text className="text-xs text-ink/40 font-medium">#{jobId?.slice(-6).toUpperCase()}</Text>
+            <Text className="text-xl font-display font-black text-ink">{job.serviceType}</Text>
+            <Text className="font-sans text-xs text-ink/40 font-medium">#{jobId?.slice(-6).toUpperCase()}</Text>
           </View>
           {isTaken && (
             <View className="bg-amber-100 px-3 py-1.5 rounded-xl">
-              <Text className="text-xs font-black text-amber-700 uppercase tracking-wider">{job.status}</Text>
+              <Text className="text-xs font-display font-black text-amber-700 uppercase tracking-wider">{job.status}</Text>
             </View>
           )}
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
           <View className="mx-5 bg-white rounded-3xl p-5 border border-ink/5 mb-4">
-            <Text className="text-xs font-black text-ink/40 uppercase tracking-widest mb-3">
+            <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest mb-3">
               {job.category === 'CAR' ? '🚗 Car Cleaning' : '🏠 House Cleaning'}
             </Text>
 
@@ -187,7 +187,7 @@ export default function CleanerJobDetailScreen() {
               <View className="flex-row flex-wrap gap-2 mt-4 pt-4 border-t border-ink/5">
                 {checklistTags.map((tag) => (
                   <View key={tag} className="bg-accent/10 px-3 py-1.5 rounded-full">
-                    <Text className="text-[11px] font-black text-accent">{tag}</Text>
+                    <Text className="text-[11px] font-display font-black text-accent">{tag}</Text>
                   </View>
                 ))}
               </View>
@@ -196,10 +196,10 @@ export default function CleanerJobDetailScreen() {
             {job.photos?.length > 0 && (
               <View className="mt-4 pt-4 border-t border-ink/5">
                 <View className="flex-row items-center justify-between mb-2">
-                  <Text className="text-xs font-black text-ink/60 uppercase tracking-wider">
+                  <Text className="text-xs font-display font-black text-ink/60 uppercase tracking-wider">
                     📸 Photos of What Needs Cleaning ({job.photos.length})
                   </Text>
-                  <Text className="text-[10px] font-bold text-accent">Tap to enlarge</Text>
+                  <Text className="font-sans text-[10px] font-bold text-accent">Tap to enlarge</Text>
                 </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
                   {job.photos.map((url) => (
@@ -211,7 +211,7 @@ export default function CleanerJobDetailScreen() {
                     >
                       <Image source={{ uri: url }} style={{ width: 88, height: 88 }} />
                       <View className="absolute bottom-1 left-1 bg-black/75 px-1.5 py-0.5 rounded-md">
-                        <Text className="text-[8px] font-black text-white uppercase">Dirty / Before</Text>
+                        <Text className="text-[8px] font-display font-black text-white uppercase">Dirty / Before</Text>
                       </View>
                     </TouchableOpacity>
                   ))}
@@ -222,10 +222,10 @@ export default function CleanerJobDetailScreen() {
             {job.completionPhotos && job.completionPhotos.length > 0 && (
               <View className="mt-4 pt-4 border-t border-ink/5">
                 <View className="flex-row items-center justify-between mb-2">
-                  <Text className="text-xs font-black text-emerald-700 uppercase tracking-wider">
+                  <Text className="text-xs font-display font-black text-emerald-700 uppercase tracking-wider">
                     ✨ Photos When Done ({job.completionPhotos.length})
                   </Text>
-                  <Text className="text-[10px] font-bold text-emerald-700">Completed</Text>
+                  <Text className="font-sans text-[10px] font-bold text-emerald-700">Completed</Text>
                 </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
                   {job.completionPhotos.map((url) => (
@@ -237,7 +237,7 @@ export default function CleanerJobDetailScreen() {
                     >
                       <Image source={{ uri: url }} style={{ width: 88, height: 88 }} />
                       <View className="absolute bottom-1 left-1 bg-emerald-700/85 px-1.5 py-0.5 rounded-md">
-                        <Text className="text-[8px] font-black text-white uppercase">Completed</Text>
+                        <Text className="text-[8px] font-display font-black text-white uppercase">Completed</Text>
                       </View>
                     </TouchableOpacity>
                   ))}
@@ -248,20 +248,20 @@ export default function CleanerJobDetailScreen() {
 
           {isTaken ? (
             <View className="mx-5 bg-amber-50 rounded-3xl p-5 border border-amber-100">
-              <Text className="text-sm font-black text-amber-700 text-center">This job has already been accepted</Text>
+              <Text className="text-sm font-display font-black text-amber-700 text-center">This job has already been accepted</Text>
             </View>
           ) : alreadyBid ? (
             <View className="mx-5 bg-emerald-50 rounded-3xl p-5 border border-emerald-100 items-center">
-              <Text className="text-2xl mb-2">✅</Text>
-              <Text className="text-sm font-black text-emerald-700 text-center">Bid submitted — waiting for customer to accept</Text>
+              <Text className="font-sans text-2xl mb-2">✅</Text>
+              <Text className="text-sm font-display font-black text-emerald-700 text-center">Bid submitted — waiting for customer to accept</Text>
             </View>
           ) : (
             <View className="mx-5 bg-white rounded-3xl p-5 border border-ink/5">
-              <Text className="text-xs font-black text-ink/40 uppercase tracking-widest mb-4">Place Your Bid</Text>
+              <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest mb-4">Place Your Bid</Text>
 
-              <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-1.5">Your Price (USD)</Text>
+              <Text className="text-xs font-display font-black text-ink/50 uppercase tracking-widest mb-1.5">Your Price (USD)</Text>
               <TextInput
-                className="border-2 border-ink/10 rounded-2xl px-4 py-3.5 text-xl font-black text-ink bg-ink/[0.02] mb-4"
+                className="border-2 border-ink/10 rounded-2xl px-4 py-3.5 text-xl font-display font-black text-ink bg-ink/[0.02] mb-4"
                 placeholder={`${job.budget ?? '0'}.00`}
                 placeholderTextColor="#9C94C4"
                 keyboardType="decimal-pad"
@@ -269,9 +269,9 @@ export default function CleanerJobDetailScreen() {
                 onChangeText={setBidPrice}
               />
 
-              <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-1.5">Estimated Arrival (minutes)</Text>
+              <Text className="text-xs font-display font-black text-ink/50 uppercase tracking-widest mb-1.5">Estimated Arrival (minutes)</Text>
               <TextInput
-                className="border-2 border-ink/10 rounded-2xl px-4 py-3.5 text-base font-bold text-ink bg-ink/[0.02] mb-4"
+                className="font-sans border-2 border-ink/10 rounded-2xl px-4 py-3.5 text-base font-bold text-ink bg-ink/[0.02] mb-4"
                 placeholder="e.g. 20"
                 placeholderTextColor="#9C94C4"
                 keyboardType="number-pad"
@@ -291,9 +291,9 @@ export default function CleanerJobDetailScreen() {
                 ))}
               </View>
 
-              <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-1.5">Message (optional)</Text>
+              <Text className="text-xs font-display font-black text-ink/50 uppercase tracking-widest mb-1.5">Message (optional)</Text>
               <TextInput
-                className="border-2 border-ink/10 rounded-2xl px-4 py-3 text-sm font-medium text-ink bg-ink/[0.02] mb-5"
+                className="font-sans border-2 border-ink/10 rounded-2xl px-4 py-3 text-sm font-medium text-ink bg-ink/[0.02] mb-5"
                 placeholder="Introduce yourself or mention your experience…"
                 placeholderTextColor="#9C94C4"
                 multiline
@@ -358,11 +358,11 @@ function DetailRow({
         <Icon size={14} color={highlight ? '#fff' : '#3906D2'} />
       </View>
       <View className="flex-1">
-        <Text className="text-sm font-black text-ink">{title}</Text>
+        <Text className="text-sm font-display font-black text-ink">{title}</Text>
         <Text className={`text-sm font-black mt-0.5 tracking-widest ${highlight ? 'text-accent' : 'text-xs text-ink/50 font-medium'}`}>
           {value}
         </Text>
-        {accent && <Text className="text-xs text-accent font-black mt-0.5">{accent}</Text>}
+        {accent && <Text className="text-xs text-accent font-display font-black mt-0.5">{accent}</Text>}
       </View>
     </View>
   );

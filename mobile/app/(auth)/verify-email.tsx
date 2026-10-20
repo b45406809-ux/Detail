@@ -51,10 +51,10 @@ export default function VerifyEmailScreen() {
   return <SafeAreaView className="flex-1 bg-white">
     <KeyboardAvoidingView className="flex-1 px-6 pt-6" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <TouchableOpacity onPress={() => router.back()} className="w-12 h-12 bg-white rounded-2xl items-center justify-center mb-8 border border-ink/10"><ArrowLeft size={20} color="#150256" /></TouchableOpacity>
-      <Text className="text-3xl font-black text-ink tracking-tight mb-2">Check your email</Text>
-      <Text className="text-base text-ink/50 font-medium mb-10">Enter the six-digit code sent to <Text className="font-black text-ink">{email}</Text>.</Text>
+      <Text className="text-3xl font-display font-black text-ink tracking-tight mb-2">Check your email</Text>
+      <Text className="font-sans text-base text-ink/50 font-medium mb-10">Enter the six-digit code sent to <Text className="font-display font-black text-ink">{email}</Text>.</Text>
       <GlassCard style={{ padding: 20 }}>
-        <TextInput value={code} onChangeText={(value) => setCode(value.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" textContentType="oneTimeCode" autoComplete="one-time-code" maxLength={6} autoFocus placeholder="000000" placeholderTextColor="rgba(21,2,86,0.25)" className="text-center text-3xl font-black tracking-[10px] text-ink py-5" editable={!busy} />
+        <TextInput value={code} onChangeText={(value) => setCode(value.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" textContentType="oneTimeCode" autoComplete="one-time-code" maxLength={6} autoFocus placeholder="000000" placeholderTextColor="rgba(21,2,86,0.25)" className="text-center text-3xl font-display font-black tracking-[10px] text-ink py-5" editable={!busy} />
       </GlassCard>
       <TouchableOpacity onPress={verify} disabled={busy || code.length !== 6} className={`mt-5 py-5 rounded-[24px] items-center ${code.length === 6 ? 'bg-accent' : 'bg-ink/10'}`}>
         {busy ? <ActivityIndicator color="#fff" /> : <Text className={`font-black text-sm uppercase tracking-widest ${code.length === 6 ? 'text-white' : 'text-ink/30'}`}>Verify & Continue</Text>}

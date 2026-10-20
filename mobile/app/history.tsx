@@ -83,7 +83,7 @@ export default function HistoryScreen() {
         >
           <ArrowLeft size={18} color="#0f172a" />
         </TouchableOpacity>
-        <Text className="text-xl font-black text-slate-900">Service History</Text>
+        <Text className="text-xl font-display font-black text-slate-900">Service History</Text>
       </View>
 
       {isLoading ? (
@@ -92,9 +92,9 @@ export default function HistoryScreen() {
         </View>
       ) : jobs.length === 0 ? (
         <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-4xl mb-4">📋</Text>
-          <Text className="text-lg font-black text-slate-700 text-center">No history yet</Text>
-          <Text className="text-sm text-slate-400 font-medium text-center mt-2">
+          <Text className="font-sans text-4xl mb-4">📋</Text>
+          <Text className="text-lg font-display font-black text-slate-700 text-center">No history yet</Text>
+          <Text className="font-sans text-sm text-slate-400 font-medium text-center mt-2">
             Your completed and cancelled jobs will appear here
           </Text>
         </View>
@@ -115,8 +115,8 @@ export default function HistoryScreen() {
                 {/* Top row */}
                 <View className="flex-row items-start justify-between mb-3">
                   <View className="flex-1">
-                    <Text className="text-base font-black text-slate-900">{job.serviceType}</Text>
-                    <Text className="text-xs text-slate-400 font-medium mt-0.5">
+                    <Text className="text-base font-display font-black text-slate-900">{job.serviceType}</Text>
+                    <Text className="font-sans text-xs text-slate-400 font-medium mt-0.5">
                       #{job.id.slice(-6).toUpperCase()}
                     </Text>
                   </View>
@@ -131,14 +131,14 @@ export default function HistoryScreen() {
                 <View className="gap-2">
                   <View className="flex-row items-center gap-2">
                     <MapPin size={12} color="#94a3b8" />
-                    <Text className="text-xs text-slate-500 font-medium flex-1" numberOfLines={1}>
+                    <Text className="font-sans text-xs text-slate-500 font-medium flex-1" numberOfLines={1}>
                       {job.location?.address ?? 'Unknown location'}
                     </Text>
                   </View>
                   {job.price != null && (
                     <View className="flex-row items-center gap-2">
-                      <Text className="text-xs text-slate-400 font-medium">Price:</Text>
-                      <Text className="text-xs font-black text-slate-900">${job.price}</Text>
+                      <Text className="font-sans text-xs text-slate-400 font-medium">Price:</Text>
+                      <Text className="text-xs font-display font-black text-slate-900">${job.price}</Text>
                     </View>
                   )}
                 </View>
@@ -147,9 +147,9 @@ export default function HistoryScreen() {
                 {profile?.role === 'CUSTOMER' && job.cleanerName && (
                   <View className="flex-row items-center gap-2 mt-4 pt-4 border-t border-slate-50">
                     <View className="w-8 h-8 bg-accent/10 rounded-xl items-center justify-center">
-                      <Text className="text-sm">🧹</Text>
+                      <Text className="font-sans text-sm">🧹</Text>
                     </View>
-                    <Text className="text-xs font-bold text-slate-700 flex-1">
+                    <Text className="font-sans text-xs font-bold text-slate-700 flex-1">
                       {job.cleanerName}
                     </Text>
                   </View>
@@ -162,7 +162,7 @@ export default function HistoryScreen() {
                     className="flex-row items-center justify-center gap-2 mt-4 pt-4 border-t border-slate-50"
                   >
                     <Flag size={13} color="#ef4444" />
-                    <Text className="text-xs font-black text-red-500 uppercase tracking-wider">
+                    <Text className="text-xs font-display font-black text-red-500 uppercase tracking-wider">
                       Report an Issue
                     </Text>
                   </TouchableOpacity>
@@ -179,20 +179,20 @@ export default function HistoryScreen() {
           <TouchableOpacity className="flex-1 bg-black/50" onPress={() => setReportingJob(null)} />
           <View className="bg-white rounded-t-[32px] p-6 pb-10">
             <View className="flex-row items-center justify-between mb-1">
-              <Text className="text-xl font-black text-slate-900">Report an Issue</Text>
+              <Text className="text-xl font-display font-black text-slate-900">Report an Issue</Text>
               <TouchableOpacity onPress={() => setReportingJob(null)}>
                 <X size={22} color="#94a3b8" />
               </TouchableOpacity>
             </View>
-            <Text className="text-xs text-slate-400 font-medium mb-6">
+            <Text className="font-sans text-xs text-slate-400 font-medium mb-6">
               {reportingJob?.serviceType} · #{reportingJob?.id.slice(-6).toUpperCase()}
             </Text>
 
-            <Text className="text-xs font-black text-slate-500 uppercase tracking-widest mb-2">
+            <Text className="text-xs font-display font-black text-slate-500 uppercase tracking-widest mb-2">
               What went wrong?
             </Text>
             <TextInput
-              className="border-2 border-slate-100 rounded-2xl px-4 py-4 text-sm font-medium text-slate-900 bg-slate-50 mb-6"
+              className="font-sans border-2 border-slate-100 rounded-2xl px-4 py-4 text-sm font-medium text-slate-900 bg-slate-50 mb-6"
               placeholder="Describe the issue with this job…"
               placeholderTextColor="#94a3b8"
               multiline
@@ -212,7 +212,7 @@ export default function HistoryScreen() {
               {isSubmittingReport ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text className="text-white font-black text-sm uppercase tracking-widest">
+                <Text className="text-white font-display font-black text-sm uppercase tracking-widest">
                   Submit Report
                 </Text>
               )}

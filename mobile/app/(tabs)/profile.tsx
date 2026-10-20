@@ -111,12 +111,12 @@ export default function ProfileScreen() {
     if (profile?.role === 'CUSTOMER') {
       if (profile.cleanerOnboardingComplete && profile.hasAgreedToTerms
         && profile.cleanerAgreementAccepted && profile.verificationStatus === 'VERIFIED') {
-        updateProfile({ role: 'CLEANER' });
+        callFunction('setActiveRole', { role: 'CLEANER' }).catch((e:any) => Alert.alert('Could not switch role', e.message ?? 'Try again.'));
       } else {
         router.push('/register-cleaner');
       }
     } else if (profile?.role === 'CLEANER') {
-      updateProfile({ role: 'CUSTOMER' });
+      callFunction('setActiveRole', { role: 'CUSTOMER' }).catch((e:any) => Alert.alert('Could not switch role', e.message ?? 'Try again.'));
     }
   };
 
@@ -253,7 +253,7 @@ export default function ProfileScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View className="px-5 pt-4 pb-4">
-          <Text className="text-2xl font-black text-slate-900 tracking-tight">Profile</Text>
+          <Text className="text-2xl font-display font-black text-slate-900 tracking-tight">Profile</Text>
         </View>
 
         {/* Profile card */}
@@ -271,7 +271,7 @@ export default function ProfileScreen() {
                 ) : profile?.photoURL ? (
                   <Image source={{ uri: profile.photoURL }} className="w-full h-full" />
                 ) : (
-                  <Text className="text-2xl font-black text-white">
+                  <Text className="text-2xl font-display font-black text-white">
                     {profile?.displayName?.charAt(0) ?? '?'}
                   </Text>
                 )}
@@ -282,10 +282,10 @@ export default function ProfileScreen() {
             </TouchableOpacity>
 
             <View className="flex-1">
-              <Text className="text-xl font-black text-slate-900">
+              <Text className="text-xl font-display font-black text-slate-900">
                 {profile?.displayName ?? 'User'}
               </Text>
-              <Text className="text-sm text-slate-500 font-medium">{user?.email}</Text>
+              <Text className="font-sans text-sm text-slate-500 font-medium">{user?.email}</Text>
               <View className="flex-row items-center gap-2 mt-1">
                 <View
                   className={`px-2.5 py-1 rounded-full ${
@@ -318,8 +318,8 @@ export default function ProfileScreen() {
                 { label: 'Balance', value: `$${profile.balance?.toFixed(0) ?? 0}` },
               ].map(({ label, value }) => (
                 <View key={label} className="flex-1 items-center">
-                  <Text className="text-lg font-black text-slate-900">{String(value)}</Text>
-                  <Text className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+                  <Text className="text-lg font-display font-black text-slate-900">{String(value)}</Text>
+                  <Text className="font-sans text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
                     {label}
                   </Text>
                 </View>
@@ -335,8 +335,8 @@ export default function ProfileScreen() {
               <Bell size={18} color="#3906d2" />
             </View>
             <View>
-              <Text className="text-sm font-black text-slate-900">Notifications</Text>
-              <Text className="text-xs text-slate-400 font-medium">Job updates and alerts</Text>
+              <Text className="text-sm font-display font-black text-slate-900">Notifications</Text>
+              <Text className="font-sans text-xs text-slate-400 font-medium">Job updates and alerts</Text>
             </View>
           </View>
           <Switch
@@ -350,7 +350,7 @@ export default function ProfileScreen() {
         {/* Menu groups */}
         {MENU_ITEMS.map(({ group, items }) => (
           <View key={group} className="mx-5 mb-4">
-            <Text className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-1">
+            <Text className="text-xs font-display font-black text-slate-400 uppercase tracking-widest mb-2 px-1">
               {group}
             </Text>
             <View className="bg-white rounded-3xl border border-slate-100 overflow-hidden">
@@ -367,8 +367,8 @@ export default function ProfileScreen() {
                     <Icon size={18} color="#64748b" />
                   </View>
                   <View className="flex-1">
-                    <Text className="text-sm font-black text-slate-900">{label}</Text>
-                    <Text className="text-xs text-slate-400 font-medium mt-0.5">{sub}</Text>
+                    <Text className="text-sm font-display font-black text-slate-900">{label}</Text>
+                    <Text className="font-sans text-xs text-slate-400 font-medium mt-0.5">{sub}</Text>
                   </View>
                   <ChevronRight size={16} color="#cbd5e1" />
                 </TouchableOpacity>
@@ -378,7 +378,7 @@ export default function ProfileScreen() {
         ))}
 
         <TouchableOpacity onPress={handleDeleteAccount} className="mx-5 mb-3 py-4 rounded-3xl items-center border border-red-200" activeOpacity={0.8}>
-          <Text className="text-red-600 font-black text-sm uppercase tracking-wider">Delete Account</Text>
+          <Text className="text-red-600 font-display font-black text-sm uppercase tracking-wider">Delete Account</Text>
         </TouchableOpacity>
 
         {/* Sign out */}
@@ -388,7 +388,7 @@ export default function ProfileScreen() {
           activeOpacity={0.8}
         >
           <LogOut size={18} color="#ef4444" />
-          <Text className="text-red-500 font-black text-sm uppercase tracking-wider">Sign Out</Text>
+          <Text className="text-red-500 font-display font-black text-sm uppercase tracking-wider">Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

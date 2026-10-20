@@ -17,7 +17,7 @@ export function Wordmark({ size = 40, color = '#FFFFFF', dotColor }: WordmarkPro
         style={{
           fontSize: size,
           lineHeight: size * 1.05,
-          fontFamily: 'PublicSans_900Black',
+          fontFamily: 'Manrope_800ExtraBold',
           color,
           letterSpacing: -0.5,
         }}
@@ -28,7 +28,7 @@ export function Wordmark({ size = 40, color = '#FFFFFF', dotColor }: WordmarkPro
         style={{
           fontSize: size,
           lineHeight: size * 1.05,
-          fontFamily: 'PublicSans_900Black',
+          fontFamily: 'Manrope_800ExtraBold',
           color: dotColor ?? color,
         }}
       >

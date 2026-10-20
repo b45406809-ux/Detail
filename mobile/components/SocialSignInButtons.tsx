@@ -124,7 +124,7 @@ export function SocialSignInButtons() {
     <View className="gap-3">
       <View className="flex-row items-center gap-3 my-1">
         <View className="flex-1 h-px bg-ink/10" />
-        <Text className="text-ink/40 text-xs font-bold">OR CONTINUE WITH</Text>
+        <Text className="font-sans text-ink/40 text-xs font-bold">OR CONTINUE WITH</Text>
         <View className="flex-1 h-px bg-ink/10" />
       </View>
 
@@ -135,7 +135,7 @@ export function SocialSignInButtons() {
         className="w-full bg-white flex-row items-center justify-center gap-3 py-4 rounded-[24px] border-2 border-ink/10"
       >
         {isGoogleLoading ? <ActivityIndicator color="#3906D2" /> : <GoogleLogo size={18} />}
-        <Text className="font-black text-sm text-ink">Continue with Google</Text>
+        <Text className="font-display font-black text-sm text-ink">Continue with Google</Text>
       </TouchableOpacity>
 
       {Platform.OS === 'ios' && (
@@ -146,7 +146,7 @@ export function SocialSignInButtons() {
           className="w-full bg-black flex-row items-center justify-center gap-3 py-4 rounded-[24px]"
         >
           {isAppleLoading ? <ActivityIndicator color="#fff" /> : <AppleLogo size={18} />}
-          <Text className="font-black text-sm text-white">Continue with Apple</Text>
+          <Text className="font-display font-black text-sm text-white">Continue with Apple</Text>
         </TouchableOpacity>
       )}
     </View>

@@ -7,15 +7,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { configureNotificationChannels } from '../services/notifications';
-import {
-  PublicSans_300Light,
-  PublicSans_400Regular,
-  PublicSans_500Medium,
-  PublicSans_600SemiBold,
-  PublicSans_700Bold,
-  PublicSans_800ExtraBold,
-  PublicSans_900Black,
-} from '@expo-google-fonts/public-sans';
+import { DMSans_400Regular, DMSans_500Medium, DMSans_600SemiBold, DMSans_700Bold } from '@expo-google-fonts/dm-sans';
+import { Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrope';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 
@@ -69,13 +62,12 @@ export default function RootLayout() {
 
   useEffect(() => {
     Font.loadAsync({
-      PublicSans_300Light,
-      PublicSans_400Regular,
-      PublicSans_500Medium,
-      PublicSans_600SemiBold,
-      PublicSans_700Bold,
-      PublicSans_800ExtraBold,
-      PublicSans_900Black,
+      DMSans_400Regular,
+      DMSans_500Medium,
+      DMSans_600SemiBold,
+      DMSans_700Bold,
+      Manrope_700Bold,
+      Manrope_800ExtraBold,
     })
       .then(() => setFontsLoaded(true))
       .catch(() => setFontsLoaded(true));

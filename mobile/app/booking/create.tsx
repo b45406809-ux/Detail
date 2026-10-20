@@ -189,6 +189,15 @@ export default function CreateBookingScreen() {
       const scheduledDateTime = resolveScheduledDate(timePreference, customDateTime);
       const now = Date.now();
       const finalBudget = budgetOption === 'NOT_SURE' ? 0 : Number(budget);
+      let resolvedCoordinates = coordinates;
+      if (!resolvedCoordinates && address.trim()) {
+        try {
+          const [match] = await Location.geocodeAsync(address.trim());
+          if (match) resolvedCoordinates = { lat: match.latitude, lng: match.longitude };
+        } catch {
+          // Keep address-only bookings available when the device geocoder cannot resolve the address.
+        }
+      }
 
       const result = await callFunction<any, { jobId: string }>('createBooking', { idempotencyKey: `booking-${user.uid}-${now}`, booking: {
         customerId: user.uid,
@@ -198,7 +207,7 @@ export default function CreateBookingScreen() {
         serviceType: serviceLabel(),
         checklist,
         description,
-        location: { lat: coordinates?.lat ?? 0, lng: coordinates?.lng ?? 0, address },
+        location: { lat: resolvedCoordinates?.lat ?? 0, lng: resolvedCoordinates?.lng ?? 0, address },
         scheduledTime: timePreference,
         timePreference,
         scheduledDateTime: Timestamp.fromDate(scheduledDateTime),
@@ -231,10 +240,10 @@ export default function CreateBookingScreen() {
             <ArrowLeft size={18} color="#150256" />
           </TouchableOpacity>
           <View className="flex-1">
-            <Text className="text-xl font-black text-ink">
+            <Text className="text-xl font-display font-black text-ink">
               Book {category === 'CAR' ? 'Car' : 'House'} Cleaning
             </Text>
-            <Text className="text-[11px] font-bold text-ink/40 uppercase tracking-widest">
+            <Text className="font-sans text-[11px] font-bold text-ink/40 uppercase tracking-widest">
               Step {stepIndex + 1} of {STEPS.length}
             </Text>
           </View>
@@ -249,8 +258,8 @@ export default function CreateBookingScreen() {
         <ScrollView contentContainerClassName="px-5 pt-4 pb-10" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {step === 'CATEGORY' && (
             <View>
-              <Text className="text-2xl font-black text-ink mb-1">What do you need cleaned?</Text>
-              <Text className="text-sm text-ink/50 font-medium mb-6">Choose a service to get started</Text>
+              <Text className="text-2xl font-display font-black text-ink mb-1">What do you need cleaned?</Text>
+              <Text className="font-sans text-sm text-ink/50 font-medium mb-6">Choose a service to get started</Text>
               <View className="gap-3">
                 {(
                   [
@@ -271,7 +280,7 @@ export default function CreateBookingScreen() {
                     </View>
                     <View className="flex-1">
                       <Text className={`text-base font-black ${category === id ? 'text-accent' : 'text-ink'}`}>{label}</Text>
-                      <Text className="text-xs text-ink/50 font-medium mt-0.5">{desc}</Text>
+                      <Text className="font-sans text-xs text-ink/50 font-medium mt-0.5">{desc}</Text>
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -285,14 +294,14 @@ export default function CreateBookingScreen() {
 
           {step === 'DETAILS' && (
             <View>
-              <Text className="text-2xl font-black text-ink mb-1">Details & Condition</Text>
-              <Text className="text-sm text-ink/50 font-medium mb-6">
+              <Text className="text-2xl font-display font-black text-ink mb-1">Details & Condition</Text>
+              <Text className="font-sans text-sm text-ink/50 font-medium mb-6">
                 Add notes and photos of dirty areas so cleaners know what needs cleaning and quote accurately
               </Text>
 
-              <Text className="text-xs font-black text-ink/40 uppercase tracking-widest mb-2">Special Instructions (Optional)</Text>
+              <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest mb-2">Special Instructions (Optional)</Text>
               <TextInput
-                className="border-2 border-ink/10 rounded-2xl px-4 py-4 text-sm font-medium text-ink bg-ink/[0.02] mb-6"
+                className="font-sans border-2 border-ink/10 rounded-2xl px-4 py-4 text-sm font-medium text-ink bg-ink/[0.02] mb-6"
                 placeholder="Gate code, pets, stains to focus on, parking instructions…"
                 placeholderTextColor="#9C94C4"
                 multiline
@@ -303,10 +312,10 @@ export default function CreateBookingScreen() {
               />
 
               <View className="mb-2">
-                <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-1">
+                <Text className="text-xs font-display font-black text-ink/50 uppercase tracking-widest mb-1">
                   Photos of What Needs Cleaning (Dirty areas & vehicle)
                 </Text>
-                <Text className="text-xs text-ink/50 font-medium mb-3">
+                <Text className="font-sans text-xs text-ink/50 font-medium mb-3">
                   Upload photos of dirty rooms, stains, surfaces, pet hair, or vehicle condition ({photoUris.length}/6)
                 </Text>
               </View>
@@ -316,7 +325,7 @@ export default function CreateBookingScreen() {
                   <View key={url} className="w-24 h-24 rounded-2xl overflow-hidden border border-ink/10 relative">
                     <Image source={{ uri: url }} style={{ width: 96, height: 96 }} />
                     <View className="absolute bottom-1 left-1 bg-black/70 px-1.5 py-0.5 rounded-md">
-                      <Text className="text-[9px] font-black text-white uppercase">Needs Cleaning</Text>
+                      <Text className="text-[9px] font-display font-black text-white uppercase">Needs Cleaning</Text>
                     </View>
                     <TouchableOpacity
                       onPress={() => removePhoto(url)}
@@ -341,7 +350,7 @@ export default function CreateBookingScreen() {
                     ) : (
                       <>
                         <Camera size={18} color="#3906D2" />
-                        <Text className="text-xs font-black text-accent uppercase">Take Photo</Text>
+                        <Text className="text-xs font-display font-black text-accent uppercase">Take Photo</Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -357,7 +366,7 @@ export default function CreateBookingScreen() {
                     ) : (
                       <>
                         <Sparkles size={18} color="#150256" />
-                        <Text className="text-xs font-black text-ink uppercase">Choose from Library</Text>
+                        <Text className="text-xs font-display font-black text-ink uppercase">Choose from Library</Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -368,15 +377,15 @@ export default function CreateBookingScreen() {
 
           {step === 'LOCATION' && (
             <View>
-              <Text className="text-2xl font-black text-ink mb-1">Where is the job?</Text>
-              <Text className="text-sm text-ink/50 font-medium mb-6">Enter the address or use your current location</Text>
+              <Text className="text-2xl font-display font-black text-ink mb-1">Where is the job?</Text>
+              <Text className="font-sans text-sm text-ink/50 font-medium mb-6">Enter the address or use your current location</Text>
 
               <View className="mb-4">
-                <Text className="text-xs font-black text-ink/40 uppercase tracking-widest mb-2">Address</Text>
+                <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest mb-2">Address</Text>
                 <View className="border-2 border-ink/10 rounded-2xl bg-ink/[0.02] flex-row items-center gap-3 px-4">
                   <MapPin size={18} color="#9C94C4" />
                   <TextInput
-                    className="flex-1 py-4 text-sm font-medium text-ink"
+                    className="font-sans flex-1 py-4 text-sm font-medium text-ink"
                     placeholder="Enter an address…"
                     placeholderTextColor="#9C94C4"
                     value={address}
@@ -392,7 +401,7 @@ export default function CreateBookingScreen() {
                 activeOpacity={0.8}
               >
                 {isFetchingLocation ? <ActivityIndicator size="small" color="#3906D2" /> : <MapPin size={18} color="#3906D2" />}
-                <Text className="text-sm font-black text-accent">
+                <Text className="text-sm font-display font-black text-accent">
                   {isFetchingLocation ? 'Detecting location…' : 'Use my current location'}
                 </Text>
               </TouchableOpacity>
@@ -401,8 +410,8 @@ export default function CreateBookingScreen() {
 
           {step === 'SCHEDULE' && (
             <View>
-              <Text className="text-2xl font-black text-ink mb-1">When do you need it?</Text>
-              <Text className="text-sm text-ink/50 font-medium mb-6">Pick a time that works for you</Text>
+              <Text className="text-2xl font-display font-black text-ink mb-1">When do you need it?</Text>
+              <Text className="font-sans text-sm text-ink/50 font-medium mb-6">Pick a time that works for you</Text>
               <View className="gap-3">
         {Catalog.TIME_OPTIONS.map(({ id, label, sub }) => (
                   <TouchableOpacity
@@ -425,7 +434,7 @@ export default function CreateBookingScreen() {
                     </View>
                     <View className="flex-1">
                       <Text className={`text-sm font-black ${timePreference === id ? 'text-accent' : 'text-ink'}`}>{label}</Text>
-                      <Text className="text-xs text-ink/50 font-medium mt-0.5">
+                      <Text className="font-sans text-xs text-ink/50 font-medium mt-0.5">
                         {id === 'CUSTOM' && customDateTime
                           ? customDateTime.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
                           : sub}
@@ -498,8 +507,8 @@ export default function CreateBookingScreen() {
 
           {step === 'BUDGET' && (
             <View>
-              <Text className="text-2xl font-black text-ink mb-1">Set your budget</Text>
-              <Text className="text-sm text-ink/50 font-medium mb-6">
+              <Text className="text-2xl font-display font-black text-ink mb-1">Set your budget</Text>
+              <Text className="font-sans text-sm text-ink/50 font-medium mb-6">
                 Choose how you want to price your job. Your request stays open for 30 minutes to receive competitive bids from local pros.
               </Text>
 
@@ -523,14 +532,14 @@ export default function CreateBookingScreen() {
                   </View>
                   <View className="flex-1">
                     <View className="flex-row items-center gap-2 mb-1">
-                      <Text className="text-sm font-black text-ink">
+                      <Text className="text-sm font-display font-black text-ink">
                         Not sure — check cleaner bids
                       </Text>
                       <View className="bg-accent/10 px-2 py-0.5 rounded-full">
-                        <Text className="text-[10px] font-black text-accent uppercase">Popular</Text>
+                        <Text className="text-[10px] font-display font-black text-accent uppercase">Popular</Text>
                       </View>
                     </View>
-                    <Text className="text-xs text-ink/60 font-medium leading-relaxed">
+                    <Text className="font-sans text-xs text-ink/60 font-medium leading-relaxed">
                       Cleaners will review your checklist and submit their best quotes. You compare prices, ratings, and choose the pro you like.
                     </Text>
                   </View>
@@ -556,10 +565,10 @@ export default function CreateBookingScreen() {
                     <DollarSign size={20} color={budgetOption === 'FIXED' ? '#fff' : '#150256'} />
                   </View>
                   <View className="flex-1">
-                    <Text className="text-sm font-black text-ink mb-1">
+                    <Text className="text-sm font-display font-black text-ink mb-1">
                       I have a specific budget in mind
                     </Text>
-                    <Text className="text-xs text-ink/60 font-medium">
+                    <Text className="font-sans text-xs text-ink/60 font-medium">
                       Set a target amount you are willing to pay for cleaners to bid around.
                     </Text>
                   </View>
@@ -567,12 +576,12 @@ export default function CreateBookingScreen() {
 
                 {budgetOption === 'FIXED' && (
                   <View className="mt-4 pt-4 border-t border-ink/5">
-                    <Text className="text-xs font-black text-ink/40 uppercase tracking-widest mb-2">
+                    <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest mb-2">
                       Your Target Budget (USD)
                     </Text>
                     <View className="border-2 border-ink/10 rounded-2xl bg-white px-4 py-3 mb-3">
                       <TextInput
-                        className="text-2xl font-black text-ink"
+                        className="text-2xl font-display font-black text-ink"
                         placeholder="$0"
                         placeholderTextColor="#9C94C4"
                         keyboardType="decimal-pad"
@@ -605,7 +614,7 @@ export default function CreateBookingScreen() {
               </TouchableOpacity>
 
               <View className="bg-ink/[0.03] rounded-3xl p-5 border border-ink/10 gap-3">
-                <Text className="text-xs font-black text-ink/40 uppercase tracking-widest">Review Request</Text>
+                <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest">Review Request</Text>
                 <SummaryRow label="Service" value={serviceLabel()} />
                 <SummaryRow label={category === 'HOUSE' ? 'Property' : 'Vehicle'} value={choices.propertyType || choices.vehicleType || 'Details added in checklist'} />
                 <SummaryRow
@@ -686,12 +695,12 @@ function ServiceChecklist({ category, serviceId, setServiceId, selections, setGr
 
   return <View className="gap-7">
     <View>
-      <Text className="text-2xl font-black text-ink mb-1">{isHouse ? 'House Cleaning' : 'Car Cleaning'}</Text>
-      <Text className="text-sm text-ink/50 font-medium mb-4">Choose one service to get started</Text>
+      <Text className="text-2xl font-display font-black text-ink mb-1">{isHouse ? 'House Cleaning' : 'Car Cleaning'}</Text>
+      <Text className="font-sans text-sm text-ink/50 font-medium mb-4">Choose one service to get started</Text>
       <View className="gap-3">
         {packages.map((item) => <TouchableOpacity key={item.id} onPress={() => setServiceId(item.id)} activeOpacity={0.85} className={`p-4 rounded-3xl border-2 ${serviceId === item.id ? 'border-accent bg-accent/5' : 'border-ink/10 bg-ink/[0.02]'}`}>
-          <View className="flex-row items-center justify-between gap-3"><Text className={`flex-1 text-base font-black ${serviceId === item.id ? 'text-accent' : 'text-ink'}`}>{item.label}</Text><Text className="text-sm font-black text-accent">Starting from {item.price}</Text></View>
-          <Text className="text-xs text-ink/50 font-medium mt-1">{item.description}</Text>
+          <View className="flex-row items-center justify-between gap-3"><Text className={`flex-1 text-base font-black ${serviceId === item.id ? 'text-accent' : 'text-ink'}`}>{item.label}</Text><Text className="text-sm font-display font-black text-accent">Starting from {item.price}</Text></View>
+          <Text className="font-sans text-xs text-ink/50 font-medium mt-1">{item.description}</Text>
         </TouchableOpacity>)}
       </View>
     </View>
@@ -702,7 +711,7 @@ function ServiceChecklist({ category, serviceId, setServiceId, selections, setGr
         {group('parts', 'Specific parts', Catalog.ROOM_PARTS)}
         {choice('areaSize', 'Area size', Catalog.AREA_SIZES)}
         <View className="gap-5">
-          <Text className="text-sm font-black text-ink">What should be done?</Text>
+          <Text className="text-sm font-display font-black text-ink">What should be done?</Text>
           {Object.entries(Catalog.ROOM_TASKS).filter(([room]) => room === 'Windows' ? (selections.parts ?? []).includes('Windows') : (selections.rooms ?? []).includes(room)).map(([room, tasks]) => group(`roomTasks:${room}`, room, tasks))}
         </View>
       </> : <>
@@ -712,7 +721,7 @@ function ServiceChecklist({ category, serviceId, setServiceId, selections, setGr
         {service === 'STANDARD_HOUSE' && group('areas', 'Additional areas', Catalog.STANDARD_AREAS)}
         {service === 'BASIC_HOUSE' && group('additions', 'Optional additions', Catalog.BASIC_ADDITIONS)}
         {service === 'STANDARD_HOUSE' && group('additions', 'Optional additions', Catalog.STANDARD_ADDITIONS)}
-        {service === 'DEEP_HOUSE' && <View className="gap-5"><Text className="text-sm font-black text-ink">Areas requiring extra attention</Text>{Object.entries(Catalog.DEEP_HOUSE_ATTENTION).map(([area, options]) => group(`attention:${area}`, area, options))}</View>}
+        {service === 'DEEP_HOUSE' && <View className="gap-5"><Text className="text-sm font-display font-black text-ink">Areas requiring extra attention</Text>{Object.entries(Catalog.DEEP_HOUSE_ATTENTION).map(([area, options]) => group(`attention:${area}`, area, options))}</View>}
         {service !== 'DEEP_HOUSE' && choice('condition', 'Property condition', conditions)}
         {service === 'DEEP_HOUSE' && choice('condition', 'Condition', ['Light', 'Moderate', 'Heavy', 'Very Heavy'])}
       </>}
@@ -736,11 +745,11 @@ function ServiceChecklist({ category, serviceId, setServiceId, selections, setGr
 
 function MultiSelectGroup({ title, options, selected, onToggle, onSelectAll }: { title: string; options: string[]; selected: string[]; onToggle: (value: string) => void; onSelectAll: (values: string[]) => void }) {
   const allSelected = options.length > 0 && selected.length === options.length;
-  const checkbox = (checked: boolean) => <View className={`w-5 h-5 rounded-md border-2 items-center justify-center ${checked ? 'border-accent bg-accent' : 'border-ink/25 bg-white'}`}>{checked && <Text className="text-[11px] font-black text-white">✓</Text>}</View>;
+  const checkbox = (checked: boolean) => <View className={`w-5 h-5 rounded-md border-2 items-center justify-center ${checked ? 'border-accent bg-accent' : 'border-ink/25 bg-white'}`}>{checked && <Text className="text-[11px] font-display font-black text-white">✓</Text>}</View>;
   return <View>
-    <Text className="text-sm font-black text-ink mb-2">{title}</Text>
+    <Text className="text-sm font-display font-black text-ink mb-2">{title}</Text>
     <View className="rounded-2xl border border-ink/10 overflow-hidden">
-      <TouchableOpacity onPress={() => onSelectAll(allSelected ? [] : options)} className="flex-row items-center gap-3 px-4 py-3 bg-accent/5 border-b border-ink/5">{checkbox(allSelected)}<Text className="text-xs font-black text-accent uppercase tracking-wide">Select All</Text></TouchableOpacity>
+      <TouchableOpacity onPress={() => onSelectAll(allSelected ? [] : options)} className="flex-row items-center gap-3 px-4 py-3 bg-accent/5 border-b border-ink/5">{checkbox(allSelected)}<Text className="text-xs font-display font-black text-accent uppercase tracking-wide">Select All</Text></TouchableOpacity>
       {options.map((option, index) => { const checked = selected.includes(option); return <TouchableOpacity key={option} onPress={() => onToggle(option)} className={`flex-row items-center gap-3 px-4 py-3 ${index < options.length - 1 ? 'border-b border-ink/5' : ''}`}>
         {checkbox(checked)}<Text className={`flex-1 text-sm font-medium ${checked ? 'text-ink' : 'text-ink/70'}`}>{option}</Text>
       </TouchableOpacity>; })}
@@ -749,7 +758,7 @@ function MultiSelectGroup({ title, options, selected, onToggle, onSelectAll }: {
 }
 
 function ChoiceGroup({ title, options, selected, onSelect }: { title: string; options: string[]; selected: string; onSelect: (value: string) => void }) {
-  return <View><Text className="text-sm font-black text-ink mb-2">{title}</Text><Text className="text-[11px] text-ink/40 font-medium mb-2">Select one</Text><View className="gap-2">
+  return <View><Text className="text-sm font-display font-black text-ink mb-2">{title}</Text><Text className="font-sans text-[11px] text-ink/40 font-medium mb-2">Select one</Text><View className="gap-2">
     {options.map((option) => { const checked = selected === option; return <TouchableOpacity key={option} onPress={() => onSelect(option)} className={`flex-row items-center gap-3 px-4 py-3 rounded-2xl border ${checked ? 'border-accent bg-accent/5' : 'border-ink/10 bg-white'}`}>
       <View className={`w-5 h-5 rounded-full border-2 items-center justify-center ${checked ? 'border-accent' : 'border-ink/25'}`}>{checked && <View className="w-2.5 h-2.5 rounded-full bg-accent" />}</View><Text className={`text-sm font-medium ${checked ? 'text-accent' : 'text-ink/70'}`}>{option}</Text>
     </TouchableOpacity>; })}
@@ -760,10 +769,10 @@ function SectionLabel({ n, title, optional }: { n: number; title: string; option
   return (
     <View className="flex-row items-center gap-2 mb-3">
       <View className="w-5 h-5 rounded-full bg-accent items-center justify-center">
-        <Text className="text-[10px] font-black text-white">{n}</Text>
+        <Text className="text-[10px] font-display font-black text-white">{n}</Text>
       </View>
-      <Text className="text-sm font-black text-ink">{title}</Text>
-      {optional && <Text className="text-[10px] font-bold text-ink/30 uppercase">Optional</Text>}
+      <Text className="text-sm font-display font-black text-ink">{title}</Text>
+      {optional && <Text className="font-sans text-[10px] font-bold text-ink/30 uppercase">Optional</Text>}
     </View>
   );
 }
@@ -798,7 +807,7 @@ function OptionRow({ label, desc, selected, onPress }: { label: string; desc: st
       className={`p-4 rounded-2xl border-2 ${selected ? 'border-accent bg-accent/5' : 'border-ink/10 bg-ink/[0.02]'}`}
     >
       <Text className={`text-sm font-black ${selected ? 'text-accent' : 'text-ink'}`}>{label}</Text>
-      <Text className="text-xs text-ink/50 font-medium mt-0.5">{desc}</Text>
+      <Text className="font-sans text-xs text-ink/50 font-medium mt-0.5">{desc}</Text>
     </TouchableOpacity>
   );
 }
@@ -806,8 +815,8 @@ function OptionRow({ label, desc, selected, onPress }: { label: string; desc: st
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <View className="flex-row justify-between">
-      <Text className="text-xs text-ink/50 font-medium">{label}</Text>
-      <Text className="text-xs font-black text-ink flex-1 text-right ml-4" numberOfLines={1}>
+      <Text className="font-sans text-xs text-ink/50 font-medium">{label}</Text>
+      <Text className="text-xs font-display font-black text-ink flex-1 text-right ml-4" numberOfLines={1}>
         {value}
       </Text>
     </View>
