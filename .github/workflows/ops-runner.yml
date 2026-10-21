@@ -432,7 +432,7 @@ jobs:
           {
             echo '## Live integration test statuses'
             echo
-            echo "- Suite: `$TASK`"
+            printf -- '- Suite: %s\n' "$TASK"
           } >> "$GITHUB_STEP_SUMMARY"
           for item in "Supabase:$SUPABASE_RESULT" "Twilio account:$TWILIO_RESULT" "Resend account:$RESEND_RESULT" "Mapbox:$MAPBOX_RESULT" "Paynow:$PAYNOW_RESULT" "Didit:$DIDIT_RESULT" "Email delivery:$EMAIL_RESULT" "SMS delivery:$SMS_RESULT"; do
             name="${item%%:*}"; result="${item#*:}"
