@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      OPS_LOG: ${{ runner.temp }}/detail-ops.log
+      OPS_LOG: ${{ github.workspace }}/detail-ops.log
     steps:
       - uses: actions/checkout@v4
 
@@ -173,7 +173,7 @@ jobs:
     environment: production
     timeout-minutes: 20
     env:
-      OPS_LOG: ${{ runner.temp }}/detail-ops.log
+      OPS_LOG: ${{ github.workspace }}/detail-ops.log
     steps:
       - uses: actions/checkout@v4
 
