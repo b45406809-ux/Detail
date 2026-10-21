@@ -1,0 +1,234 @@
+name: Detail allowlisted GitHub operations
+
+on:
+  push:
+    branches:
+      - main
+      - codex/separate-dashboard-into-routed-modules-fl7jlh
+    paths:
+      - cmd.txt
+  workflow_dispatch:
+    inputs:
+      task:
+        description: Select a fixed operation; arbitrary shell commands are not accepted.
+        type: choice
+        required: true
+        options:
+          - site-checks
+          - mobile-checks
+          - functions-checks
+          - supabase-migration-list
+          - supabase-migration-dry-run
+          - waitlist-migration-dry-run
+      confirm_production_access:
+        description: Required for read-only access to production Supabase or Cloudflare data.
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: detail-ops-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    if: github.event_name == 'push' || inputs.task == 'site-checks' || inputs.task == 'mobile-checks' || inputs.task == 'functions-checks'
+    name: Build and test selected component
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OPS_LOG: ${{ runner.temp }}/detail-ops.log
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select local operation
+        id: select
+        env:
+          INPUT_TASK: ${{ inputs.task }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            task="$(tr -d '\r\n' < cmd.txt)"
+          else
+            task="$INPUT_TASK"
+          fi
+          case "$task" in
+            site-checks|mobile-checks|functions-checks) ;;
+            *) echo "cmd.txt accepts only site-checks, mobile-checks, or functions-checks." >&2; exit 2 ;;
+          esac
+          echo "task=$task" >> "$GITHUB_OUTPUT"
+          printf 'Selected operation: %s\n' "$task" > "$OPS_LOG"
+
+      - uses: actions/setup-node@v4
+        if: steps.select.outputs.task == 'site-checks' || steps.select.outputs.task == 'mobile-checks' || steps.select.outputs.task == 'functions-checks'
+        with:
+          node-version: 20
+
+      - name: Site and dashboard checks
+        if: steps.select.outputs.task == 'site-checks'
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+          VITE_TURNSTILE_SITE_KEY: ci-placeholder-turnstile-key
+        run: |
+          set -euo pipefail
+          if npm ci --prefix site --no-audit --no-fund >> "$OPS_LOG" 2>&1 && npm run build --prefix site >> "$OPS_LOG" 2>&1; then
+            echo 'Site build passed.' >> "$OPS_LOG"
+          else
+            code=$?; echo "Site checks failed (exit $code)." >> "$OPS_LOG"; exit "$code"
+          fi
+
+      - name: Mobile checks
+        if: steps.select.outputs.task == 'mobile-checks'
+        run: |
+          set -euo pipefail
+          if npm ci --prefix mobile --no-audit --no-fund >> "$OPS_LOG" 2>&1 && npm run type-check --prefix mobile >> "$OPS_LOG" 2>&1 && npm run lint --prefix mobile >> "$OPS_LOG" 2>&1; then
+            echo 'Mobile type-check and lint passed.' >> "$OPS_LOG"
+          else
+            code=$?; echo "Mobile checks failed (exit $code)." >> "$OPS_LOG"; exit "$code"
+          fi
+
+      - name: Legacy functions build
+        if: steps.select.outputs.task == 'functions-checks'
+        run: |
+          set -euo pipefail
+          if npm ci --prefix functions --no-audit --no-fund >> "$OPS_LOG" 2>&1 && npm run build --prefix functions >> "$OPS_LOG" 2>&1; then
+            echo 'Functions build passed.' >> "$OPS_LOG"
+          else
+            code=$?; echo "Functions build failed (exit $code)." >> "$OPS_LOG"; exit "$code"
+          fi
+
+      - name: Redact and summarize operation output
+        if: always() && steps.select.outputs.task != ''
+        env:
+          TASK: ${{ steps.select.outputs.task }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          python scripts/redact_gha_ops_log.py "$OPS_LOG" "$RUNNER_TEMP/detail-ops-result.txt"
+          {
+            echo "## GitHub operation result"
+            echo
+            echo "- Task: \`$TASK\`"
+            echo "- Workflow result: \`$JOB_STATUS\`"
+            echo "- Detailed output: available in the attached redacted artifact."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.select.outputs.task != ''
+        with:
+          name: detail-ops-${{ github.run_id }}
+          path: ${{ runner.temp }}/detail-ops-result.txt
+          if-no-files-found: warn
+          retention-days: 3
+
+  production-readonly:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && (inputs.task == 'supabase-migration-list' || inputs.task == 'supabase-migration-dry-run' || inputs.task == 'waitlist-migration-dry-run')
+    name: Read-only production diagnostics
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    env:
+      OPS_LOG: ${{ runner.temp }}/detail-ops.log
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require explicit production confirmation on main
+        env:
+          TASK: ${{ inputs.task }}
+          CONFIRM: ${{ inputs.confirm_production_access }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$CONFIRM" == 'true' ]] || { echo 'Set confirm_production_access only after reviewing the selected read-only operation.'; exit 1; }
+          [[ "$REF" == 'refs/heads/main' ]] || { echo 'Production diagnostics may run only from main.'; exit 1; }
+          printf 'Selected production read-only operation: %s\n' "$TASK" > "$OPS_LOG"
+
+      - uses: supabase/setup-cli@v1
+        if: inputs.task == 'supabase-migration-list' || inputs.task == 'supabase-migration-dry-run'
+        with:
+          version: latest
+
+      - name: Validate Supabase CLI credentials
+        if: inputs.task == 'supabase-migration-list' || inputs.task == 'supabase-migration-dry-run'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN" || { echo 'Missing SUPABASE_ACCESS_TOKEN.'; exit 1; }
+          test -n "$SUPABASE_PROJECT_REF" || { echo 'Missing SUPABASE_PROJECT_REF.'; exit 1; }
+          test -n "$SUPABASE_DB_PASSWORD" || { echo 'Missing SUPABASE_DB_PASSWORD.'; exit 1; }
+
+      - name: Inspect migration status or preview pending migrations
+        if: inputs.task == 'supabase-migration-list' || inputs.task == 'supabase-migration-dry-run'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          TASK: ${{ inputs.task }}
+        run: |
+          set -euo pipefail
+          if supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD" >> "$OPS_LOG" 2>&1; then
+            echo 'Supabase project linked.' >> "$OPS_LOG"
+          else
+            code=$?; echo "Supabase project link failed (exit $code)." >> "$OPS_LOG"; exit "$code"
+          fi
+          if [[ "$TASK" == 'supabase-migration-list' ]]; then
+            supabase migration list --linked >> "$OPS_LOG" 2>&1
+          else
+            supabase db push --dry-run >> "$OPS_LOG" 2>&1
+          fi
+
+      - name: Dry-run legacy D1 data migration
+        if: inputs.task == 'waitlist-migration-dry-run'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_D1_DATABASE_ID: ${{ vars.CLOUDFLARE_D1_DATABASE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_READ_TOKEN }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EXECUTE_MIGRATION: 'false'
+        run: python scripts/migrate_cloudflare_waitlist_to_supabase.py >> "$OPS_LOG" 2>&1
+
+      - name: Redact and summarize production output
+        if: always()
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_READ_TOKEN }}
+          PAYNOW_INTEGRATION_ID: ${{ secrets.PAYNOW_INTEGRATION_ID }}
+          PAYNOW_INTEGRATION_KEY: ${{ secrets.PAYNOW_INTEGRATION_KEY }}
+          DIDIT_API_KEY: ${{ secrets.DIDIT_API_KEY }}
+          DIDIT_WORKFLOW_ID: ${{ secrets.DIDIT_WORKFLOW_ID }}
+          TURNSTILE_SECRET: ${{ secrets.TURNSTILE_SECRET }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          PAYOUT_ENCRYPTION_KEY: ${{ secrets.PAYOUT_ENCRYPTION_KEY }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_MESSAGING_SERVICE_SID: ${{ secrets.TWILIO_MESSAGING_SERVICE_SID }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          TASK: ${{ inputs.task }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          python scripts/redact_gha_ops_log.py "$OPS_LOG" "$RUNNER_TEMP/detail-ops-result.txt"
+          {
+            echo "## GitHub operation result"
+            echo
+            echo "- Task: \`$TASK\`"
+            echo "- Workflow result: \`$JOB_STATUS\`"
+            echo "- Detailed output: available in the attached redacted artifact."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: detail-production-ops-${{ github.run_id }}
+          path: ${{ runner.temp }}/detail-ops-result.txt
+          if-no-files-found: warn
+          retention-days: 3
