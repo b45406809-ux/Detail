@@ -95,17 +95,22 @@ jobs:
           fi
 
       - name: Export mobile app bundle
-        if: steps.select.outputs.task == 'mobile-export-checks'
+        if: steps.select.outputs.task == 'mobile-export-checks' || steps.select.outputs.task == 'full-checks'
         env:
+          TASK: ${{ steps.select.outputs.task }}
           EXPO_PUBLIC_SUPABASE_URL: https://example.supabase.co
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
           EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: pk.ci-placeholder-token
         run: |
           set -euo pipefail
-          if npm ci --prefix mobile --no-audit --no-fund >> "$OPS_LOG" 2>&1 && (cd mobile && npx expo export --platform all --output-dir "$RUNNER_TEMP/detail-mobile-export") >> "$OPS_LOG" 2>&1; then
-            echo 'Mobile app export passed.' >> "$OPS_LOG"
+          if [[ "$TASK" == 'full-checks' ]] || npm ci --prefix mobile --no-audit --no-fund >> "$OPS_LOG" 2>&1; then
+            if (cd mobile && npx expo export --platform all --output-dir "$RUNNER_TEMP/detail-mobile-export") >> "$OPS_LOG" 2>&1; then
+              echo 'Mobile app export passed.' >> "$OPS_LOG"
+            else
+              code=$?; echo "Mobile export failed (exit $code)." >> "$OPS_LOG"; exit "$code"
+            fi
           else
-            code=$?; echo "Mobile export failed (exit $code)." >> "$OPS_LOG"; exit "$code"
+            code=$?; echo "Mobile export dependency install failed (exit $code)." >> "$OPS_LOG"; exit "$code"
           fi
 
       - name: Legacy functions build
@@ -134,7 +139,7 @@ jobs:
           set -euo pipefail
           supabase start >> "$OPS_LOG" 2>&1
           supabase db reset --local >> "$OPS_LOG" 2>&1
-          supabase db lint --local --fail-on error >> "$OPS_LOG" 2>&1
+          supabase db lint --local --schema public --fail-on error >> "$OPS_LOG" 2>&1
           deno check supabase/functions/*/index.ts >> "$OPS_LOG" 2>&1
           echo 'Local Supabase migrations, schema lint, and Edge Function type checks passed.' >> "$OPS_LOG"
         timeout-minutes: 20

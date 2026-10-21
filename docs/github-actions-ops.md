@@ -9,7 +9,7 @@ For automatic checks, set `cmd.txt` to exactly one fixed task name and push it t
 - `mobile-export-checks` (bundles Android and iOS JS assets using non-production placeholder config)
 - `functions-checks`
 - `supabase-local-checks` (starts disposable local Supabase, resets/applies migrations, lints the schema, and type-checks Edge Functions)
-- `full-checks` (runs site, mobile, functions, and local Supabase checks)
+- `full-checks` (runs site, mobile, native JS bundle export, functions, and local Supabase checks)
 
 For remote, read-only diagnostics, use **Actions → Detail allowlisted GitHub operations → Run workflow** and select one of:
 
