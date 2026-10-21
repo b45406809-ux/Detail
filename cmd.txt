@@ -1,1 +1,1 @@
-site-checks
+full-checks

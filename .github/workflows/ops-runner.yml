@@ -16,7 +16,10 @@ on:
         options:
           - site-checks
           - mobile-checks
+          - mobile-export-checks
           - functions-checks
+          - supabase-local-checks
+          - full-checks
           - supabase-migration-list
           - supabase-migration-dry-run
           - waitlist-migration-dry-run
@@ -35,10 +38,10 @@ concurrency:
 
 jobs:
   checks:
-    if: github.event_name == 'push' || inputs.task == 'site-checks' || inputs.task == 'mobile-checks' || inputs.task == 'functions-checks'
-    name: Build and test selected component
+    if: github.event_name == 'push' || inputs.task == 'site-checks' || inputs.task == 'mobile-checks' || inputs.task == 'mobile-export-checks' || inputs.task == 'functions-checks' || inputs.task == 'supabase-local-checks' || inputs.task == 'full-checks'
+    name: Run selected local checks
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       OPS_LOG: ${{ runner.temp }}/detail-ops.log
     steps:
@@ -57,19 +60,18 @@ jobs:
             task="$INPUT_TASK"
           fi
           case "$task" in
-            site-checks|mobile-checks|functions-checks) ;;
-            *) echo "cmd.txt accepts only site-checks, mobile-checks, or functions-checks." >&2; exit 2 ;;
+            site-checks|mobile-checks|mobile-export-checks|functions-checks|supabase-local-checks|full-checks) ;;
+            *) echo "cmd.txt accepts only a named local check from the workflow task menu." >&2; exit 2 ;;
           esac
           echo "task=$task" >> "$GITHUB_OUTPUT"
           printf 'Selected operation: %s\n' "$task" > "$OPS_LOG"
 
       - uses: actions/setup-node@v4
-        if: steps.select.outputs.task == 'site-checks' || steps.select.outputs.task == 'mobile-checks' || steps.select.outputs.task == 'functions-checks'
         with:
           node-version: 20
 
       - name: Site and dashboard checks
-        if: steps.select.outputs.task == 'site-checks'
+        if: steps.select.outputs.task == 'site-checks' || steps.select.outputs.task == 'full-checks'
         env:
           VITE_SUPABASE_URL: https://example.supabase.co
           VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
@@ -82,8 +84,8 @@ jobs:
             code=$?; echo "Site checks failed (exit $code)." >> "$OPS_LOG"; exit "$code"
           fi
 
-      - name: Mobile checks
-        if: steps.select.outputs.task == 'mobile-checks'
+      - name: Mobile type-check and lint
+        if: steps.select.outputs.task == 'mobile-checks' || steps.select.outputs.task == 'full-checks'
         run: |
           set -euo pipefail
           if npm ci --prefix mobile --no-audit --no-fund >> "$OPS_LOG" 2>&1 && npm run type-check --prefix mobile >> "$OPS_LOG" 2>&1 && npm run lint --prefix mobile >> "$OPS_LOG" 2>&1; then
@@ -92,8 +94,22 @@ jobs:
             code=$?; echo "Mobile checks failed (exit $code)." >> "$OPS_LOG"; exit "$code"
           fi
 
+      - name: Export mobile app bundle
+        if: steps.select.outputs.task == 'mobile-export-checks'
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+          EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: pk.ci-placeholder-token
+        run: |
+          set -euo pipefail
+          if npm ci --prefix mobile --no-audit --no-fund >> "$OPS_LOG" 2>&1 && (cd mobile && npx expo export --platform all --output-dir "$RUNNER_TEMP/detail-mobile-export") >> "$OPS_LOG" 2>&1; then
+            echo 'Mobile app export passed.' >> "$OPS_LOG"
+          else
+            code=$?; echo "Mobile export failed (exit $code)." >> "$OPS_LOG"; exit "$code"
+          fi
+
       - name: Legacy functions build
-        if: steps.select.outputs.task == 'functions-checks'
+        if: steps.select.outputs.task == 'functions-checks' || steps.select.outputs.task == 'full-checks'
         run: |
           set -euo pipefail
           if npm ci --prefix functions --no-audit --no-fund >> "$OPS_LOG" 2>&1 && npm run build --prefix functions >> "$OPS_LOG" 2>&1; then
@@ -101,6 +117,31 @@ jobs:
           else
             code=$?; echo "Functions build failed (exit $code)." >> "$OPS_LOG"; exit "$code"
           fi
+
+      - uses: denoland/setup-deno@v2
+        if: steps.select.outputs.task == 'supabase-local-checks' || steps.select.outputs.task == 'full-checks'
+        with:
+          deno-version: v2.x
+
+      - uses: supabase/setup-cli@v1
+        if: steps.select.outputs.task == 'supabase-local-checks' || steps.select.outputs.task == 'full-checks'
+        with:
+          version: latest
+
+      - name: Start local Supabase and apply migrations
+        if: steps.select.outputs.task == 'supabase-local-checks' || steps.select.outputs.task == 'full-checks'
+        run: |
+          set -euo pipefail
+          supabase start >> "$OPS_LOG" 2>&1
+          supabase db reset --local >> "$OPS_LOG" 2>&1
+          supabase db lint --local --fail-on error >> "$OPS_LOG" 2>&1
+          deno check supabase/functions/*/index.ts >> "$OPS_LOG" 2>&1
+          echo 'Local Supabase migrations, schema lint, and Edge Function type checks passed.' >> "$OPS_LOG"
+        timeout-minutes: 20
+
+      - name: Stop local Supabase
+        if: always() && (steps.select.outputs.task == 'supabase-local-checks' || steps.select.outputs.task == 'full-checks')
+        run: supabase stop --no-backup >> "$OPS_LOG" 2>&1 || true
 
       - name: Redact and summarize operation output
         if: always() && steps.select.outputs.task != ''
