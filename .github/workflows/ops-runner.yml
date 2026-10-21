@@ -104,8 +104,8 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$TASK" == 'full-checks' ]] || npm ci --prefix mobile --no-audit --no-fund >> "$OPS_LOG" 2>&1; then
-            if (cd mobile && npx expo export --platform all --output-dir "$RUNNER_TEMP/detail-mobile-export") >> "$OPS_LOG" 2>&1; then
-              echo 'Mobile app export passed.' >> "$OPS_LOG"
+            if (cd mobile && npx expo export --platform ios --output-dir "$RUNNER_TEMP/detail-mobile-export/ios" && npx expo export --platform android --output-dir "$RUNNER_TEMP/detail-mobile-export/android") >> "$OPS_LOG" 2>&1; then
+              echo 'iOS and Android app exports passed.' >> "$OPS_LOG"
             else
               code=$?; echo "Mobile export failed (exit $code)." >> "$OPS_LOG"; exit "$code"
             fi
@@ -146,7 +146,7 @@ jobs:
 
       - name: Stop local Supabase
         if: always() && (steps.select.outputs.task == 'supabase-local-checks' || steps.select.outputs.task == 'full-checks')
-        run: supabase stop --no-backup >> "$OPS_LOG" 2>&1 || true
+        run: if command -v supabase >/dev/null 2>&1; then supabase stop --no-backup >> "$OPS_LOG" 2>&1 || true; fi
 
       - name: Redact and summarize operation output
         if: always() && steps.select.outputs.task != ''
