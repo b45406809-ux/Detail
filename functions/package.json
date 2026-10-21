@@ -2,7 +2,7 @@
   "name": "detail-functions",
   "description": "Legacy Firebase importer and Supabase cutover utilities",
   "engines": {
-    "node": "20"
+    "node": ">=22"
   },
   "main": "lib/index.js",
   "private": true,
