@@ -17,7 +17,8 @@ Create a GitHub environment named `production`, enable required reviewers if des
 | `VITE_POSTHOG_HOST` | Optional analytics host, usually `https://us.i.posthog.com`. |
 | `PAYNOW_RETURN_URL` | Optional customer return URL used by payment checkout. |
 | `APP_RETURN_URL` | Optional app deep-link return URL for payments. |
-| `CLOUDFLARE_ACCOUNT_ID` | Account used only by the separate marketing-asset publishing workflow. |
+| `CLOUDFLARE_ACCOUNT_ID` | Account used by marketing-asset publishing and the one-time legacy D1 migration. |
+| `CLOUDFLARE_D1_DATABASE_ID` | Legacy D1 database UUID used only for the one-time data migration. |
 
 | GitHub environment secret | Purpose |
 | --- | --- |
@@ -35,7 +36,9 @@ Create a GitHub environment named `production`, enable required reviewers if des
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_SERVICE_SID` | SMS delivery from the Supabase delivery worker. |
 | `TWILIO_FROM_NUMBER` | Optional fallback sender when no Messaging Service SID is used. |
 | `CRON_SECRET` | Authenticates the scheduled notification delivery workflow and server worker. |
-| `CLOUDFLARE_API_TOKEN` | Optional token for publishing marketing assets to Cloudflare KV; not used for D1 migrations. |
+| `CLOUDFLARE_API_TOKEN` | Optional token for publishing marketing assets to Cloudflare KV. |
+| `CLOUDFLARE_D1_READ_TOKEN` | Cloudflare API token scoped as narrowly as possible to query the legacy D1 database. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-side key used by the manual legacy data migration workflow; never expose it to frontend builds. |
 
 The Supabase deployment workflow sends configured provider values to Supabase Edge Function secrets and deploys the database migrations and functions. Supabase supplies its project URL and platform keys to deployed functions. Keep `SUPABASE_SERVICE_ROLE_KEY` out of Vite and Expo variables; it is a Supabase server-side secret, not a GitHub Actions build argument.
 
@@ -45,6 +48,10 @@ The Supabase deployment workflow sends configured provider values to Supabase Ed
 - `deploy-supabase.yml` applies Supabase migrations, configures Edge Function provider secrets, and deploys the Edge Functions after relevant changes reach `main` or by manual dispatch from `main`.
 - `notification-delivery.yml` calls the deployed Supabase delivery worker every five minutes when `SUPABASE_URL` and `CRON_SECRET` are available.
 - `publish-marketing-assets.yml` publishes generated promotional assets to Cloudflare KV. It does not create, migrate, or write to the Cloudflare waitlist D1 database.
-- No workflow deploys to, migrates, or writes to the Cloudflare waitlist D1 database.
+- `migrate-cloudflare-waitlist.yml` is a manual, dry-run-first migration. It reads the legacy D1 database and imports missing waitlist emails, blog posts, campaign history, and dashboard settings into Supabase; it never deletes or modifies Cloudflare data. Set the workflow input to true only after reviewing a successful dry run. Configure the narrowest D1 token scope that permits SELECT queries. The ordinary site, dashboard, and backend deployments use Supabase.
 
 For local development and provider sign-up links, see [live API credentials](live-api-credentials.md).
+
+## One-time Cloudflare D1 migration
+
+Set `CLOUDFLARE_D1_DATABASE_ID`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_READ_TOKEN`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` in the protected `production` environment. The migration runs SELECT queries against D1 and only writes to Supabase. Run **Migrate legacy Cloudflare D1 data to Supabase** with `execute_migration=false` first to review table counts, then dispatch again with `true` to import supported records. Re-running is safe: destination emails, blog slugs, campaign IDs, and setting keys already present are skipped. Cloudflare D1 remains intact as a rollback source. The script never logs waitlist personal data. Legacy admin passwords, invites, and sessions are not copied; recreate access with Supabase admin invitations. If any old mobile marketplace tables contain rows, execution stops until their user identities can be mapped safely.

@@ -7,13 +7,13 @@ appId: ${APP_ID}
 - tapOn:
     id: auth-email-tab
 - tapOn:
+    id: auth-email-mode-password
+- tapOn:
     id: auth-email-input
 - inputText: ${E2E_EMAIL}
 - tapOn:
     id: auth-password-input
 - inputText: ${E2E_PASSWORD}
-- tapOn:
-    id: auth-terms-toggle
 - tapOn:
     id: auth-email-submit
 - extendedWaitUntil:

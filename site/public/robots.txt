@@ -10,5 +10,5 @@ Allow: /
 User-agent: PerplexityBot
 Allow: /
 
-Sitemap: https://detailapp.co.zw/sitemap.xml
-Sitemap: https://blog.detailapp.co.zw/sitemap.xml
+Sitemap: https://detail.co.zw/sitemap.xml
+Sitemap: https://blog.detail.co.zw/sitemap.xml

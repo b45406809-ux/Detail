@@ -81,20 +81,20 @@ export default function CustomerAgreementScreen() {
         >
           <ArrowLeft size={18} color="#0f172a" />
         </TouchableOpacity>
-        <Text className="text-xl font-black text-slate-900">Customer Agreement</Text>
+        <Text className="text-xl font-display font-black text-slate-900">Customer Agreement</Text>
       </View>
 
       <ScrollView contentContainerClassName="px-5 pt-6 pb-16" showsVerticalScrollIndicator={false}>
-        <Text className="text-xs text-slate-400 font-medium mb-1">
+        <Text className="font-sans text-xs text-slate-400 font-medium mb-1">
           Catalyst Labs (PRIVATE) LIMITED, trading as Detail — Zimbabwe
         </Text>
-        <Text className="text-xs text-slate-400 font-medium mb-6">
+        <Text className="font-sans text-xs text-slate-400 font-medium mb-6">
           By booking a Service through Detail, you agree to these terms
         </Text>
         {SECTIONS.map(({ title, body }) => (
           <View key={title} className="mb-6">
-            <Text className="text-base font-black text-slate-900 mb-2">{title}</Text>
-            <Text className="text-sm text-slate-600 font-medium leading-relaxed">{body}</Text>
+            <Text className="text-base font-display font-black text-slate-900 mb-2">{title}</Text>
+            <Text className="font-sans text-sm text-slate-600 font-medium leading-relaxed">{body}</Text>
           </View>
         ))}
       </ScrollView>

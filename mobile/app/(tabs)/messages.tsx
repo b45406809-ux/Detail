@@ -218,10 +218,10 @@ export default function MessagesScreen() {
               <ArrowLeft size={22} color="#0f172a" />
             </TouchableOpacity>
             <View className="flex-1">
-              <Text className="text-base font-black text-slate-900">
+              <Text className="text-base font-display font-black text-slate-900">
                 {convo?.otherUserName ?? 'Chat'}
               </Text>
-              <Text className="text-xs text-slate-400 font-medium">
+              <Text className="font-sans text-xs text-slate-400 font-medium">
                 Job #{activeJobId.slice(-6).toUpperCase()}
               </Text>
             </View>
@@ -271,7 +271,7 @@ export default function MessagesScreen() {
                   onPress={() => sendMessage(reply)}
                   className="bg-slate-100 px-4 py-2 rounded-full border border-slate-200"
                 >
-                  <Text className="text-xs font-bold text-slate-600">{reply}</Text>
+                  <Text className="font-sans text-xs font-bold text-slate-600">{reply}</Text>
                 </TouchableOpacity>
               )}
             />
@@ -287,7 +287,7 @@ export default function MessagesScreen() {
               {isSendingPhoto ? <ActivityIndicator size="small" color="#3906D2" /> : <ImagePlus size={18} color="#3906D2" />}
             </TouchableOpacity>
             <TextInput
-              className="flex-1 bg-slate-50 rounded-2xl px-4 py-3 text-sm font-medium text-slate-900 border border-slate-100"
+              className="font-sans flex-1 bg-slate-50 rounded-2xl px-4 py-3 text-sm font-medium text-slate-900 border border-slate-100"
               placeholder="Type a message…"
               placeholderTextColor="#94a3b8"
               value={inputText}
@@ -316,7 +316,7 @@ export default function MessagesScreen() {
     <SafeAreaView className="flex-1 bg-[#F2F1F5]">
       {/* Header */}
       <View className="px-5 pt-4 pb-4">
-        <Text className="text-2xl font-black text-slate-900 tracking-tight">Messages</Text>
+        <Text className="text-2xl font-display font-black text-slate-900 tracking-tight">Messages</Text>
       </View>
 
       {isLoading ? (
@@ -328,8 +328,8 @@ export default function MessagesScreen() {
           <View className="w-20 h-20 bg-slate-100 rounded-3xl items-center justify-center mb-4">
             <MessageSquare size={36} color="#94a3b8" />
           </View>
-          <Text className="text-lg font-black text-slate-700 text-center">No conversations yet</Text>
-          <Text className="text-sm text-slate-400 font-medium text-center mt-2">
+          <Text className="text-lg font-display font-black text-slate-700 text-center">No conversations yet</Text>
+          <Text className="font-sans text-sm text-slate-400 font-medium text-center mt-2">
             Messages will appear here once a job is accepted
           </Text>
         </View>
@@ -345,17 +345,17 @@ export default function MessagesScreen() {
               activeOpacity={0.8}
             >
               <View className="w-12 h-12 bg-accent/10 rounded-2xl items-center justify-center">
-                <Text className="text-xl">💬</Text>
+                <Text className="font-sans text-xl">💬</Text>
               </View>
               <View className="flex-1">
-                <Text className="text-sm font-black text-slate-900">{item.otherUserName}</Text>
-                <Text className="text-xs text-slate-400 font-medium mt-0.5" numberOfLines={1}>
+                <Text className="text-sm font-display font-black text-slate-900">{item.otherUserName}</Text>
+                <Text className="font-sans text-xs text-slate-400 font-medium mt-0.5" numberOfLines={1}>
                   {item.lastMessage}
                 </Text>
               </View>
               {item.unreadCount > 0 && (
                 <View className="w-5 h-5 bg-accent rounded-full items-center justify-center">
-                  <Text className="text-[10px] font-black text-white">
+                  <Text className="text-[10px] font-display font-black text-white">
                     {item.unreadCount > 9 ? '9+' : item.unreadCount}
                   </Text>
                 </View>

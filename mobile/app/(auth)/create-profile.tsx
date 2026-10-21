@@ -80,7 +80,9 @@ export default function CreateProfileScreen() {
           email: user.email ?? '',
           displayName: name.trim(),
           photoURL: photoURL.trim(),
-          role,
+          // Cleaner role is granted only after provider verified identity and
+          // the Cleaner Agreement is accepted.
+          role: role === 'CLEANER' ? 'CUSTOMER' : role,
           balance: 0,
           status: 'AVAILABLE',
           hasCompletedProfile: true,
@@ -91,7 +93,7 @@ export default function CreateProfileScreen() {
         { merge: true }
       );
       await refreshProfile();
-      router.replace('/(auth)/permissions');
+      router.replace(role === 'CLEANER' ? '/register-cleaner' : '/(auth)/permissions');
     } catch (err: any) {
       Alert.alert('Error', 'Failed to save profile. Please try again.');
     } finally {
@@ -113,8 +115,8 @@ export default function CreateProfileScreen() {
             ))}
           </View>
 
-          <Text className="text-3xl font-black text-ink tracking-tight mb-2">Set up your profile</Text>
-          <Text className="text-base text-ink/50 font-medium mb-6">
+          <Text className="text-3xl font-display font-black text-ink tracking-tight mb-2">Set up your profile</Text>
+          <Text className="font-sans text-base text-ink/50 font-medium mb-6">
             Tell us a bit about yourself to get started
           </Text>
 
@@ -139,16 +141,16 @@ export default function CreateProfileScreen() {
                 <Camera size={14} color="#fff" />
               </View>
             </TouchableOpacity>
-            <Text className="text-xs font-bold text-ink/50 mt-2">
+            <Text className="font-sans text-xs font-bold text-ink/50 mt-2">
               {photoURL ? 'Tap to change photo' : 'Add profile picture (Optional)'}
             </Text>
           </View>
 
           <GlassCard style={{ padding: 20 }}>
             <View className="mb-6">
-              <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-2">Full Name</Text>
+              <Text className="text-xs font-display font-black text-ink/50 uppercase tracking-widest mb-2">Full Name</Text>
               <TextInput
-                className="border border-ink/10 rounded-2xl px-4 py-4 text-base font-medium text-ink bg-ink/[0.02]"
+                className="font-sans border border-ink/10 rounded-2xl px-4 py-4 text-base font-medium text-ink bg-ink/[0.02]"
                 placeholder="Your full name"
                 placeholderTextColor="rgba(21,2,86,0.35)"
                 value={name}
@@ -159,7 +161,7 @@ export default function CreateProfileScreen() {
             </View>
 
                 <View>
-                  <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-3">I want to</Text>
+                  <Text className="text-xs font-display font-black text-ink/50 uppercase tracking-widest mb-3">I want to</Text>
                   <View className="gap-3">
                     {(
                       [
@@ -195,12 +197,12 @@ export default function CreateProfileScreen() {
                         </View>
                         <View className="flex-1">
                           <Text
-                            className="text-sm font-black"
+                            className="text-sm font-display font-black"
                             style={{ color: role === value ? '#3906D2' : '#150256' }}
                           >
                             {label}
                           </Text>
-                          <Text className="text-xs text-ink/50 font-medium mt-0.5">{sub}</Text>
+                          <Text className="font-sans text-xs text-ink/50 font-medium mt-0.5">{sub}</Text>
                         </View>
                         {role === value && <ChevronRight size={18} color="#3906D2" />}
                       </TouchableOpacity>
@@ -218,7 +220,7 @@ export default function CreateProfileScreen() {
             {isLoading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text className="font-black text-sm uppercase tracking-widest text-white">Continue</Text>
+              <Text className="font-display font-black text-sm uppercase tracking-widest text-white">Continue</Text>
             )}
           </TouchableOpacity>
         </ScrollView>

@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6B4CFF" stop-opacity=".65"/>
+      <stop offset="1" stop-color="#3906D2" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#211A46"/>
+      <stop offset="1" stop-color="#15112D"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#0D0A24"/>
+  <circle cx="1080" cy="65" r="390" fill="url(#glow)"/>
+  <g transform="translate(78 68)" fill="none" stroke="#A99BFF" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M24 16v47m0-47h31a27 27 0 0 1 0 54H24m20-40h11a13 13 0 0 1 0 26H24" stroke-width="7"/>
+    <circle cx="91" cy="67" r="5" fill="#A99BFF" stroke="none"/>
+  </g>
+  <text x="195" y="122" fill="#C7BEFF" font-family="Arial,sans-serif" font-size="28" font-weight="700" letter-spacing="5">DETAIL</text>
+  <text x="80" y="260" fill="#fff" font-family="Arial,sans-serif" font-size="67" font-weight="700">A clearer view of</text>
+  <text x="80" y="342" fill="#fff" font-family="Arial,sans-serif" font-size="67" font-weight="700">every booking.</text>
+  <text x="82" y="400" fill="#D7D1F2" font-family="Arial,sans-serif" font-size="27">Cleaner marketplace operations, in one place.</text>
+  <g transform="translate(725 165)">
+    <rect width="400" height="300" rx="22" fill="url(#panel)" stroke="#8170DD" stroke-opacity=".6"/>
+    <rect x="24" y="24" width="352" height="48" rx="12" fill="#2C2455"/>
+    <circle cx="49" cy="48" r="9" fill="#A99BFF"/>
+    <rect x="68" y="42" width="112" height="12" rx="6" fill="#DCD5FF" opacity=".9"/>
+    <rect x="24" y="96" width="108" height="74" rx="12" fill="#342B64"/>
+    <rect x="146" y="96" width="108" height="74" rx="12" fill="#342B64"/>
+    <rect x="268" y="96" width="108" height="74" rx="12" fill="#342B64"/>
+    <text x="40" y="126" fill="#CCC4F2" font-family="Arial,sans-serif" font-size="12">BOOKINGS</text>
+    <text x="40" y="153" fill="#fff" font-family="Arial,sans-serif" font-size="25" font-weight="700">128</text>
+    <text x="162" y="126" fill="#CCC4F2" font-family="Arial,sans-serif" font-size="12">CLEANERS</text>
+    <text x="162" y="153" fill="#fff" font-family="Arial,sans-serif" font-size="25" font-weight="700">46</text>
+    <text x="284" y="126" fill="#CCC4F2" font-family="Arial,sans-serif" font-size="12">PENDING</text>
+    <text x="284" y="153" fill="#fff" font-family="Arial,sans-serif" font-size="25" font-weight="700">12</text>
+    <rect x="24" y="192" width="352" height="1" fill="#5A4D91"/>
+    <rect x="24" y="214" width="48" height="48" rx="14" fill="#5846B8"/>
+    <path d="M37 238l8 8 15-17" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="88" y="220" width="170" height="11" rx="5" fill="#E4DFFF"/>
+    <rect x="88" y="242" width="122" height="9" rx="4" fill="#9C91CB"/>
+    <rect x="296" y="229" width="80" height="28" rx="14" fill="#3D936E"/>
+    <text x="310" y="248" fill="#E6FFF4" font-family="Arial,sans-serif" font-size="12" font-weight="700">ON TRACK</text>
+  </g>
+  <text x="82" y="548" fill="#A99BFF" font-family="Arial,sans-serif" font-size="22" font-weight="700">DASHBOARD</text>
+  <text x="82" y="582" fill="#BEB7D9" font-family="Arial,sans-serif" font-size="19">Zimbabwe's cleaning marketplace</text>
+</svg>

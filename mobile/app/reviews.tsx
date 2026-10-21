@@ -66,8 +66,8 @@ export default function ReviewsScreen() {
           <ArrowLeft size={18} color="#0f172a" />
         </TouchableOpacity>
         <View className="flex-1">
-          <Text className="text-xl font-black text-slate-900">My Reviews</Text>
-          <Text className="text-xs text-slate-400 font-medium">
+          <Text className="text-xl font-display font-black text-slate-900">My Reviews</Text>
+          <Text className="font-sans text-xs text-slate-400 font-medium">
             Ratings left by customers
           </Text>
         </View>
@@ -77,7 +77,7 @@ export default function ReviewsScreen() {
       {averageRating !== null && (
         <View className="mx-5 mb-5 bg-white rounded-3xl p-5 flex-row items-center gap-5 border border-slate-100">
           <View className="items-center">
-            <Text className="text-4xl font-black text-slate-900">
+            <Text className="text-4xl font-display font-black text-slate-900">
               {averageRating.toFixed(1)}
             </Text>
             <View className="flex-row mt-1">
@@ -93,17 +93,17 @@ export default function ReviewsScreen() {
           </View>
           <View className="w-px h-12 bg-slate-100" />
           <View>
-            <Text className="text-2xl font-black text-slate-900">{reviews.length}</Text>
-            <Text className="text-xs text-slate-400 font-medium uppercase tracking-wider">
+            <Text className="text-2xl font-display font-black text-slate-900">{reviews.length}</Text>
+            <Text className="font-sans text-xs text-slate-400 font-medium uppercase tracking-wider">
               Total reviews
             </Text>
           </View>
           <View className="w-px h-12 bg-slate-100" />
           <View>
-            <Text className="text-2xl font-black text-slate-900">
+            <Text className="text-2xl font-display font-black text-slate-900">
               {profile?.jobsCompleted ?? 0}
             </Text>
-            <Text className="text-xs text-slate-400 font-medium uppercase tracking-wider">
+            <Text className="font-sans text-xs text-slate-400 font-medium uppercase tracking-wider">
               Jobs done
             </Text>
           </View>
@@ -116,11 +116,11 @@ export default function ReviewsScreen() {
         </View>
       ) : reviews.length === 0 ? (
         <View className="flex-1 items-center justify-center px-8">
-          <Text className="text-4xl mb-4">⭐</Text>
-          <Text className="text-lg font-black text-slate-900 text-center">
+          <Text className="font-sans text-4xl mb-4">⭐</Text>
+          <Text className="text-lg font-display font-black text-slate-900 text-center">
             No reviews yet
           </Text>
-          <Text className="text-sm text-slate-400 font-medium text-center mt-2">
+          <Text className="font-sans text-sm text-slate-400 font-medium text-center mt-2">
             Complete jobs to receive ratings from customers
           </Text>
         </View>
@@ -134,10 +134,10 @@ export default function ReviewsScreen() {
             <View className="bg-white rounded-3xl p-5 border border-slate-100">
               <View className="flex-row items-start justify-between mb-3">
                 <View>
-                  <Text className="text-sm font-black text-slate-900">
+                  <Text className="text-sm font-display font-black text-slate-900">
                     {item.customerName || 'Customer'}
                   </Text>
-                  <Text className="text-xs text-slate-400 font-medium mt-0.5">
+                  <Text className="font-sans text-xs text-slate-400 font-medium mt-0.5">
                     {item.createdAt?.toDate?.()?.toLocaleDateString() ?? 'Recent'}
                   </Text>
                 </View>
@@ -154,11 +154,11 @@ export default function ReviewsScreen() {
                 </View>
               </View>
               {item.comment ? (
-                <Text className="text-sm text-slate-600 font-medium leading-relaxed italic">
+                <Text className="font-sans text-sm text-slate-600 font-medium leading-relaxed italic">
                   "{item.comment}"
                 </Text>
               ) : (
-                <Text className="text-sm text-slate-300 font-medium italic">No comment left</Text>
+                <Text className="font-sans text-sm text-slate-300 font-medium italic">No comment left</Text>
               )}
             </View>
           )}

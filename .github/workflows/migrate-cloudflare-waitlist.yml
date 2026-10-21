@@ -1,0 +1,38 @@
+name: Migrate legacy Cloudflare D1 data to Supabase
+
+on:
+  workflow_dispatch:
+    inputs:
+      execute_migration:
+        description: 'Import supported missing records (leave false for a read-only dry run)'
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-waitlist-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Read D1 and migrate supported site/dashboard records
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read and migrate waitlist
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_D1_DATABASE_ID: ${{ vars.CLOUDFLARE_D1_DATABASE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_READ_TOKEN }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EXECUTE_MIGRATION: ${{ inputs.execute_migration }}
+        run: python scripts/migrate_cloudflare_waitlist_to_supabase.py

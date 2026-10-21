@@ -64,15 +64,15 @@ export default function ForgotPasswordScreen() {
                 <CheckCircle2 size={42} color="#059669" />
               </View>
 
-              <Text className="text-3xl font-black text-ink tracking-tight mb-3 text-center">
+              <Text className="text-3xl font-display font-black text-ink tracking-tight mb-3 text-center">
                 Check your email
               </Text>
-              <Text className="text-base text-ink/60 font-medium text-center mb-8 leading-relaxed px-2">
-                We've sent a password reset link to <Text className="font-black text-ink">{email.trim()}</Text>. Follow the instructions in the email to reset your password.
+              <Text className="font-sans text-base text-ink/60 font-medium text-center mb-8 leading-relaxed px-2">
+                We've sent a password reset link to <Text className="font-display font-black text-ink">{email.trim()}</Text>. Follow the instructions in the email to reset your password.
               </Text>
 
               <GlassCard style={{ padding: 20, width: '100%', marginBottom: 24 }}>
-                <Text className="text-xs font-bold text-ink/60 leading-relaxed text-center">
+                <Text className="font-sans text-xs font-bold text-ink/60 leading-relaxed text-center">
                   Didn't receive the email? Check your spam/junk folder or request a new link in a few minutes.
                 </Text>
               </GlassCard>
@@ -82,7 +82,7 @@ export default function ForgotPasswordScreen() {
                 activeOpacity={0.8}
                 className="w-full bg-ink/5 py-4 rounded-[24px] items-center mb-3 border border-ink/10"
               >
-                <Text className="text-ink font-bold text-sm">Resend Link</Text>
+                <Text className="font-sans text-ink font-bold text-sm">Resend Link</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -90,7 +90,7 @@ export default function ForgotPasswordScreen() {
                 activeOpacity={0.85}
                 className="w-full bg-accent py-5 rounded-[24px] items-center shadow-lg shadow-accent/30"
               >
-                <Text className="text-white font-black text-sm uppercase tracking-widest">
+                <Text className="text-white font-display font-black text-sm uppercase tracking-widest">
                   Back to Sign In
                 </Text>
               </TouchableOpacity>
@@ -101,23 +101,23 @@ export default function ForgotPasswordScreen() {
                 <KeyRound size={30} color="#3906D2" />
               </View>
 
-              <Text className="text-3xl font-black text-ink tracking-tight mb-2">
+              <Text className="text-3xl font-display font-black text-ink tracking-tight mb-2">
                 Forgot password?
               </Text>
-              <Text className="text-base text-ink/50 font-medium mb-8">
+              <Text className="font-sans text-base text-ink/50 font-medium mb-8">
                 No worries! Enter your registered email address and we'll send you a link to reset your password.
               </Text>
 
               <GlassCard style={{ padding: 20 }}>
                 <View className="gap-4">
                   <View>
-                    <Text className="text-xs font-black text-ink/50 uppercase tracking-widest mb-2">
+                    <Text className="text-xs font-display font-black text-ink/50 uppercase tracking-widest mb-2">
                       Account Email
                     </Text>
                     <View className="flex-row items-center border border-white/40 rounded-2xl bg-white/50 px-4">
                       <Mail size={18} color="rgba(21,2,86,0.4)" />
                       <TextInput
-                        className="flex-1 py-4 px-3 text-base font-medium text-ink"
+                        className="font-sans flex-1 py-4 px-3 text-base font-medium text-ink"
                         placeholder="you@example.com"
                         placeholderTextColor="rgba(21,2,86,0.35)"
                         keyboardType="email-address"
@@ -158,8 +158,8 @@ export default function ForgotPasswordScreen() {
                   activeOpacity={0.7}
                   className="py-2"
                 >
-                  <Text className="text-sm font-bold text-accent">
-                    Remember your password? <Text className="font-black underline">Sign in</Text>
+                  <Text className="font-sans text-sm font-bold text-accent">
+                    Remember your password? <Text className="font-display font-black underline">Sign in</Text>
                   </Text>
                 </TouchableOpacity>
               </View>

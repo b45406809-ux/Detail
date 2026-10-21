@@ -19,7 +19,7 @@ const SECTIONS = [
   },
   {
     title: '4. Sharing of Information',
-    body: 'We share your information with cleaners you book, payment processors, and service providers that help us operate the platform. We do not sell your personal data.',
+    body: 'We share your information with cleaners you book, payment processors, and service providers that help us operate the platform. If you register as a cleaner, you may choose to complete identity verification through Didit. Didit collects and processes the identity information, document images, and any selfie or liveness data required by the verification workflow under its own privacy terms. Detail receives the verification decision and session status; identity documents are submitted directly to Didit and are not stored by Detail. We do not sell your personal data.',
   },
   {
     title: '5. Data Security',
@@ -45,17 +45,17 @@ export default function PrivacyPolicyScreen() {
         >
           <ArrowLeft size={18} color="#0f172a" />
         </TouchableOpacity>
-        <Text className="text-xl font-black text-slate-900">Privacy Policy</Text>
+        <Text className="text-xl font-display font-black text-slate-900">Privacy Policy</Text>
       </View>
 
       <ScrollView contentContainerClassName="px-5 pt-6 pb-16" showsVerticalScrollIndicator={false}>
-        <Text className="text-xs text-slate-400 font-medium mb-6">
+        <Text className="font-sans text-xs text-slate-400 font-medium mb-6">
           Last updated: January 2025
         </Text>
         {SECTIONS.map(({ title, body }) => (
           <View key={title} className="mb-6">
-            <Text className="text-base font-black text-slate-900 mb-2">{title}</Text>
-            <Text className="text-sm text-slate-600 font-medium leading-relaxed">{body}</Text>
+            <Text className="text-base font-display font-black text-slate-900 mb-2">{title}</Text>
+            <Text className="font-sans text-sm text-slate-600 font-medium leading-relaxed">{body}</Text>
           </View>
         ))}
       </ScrollView>
