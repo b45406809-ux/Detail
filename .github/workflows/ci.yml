@@ -1,0 +1,91 @@
+name: Validate Detail
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - codex/separate-dashboard-into-routed-modules-fl7jlh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  site:
+    name: Site and dashboard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci --prefix site --no-audit --no-fund
+      - run: npm run build --prefix site
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+          VITE_TURNSTILE_SITE_KEY: ci-placeholder-turnstile-key
+      - name: Verify link preview and routing artifacts
+        run: |
+          test -f site/dist/index.html
+          test -f site/dist/dashboard.html
+          test -f site/dist/og-image.png
+          test -f site/dist/og-dashboard.png
+          test -f site/dist/.htaccess
+
+  mobile:
+    name: Mobile app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci --prefix mobile --no-audit --no-fund
+      - run: npm run type-check --prefix mobile
+      - run: npm run lint --prefix mobile
+
+  functions:
+    name: Legacy migration utilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm ci --prefix functions --no-audit --no-fund
+      - run: npm run build --prefix functions
+
+  supabase:
+    name: Supabase migrations and Edge Functions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start local Supabase and apply migrations
+        run: |
+          supabase start
+          supabase db reset --local
+      - name: Lint local database schema
+        run: supabase db lint --local --fail-on error
+      - name: Type-check Edge Functions
+        run: deno check supabase/functions/*/index.ts
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup

@@ -1,11 +1,11 @@
 # Live API credentials
 
-The current clients and backend use Supabase for authentication, database, private media, and Edge Functions. Provider credentials are never stored in the repository. Configure public client values in the app build environment and private keys in Supabase's secret store.
+The current clients and backend use Supabase for authentication, database, private media, and Edge Functions. Provider credentials are never stored in the repository. Configure public client values as GitHub Actions variables/secrets and private keys in the protected `production` GitHub environment; the backend deployment workflow transfers configured provider secrets to Supabase Edge Function secrets.
 
 | Service | Values | Where to get/configure them |
 | --- | --- | --- |
 | Supabase client | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | Create a project in the [Supabase dashboard](https://supabase.com/dashboard/projects); copy the project URL and publishable/anon key from **Project Settings → API**. Client keys are public; RLS protects data. |
-| Supabase deployment | `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, `SUPABASE_DB_PASSWORD` | Create a [Supabase personal access token](https://supabase.com/dashboard/account/tokens); find the ref and database password in project settings. Store them in the GitHub `production` environment. |
+| Supabase deployment | `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, `SUPABASE_DB_PASSWORD` | Create a [Supabase personal access token](https://supabase.com/dashboard/account/tokens); find the ref and database password in project settings. Store them in the GitHub `production` environment. See [GitHub Actions setup](github-actions.md). |
 | Supabase server access | `SUPABASE_SERVICE_ROLE_KEY` | Project **Settings → API**. Configure only with `supabase secrets set` or a protected local operator shell. Never put it in a Vite/Expo variable. |
 | Paynow BuySafe and wallet top-ups | `PAYNOW_INTEGRATION_ID`, `PAYNOW_INTEGRATION_KEY`, optional `PAYNOW_RETURN_URL` | Create/view a merchant integration in the [Paynow Customer Portal](https://www.paynow.co.zw/). Set the result URL to `https://<project-ref>.supabase.co/functions/v1/paynow-webhook`, keep BuySafe enabled, and add credentials to Supabase Edge Function secrets. Paynow settles to Detail; cleaner payouts remain manual. |
 | Didit cleaner identity checks | `DIDIT_API_KEY`, `DIDIT_WORKFLOW_ID` | Create API credentials and a Zimbabwe identity workflow in the [Didit dashboard](https://business.didit.me/); check [Zimbabwe coverage](https://didit.me/solutions/countries/zimbabwe/) and the [API docs](https://docs.didit.me/). Store values in Supabase Edge Function secrets. |

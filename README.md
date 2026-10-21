@@ -18,4 +18,4 @@ The repository contains three deployable parts:
 
 See [the site guide](site/README.md) and [the Supabase cutover guide](docs/supabase-cutover.md) for setup. The mobile app uses Expo from `mobile/`; root `npm run dev`, `npm run build`, and `npm run lint` delegate to the web package.
 
-For a complete live API test environment, credential inventory, provider setup links, and secret placement, see [`docs/live-api-credentials.md`](docs/live-api-credentials.md).
+For a complete live API test environment, credential inventory, provider setup links, and secret placement, see [`docs/live-api-credentials.md`](docs/live-api-credentials.md). GitHub Actions setup and deployment boundaries are documented in [`docs/github-actions.md`](docs/github-actions.md).
