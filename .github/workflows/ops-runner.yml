@@ -140,7 +140,7 @@ jobs:
           supabase start >> "$OPS_LOG" 2>&1
           supabase db reset --local >> "$OPS_LOG" 2>&1
           supabase db lint --local --schema public --fail-on error >> "$OPS_LOG" 2>&1
-          deno check supabase/functions/*/index.ts >> "$OPS_LOG" 2>&1
+          deno check --config supabase/functions/deno.json supabase/functions/*/index.ts >> "$OPS_LOG" 2>&1
           echo 'Local Supabase migrations, schema lint, and Edge Function type checks passed.' >> "$OPS_LOG"
         timeout-minutes: 20
 

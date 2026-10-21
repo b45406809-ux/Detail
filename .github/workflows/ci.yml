@@ -87,7 +87,7 @@ jobs:
       - name: Lint local database schema
         run: supabase db lint --local --schema public --fail-on error
       - name: Type-check Edge Functions
-        run: deno check supabase/functions/*/index.ts
+        run: deno check --config supabase/functions/deno.json supabase/functions/*/index.ts
       - name: Stop local Supabase
         if: always()
         run: supabase stop --no-backup
