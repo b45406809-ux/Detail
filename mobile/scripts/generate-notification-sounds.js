@@ -1,3 +1,4 @@
+/* global __dirname, Buffer */
 const fs = require('fs');
 const path = require('path');
 

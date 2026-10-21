@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft, Bell, MessageSquare, DollarSign, Star, Zap, Info } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
-import { db, collection, query, where, onSnapshot, doc, updateDoc, orderBy, limit } from '../services/firebase';
+import { db, collection, query, where, onSnapshot, doc, updateDoc, orderBy, limit } from '../services/supabase';
 import { AppNotification, NotificationType } from '../types';
 
 const TYPE_ICON: Record<NotificationType, any> = {
@@ -37,6 +37,7 @@ export default function NotificationsScreen() {
 
   const openNotification = (n: AppNotification) => {
     if (!n.read) updateDoc(doc(db, 'notifications', n.id), { read: true }).catch(() => {});
+    if(n.data?.supportCaseId){router.push('/support');return;}
     if (n.jobId) router.push({ pathname: '/tracking/[jobId]', params: { jobId: n.jobId } });
   };
 

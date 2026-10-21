@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { User, Briefcase, ChevronRight, Camera } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
-import { auth, db, setDoc, doc, serverTimestamp } from '../../services/firebase';
+import { auth, db, setDoc, doc, serverTimestamp } from '../../services/supabase';
 import { uploadProfilePhoto } from '../../services/storage';
 import { GlassCard } from '../../components/glass';
 

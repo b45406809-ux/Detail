@@ -8,4 +8,5 @@ coverage/
 .env*
 !.env.example
 .cache/
+supabase/.temp/
 marketing/generated/

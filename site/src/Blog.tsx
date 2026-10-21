@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, Clock3 } from 'lucide-react';
 import { BrandMark } from './BrandMark';
+import { supabase } from './supabase';
 import './blog.css';
 
 type Post = {id:string;slug:string;title:string;excerpt:string;content:string;keywords:string;publishedAt?:string;updatedAt:string};
 type BlogPage = {posts:Post[];page:number;pageSize:number;total:number;totalPages:number};
-const api = String(import.meta.env.VITE_WAITLIST_API_URL || '').replace(/\/$/, '');
 
 function setMetadata(post?: Post) {
   const description = post?.excerpt || 'Practical answers to home, office and vehicle cleaning problems in Zimbabwe from Detail.';
@@ -31,8 +31,7 @@ export function Blog() {
 
   useEffect(() => {
     setLoading(true); setError('');
-    const query = slug ? `?slug=${encodeURIComponent(slug)}` : `?page=${requestedPage}&limit=6`;
-    fetch(`${api}/api/blog${query}`).then(async result => { const body = await result.json(); if (!result.ok) throw new Error(body.error); return body; }).then(body => {
+    supabase.functions.invoke('marketplace-api', { body: { name: 'blogPublicList', data: slug ? {slug} : {page:requestedPage, limit:6} } }).then(({data, error}) => { if (error || data?.error) throw new Error(data?.error || error?.message); return data; }).then(body => {
       if (body.post) { setPost(body.post); setMetadata(body.post); } else { setListing(body); setMetadata(); }
     }).catch(reason => setError(reason instanceof Error ? reason.message : 'The cleaning guide is temporarily unavailable.')).finally(() => setLoading(false));
   }, [slug, requestedPage]);

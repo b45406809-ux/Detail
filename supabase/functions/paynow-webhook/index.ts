@@ -1,0 +1,56 @@
+import { createClient } from 'npm:@supabase/supabase-js@2.80.0';
+import { Paynow } from 'npm:paynow@2.2.2';
+
+const url = Deno.env.get('SUPABASE_URL') ?? '';
+const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+const id = Deno.env.get('PAYNOW_INTEGRATION_ID') ?? '';
+const key = Deno.env.get('PAYNOW_INTEGRATION_KEY') ?? '';
+if (!url || !serviceKey || !id || !key) throw new Error('Paynow webhook environment is incomplete.');
+const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+const paynow = new Paynow(id, key);
+
+async function notifyOnce(userId:string,reference:string,status:string,payload:{title:string;body:string;type:string;jobId?:string|null}){
+  const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(`${userId}:${reference}:${status}`)));
+  const bytes=Array.from(digest.slice(0,16));bytes[6]=(bytes[6]&0x0f)|0x50;bytes[8]=(bytes[8]&0x3f)|0x80;
+  const hex=bytes.map(v=>v.toString(16).padStart(2,'0')).join('');const notificationId=`${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+  await admin.from('notifications').upsert({id:notificationId,userid:userId,title:payload.title,body:payload.body,type:payload.type,jobid:payload.jobId??null,data:{paymentStatus:status},createdat:new Date().toISOString()},{onConflict:'id',ignoreDuplicates:true});
+  const {data:profile}=await admin.from('users').select('expopushtoken').eq('id',userId).maybeSingle();
+  if(profile?.expopushtoken){try{const response=await fetch('https://exp.host/--/api/v2/push/send',{method:'POST',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify({to:profile.expopushtoken,title:payload.title,body:payload.body,sound:'urgent.wav',channelId:'urgent',data:{jobId:payload.jobId,paymentStatus:status}})});const result=await response.json().catch(()=>null);if(result?.data?.details?.error==='DeviceNotRegistered')await admin.from('users').update({expopushtoken:null}).eq('id',userId).eq('expopushtoken',profile.expopushtoken);if(!response.ok)console.error('Paynow status push failed',response.status);}catch(error){console.error('Paynow status push failed',String(error));}}
+}
+
+Deno.serve(async request => {
+  if (request.method !== 'POST') return new Response('POST required', { status: 405 });
+  try {
+    // Paynow result URLs are form-encoded status updates. The official SDK
+    // validates the integration hash before the reference can touch the ledger.
+    const raw = await request.text();
+    const update = paynow.parseStatusUpdate(raw);
+    if (!update.reference || !update.status || !update.amount) return new Response('Invalid status update', { status: 400 });
+    const reference=String(update.reference);
+    const {data:before,error:lookupError}=await admin.from('payments').select('id,customerid,cleanerid,jobid,status,data').eq('reference',reference).maybeSingle();if(lookupError)throw lookupError;
+    const { data, error } = await admin.rpc('apply_paynow_status', {
+      p_reference: reference, p_status: String(update.status), p_amount: Number(update.amount),
+    });
+    if (error) throw error;
+    if(data?.status==='REFUNDED'){
+      const {data:payment}=await admin.from('payments').select('id,data').eq('reference',reference).maybeSingle();
+      if(payment?.data?.refundRequest?.status==='PENDING')await admin.from('payments').update({data:{...payment.data,refundRequest:{...payment.data.refundRequest,status:'COMPLETED',completedAt:new Date().toISOString()}}}).eq('id',payment.id);
+    }
+    if(before&&data?.status&&before.status!==data.status){
+      const booking=!!before.jobid;
+      const messages:Record<string,{title:string;body:string;type:string}>={
+        ESCROWED:{title:'Payment protected with BuySafe',body:'Paynow is holding the booking payment. Open Detail to follow the service.',type:'PAYMENT_ESCROWED'},
+        DELIVERED:{title:'Delivery confirmed in Paynow',body:'The 24-hour dispute period has started.',type:'PAYMENT_DELIVERED'},
+        PAID:{title:booking?'Paynow released the payment':'Wallet top-up completed',body:booking?'Paynow has released the payment to Detail.':'Your Detail wallet balance has been updated.',type:'PAYMENT_PAID'},
+        DISPUTED:{title:'Paynow dispute opened',body:'Paynow reported a dispute. Detail support will review the booking.',type:'PAYMENT_DISPUTED'},
+        REFUNDED:{title:'Paynow refund confirmed',body:'Paynow confirmed the refund for this payment.',type:'PAYMENT_REFUNDED'},
+      };
+      const message=messages[data.status];if(message){for(const userId of new Set([before.customerid,before.cleanerid].filter(Boolean)))await notifyOnce(String(userId),reference,String(data.status),{...message,jobId:before.jobid});}
+      if(data.status==='DISPUTED'){const {data:admins}=await admin.from('adminroles').select('userid');for(const row of admins??[])await notifyOnce(row.userid,reference,'DISPUTED',{title:'Paynow dispute needs review',body:'A Paynow BuySafe dispute was opened. Review the support queue.',type:'PAYMENT_DISPUTED',jobId:before.jobid});}
+    }
+    return new Response('OK', { status: 200 });
+  } catch (error) {
+    console.error('Paynow callback rejected or failed', String(error));
+    return new Response('Invalid Paynow callback', { status: 400 });
+  }
+});

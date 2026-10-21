@@ -18,7 +18,7 @@ import {
   onSnapshot,
   orderBy,
   limit,
-} from '../services/firebase';
+} from '../services/supabase';
 
 interface Review {
   id: string;

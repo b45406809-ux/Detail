@@ -1,8 +1,4 @@
-// Google + Apple sign-in buttons with their official logo marks, rendered
-// via react-native-svg (no image assets needed). Apple only renders on iOS
-// (Sign in with Apple is an iOS-only capability). Both exchange their
-// provider credential for a Firebase credential via signInWithCredential —
-// same downstream profile-creation path as the existing email flow.
+// Google and Apple ID token sign-in for Supabase Auth.
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Platform, Alert } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
@@ -10,59 +6,33 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import * as AuthSession from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
-import {
-  auth,
-  db,
-  getDoc,
-  setDoc,
-  doc,
-  serverTimestamp,
-  signInWithCredential,
-  GoogleAuthProvider,
-  OAuthProvider,
-} from '../services/firebase';
+import { supabase } from '../services/supabase';
 
 WebBrowser.maybeCompleteAuthSession();
 
 /**
- * Creates the user's Firestore profile on their very first social sign-in —
- * identical default shape to the existing email-signup path in sign-in.tsx.
- * Only writes if the doc doesn't exist yet: a *returning* Google/Apple user
- * already has a profile (possibly role: 'CLEANER' etc.), and blindly
- * merging these defaults back in every login would stomp it. No navigation
- * here — the root AuthGuard (_layout.tsx) already redirects based on
- * user/profile state the instant onAuthStateChanged fires.
+ * Supabase's auth.users trigger creates a profile for new providers. Check
+ * that it exists without writing a client-controlled role or KYC state.
  */
 async function ensureProfileExists(uid: string, email: string | null) {
-  const ref = doc(db, 'users', uid);
-  if ((await getDoc(ref)).exists()) return;
-  await setDoc(ref, {
-    uid,
-    email: email ?? '',
-    displayName: '',
-    photoURL: '',
-    role: 'CUSTOMER',
-    balance: 0,
-    status: 'AVAILABLE',
-    hasCompletedProfile: false,
-    hasSetupPermissions: false,
-    createdAt: serverTimestamp(),
-  });
+  const { data } = await supabase.from('users').select('id').eq('id', uid).maybeSingle();
+  if (data) return;
+  throw new Error(`The Supabase profile trigger did not create a profile for ${email ?? uid}.`);
 }
 
 export function SocialSignInButtons() {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isAppleLoading, setIsAppleLoading] = useState(false);
 
-  // EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: free OAuth Web Client ID from
-  // Firebase Console -> Authentication -> Sign-in method -> Google -> Enable.
+  // Configure the Google provider in Supabase Auth and create OAuth client IDs
+  // for the app's registered package/bundle identifiers in Google Cloud.
   // EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: a *second*, separate free OAuth
   // client (type "Android", registered with the app's package name + SHA-1 —
   // `eas credentials` prints the SHA-1) from Google Cloud Console ->
   // Credentials. expo-auth-session's Google provider requires this on
   // Android specifically — the web client ID alone throws
   // "Client Id property `androidClientId` must be defined". Both are set
-  // via `eas env:set` the same way the Firebase config vars were added.
+  // via `eas env:set` for production builds.
   const [, , promptGoogleSignIn] = Google.useAuthRequest({
     webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
     androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
@@ -85,9 +55,9 @@ export function SocialSignInButtons() {
       if (result.type !== 'success') return;
       const idToken = result.authentication?.idToken ?? result.params?.id_token;
       if (!idToken) throw new Error('No ID token returned from Google.');
-      const credential = GoogleAuthProvider.credential(idToken);
-      const userCred = await signInWithCredential(auth, credential);
-      await ensureProfileExists(userCred.user.uid, userCred.user.email);
+      const { data, error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: idToken });
+      if (error) throw error;
+      await ensureProfileExists(data.user.id, data.user.email ?? null);
     } catch (err: any) {
       Alert.alert('Google Sign-In Failed', err.message || 'Please try again.');
     } finally {
@@ -105,12 +75,9 @@ export function SocialSignInButtons() {
         ],
       });
       if (!appleCredential.identityToken) throw new Error('No identity token returned from Apple.');
-      const provider = new OAuthProvider('apple.com');
-      const credential = provider.credential({
-        idToken: appleCredential.identityToken,
-      });
-      const userCred = await signInWithCredential(auth, credential);
-      await ensureProfileExists(userCred.user.uid, userCred.user.email);
+      const { data, error } = await supabase.auth.signInWithIdToken({ provider: 'apple', token: appleCredential.identityToken });
+      if (error) throw error;
+      await ensureProfileExists(data.user.id, data.user.email ?? null);
     } catch (err: any) {
       if (err.code !== 'ERR_REQUEST_CANCELED') {
         Alert.alert('Apple Sign-In Failed', err.message || 'Please try again.');

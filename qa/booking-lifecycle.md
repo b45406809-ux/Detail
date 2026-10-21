@@ -1,18 +1,24 @@
-# Booking lifecycle emulator QA
+# Booking lifecycle release QA
 
-Run Functions and Firestore emulators, use two authenticated fixture users (`customer`, `cleaner`) and assert both document state and `jobs/{jobId}/events`.
+Use an isolated Supabase staging project and two verified test accounts (customer and cleaner). Exercise Android and iOS on real devices with push notifications, location, and photo permissions enabled and denied.
 
 | Case | Procedure | Expected |
 |---|---|---|
-| Delayed push | Disable network, transition, reconnect | Firestore state restores; notification deep-link opens tracking. |
-| Duplicate acceptance | Invoke `acceptBid` twice concurrently with one idempotency key | One payment/event; one accepted bid; competitors rejected. |
-| Insufficient funds | Wallet below bid | `INSUFFICIENT_FUNDS`; no assignment or debit. |
-| App terminated | Kill after acceptance, relaunch | Assigned job is restored from Firestore. |
-| Cancellation/completion race | Invoke both concurrently | Exactly one terminal result; invalid transition rejected. |
-| Customer/cleaner no-show | Report from each role with notes/evidence | Separate `ADMIN_REVIEW` case and immutable event. |
-| Duplicate webhook | Replay provider payload | One ledger credit. |
-| Refund retry | Force provider failure then retry same key | Pending/failed is visible; one eventual refund. |
-| Low rating | Submit 1–2 stars without/with description | First rejected; second creates one review case; duplicate rejected. |
-| Kill switches | Toggle each beta config flag | Booking/payment disabled independently; maintenance blocks beta; contact fallback shown. |
-| Completion idempotency | Call completion twice | One earnings mutation and one completion event. |
-| Account deletion | Try with active job, then resolve and retry after recent auth | First blocked; second anonymizes retained records, removes private data/tokens, revokes and deletes auth user. |
+| Customer booking | Search all cleaners, filter House/Car, nearby search, favorites, create booking with checklist/photos, receive bids | Search returns only eligible verified cleaners; nearby results honor the user's radius and cleaner coverage; booking and bid data are private to participants. |
+| Instant matching | Go online as a verified cleaner, create Book Now from a nearby customer, accept/decline from two cleaners, and let an offer expire | Only online, verified, fresh-location cleaners within radius receive safe summaries; one accepted offer is presented to the customer for payment choice; duplicate/expired offers cannot assign an unpaid booking. |
+| Supplies pricing | Create scheduled and instant requests with supplies both off and on; accept a scheduled bid | The server price includes the configured surcharge once, the displayed total matches payment, and cleaner payout/commission use that same gross amount. |
+| Offer acceptance | Accept a bid with Paynow BuySafe, cancel hosted checkout, then retry; separately accept direct payment | The Detail-branded payment handoff is clear, status never claims payment before provider confirmation, BuySafe must clear before cleaner starts, and direct payment clearly explains no escrow. |
+| Provider callback | Replay valid/invalid Paynow callbacks, poll while pending, deliver duplicate and out-of-order statuses | Hash/amount/reference checks reject invalid updates; duplicate events do not credit twice; terminal/refund/dispute statuses remain reconcilable. |
+| Cancellation | Cancel wallet, direct-payment, pending Paynow, escrowed, and active bookings from both roles | Wallet refund/commission reserve is applied once; Paynow cancellation opens review instead of claiming a refund; invalid terminal cancellation is rejected. |
+| Reschedule | Reschedule future pending/assigned booking, choose past/too-soon date, try after work starts | Valid future date persists and notifies the other party; server rejects dates inside the two-hour window and in-progress/closed jobs. |
+| Availability collision | Assign two jobs to the same cleaner with overlapping duration/buffer, then reschedule one into the other | The second assignment/reschedule fails atomically; the original availability block remains intact; completed/cancelled work releases its block. |
+| Cleaner portfolio | Upload, view as another customer, delete, exceed 12 photos, upload another user's path | Only verified active cleaners can publish; public signed URLs expose only portfolio photos; ownership checks prevent tampering and delete removes storage object. |
+| Job progress | Cleaner accepts, shares location, arrives, starts, uploads completion evidence and completes; customer tracks | Only valid status transitions succeed; precise location is visible only to booking participants; evidence is stored in private media. |
+| Notifications | Enable/disable push, transition status, send urgent alert, revoke a device token | In-app event is retained, push delivery is attempted, stale Expo tokens are removed, notification opens the relevant job/case. |
+| Outbox recovery | Make Expo/Twilio unavailable, restore provider access, run the scheduled worker, and deliver an Expo receipt error | Failed delivery retries with backoff, terminal failures remain visible, and missing-device receipts clear only the matching token. |
+| Safety and support | Send SOS from an active booking; submit generic support request; report no-show/dispute | Cases are created with severity, booking, and reporter, and admins are notified; failure is shown to the user. |
+| Payout | Earn, request payout, settle and reject requests; replay operations | Funds remain reserved until settled; transfer reference is required; rejection restores balance once; ledger totals reconcile. |
+| Account recovery/deletion | Test email/SMS/OAuth recovery, delete with active job, payout, and clean account | Active financial obligations block deletion; eligible deletion anonymizes retained marketplace history and removes private identity/media data according to policy. |
+| Network resilience | Kill the app during checkout, go offline during transitions, relaunch, retry operations | Server status is authoritative; idempotency prevents duplicate bookings, debits, refunds, or payouts. |
+
+No end-to-end or provider sandbox execution is claimed until this matrix passes against a configured staging project.

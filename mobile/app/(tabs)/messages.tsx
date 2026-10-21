@@ -29,7 +29,7 @@ import {
   serverTimestamp,
   writeBatch,
   increment,
-} from '../../services/firebase';
+} from '../../services/supabase';
 import { uploadChatPhoto } from '../../services/storage';
 import { ChatMessage } from '../../types';
 

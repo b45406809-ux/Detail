@@ -52,6 +52,9 @@ export type CarCondition = 'CLEAN' | 'AVERAGE' | 'VERY_DIRTY';
 /** Step-by-step checklist captured while booking a house cleaning. */
 export interface HouseChecklist {
   category: 'HOUSE';
+  packageId?: string;
+  selections?: Record<string, string[]>;
+  choices?: Record<string, string>;
   propertySizeSqm?: number;
   storiesCount?: number; // Number of stories/floors in property (e.g. 1, 2, 3)
   roomsCount?: number; // Number of rooms to be cleaned
@@ -65,6 +68,9 @@ export interface HouseChecklist {
 /** Step-by-step checklist captured while booking a car cleaning. */
 export interface CarChecklist {
   category: 'CAR';
+  packageId?: string;
+  selections?: Record<string, string[]>;
+  choices?: Record<string, string>;
   vehicleType?: string; // Sedan, SUV, Truck, Van, Other
   registrationNumber?: string; // e.g. ABC-1234 — shown to the cleaner so they wash the correct car
   cleaningTypes: string[]; // Exterior, Interior, Full Service, Other
@@ -82,7 +88,11 @@ export interface UserProfile {
   displayName: string;
   photoURL: string;
   role: UserRole;
+  accountType?: 'INDIVIDUAL' | 'ORGANIZATION';
+  organizationId?: string;
   balance: number;
+  earningsBalance?: number;
+  commissionBalance?: number;
   status: 'AVAILABLE' | 'BUSY' | 'OFFLINE';
   hasAgreedToTerms?: boolean;
   commissionOwed?: number;
@@ -102,12 +112,14 @@ export interface UserProfile {
   // hasAgreedToTerms, before profile.tsx's role switch will flip role to
   // CLEANER. All owner-writable (not in firestore.rules' users update denylist).
   cleanerOnboardingComplete?: boolean;
+  cleanerAgreementAccepted?: boolean;
   serviceCategories?: ServiceCategory[];
   serviceRadiusKm?: number;
   experienceYears?: number;
   address?: string;
+  serviceArea?: string;
   proofOfResidenceUrl?: string;
-  verificationStatus?: 'PENDING' | 'VERIFIED';
+  verificationStatus?: 'PENDING' | 'VERIFIED' | 'REJECTED';
 }
 
 export interface Job {
@@ -115,9 +127,11 @@ export interface Job {
   customerId: string;
   customerName?: string;
   customerPhoto?: string;
+  customerPhone?: string;
   cleanerId?: string;
   cleanerName?: string;
   cleanerPhoto?: string;
+  cleanerPhone?: string;
   cleanerRating?: number;
   category?: ServiceCategory;
   serviceType: string;
@@ -135,6 +149,14 @@ export interface Job {
   photos: string[];
   /** Photos uploaded upon job completion (proof of work). */
   completionPhotos?: string[];
+  bookingMode?: 'SCHEDULED'|'INSTANT';
+  suppliesRequired?: boolean;
+  suppliesFee?: number;
+  arrivalAt?: any;
+  serviceStartedAt?: any;
+  completionSubmittedAt?: any;
+  customerResponseAt?: any;
+  matchExpiresAt?: any;
   createdAt?: any;
   /** When the job stops accepting new bids — 30 min from creation, extended
    * by another 30 min each time the customer raises the budget. */
@@ -148,6 +170,8 @@ export interface Job {
   cleanerLocation?: { lat: number; lng: number };
   paidAt?: any;
   paymentMethod?: string;
+  paymentStatus?: 'INITIATING' | 'PENDING' | 'CAPTURED' | 'AUTHORIZED' | 'ESCROWED' | 'DELIVERED' | 'PAID' | 'DISPUTED' | 'REFUNDED' | 'FAILED' | string;
+  earnings?: { gross: number; commission: number; net: number; finalized: boolean };
   rating?: number;
   ratedAt?: any;
   isFavoriteRebook?: boolean;
@@ -247,6 +271,7 @@ export interface AppNotification {
   title: string;
   body: string;
   jobId?: string;
+  data?: { supportCaseId?: string; [key:string]: unknown };
   read: boolean;
   createdAt?: any;
 }

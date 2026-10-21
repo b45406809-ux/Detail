@@ -1,4 +1,23 @@
-# Detail — Cloud Functions
+# Legacy Firebase backend and migration tools
+
+The mobile app and dashboard now target Supabase. `src/index.ts` and the
+Firebase deployment configuration are retained only as legacy reference during
+the cutover window. Do not deploy this runtime. The Firebase Admin SDK remains
+for the one-time import script below.
+
+See [`../docs/supabase-cutover.md`](../docs/supabase-cutover.md) for Supabase
+setup, provider configuration, migration sequence, and rollback guidance.
+
+## One-time Firebase to Supabase import
+
+With Firebase Admin read credentials and the Supabase service role configured
+in a protected shell, run `npm run migrate:supabase:dry-run` and review its
+counts. Then use `npm run migrate:supabase` during the approved write freeze.
+The importer preserves the Firebase source and marks migrated users for account
+recovery. It is not a substitute for reconciliation and a staging rehearsal.
+
+The documentation below this point describes the retired Firebase runtime and
+is retained for historical reference only.
 
 Server-side logic that the client cannot be trusted to do (moving money between
 users, computing rating averages, talking to PesePay with secret keys).

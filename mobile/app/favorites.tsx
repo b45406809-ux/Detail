@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft, Heart, MessageCircle, Star } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
-import { db, collection, query, where, onSnapshot, doc, deleteDoc, orderBy } from '../services/firebase';
+import { db, collection, query, where, onSnapshot, doc, deleteDoc, orderBy } from '../services/supabase';
 import { Favorite } from '../types';
 
 export default function FavoritesScreen() {

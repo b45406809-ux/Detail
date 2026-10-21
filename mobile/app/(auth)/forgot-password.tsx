@@ -13,7 +13,7 @@ import {
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Mail, CheckCircle2, KeyRound } from 'lucide-react-native';
-import { auth, sendPasswordResetEmail } from '../../services/firebase';
+import { auth, sendPasswordResetEmail } from '../../services/supabase';
 import { GlassCard } from '../../components/glass';
 
 export default function ForgotPasswordScreen() {

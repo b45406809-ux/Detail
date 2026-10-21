@@ -8,12 +8,12 @@ import {
   setDoc,
   updateDoc,
   serverTimestamp,
-  FirebaseUser,
-} from '../services/firebase';
+  SupabaseCompatUser,
+} from '../services/supabase';
 import { UserProfile } from '../types';
 
 interface AuthContextValue {
-  user: FirebaseUser | null;
+  user: SupabaseCompatUser | null;
   profile: UserProfile | null;
   isLoading: boolean;
   refreshProfile: () => Promise<void>;
@@ -29,7 +29,7 @@ const AuthContext = createContext<AuthContextValue>({
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [user, setUser] = useState<SupabaseCompatUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 

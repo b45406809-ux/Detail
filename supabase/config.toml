@@ -1,0 +1,57 @@
+project_id = "detail-marketplace"
+
+[api]
+enabled = true
+schemas = ["public", "storage"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+major_version = 15
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[realtime]
+enabled = true
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:8081"
+additional_redirect_urls = ["detail://", "http://localhost:8081", "http://localhost:5173"]
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+secure_password_change = true
+
+[auth.sms]
+enable_signup = true
+enable_confirmations = true
+template = "Your Detail verification code is {{ .Code }}. If you didn't request it, ignore this message."
+
+[storage]
+enabled = true
+file_size_limit = "15MiB"
+
+[functions.marketplace-api]
+verify_jwt = false
+
+[functions.delivery-worker]
+verify_jwt = false
+
+[functions.paynow-webhook]
+verify_jwt = false
+
+[functions.paynow-return]
+verify_jwt = false
+
+[functions.marketing-unsubscribe]
+verify_jwt = false

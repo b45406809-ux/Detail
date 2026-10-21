@@ -6,14 +6,6 @@
   "storage": {
     "rules": "storage.rules"
   },
-  "functions": [
-    {
-      "source": "functions",
-      "codebase": "default",
-      "runtime": "nodejs20",
-      "ignore": ["node_modules", ".git", "*.log"]
-    }
-  ],
   "hosting": [
     {
       "target": "marketing",
@@ -35,7 +27,6 @@
   "emulators": {
     "auth": { "port": 9099 },
     "firestore": { "port": 8080 },
-    "functions": { "port": 5001 },
     "storage": { "port": 9199 },
     "ui": { "enabled": true },
     "singleProjectMode": true

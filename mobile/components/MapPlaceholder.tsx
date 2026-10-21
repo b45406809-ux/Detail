@@ -1,11 +1,4 @@
-// Stand-in for react-native-maps' <MapView> in demo mode.
-//
-// PROVIDER_DEFAULT resolves to Google Maps on Android, which needs a
-// configured `com.google.android.geo.API_KEY` in app.json — without one it
-// doesn't just render blank, it crashes the whole native process ("X has
-// stopped"). Rather than mount that native view at all when we don't have a
-// working key (EXPO_PUBLIC_DEMO_MODE=true), render a static brand-styled
-// placeholder in its place so the rest of the UI stays reviewable.
+// Detail-branded fallback shown in demo mode, Expo Go, or when Mapbox is not configured.
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -32,7 +25,7 @@ export function MapPlaceholder({ style }: { style?: any }) {
       <View style={styles.pin}>
         <MapPin size={28} color="#3906D2" />
       </View>
-      <Text style={styles.label}>Demo mode — live map disabled</Text>
+      <Text style={styles.label}>Live map is unavailable in this build</Text>
     </View>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -27,18 +27,34 @@ import {
   Camera,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as Notifications from 'expo-notifications';
 import { Linking } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { auth, signOut } from '../../services/firebase';
+import { auth, signOut } from '../../services/supabase';
 import { callFunction } from '../../services/functions';
 import { uploadProfilePhoto } from '../../services/storage';
+import { getExpoPushToken } from '../../services/notifications';
 import { StarRating } from '../../components/StarRating';
-import { IS_MOCK } from '../../utils/env';
 
 export default function ProfileScreen() {
   const { user, profile, updateProfile } = useAuth();
   const [notificationsOn, setNotificationsOn] = useState(true);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  useEffect(() => { setNotificationsOn(!!profile?.expoPushToken); }, [profile?.expoPushToken]);
+
+  const setPushNotifications = async (enabled: boolean) => {
+    if (!enabled) {
+      try { await updateProfile({ expoPushToken: '' }); setNotificationsOn(false); }
+      catch { Alert.alert('Could not update notification settings', 'Please try again.'); }
+      return;
+    }
+    const permission = await Notifications.requestPermissionsAsync();
+    if (!permission.granted) { Alert.alert('Allow notifications', 'Enable notifications in your device settings to receive booking and payment updates.'); return; }
+    const token = await getExpoPushToken();
+    if (!token) { Alert.alert('Notifications unavailable', 'This device could not register for push notifications right now.'); return; }
+    try { await updateProfile({ expoPushToken: token }); setNotificationsOn(true); }
+    catch { Alert.alert('Could not enable notifications', 'Please try again.'); }
+  };
 
   const handlePickProfilePhoto = async () => {
     Alert.alert('Update Profile Picture', 'Choose how you would like to set your photo', [
@@ -174,10 +190,7 @@ export default function ProfileScreen() {
                 icon: Briefcase,
                 label: 'My Portfolio',
                 sub: 'Showcase your work',
-                onPress: () =>
-                  IS_MOCK
-                    ? Alert.alert('[DEV] Portfolio', 'Portfolio upload coming in next release.')
-                    : Alert.alert('Coming Soon', 'Portfolio photos are coming in the next update.'),
+                onPress: () => router.push('/portfolio'),
               },
             ]
           : []),
@@ -329,7 +342,7 @@ export default function ProfileScreen() {
           </View>
           <Switch
             value={notificationsOn}
-            onValueChange={setNotificationsOn}
+            onValueChange={setPushNotifications}
             trackColor={{ false: '#e2e8f0', true: '#3906d2' }}
             thumbColor="#fff"
           />

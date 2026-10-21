@@ -17,11 +17,7 @@ import {
   auth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  db,
-  setDoc,
-  doc,
-  serverTimestamp,
-} from '../../services/firebase';
+} from '../../services/supabase';
 import { GlassCard } from '../../components/glass';
 import { SocialSignInButtons } from '../../components/SocialSignInButtons';
 import { CountryPickerModal } from '../../components/CountryPickerModal';
@@ -98,20 +94,11 @@ export default function SignInScreen() {
     setIsLoading(true);
     try {
       if (isNewAccount) {
-        const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        await setDoc(doc(db, 'users', cred.user.uid), {
-          uid: cred.user.uid,
-          email: cred.user.email,
-          displayName: '',
-          photoURL: '',
-          role: 'CUSTOMER',
-          balance: 0,
-          status: 'AVAILABLE',
-          hasCompletedProfile: false,
-          hasSetupPermissions: false,
-          hasAgreedToTerms: true,
-          createdAt: serverTimestamp(),
-        });
+        const cred = await createUserWithEmailAndPassword(auth, email.trim(), password, { data: { termsAccepted: true } });
+        if (!cred.user.emailVerified) {
+          router.replace({ pathname: '/(auth)/verify-email', params: { email: email.trim().toLowerCase(), intent: 'REGISTER' } });
+          return;
+        }
         router.replace('/(auth)/create-profile');
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password);

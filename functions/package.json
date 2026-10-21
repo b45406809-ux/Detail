@@ -1,6 +1,6 @@
 {
   "name": "detail-functions",
-  "description": "Cloud Functions for Detail — payment settlement, rating aggregation, PesePay",
+  "description": "Legacy Firebase importer and Supabase cutover utilities",
   "engines": {
     "node": "20"
   },
@@ -9,14 +9,18 @@
   "scripts": {
     "build": "tsc",
     "build:watch": "tsc --watch",
-    "serve": "npm run build && firebase emulators:start --only functions,storage",
-    "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log",
-    "bootstrap-admin": "npm run build && node scripts/bootstrap-admin.mjs"
+    "serve": "echo 'The Firebase runtime is legacy. Use Supabase CLI to run the replacement Edge Functions.' && exit 1",
+    "deploy": "echo 'Firebase Functions are retired; deploy supabase/functions with the Supabase CLI.' && exit 1",
+    "logs": "echo 'Read logs from the Supabase project dashboard.'",
+    "bootstrap-admin": "node scripts/bootstrap-supabase-admin.mjs",
+    "migrate:supabase:dry-run": "node scripts/migrate-firebase-to-supabase.mjs --dry-run",
+    "migrate:supabase": "node scripts/migrate-firebase-to-supabase.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
     "firebase-admin": "^12.6.0",
     "firebase-functions": "^6.1.0",
+    "paynow": "^2.2.2",
     "pesepay": "^1.0.4"
   },
   "devDependencies": {

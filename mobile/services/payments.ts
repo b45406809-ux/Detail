@@ -1,6 +1,5 @@
 import * as WebBrowser from 'expo-web-browser';
-import { IS_MOCK } from '../utils/env';
-import { auth } from './firebase';
+import { auth } from './supabase';
 import { callFunction } from './functions';
 
 export interface PaymentResult {
@@ -16,36 +15,28 @@ export interface PaymentResult {
  * No balance is ever written from the client — that would let a tampered build
  * mint money. The wallet is only ever credited by trusted server code:
  *
- * DEV:  calls `devCreditWallet`, a Cloud Function that refuses to run anywhere
- *       except the local Functions emulator. Lets you test the wallet without a
- *       live PesePay account. (Requires EXPO_PUBLIC_USE_FIREBASE_EMULATOR=true.)
- *
- * PROD: calls `createPesePayPayment`, which starts a PesePay hosted checkout and
- *       returns a redirect URL. The user pays in a browser sheet (EcoCash, card,
- *       etc.). PesePay's webhook then credits the wallet server-side; the wallet
- *       screen's onSnapshot listener reflects the new balance automatically.
+ * Paynow handles checkout. A verified Paynow result callback credits the wallet
+ * server-side; the client never writes a balance directly.
  */
 export async function addFundsToWallet(amountUSD: number): Promise<PaymentResult> {
   const user = auth.currentUser;
   if (!user) throw new Error('Not authenticated');
 
-  if (IS_MOCK) {
-    // Emulator-only credit. Throws clearly if the emulator isn't running.
-    await callFunction('devCreditWallet', { amount: amountUSD });
-    return { success: true, pending: false };
-  }
-
   const data = await callFunction<
     { amount: number; currency: string },
     { redirectUrl: string; referenceNumber: string }
-  >('createPesePayPayment', { amount: amountUSD, currency: 'USD' });
+  >('createPaynowWalletTopup', { amount: amountUSD, currency: 'USD' });
 
   await WebBrowser.openBrowserAsync(data.redirectUrl, {
     presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET,
   });
 
-  // Browser dismissed — PesePay's webhook settles the balance server-side and the
-  // wallet's onSnapshot listener picks it up. Return pending so the UI can say so.
+  // Poll the signed Paynow status endpoint after the hosted checkout returns.
+  // A BuySafe top-up is credited only when Paynow reports Paid.
+  try { await callFunction('refreshPaynowWalletTopup', { referenceNumber: data.referenceNumber }); } catch { /* the signed callback remains the source of truth */ }
+
+  // The Paynow result callback settles the balance server-side. Return pending
+  // because the user may have dismissed the hosted checkout before paying.
   return { success: true, referenceNumber: data.referenceNumber, pending: true };
 }
 

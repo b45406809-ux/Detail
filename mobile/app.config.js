@@ -5,20 +5,20 @@ const { generateNotificationSounds } = require('./scripts/generate-notification-
 // artifacts exist for expo-notifications without committing binary files.
 generateNotificationSounds();
 
-const config = appJson.expo;
-const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
-
-if (googleMapsApiKey) {
-  config.android = {
-    ...config.android,
-    config: {
-      ...config.android?.config,
-      googleMaps: {
-        ...config.android?.config?.googleMaps,
-        apiKey: googleMapsApiKey,
-      },
-    },
-  };
+const expo = appJson.expo;
+const mapboxAccessToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
+const mapboxDownloadsToken = process.env.MAPBOX_DOWNLOADS_TOKEN;
+if (process.env.EAS_BUILD_PROFILE && (!mapboxAccessToken || !mapboxDownloadsToken)) {
+  throw new Error('EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN and MAPBOX_DOWNLOADS_TOKEN are required for EAS builds.');
 }
+expo.plugins = [
+  ...(expo.plugins || []),
+  ['@rnmapbox/maps', { ...(mapboxDownloadsToken ? { RNMapboxMapsDownloadToken: mapboxDownloadsToken } : {}) }],
+];
+expo.extra = {
+  ...(expo.extra || {}),
+  mapboxConfigured: Boolean(mapboxAccessToken),
+  mapboxAccessToken: mapboxAccessToken || '',
+};
 
-module.exports = config;
+module.exports = expo;

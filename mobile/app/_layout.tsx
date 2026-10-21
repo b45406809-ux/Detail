@@ -57,7 +57,10 @@ export default function RootLayout() {
   useEffect(() => {
     configureNotificationChannels().catch(() => undefined);
     const routeNotification = (response: Notifications.NotificationResponse) => {
-      const data = response.notification.request.content.data as { jobId?: string; type?: string };
+      const data = response.notification.request.content.data as { jobId?: string; supportCaseId?: string; type?: string };
+      if(data.supportCaseId){router.push('/support');return;}
+      if(data.type==='INSTANT_BOOKING_OFFER'){router.push('/instant-offers');return;}
+      if(data.type==='INSTANT_BOOKING_ACCEPTED'&&data.jobId){router.push({pathname:'/booking/offers',params:{jobId:data.jobId}});return;}
       if (!data.jobId) return;
       const offerTypes = ['BOOKING_CREATED', 'NEW_BID'];
       router.push({ pathname: offerTypes.includes(data.type ?? '') ? '/booking/offers' : '/tracking/[jobId]', params: { jobId: data.jobId } });

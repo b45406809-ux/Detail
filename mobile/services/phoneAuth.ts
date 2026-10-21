@@ -1,50 +1,49 @@
-import type { ConfirmationResult } from 'firebase/auth';
 import { IS_MOCK } from '../utils/env';
+import { supabase } from './supabase';
 
-// Module-level store for the active OTP session (one at a time per app lifecycle)
-let _confirmationResult: ConfirmationResult | null = null;
+let pendingPhone: string | null = null;
 
 /**
  * DEV:  Waits 800 ms to simulate network, no SMS sent.
  *       Any 6-digit code will be accepted by confirmPhoneOTP.
  *
- * PROD: Triggers Firebase Phone Auth via reCAPTCHA verifier (expo-firebase-recaptcha).
- *       A real SMS is sent to phoneNumber (must include country code, e.g. "+1…").
+ * PROD: Supabase Auth sends SMS through its configured provider.
  */
 export async function sendPhoneOTP(
   phoneNumber: string,
-  recaptchaVerifier: any
+  _recaptchaVerifier?: any
 ): Promise<void> {
   if (IS_MOCK) {
     await new Promise((r) => setTimeout(r, 800));
+    pendingPhone = phoneNumber;
     return;
   }
-  const { signInWithPhoneNumber } = await import('firebase/auth');
-  const { auth } = await import('./firebase');
-  _confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
+  const { error } = await supabase.auth.signInWithOtp({ phone: phoneNumber });
+  if (error) throw error;
+  pendingPhone = phoneNumber;
 }
 
 /**
- * DEV:  Signs the user in anonymously so the AuthGuard sees a real Firebase user.
+ * DEV:  Signs the user in anonymously so the AuthGuard sees an authenticated user.
  *       Accepts any 6-digit code.
  *
- * PROD: Validates the SMS code against the active ConfirmationResult.
+ * PROD: Validates the SMS code through Supabase Auth.
  *       On success the user is fully authenticated.
  */
 export async function confirmPhoneOTP(code: string): Promise<void> {
   if (IS_MOCK) {
-    const { signInAnonymously } = await import('firebase/auth');
-    const { auth } = await import('./firebase');
-    await signInAnonymously(auth);
+    const { error } = await supabase.auth.signInAnonymously();
+    if (error) throw error;
     return;
   }
-  if (!_confirmationResult) {
+  if (!pendingPhone) {
     throw new Error('No OTP session active. Please request a new code.');
   }
-  await _confirmationResult.confirm(code);
-  _confirmationResult = null;
+  const { error } = await supabase.auth.verifyOtp({ phone: pendingPhone, token: code, type: 'sms' });
+  if (error) throw error;
+  pendingPhone = null;
 }
 
 export function clearOTPSession(): void {
-  _confirmationResult = null;
+  pendingPhone = null;
 }

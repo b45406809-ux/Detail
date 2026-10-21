@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, MapPin, Clock, DollarSign, MessageSquare, Hash, Home, Layers, Sparkles, X } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
-import { db, doc, collection, onSnapshot, query, where, getDocs, limit } from '../../services/firebase';
+import { db, doc, collection, onSnapshot, query, where, getDocs, limit } from '../../services/supabase';
 import { callFunction } from '../../services/functions';
 import { Job, JobStatus, HouseChecklist, CarChecklist } from '../../types';
 import { IS_MOCK } from '../../utils/env';

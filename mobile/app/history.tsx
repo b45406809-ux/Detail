@@ -21,7 +21,7 @@ import {
   onSnapshot,
   orderBy,
   limit,
-} from '../services/firebase';
+} from '../services/supabase';
 import { callFunction } from '../services/functions';
 import { Job, JobStatus } from '../types';
 

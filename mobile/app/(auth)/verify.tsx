@@ -14,9 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
 import { IS_MOCK } from '../../utils/env';
 import { sendPhoneOTP, confirmPhoneOTP } from '../../services/phoneAuth';
-import { firebaseConfig } from '../../services/firebase';
 import { GlassCard } from '../../components/glass';
-import { RecaptchaModal, RecaptchaModalHandle } from '../../components/RecaptchaModal';
 
 const OTP_LENGTH = 6;
 
@@ -27,14 +25,13 @@ export default function VerifyScreen() {
   const [isSending, setIsSending] = useState(false);
   const [resendTimer, setResendTimer] = useState(60);
   const inputRefs = useRef<(TextInput | null)[]>([]);
-  const recaptchaVerifierRef = useRef<RecaptchaModalHandle>(null);
 
   const sendCode = useCallback(async () => {
     if (isSending || !phone) return;
     setIsSending(true);
     try {
       const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`;
-      await sendPhoneOTP(normalizedPhone, recaptchaVerifierRef.current);
+      await sendPhoneOTP(normalizedPhone);
       setResendTimer(60);
     } catch (err: any) {
       Alert.alert('Failed to Send Code', err.message ?? 'Please try again.');
@@ -99,8 +96,6 @@ export default function VerifyScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      {!IS_MOCK && <RecaptchaModal ref={recaptchaVerifierRef} firebaseConfig={firebaseConfig} />}
-
       <KeyboardAvoidingView className="flex-1 px-6 pt-6" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <TouchableOpacity
           onPress={() => router.back()}
