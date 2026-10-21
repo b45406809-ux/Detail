@@ -23,8 +23,24 @@ on:
           - supabase-migration-list
           - supabase-migration-dry-run
           - waitlist-migration-dry-run
+          - live-readiness
+          - live-paynow-e2e
+          - live-didit-e2e
+          - live-email-e2e
+          - live-sms-e2e
+          - live-provider-e2e
       confirm_production_access:
         description: Required for read-only access to production Supabase or Cloudflare data.
+        type: boolean
+        required: true
+        default: false
+      confirm_live_access:
+        description: Required before live provider readiness requests are made.
+        type: boolean
+        required: true
+        default: false
+      confirm_live_side_effects:
+        description: Required for payment, KYC, email, and SMS test operations that create live provider records or send messages.
         type: boolean
         required: true
         default: false
@@ -278,3 +294,150 @@ jobs:
           path: ${{ runner.temp }}/detail-ops-result.txt
           if-no-files-found: warn
           retention-days: 3
+
+  live-provider-e2e:
+    if: github.event_name == 'workflow_dispatch' && (inputs.task == 'live-readiness' || inputs.task == 'live-paynow-e2e' || inputs.task == 'live-didit-e2e' || inputs.task == 'live-email-e2e' || inputs.task == 'live-sms-e2e' || inputs.task == 'live-provider-e2e')
+    name: Live provider checks (status only)
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Require explicit live test confirmation
+        id: preflight
+        env:
+          TASK: ${{ inputs.task }}
+          REF: ${{ github.ref }}
+          CONFIRM_ACCESS: ${{ inputs.confirm_live_access }}
+          CONFIRM_SIDE_EFFECTS: ${{ inputs.confirm_live_side_effects }}
+        run: |
+          set -euo pipefail
+          [[ "$REF" == 'refs/heads/main' || "$REF" == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh' ]] || { echo 'LIVE_SUITE: FAIL'; exit 1; }
+          [[ "$CONFIRM_ACCESS" == 'true' ]] || { echo 'LIVE_SUITE: FAIL'; exit 1; }
+          case "$TASK" in
+            live-paynow-e2e|live-didit-e2e|live-email-e2e|live-sms-e2e|live-provider-e2e)
+              [[ "$CONFIRM_SIDE_EFFECTS" == 'true' ]] || { echo 'LIVE_SUITE: FAIL'; exit 1; }
+              ;;
+            live-readiness) ;;
+            *) echo 'LIVE_SUITE: FAIL'; exit 1 ;;
+          esac
+          echo 'authorized=true' >> "$GITHUB_OUTPUT"
+
+      - name: Install Paynow SDK for checkout test
+        if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-paynow-e2e' || inputs.task == 'live-provider-e2e')
+        continue-on-error: true
+        run: npm ci --prefix functions --silent --no-audit --no-fund > "$RUNNER_TEMP/live-test-install.log" 2>&1
+
+      - name: Check Supabase auth, REST, and deployed marketplace read route
+        id: supabase
+        if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-readiness' || inputs.task == 'live-provider-e2e')
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: node scripts/live_provider_checks.mjs readiness
+
+      - name: Check Twilio account credentials
+        id: twilio
+        if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-readiness' || inputs.task == 'live-provider-e2e')
+        continue-on-error: true
+        env:
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+        run: node scripts/live_provider_checks.mjs twilio
+
+      - name: Check Resend account and sender domain
+        id: resend
+        if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-readiness' || inputs.task == 'live-provider-e2e')
+        continue-on-error: true
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: node scripts/live_provider_checks.mjs resend
+
+      - name: Check Mapbox style access
+        id: mapbox
+        if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-readiness' || inputs.task == 'live-provider-e2e')
+        continue-on-error: true
+        env:
+          MAPBOX_PUBLIC_TOKEN: ${{ secrets.MAPBOX_PUBLIC_TOKEN }}
+        run: node scripts/live_provider_checks.mjs mapbox
+
+      - name: Initialize an unpaid Paynow checkout
+        id: paynow
+        if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-paynow-e2e' || inputs.task == 'live-provider-e2e')
+        continue-on-error: true
+        env:
+          PAYNOW_INTEGRATION_ID: ${{ secrets.PAYNOW_INTEGRATION_ID }}
+          PAYNOW_INTEGRATION_KEY: ${{ secrets.PAYNOW_INTEGRATION_KEY }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: node scripts/live_provider_checks.mjs paynow-e2e
+
+      - name: Create a test Didit verification session
+        id: didit
+        if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-didit-e2e' || inputs.task == 'live-provider-e2e')
+        continue-on-error: true
+        env:
+          DIDIT_API_KEY: ${{ secrets.DIDIT_API_KEY }}
+          DIDIT_WORKFLOW_ID: ${{ secrets.DIDIT_WORKFLOW_ID }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: node scripts/live_provider_checks.mjs didit-e2e
+
+      - name: Send a test email to the configured test recipient
+        id: email
+        if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-email-e2e' || inputs.task == 'live-provider-e2e')
+        continue-on-error: true
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          LIVE_E2E_EMAIL_TO: ${{ secrets.LIVE_E2E_EMAIL_TO }}
+        run: node scripts/live_provider_checks.mjs email-e2e
+
+      - name: Send a test SMS to the configured test recipient
+        id: sms
+        if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-sms-e2e' || inputs.task == 'live-provider-e2e')
+        continue-on-error: true
+        env:
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_MESSAGING_SERVICE_SID: ${{ secrets.TWILIO_MESSAGING_SERVICE_SID }}
+          TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
+          LIVE_E2E_SMS_TO: ${{ secrets.LIVE_E2E_SMS_TO }}
+        run: node scripts/live_provider_checks.mjs sms-e2e
+
+      - name: Summarize live test statuses only
+        if: always()
+        env:
+          TASK: ${{ inputs.task }}
+          PREFLIGHT_RESULT: ${{ steps.preflight.outcome }}
+          SUPABASE_RESULT: ${{ steps.supabase.outcome }}
+          TWILIO_RESULT: ${{ steps.twilio.outcome }}
+          RESEND_RESULT: ${{ steps.resend.outcome }}
+          MAPBOX_RESULT: ${{ steps.mapbox.outcome }}
+          PAYNOW_RESULT: ${{ steps.paynow.outcome }}
+          DIDIT_RESULT: ${{ steps.didit.outcome }}
+          EMAIL_RESULT: ${{ steps.email.outcome }}
+          SMS_RESULT: ${{ steps.sms.outcome }}
+        run: |
+          set -euo pipefail
+          if [[ "$PREFLIGHT_RESULT" != 'success' ]]; then echo 'LIVE_SUITE: FAIL' >> "$GITHUB_STEP_SUMMARY"; exit 1; fi
+          failed=0
+          {
+            echo '## Live integration test statuses'
+            echo
+            echo "- Suite: `$TASK`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for item in "Supabase:$SUPABASE_RESULT" "Twilio account:$TWILIO_RESULT" "Resend account:$RESEND_RESULT" "Mapbox:$MAPBOX_RESULT" "Paynow:$PAYNOW_RESULT" "Didit:$DIDIT_RESULT" "Email delivery:$EMAIL_RESULT" "SMS delivery:$SMS_RESULT"; do
+            name="${item%%:*}"; result="${item#*:}"
+            [[ "$result" == 'skipped' ]] && continue
+            if [[ "$result" == 'success' ]]; then status='PASS'; else status='FAIL'; failed=1; fi
+            printf -- '- %s: %s\n' "$name" "$status" >> "$GITHUB_STEP_SUMMARY"
+          done
+          if [[ "$failed" -eq 0 ]]; then echo 'LIVE_SUITE: PASS'; else echo 'LIVE_SUITE: FAIL'; exit 1; fi

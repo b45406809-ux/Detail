@@ -39,6 +39,9 @@ Create a GitHub environment named `production`, enable required reviewers if des
 | `CLOUDFLARE_API_TOKEN` | Optional token for publishing marketing assets to Cloudflare KV. |
 | `CLOUDFLARE_D1_READ_TOKEN` | Cloudflare API token scoped as narrowly as possible to query the legacy D1 database. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-side key used by the manual legacy data migration workflow; never expose it to frontend builds. |
+| `MAPBOX_PUBLIC_TOKEN` | Public Mapbox token used by the manual live style-access check. |
+| `LIVE_E2E_EMAIL_TO` | Dedicated test mailbox for the manual Resend delivery test. |
+| `LIVE_E2E_SMS_TO` | Dedicated E.164 test phone for the manual Twilio delivery test. |
 
 The Supabase deployment workflow sends configured provider values to Supabase Edge Function secrets and deploys the database migrations and functions. Supabase supplies its project URL and platform keys to deployed functions. Keep `SUPABASE_SERVICE_ROLE_KEY` out of Vite and Expo variables; it is a Supabase server-side secret, not a GitHub Actions build argument.
 

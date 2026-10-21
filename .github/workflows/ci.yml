@@ -66,6 +66,8 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: functions/package-lock.json
+      - name: Validate status-only live provider test runner
+        run: node --check scripts/live_provider_checks.mjs
       - run: npm ci --prefix functions --no-audit --no-fund
       - run: npm run build --prefix functions
 
