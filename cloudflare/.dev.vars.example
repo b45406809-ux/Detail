@@ -1,5 +1,0 @@
-# Local-only Worker secrets. Copy to .dev.vars; do not commit that file.
-# PesePay calls intentionally fail until genuine merchant values are supplied.
-PESEPAY_INTEGRATION_KEY=
-PESEPAY_ENCRYPTION_KEY=
-PESEPAY_WEBHOOK_SECRET=

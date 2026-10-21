@@ -10,3 +10,5 @@ coverage/
 .cache/
 supabase/.temp/
 marketing/generated/
+repomix-output.*
+uncompressed_repomix.*
