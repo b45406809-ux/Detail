@@ -19,11 +19,11 @@ select ok(
   'authenticated users cannot bypass cleaner eligibility checks'
 );
 select ok(
-  not has_column_privilege('authenticated', 'public.users', 'hasAgreedToTerms', 'UPDATE'),
+  not has_column_privilege('authenticated', 'public.users', 'hasagreedtoterms', 'UPDATE'),
   'users cannot directly set customer legal acceptance'
 );
 select ok(
-  not has_column_privilege('authenticated', 'public.users', 'cleanerAgreementAccepted', 'UPDATE'),
+  not has_column_privilege('authenticated', 'public.users', 'cleaneragreementaccepted', 'UPDATE'),
   'users cannot directly set cleaner legal acceptance'
 );
 select ok(
