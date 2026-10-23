@@ -84,8 +84,8 @@ export default function MessagesScreen() {
   };
 
   const savePendingMessageIntent = async (intent: string, pending: { key: string; storageKey: string; imagePath?: string }) => {
-    pendingMessageIntentsRef.current.set(intent, pending);
     await AsyncStorage.setItem(pending.storageKey, JSON.stringify({ key: pending.key, imagePath: pending.imagePath }));
+    pendingMessageIntentsRef.current.set(intent, pending);
   };
 
   const clearPendingMessageIntent = async (intent: string, pending: { key: string; storageKey: string; imagePath?: string }) => {
@@ -213,10 +213,8 @@ export default function MessagesScreen() {
     try {
       const { intent, pending } = await getPendingMessageIntent('photo', uri);
       const imageUrl = pending.imagePath ?? await uploadChatPhoto(uri, activeJobId);
-      if (!pending.imagePath) {
-        pending.imagePath = imageUrl;
-        await savePendingMessageIntent(intent, pending);
-      }
+      pending.imagePath = imageUrl;
+      await savePendingMessageIntent(intent, pending);
       const { error } = await supabase.rpc('send_job_message', { p_job_id: activeJobId, p_text: '', p_image_path: imageUrl, p_idempotency_key: pending.key });
       if (error) throw error;
       await clearPendingMessageIntent(intent, pending);
