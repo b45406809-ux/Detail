@@ -27,6 +27,23 @@ const secret = (primary: string, alias: string) => Deno.env.get(primary) || Deno
 const round2 = (value: number) => Math.round(value * 100) / 100;
 const hash = async (value: string) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))).map(v => v.toString(16).padStart(2, '0')).join('');
 const requireKey = (value: unknown) => { const key = text(value, 160); if (!/^[A-Za-z0-9_-]{8,160}$/.test(key)) fail(400, 'A valid idempotency key is required.'); return key; };
+const MAX_REQUEST_BYTES=1024*1024;
+async function readBoundedJson(request:Request):Promise<unknown>{
+  const declared=request.headers.get('content-length');
+  if(declared&&Number.isFinite(Number(declared))&&Number(declared)>MAX_REQUEST_BYTES)fail(413,'Request body is too large.');
+  const reader=request.body?.getReader();if(!reader)fail(400,'A JSON request body is required.');
+  const chunks:Uint8Array[]=[];let total=0;
+  try{
+    while(true){
+      const {done,value}=await reader.read();if(done)break;
+      total+=value.byteLength;if(total>MAX_REQUEST_BYTES){await reader.cancel();fail(413,'Request body is too large.');}
+      chunks.push(value);
+    }
+  }finally{reader.releaseLock();}
+  const bytes=new Uint8Array(total);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
+  try{return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));}
+  catch{fail(400,'Request body must be valid JSON.');}
+}
 async function enforceRateLimit(request: Request, actor: string, action: string, max: number, windowSeconds: number) {
   // Never trust x-real-ip or x-forwarded-for: callers can supply both. The
   // Cloudflare edge overwrites cf-connecting-ip; actor limits remain primary.
@@ -1010,7 +1027,10 @@ Deno.serve(async request => {
   });
   if(request.method!=='POST')return reply({error:'POST required.'},405,origin);
   try {
-    const payload=await request.json() as {name?:string;data?:Json};
+    const parsed=await readBoundedJson(request);
+    if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))fail(400,'Request must be a JSON object.');
+    const payload=parsed as {name?:string;data?:Json};
+    if(payload.data!==undefined&&payload.data!==null&&(typeof payload.data!=='object'||Array.isArray(payload.data)))fail(400,'Action data must be a JSON object.');
     const name=text(payload.name,100); if(!name)fail(400,'Action name is required.');
     const publicActions=new Set(['getBetaConfig','joinWaitlist','blogPublicList']);
     const user=publicActions.has(name)?null:await getUser(request);
