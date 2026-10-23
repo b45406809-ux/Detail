@@ -28,7 +28,7 @@ values
   ('68f879e0-e59d-40c8-9481-5149dce50734','922363f4-9721-42b0-8f6d-d12411d72716','OFFERED',now()+interval '3 minutes',1000);
 
 select ok(
-  public.respond_instant_offer('504693dc-1a0b-4b3a-8c4b-23265148ba3f'::uuid,'922363f4-9721-42b0-8f6d-d12411d72716',true,'instant-accept-one')->>'status'='CUSTOMER_ACTION_REQUIRED',
+  public.respond_instant_offer((select id from public.instantOffers where jobId='504693dc-1a0b-4b3a-8c4b-23265148ba3f'), '922363f4-9721-42b0-8f6d-d12411d72716',true,'instant-accept-one')->>'status'='CUSTOMER_ACTION_REQUIRED',
   'the first cleaner acceptance waits for customer confirmation'
 );
 select is(
@@ -37,7 +37,7 @@ select is(
   'customer confirmation creates an exclusive cleaner availability hold'
 );
 select throws_ok(
-  $$select public.respond_instant_offer('68f879e0-e59d-40c8-9481-5149dce50734'::uuid,'922363f4-9721-42b0-8f6d-d12411d72716',true,'instant-accept-two')$$,
+  $$select public.respond_instant_offer((select id from public.instantOffers where jobId='68f879e0-e59d-40c8-9481-5149dce50734'), '922363f4-9721-42b0-8f6d-d12411d72716',true,'instant-accept-two')$$,
   'P0001',
   'Cleaner is not available for another customer confirmation',
   'a second customer cannot reserve the same cleaner at the same time'
@@ -58,7 +58,7 @@ select ok(
   'declining leaves time for another instant matching round'
 );
 select ok(
-  public.respond_instant_offer('68f879e0-e59d-40c8-9481-5149dce50734'::uuid,'922363f4-9721-42b0-8f6d-d12411d72716',true,'instant-accept-two-retry')->>'status'='CUSTOMER_ACTION_REQUIRED',
+  public.respond_instant_offer((select id from public.instantOffers where jobId='68f879e0-e59d-40c8-9481-5149dce50734'), '922363f4-9721-42b0-8f6d-d12411d72716',true,'instant-accept-two-retry')->>'status'='CUSTOMER_ACTION_REQUIRED',
   'the released cleaner can accept another customer request'
 );
 select is(
