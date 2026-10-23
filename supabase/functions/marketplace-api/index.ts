@@ -4,6 +4,7 @@ import { hasRecentSupabaseAuthentication } from '../_shared/session_auth.ts';
 import { trustedEdgeIp } from '../_shared/trusted_edge_ip.ts';
 import { isValidScheduledBookingTime } from '../_shared/booking_schedule.ts';
 import { isPaymentGateClosed } from '../_shared/payment_gate.ts';
+import { cleanerLocationIsFresh } from '../_shared/cleaner_location.ts';
 
 const url = Deno.env.get('SUPABASE_URL') ?? '';
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
@@ -162,10 +163,6 @@ function paynowClient() {
   client.resultUrl = `${url}/functions/v1/paynow-webhook`;
   client.returnUrl = Deno.env.get('PAYNOW_RETURN_URL') || `${url}/functions/v1/paynow-return`;
   return client;
-}
-function cleanerLocationIsFresh(status: unknown, locationUpdatedAt: unknown, now = Date.now()): boolean {
-  const timestamp = typeof locationUpdatedAt === 'string' ? Date.parse(locationUpdatedAt) : NaN;
-  return status === 'AVAILABLE' && Number.isFinite(timestamp) && timestamp > now - 2 * 60 * 1000;
 }
 function trustedPaynowUrl(raw: string) {
   const parsed = new URL(raw);
@@ -821,6 +818,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const category=['HOUSE','CAR'].includes(text(input.category,10).toUpperCase())?text(input.category,10).toUpperCase():'';
       const lat=Number(input.lat),lng=Number(input.lng),radius=Math.min(100,Math.max(1,Number(input.radiusKm)||25));const useNearby=Number.isFinite(lat)&&Number.isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180;
       let query=admin.from('users').select('id,displayname,photourl,servicearea,servicecategories,serviceradiuskm,ratingaverage,ratingcount,jobscompleted,verificationstatus,status,location,locationupdatedat').eq('role','CLEANER').eq('verificationstatus','VERIFIED').eq('cleaneragreementaccepted',true).eq('issuspended',false).eq('isbanned',false).limit(250);
+      if(useNearby)query=query.eq('status','AVAILABLE').gt('locationupdatedat',new Date(Date.now()-5*60*1000).toISOString());
       if(search)query=query.or(`displayname.ilike.%${search}%,servicearea.ilike.%${search}%`);
       if(category)query=query.contains('servicecategories',[category]);
       const {data,error}=await query;
@@ -1236,8 +1234,6 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     default: fail(404,`Unknown marketplace action: ${name}`);
   }
 }
-
-export { cleanerLocationIsFresh };
 
 Deno.serve(async request => {
   const origin=request.headers.get('origin');

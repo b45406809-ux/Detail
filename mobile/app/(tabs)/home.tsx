@@ -449,7 +449,7 @@ function LocationFreshness({ updatedAt }: { updatedAt?: string }) {
   }, []);
   const timestamp = updatedAt ? Date.parse(updatedAt) : NaN;
   const ageMs = Number.isFinite(timestamp) ? Math.max(0, now - timestamp) : null;
-  const stale = ageMs === null || ageMs > 2 * 60_000;
+  const stale = ageMs === null || ageMs > 5 * 60_000;
   const label = ageMs === null
     ? 'Location update not received yet'
     : ageMs < 10_000
