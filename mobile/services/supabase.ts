@@ -158,7 +158,7 @@ function rowToData(table: string, row: Record<string, any>) {
   delete result.data;
   delete result.__signedData;
   if (table === 'users') result.uid = row.id;
-  if (table === 'openJobs') result.id = row.jobId;
+  if (table === 'openJobs') result.id = row.jobid ?? normalized.jobId;
   return result;
 }
 function dataToRow(table: string, input: Record<string, any>) {

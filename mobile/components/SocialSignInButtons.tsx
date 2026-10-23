@@ -21,49 +21,7 @@ async function ensureProfileExists(uid: string, email: string | null) {
 }
 
 export function SocialSignInButtons() {
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isAppleLoading, setIsAppleLoading] = useState(false);
-
-  // Configure the Google provider in Supabase Auth and create OAuth client IDs
-  // for the app's registered package/bundle identifiers in Google Cloud.
-  // EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: a *second*, separate free OAuth
-  // client (type "Android", registered with the app's package name + SHA-1 —
-  // `eas credentials` prints the SHA-1) from Google Cloud Console ->
-  // Credentials. expo-auth-session's Google provider requires this on
-  // Android specifically — the web client ID alone throws
-  // "Client Id property `androidClientId` must be defined". Both are set
-  // via `eas env:set` for production builds.
-  const [, , promptGoogleSignIn] = Google.useAuthRequest({
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    redirectUri: AuthSession.makeRedirectUri({ scheme: 'detail' }),
-  });
-
-  const isGoogleConfigured =
-    Platform.OS === 'android'
-      ? !!process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
-      : !!process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-
-  const handleGoogleSignIn = async () => {
-    if (!isGoogleConfigured) {
-      Alert.alert('Not configured', 'Google sign-in needs a client ID set up first.');
-      return;
-    }
-    setIsGoogleLoading(true);
-    try {
-      const result = await promptGoogleSignIn();
-      if (result.type !== 'success') return;
-      const idToken = result.authentication?.idToken ?? result.params?.id_token;
-      if (!idToken) throw new Error('No ID token returned from Google.');
-      const { data, error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: idToken });
-      if (error) throw error;
-      await ensureProfileExists(data.user.id, data.user.email ?? null);
-    } catch (err: any) {
-      Alert.alert('Google Sign-In Failed', err.message || 'Please try again.');
-    } finally {
-      setIsGoogleLoading(false);
-    }
-  };
 
   const handleAppleSignIn = async () => {
     setIsAppleLoading(true);
@@ -95,15 +53,7 @@ export function SocialSignInButtons() {
         <View className="flex-1 h-px bg-ink/10" />
       </View>
 
-      <TouchableOpacity
-        onPress={handleGoogleSignIn}
-        disabled={isGoogleLoading}
-        activeOpacity={0.85}
-        className="w-full bg-white flex-row items-center justify-center gap-3 py-4 rounded-[24px] border-2 border-ink/10"
-      >
-        {isGoogleLoading ? <ActivityIndicator color="#3906D2" /> : <GoogleLogo size={18} />}
-        <Text className="font-display font-black text-sm text-ink">Continue with Google</Text>
-      </TouchableOpacity>
+      <GoogleSignInButton />
 
       {Platform.OS === 'ios' && (
         <TouchableOpacity
@@ -117,6 +67,74 @@ export function SocialSignInButtons() {
         </TouchableOpacity>
       )}
     </View>
+  );
+}
+
+function GoogleSignInButton() {
+  const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+  const androidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
+  const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+  const configured = Platform.OS === 'android' ? !!androidClientId
+    : Platform.OS === 'ios' ? !!iosClientId
+    : !!webClientId;
+
+  // Mount the provider hook only when its platform-specific client ID exists.
+  // expo-auth-session validates that ID during render, before a button press.
+  if (!configured) {
+    return (
+      <TouchableOpacity
+        onPress={() => Alert.alert('Not configured', 'Google sign-in needs a client ID set up first.')}
+        activeOpacity={0.85}
+        className="w-full bg-white flex-row items-center justify-center gap-3 py-4 rounded-[24px] border-2 border-ink/10"
+      >
+        <GoogleLogo size={18} />
+        <Text className="font-display font-black text-sm text-ink">Continue with Google</Text>
+      </TouchableOpacity>
+    );
+  }
+  return <ConfiguredGoogleSignInButton webClientId={webClientId} androidClientId={androidClientId} iosClientId={iosClientId} />;
+}
+
+function ConfiguredGoogleSignInButton({ webClientId, androidClientId, iosClientId }: {
+  webClientId?: string;
+  androidClientId?: string;
+  iosClientId?: string;
+}) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [, , promptGoogleSignIn] = Google.useAuthRequest({
+    webClientId,
+    androidClientId,
+    iosClientId,
+    redirectUri: AuthSession.makeRedirectUri({ scheme: 'detail' }),
+  });
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    try {
+      const result = await promptGoogleSignIn();
+      if (result.type !== 'success') return;
+      const idToken = result.authentication?.idToken ?? result.params?.id_token;
+      if (!idToken) throw new Error('No ID token returned from Google.');
+      const { data, error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: idToken });
+      if (error) throw error;
+      await ensureProfileExists(data.user.id, data.user.email ?? null);
+    } catch (err: any) {
+      Alert.alert('Google Sign-In Failed', err.message || 'Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <TouchableOpacity
+      onPress={handleGoogleSignIn}
+      disabled={isLoading}
+      activeOpacity={0.85}
+      className="w-full bg-white flex-row items-center justify-center gap-3 py-4 rounded-[24px] border-2 border-ink/10"
+    >
+      {isLoading ? <ActivityIndicator color="#3906D2" /> : <GoogleLogo size={18} />}
+      <Text className="font-display font-black text-sm text-ink">Continue with Google</Text>
+    </TouchableOpacity>
   );
 }
 
