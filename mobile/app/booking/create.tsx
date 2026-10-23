@@ -95,11 +95,13 @@ export default function CreateBookingScreen() {
   const [budget, setBudget] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingMode, setBookingMode] = useState<'SCHEDULED'|'INSTANT'>('SCHEDULED');
+  const [bookingEnabled, setBookingEnabled] = useState(false);
   const [suppliesRequired, setSuppliesRequired] = useState(false);
   const [suppliesFee, setSuppliesFee] = useState(10);
 
   useEffect(() => {
-    callFunction<{}, {suppliesFeeUsd?:number}>('getBetaConfig',{}).then(value=>{
+    callFunction<{}, {suppliesFeeUsd?:number;bookingEnabled?:boolean}>('getBetaConfig',{}).then(value=>{
+      setBookingEnabled(value.bookingEnabled===true);
       if(Number.isFinite(Number(value.suppliesFeeUsd)))setSuppliesFee(Math.max(0,Number(value.suppliesFeeUsd)));
     }).catch(()=>{});
   },[]);
@@ -192,6 +194,10 @@ export default function CreateBookingScreen() {
   };
 
   const handleSubmit = async () => {
+    if(!bookingEnabled){
+      Alert.alert('Bookings are not open yet','Join the Detail waitlist for an update when bookings open in your area.');
+      return;
+    }
     if (!user || !category) return;
     setIsSubmitting(true);
     try {

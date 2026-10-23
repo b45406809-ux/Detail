@@ -225,8 +225,22 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       return {success:true};
     }
     case 'getBetaConfig': {
-      const { data } = await admin.from('configuration').select('value').eq('key', 'beta').maybeSingle();
-      return { maintenanceMode: false, disableNewBookings: false, disablePayments: false, suppliesFeeUsd:10, contactUrl: 'https://wa.me/', ...(data?.value ?? {}) };
+      const [{data:beta,error:betaError},{data:operations,error:operationsError}]=await Promise.all([
+        admin.from('configuration').select('value').eq('key','beta').maybeSingle(),
+        admin.from('configuration').select('value').eq('key','operations').maybeSingle(),
+      ]);
+      if(betaError)throw betaError;if(operationsError)throw operationsError;
+      const settings=beta?.value??{},switches=operations?.value?.switches??{};
+      const maintenanceMode=settings.maintenanceMode===true||switches.maintenance===true;
+      const disableNewBookings=settings.disableNewBookings===true||switches.bookingCreation===true;
+      return {
+        suppliesFeeUsd:10,contactUrl:'https://wa.me/',...settings,
+        bookingEnabled:settings.bookingEnabled===true&&!maintenanceMode&&!disableNewBookings,
+        waitlistEnabled:settings.waitlistEnabled!==false,
+        maintenanceMode,
+        disableNewBookings,
+        disablePayments:settings.disablePayments===true||switches.payments===true,
+      };
     }
     case 'startCleanerIdentityVerification': {
       const actor = authed();
@@ -367,7 +381,9 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'createBooking': {
       const actor = authed(); await requireActiveMarketplaceAccount(actor); const key = requireKey(input.idempotencyKey); const booking = input.booking ?? {};
       await enforceRateLimit(request, actor, 'create_booking', 8, 3600);
-      const [{data:config},{data:operations}]=await Promise.all([admin.from('configuration').select('value').eq('key','beta').maybeSingle(),admin.from('configuration').select('value').eq('key','operations').maybeSingle()]);
+      const [{data:config,error:configError},{data:operations,error:operationsError}]=await Promise.all([admin.from('configuration').select('value').eq('key','beta').maybeSingle(),admin.from('configuration').select('value').eq('key','operations').maybeSingle()]);
+      if(configError)throw configError;if(operationsError)throw operationsError;
+      if(config?.value?.bookingEnabled!==true)fail(503,'Bookings are not open in this area yet. Please join the waitlist for launch updates.');
       if (config?.value?.maintenanceMode || config?.value?.disableNewBookings || operations?.value?.switches?.maintenance===true || operations?.value?.switches?.bookingCreation===true) fail(503,'BOOKINGS_DISABLED');
       const photos = Array.isArray(booking.photos) ? booking.photos.slice(0,6).map((x: unknown) => text(x,500)) : [];
       if (photos.some((path: string) => !path.startsWith(`detail-media/job-photos/${actor}/`))) fail(400,'Invalid booking photo path.');
@@ -832,6 +848,9 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     }
     case 'joinWaitlist': {
       if(text(input.website,200)) return {success:true};
+      const {data:betaConfig,error:betaConfigError}=await admin.from('configuration').select('value').eq('key','beta').maybeSingle();
+      if(betaConfigError)throw betaConfigError;
+      if(betaConfig?.value?.waitlistEnabled===false)fail(503,'The waitlist is temporarily closed. Please try again later.');
       if(input.privacyAccepted!==true)fail(400,'Accept the privacy notice to join the waitlist.');
       const email=text(input.email,254).toLowerCase(); const fullName=text(input.fullName,120); const token=text(input.turnstileToken,4000);
       if(!email.includes('@')||fullName.length<2||text(input.phone,40).length<7)fail(400,'Enter your name, email and phone number.');

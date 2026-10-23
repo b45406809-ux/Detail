@@ -27,9 +27,13 @@ export const SUPPORT_WHATSAPP = '263714885936';
 export async function loadBetaConfig(): Promise<BetaConfig> {
   const defaults: BetaConfig = { bookingEnabled: false, waitlistEnabled: true, message: 'Bookings are being prepared for beta. Join the waitlist and we’ll let you know when your area opens.', whatsapp: SUPPORT_WHATSAPP };
   try {
-    const { data, error } = await supabase.from('configuration').select('value').eq('key', 'beta').maybeSingle();
-    if (error || !data?.value) return defaults;
-    const config = data.value as Record<string, unknown>;
-    return { bookingEnabled: config.bookingEnabled === true, waitlistEnabled: config.waitlistEnabled !== false, message: String(config.message || defaults.message), whatsapp: SUPPORT_WHATSAPP };
+    const { data, error } = await supabase.functions.invoke('marketplace-api', { body: { name: 'getBetaConfig', data: {} } });
+    if (error || !data || typeof data !== 'object') return defaults;
+    return {
+      bookingEnabled: data.bookingEnabled === true,
+      waitlistEnabled: data.waitlistEnabled !== false,
+      message: String(data.message || defaults.message),
+      whatsapp: SUPPORT_WHATSAPP,
+    };
   } catch { return defaults; }
 }
