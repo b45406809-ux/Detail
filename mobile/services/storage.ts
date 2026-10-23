@@ -40,6 +40,18 @@ export function uploadChatPhoto(uri: string, jobId: string) {
   if (!uid) throw new Error('Sign in before uploading a photo.');
   return uploadUri(uri, `chat-photos/${jobId}/${uid}/${filename()}`);
 }
+export function uploadSupportEvidence(uri: string, jobId: string) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error('Sign in before uploading a support photo.');
+  return uploadUri(uri, `support-evidence/${jobId}/${uid}/${filename()}`);
+}
+export async function removeSupportEvidence(paths: string[]) {
+  const prefix = `${BUCKET}/support-evidence/`;
+  const objectPaths = paths.filter(path => path.startsWith(prefix)).map(path => path.slice(BUCKET.length + 1));
+  if (!objectPaths.length) return;
+  const { error } = await supabase.storage.from(BUCKET).remove(objectPaths);
+  if (error) throw error;
+}
 export function uploadProfilePhoto(uri: string) {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error('Sign in before uploading a photo.');

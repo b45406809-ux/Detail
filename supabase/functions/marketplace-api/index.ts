@@ -724,7 +724,9 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       await enforceRateLimit(request,actor,'report_booking_issue',8,3600);
       const {data:job}=await admin.from('jobs').select('*').eq('id',jobId).maybeSingle();
       if(!job||![job.customerid,job.cleanerid].includes(actor)||reason.length<3)fail(400,'A booking participant and issue description are required.');
-      const id=crypto.randomUUID(); const {error}=await admin.from('supportcases').insert({id,jobid:jobId,customerid:job.customerid,cleanerid:job.cleanerid,reason,status:'OPEN',data:{reporterId:actor,evidence:Array.isArray(input.evidence)?input.evidence.slice(0,5):[]}});
+      const evidence=Array.isArray(input.evidence)?input.evidence.slice(0,3).map((path:unknown)=>text(path,500)):[];
+      if(evidence.some((path:string)=>!/^detail-media\/support-evidence\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/[A-Za-z0-9_-]{1,120}$/i.test(path)||!path.startsWith(`detail-media/support-evidence/${jobId}/${actor}/`)))fail(400,'Evidence photos must be uploaded to this booking support case.');
+      const id=crypto.randomUUID(); const {error}=await admin.from('supportcases').insert({id,jobid:jobId,customerid:job.customerid,cleanerid:job.cleanerid,reason,status:'OPEN',data:{reporterId:actor,evidence}});
       if(error)throw error;
       const {data:admins,error:adminError}=await admin.from('adminroles').select('userid');
       if(adminError)console.error('support case admin notification lookup failed',adminError.message);
@@ -950,7 +952,11 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         profiles.forEach(profile=>profileMap.set(profile.id,profile));const jobMap=new Map(jobs.map(job=>[job.id,job]));
         for(const row of page){
           const customer=profileMap.get(row.customerid),cleanerProfile=profileMap.get(row.cleanerid),reporter=profileMap.get(row.data?.reporterId),job=jobMap.get(row.jobid);
-          supportContext.set(row.id,{customer,cleaner:cleanerProfile,reporter,job});
+          const evidenceUrls:string[]=[];const reporterId=typeof row.data?.reporterId==='string'?row.data.reporterId:'';
+          const evidencePaths=Array.isArray(row.data?.evidence)?row.data.evidence.filter((path:unknown)=>typeof path==='string'&&/^detail-media\/support-evidence\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/[A-Za-z0-9_-]{1,120}$/i.test(path)&&path.startsWith(`detail-media/support-evidence/${row.jobid}/${reporterId}/`)):[];
+          const signedEvidence=await Promise.all(evidencePaths.map(async(path:string)=>{const signed=await admin.storage.from('detail-media').createSignedUrl(path.slice('detail-media/'.length),600);if(signed.error){console.warn('support evidence signing failed',signed.error.message);return null;}return signed.data?.signedUrl??null;}));
+          evidenceUrls.push(...signedEvidence.filter((path):path is string=>typeof path==='string'));
+          supportContext.set(row.id,{customer,cleaner:cleanerProfile,reporter,job,evidenceUrls});
         }
       }
       const rows=page.map((row:Json)=>{
@@ -967,7 +973,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
             cleanerName:cleanerProfile.displayname??'—',cleanerContact:[cleanerProfile.email,cleanerProfile.phone].filter(Boolean).join(' · '),
             category:row.data?.category??row.data?.type??'GENERAL',description:row.data?.description??row.reason??'',
             bookingStatus:job.status??'—',paymentStatus:job.paymentstatus??'—',paymentMethod:job.paymentmethod??'—',scheduledAt:job.scheduleddatetime??null,
-            evidenceCount:Array.isArray(row.data?.evidence)?row.data.evidence.length:0,
+            evidenceCount:Array.isArray(row.data?.evidence)?row.data.evidence.length:0,evidenceUrls:context.evidenceUrls??[],
             assignmentHistory:Array.isArray(row.data?.assignmentHistory)?row.data.assignmentHistory.slice(-20).map((entry:Json)=>({assignee:profileMap.get(entry.assignee)?.displayname??entry.assignee,assignedAt:entry.assignedAt,reason:entry.reason})):[],
             data:{type:row.data?.type,severity:row.data?.severity}};
         }

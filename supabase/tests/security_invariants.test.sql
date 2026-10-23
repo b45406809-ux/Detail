@@ -1,6 +1,6 @@
 begin;
 
-select plan(16);
+select plan(18);
 
 select ok(
   not has_function_privilege('anon', 'public.accept_customer_agreement(uuid)', 'execute'),
@@ -54,6 +54,10 @@ select has_column('public','jobs','lastmessage','job message previews have a per
 select has_column('public','jobs','lastmessageat','job message previews have a persisted timestamp');
 select has_column('public','jobs','cleanerunread','cleaner unread counts have a persisted column');
 select has_column('public','jobs','customerunread','customer unread counts have a persisted column');
+select ok(exists(select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname='Participants upload support evidence' and cmd='INSERT' and with_check like '%is_job_participant%'),
+  'support evidence uploads are limited to booking participants');
+select ok(exists(select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname='Users remove own support evidence' and cmd='DELETE' and qual like '%is_job_participant%'),
+  'support evidence cleanup is limited to its booking participant');
 
 select * from finish();
 rollback;

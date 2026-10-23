@@ -5,13 +5,15 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  Image,
   Modal,
   TextInput,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { ArrowLeft, MapPin, Flag, X } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { ArrowLeft, MapPin, Flag, X, ImagePlus } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import {
   db,
@@ -23,6 +25,7 @@ import {
   limit,
 } from '../services/supabase';
 import { callFunction } from '../services/functions';
+import { removeSupportEvidence, uploadSupportEvidence } from '../services/storage';
 import { Job, JobStatus } from '../types';
 
 const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }> = {
@@ -38,6 +41,15 @@ export default function HistoryScreen() {
   const [reportingJob, setReportingJob] = useState<Job | null>(null);
   const [reportReason, setReportReason] = useState('');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const [evidenceUris, setEvidenceUris] = useState<string[]>([]);
+
+  const chooseEvidence = async () => {
+    if (evidenceUris.length >= 3) { Alert.alert('Photo limit', 'Attach up to three photos.'); return; }
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) { Alert.alert('Permission needed', 'Allow photo library access to attach evidence.'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7, allowsMultipleSelection: false });
+    if (!result.canceled && result.assets?.[0]) setEvidenceUris(current => current.length < 3 ? [...current, result.assets[0].uri] : current);
+  };
 
   const submitReport = async () => {
     if (!reportingJob || !reportReason.trim()) {
@@ -45,12 +57,16 @@ export default function HistoryScreen() {
       return;
     }
     setIsSubmittingReport(true);
+    const uploadedEvidence: string[] = [];
     try {
-      await callFunction('reportJobIssue', { jobId: reportingJob.id, reason: reportReason.trim() });
+      for (const uri of evidenceUris) uploadedEvidence.push(await uploadSupportEvidence(uri, reportingJob.id));
+      await callFunction('reportJobIssue', { jobId: reportingJob.id, reason: reportReason.trim(), evidence: uploadedEvidence });
       setReportingJob(null);
       setReportReason('');
+      setEvidenceUris([]);
       Alert.alert('Report submitted', "We'll review this and follow up with you.");
     } catch (err: any) {
+      if (uploadedEvidence.length) await removeSupportEvidence(uploadedEvidence).catch(() => {});
       Alert.alert('Error', err.message || 'Could not submit your report. Please try again.');
     } finally {
       setIsSubmittingReport(false);
@@ -176,11 +192,11 @@ export default function HistoryScreen() {
       {/* Report an issue modal */}
       <Modal visible={!!reportingJob} transparent animationType="slide">
         <View className="flex-1 justify-end">
-          <TouchableOpacity className="flex-1 bg-black/50" onPress={() => setReportingJob(null)} />
+          <TouchableOpacity className="flex-1 bg-black/50" onPress={() => { setReportingJob(null); setReportReason(''); setEvidenceUris([]); }} />
           <View className="bg-white rounded-t-[32px] p-6 pb-10">
             <View className="flex-row items-center justify-between mb-1">
               <Text className="text-xl font-display font-black text-slate-900">Report an Issue</Text>
-              <TouchableOpacity onPress={() => setReportingJob(null)}>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close issue report" onPress={() => { setReportingJob(null); setReportReason(''); setEvidenceUris([]); }}>
                 <X size={22} color="#94a3b8" />
               </TouchableOpacity>
             </View>
@@ -202,6 +218,14 @@ export default function HistoryScreen() {
               onChangeText={setReportReason}
               autoFocus
             />
+
+            <View className="mb-5">
+              <Text className="mb-2 font-sans text-xs text-slate-600">Photos you attach are shared with Detail support for this report.</Text>
+              <TouchableOpacity accessibilityRole="button" onPress={chooseEvidence} disabled={isSubmittingReport || evidenceUris.length >= 3} className="self-start flex-row items-center gap-2 rounded-xl border border-slate-200 px-4 py-3">
+                <ImagePlus size={18} color="#3906D2" /><Text className="font-sans text-sm font-bold text-slate-800">Attach photo ({evidenceUris.length}/3)</Text>
+              </TouchableOpacity>
+              {evidenceUris.length > 0 && <View className="mt-3 flex-row gap-3">{evidenceUris.map((uri,index)=><View key={`${uri}-${index}`} className="relative"><Image source={{uri}} className="h-16 w-16 rounded-xl" /><TouchableOpacity accessibilityRole="button" accessibilityLabel={`Remove evidence photo ${index+1}`} onPress={()=>setEvidenceUris(current=>current.filter((_,position)=>position!==index))} className="absolute -right-2 -top-2 rounded-full bg-white p-1"><X size={14} color="#991b1b" /></TouchableOpacity></View>)}</View>}
+            </View>
 
             <TouchableOpacity
               onPress={submitReport}
