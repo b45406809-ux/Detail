@@ -506,7 +506,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Source:** [mobile/services/functions.ts:6](<../mobile/services/functions.ts#L6>); [site/src/admin/api.ts:19](<../site/src/admin/api.ts#L19>); [mobile/app/(auth)/sign-in.tsx:145](<../mobile/app/(auth)/sign-in.tsx#L145>)
 
-**Problem and impact.** Supabase FunctionsHttpError keeps the response body in its context, while these wrappers look for response.error after an invocation failure. Domain messages are often replaced by a generic non-2xx error. Email/password auth still maps Firebase error codes. Many screens catch silently or replace all causes with 'try again', making insufficient commission, missing email, unavailable cleaner and actual outages indistinguishable.
+**Current implementation and remaining gap.** The mobile and admin API wrappers now parse the structured error response carried by Supabase FunctionsHttpError, while the Edge API returns safe domain messages and hides unexpected server exceptions. Mobile password and email-code sign-in now maps Supabase Auth codes to actionable, user-safe messages, and booking creation surfaces its sanitized API error. Other screens still replace some upload, database and provider failures with generic messages; operation-specific recovery and cross-journey error tests remain open.
 
 **Proposed fix.** Parse the safe structured error body from FunctionsHttpError.context, adopt Supabase auth codes and display operation-specific recovery actions. Preserve user input on retry and log only redacted diagnostics.
 

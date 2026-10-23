@@ -275,7 +275,7 @@ export default function CreateBookingScreen() {
       if(bookingMode==='INSTANT')router.replace({pathname:'/tracking/[jobId]',params:{jobId:result.jobId}});
       else router.replace({ pathname: '/booking/offers', params: { jobId: result.jobId } });
     } catch (err) {
-      Alert.alert('Error', 'Failed to post job. Please try again.');
+      Alert.alert('Could not post booking', err instanceof Error ? err.message : 'Check your connection and try again.');
     } finally {
       setIsSubmitting(false);
     }

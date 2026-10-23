@@ -108,6 +108,20 @@ export async function sendPasswordResetEmail(_auth: typeof auth, email: string) 
   if (error) throw error;
 }
 
+/** Translate Supabase Auth failures into safe, actionable messages for users. */
+export function authErrorMessage(error: unknown, fallback = 'Authentication failed. Please try again.') {
+  const candidate = error && typeof error === 'object' ? error as { code?: unknown; message?: unknown } : {};
+  const code = typeof candidate.code === 'string' ? candidate.code.toLowerCase() : '';
+  const message = typeof candidate.message === 'string' ? candidate.message.toLowerCase() : '';
+  if (code === 'invalid_credentials' || message.includes('invalid login credentials')) return 'Email or password was not recognized.';
+  if (code === 'email_not_confirmed' || message.includes('email not confirmed')) return 'Confirm your email address before signing in. You can request another confirmation email.';
+  if (code === 'user_already_exists' || message.includes('user already registered')) return 'An account already uses this email. Sign in or use account recovery.';
+  if (code.includes('rate_limit') || message.includes('too many requests')) return 'Too many attempts. Wait a few minutes and try again.';
+  if (code === 'weak_password' || message.includes('password should be')) return 'Choose a stronger password and try again.';
+  if (code === 'email_address_invalid' || message.includes('email address is invalid')) return 'Enter a valid email address.';
+  return fallback;
+}
+
 /** Exchanges Supabase recovery links whether the app is cold-started or already open. */
 export async function handleAuthCallback(url: string) {
   const parsed = new URL(url);

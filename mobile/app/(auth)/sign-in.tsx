@@ -17,6 +17,7 @@ import {
   auth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  authErrorMessage,
 } from '../../services/supabase';
 import { GlassCard } from '../../components/glass';
 import { SocialSignInButtons } from '../../components/SocialSignInButtons';
@@ -120,7 +121,7 @@ export default function SignInScreen() {
       await sendEmailLoginCode(email, intent, hasAcceptedTerms || isNewAccount);
       router.push({ pathname: '/(auth)/verify-email', params: { email: email.trim().toLowerCase(), intent } });
     } catch (err: any) {
-      Alert.alert('Could not send code', err?.message ?? 'Please check the email address and try again.');
+      Alert.alert('Could not send code', authErrorMessage(err, 'Please check the email address and try again.'));
     } finally {
       setIsLoading(false);
     }
@@ -141,15 +142,7 @@ export default function SignInScreen() {
         router.replace('/home');
       }
     } catch (err: any) {
-      const message =
-        err.code === 'auth/user-not-found'
-          ? 'No account found. Try creating one.'
-          : err.code === 'auth/wrong-password'
-          ? 'Incorrect password.'
-          : err.code === 'auth/invalid-email'
-          ? 'Invalid email address.'
-          : 'Authentication failed. Please try again.';
-      Alert.alert('Sign In Error', message);
+      Alert.alert('Sign In Error', authErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
