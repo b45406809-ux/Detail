@@ -8,6 +8,12 @@ const HOUSE_AREAS = ['Living room', 'Bedrooms', 'Kitchen', 'Dining room', 'Bathr
 const HOUSE_PARTS = ['Windows', 'Floors', 'Walls', 'Carpets', 'Upholstery', 'Cupboards', 'Appliances', 'Garage', 'Other'];
 const HOUSE_SERVICES: Record<string, string> = { BASIC_HOUSE: 'Basic House Clean', SPECIFIC_ROOM: 'Specific Room / Part', STANDARD_HOUSE: 'Standard House Clean', DEEP_HOUSE: 'Deep House Clean' };
 const HOUSE_ADD_ONS = ['Interior windows', 'Exterior windows', 'Mirrors', 'Inside cupboards', 'Fridge', 'Oven', 'Microwave', 'Garage', 'Balcony', 'Patio', 'Oven cleaning', 'Fridge cleaning', 'Microwave cleaning', 'Cupboard cleaning', 'Wall cleaning', 'Carpet cleaning', 'Upholstery cleaning', 'Garage cleaning', 'Balcony/patio cleaning'];
+const HOUSE_ATTENTION: Record<string, readonly string[]> = {
+  Kitchen: ['Oven', 'Fridge', 'Microwave', 'Cabinets', 'Countertops', 'Sink', 'Appliances', 'Walls', 'Floor'],
+  Bathroom: ['Shower', 'Bathtub', 'Toilet', 'Tiles', 'Grout', 'Mirrors', 'Cabinets', 'Floor'],
+  Bedrooms: ['Floors', 'Wardrobes', 'Under furniture', 'Windows', 'Walls', 'Doors'],
+  'Living areas': ['Sofas', 'Carpets', 'Curtains', 'Windows', 'Walls', 'Floors'],
+};
 const CAR_TYPES = ['Sedan', 'Hatchback', 'Coupe', 'SUV', 'Crossover', 'Pickup / Double Cab', 'Minivan', 'Van', 'Truck', 'Other'];
 const CAR_SERVICES: Record<string, string> = { EXTERIOR_WASH: 'Exterior Wash', FULL_CAR: 'Full Car Clean', DEEP_DETAIL: 'Deep Detail' };
 const CAR_EXTERIOR = ['Exterior body wash', 'Rinse', 'Drying', 'Wheel cleaning', 'Rim cleaning', 'Tyre cleaning', 'Exterior windows', 'Basic dirt removal', 'Basic mud removal', 'Tyre shine', 'Rim deep cleaning', 'Bug removal', 'Mud removal', 'Tar removal', 'Exterior polish', 'Wax', 'Engine bay cleaning', 'Full body wash', 'Wheels', 'Rims', 'Tyres', 'Door jambs', 'Basic exterior detailing', 'Detailed exterior wash', 'Wheel deep cleaning', 'Tyre treatment', 'Door-jamb cleaning', 'Tar/contaminant removal', 'Exterior glass cleaning', 'Paint cleaning', 'Exterior finishing', 'Polishing'];
@@ -40,6 +46,7 @@ export function toCleanerBookingSummary(job: Json) {
         cleaningTypes: packageIds.map(id => HOUSE_SERVICES[id]),
         condition,
         addOns: selected(source.addOns, 'additions', HOUSE_ADD_ONS),
+        attentionServices: Object.entries(HOUSE_ATTENTION).flatMap(([area, allowed]) => safeStrings(selections[`attention:${area}`], allowed).map(item => `${area}: ${item}`)).slice(0, 12),
         propertyType: safeStrings([choices.propertyType], ['Apartment', 'House', 'Townhouse', 'Other'])[0],
         propertySize: safeStrings([choices.propertySize], ['Under 50 m²', '50–100 m²', '101–150 m²', '151–200 m²', '201–300 m²', '301–500 m²', '500+ m²'])[0],
         areaSize: safeStrings([choices.areaSize], ['Under 10 m²', '10–20 m²', '21–30 m²', '31–50 m²', '51–75 m²', '76–100 m²', '100+ m²'])[0],
@@ -57,9 +64,14 @@ export function toCleanerBookingSummary(job: Json) {
         seats: safeStrings([choices.seats], ['2', '4', '5', '6', '7+'])[0],
         cleaningTypes: packageIds.map(id => CAR_SERVICES[id]),
         condition,
-        exteriorServices: selected(source.exteriorServices, 'exterior', CAR_EXTERIOR),
+        exteriorServices: selected(source.exteriorServices, 'exterior', CAR_EXTERIOR).concat(selected(undefined, 'included', CAR_EXTERIOR)).slice(0, 12),
         interiorServices: selected(source.interiorServices, 'interior', CAR_INTERIOR),
-        deepServices: selected(source.deepServices, 'deep', CAR_DEEP),
+        deepServices: [...new Set([
+          ...selected(source.deepServices, 'deep', CAR_DEEP),
+          ...selected(undefined, 'deepInterior', CAR_INTERIOR),
+          ...selected(undefined, 'deepExterior', CAR_EXTERIOR),
+          ...safeStrings(selections.attention, CAR_DEEP),
+        ])].slice(0, 12),
       };
   const location = job.location && typeof job.location === 'object' && !Array.isArray(job.location)
     ? job.location as Json

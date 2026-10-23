@@ -370,10 +370,10 @@ function getChecklistTags(job: Job): string[] {
   if (!checklist) return [];
   if (checklist.category === 'HOUSE') {
     const c = checklist as HouseChecklist;
-    return [...(c.cleaningTypes ?? []), ...(c.areas ?? []).slice(0, 4)];
+    return [...(c.cleaningTypes ?? []), ...(c.areas ?? []).slice(0, 4), ...((checklist as any).attentionServices ?? []).slice(0, 6)];
   }
   const c = checklist as CarChecklist;
-  return [...(c.cleaningTypes ?? []), ...(c.exteriorServices ?? []).slice(0, 2), ...(c.interiorServices ?? []).slice(0, 2)];
+  return [...(c.cleaningTypes ?? []), ...(c.exteriorServices ?? []).slice(0, 2), ...(c.interiorServices ?? []).slice(0, 2), ...(c.deepServices ?? []).slice(0, 4)];
 }
 
 function formatDuration(minutes?: number): string {
