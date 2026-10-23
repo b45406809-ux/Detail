@@ -3,37 +3,39 @@ import { Home, Activity, MessageSquare, Wallet, User, LucideIcon } from 'lucide-
 import { View, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function TabIcon({ Icon, focused }: { Icon: LucideIcon; focused: boolean }) {
   return (
     <View
       style={{
-        width: 40,
-        height: 40,
+        width: 48,
+        height: 48,
         alignItems: 'center',
         justifyContent: 'center',
         borderRadius: 14,
         backgroundColor: focused ? '#3906D2' : 'transparent',
       }}
     >
-      <Icon size={20} color={focused ? '#fff' : '#9B93C9'} />
+      <Icon size={20} color={focused ? '#fff' : '#5D5871'} />
     </View>
   );
 }
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
         tabBarStyle: {
-          position: 'absolute',
           backgroundColor: Platform.OS === 'android' ? 'rgba(255,255,255,0.96)' : 'transparent',
           borderTopColor: 'rgba(57,6,210,0.08)',
           borderTopWidth: 1,
-          height: 82,
-          paddingTop: 10,
+          height: 62 + insets.bottom,
+          paddingTop: 6,
+          paddingBottom: insets.bottom,
           elevation: 0,
         },
         tabBarBackground: () =>
@@ -44,23 +46,23 @@ export default function TabsLayout() {
     >
       <Tabs.Screen
         name="home"
-        options={{ tabBarIcon: ({ focused }) => <TabIcon Icon={Home} focused={focused} /> }}
+        options={{ tabBarAccessibilityLabel: 'Home', tabBarIcon: ({ focused }) => <TabIcon Icon={Home} focused={focused} /> }}
       />
       <Tabs.Screen
         name="activity"
-        options={{ tabBarIcon: ({ focused }) => <TabIcon Icon={Activity} focused={focused} /> }}
+        options={{ tabBarAccessibilityLabel: 'Activity and bookings', tabBarIcon: ({ focused }) => <TabIcon Icon={Activity} focused={focused} /> }}
       />
       <Tabs.Screen
         name="messages"
-        options={{ tabBarIcon: ({ focused }) => <TabIcon Icon={MessageSquare} focused={focused} /> }}
+        options={{ tabBarAccessibilityLabel: 'Messages', tabBarIcon: ({ focused }) => <TabIcon Icon={MessageSquare} focused={focused} /> }}
       />
       <Tabs.Screen
         name="wallet"
-        options={{ tabBarIcon: ({ focused }) => <TabIcon Icon={Wallet} focused={focused} /> }}
+        options={{ tabBarAccessibilityLabel: 'Wallet', tabBarIcon: ({ focused }) => <TabIcon Icon={Wallet} focused={focused} /> }}
       />
       <Tabs.Screen
         name="profile"
-        options={{ tabBarIcon: ({ focused }) => <TabIcon Icon={User} focused={focused} /> }}
+        options={{ tabBarAccessibilityLabel: 'Profile', tabBarIcon: ({ focused }) => <TabIcon Icon={User} focused={focused} /> }}
       />
     </Tabs>
   );
