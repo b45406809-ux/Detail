@@ -70,6 +70,13 @@ async function userRow(uid: string) {
   if (!data) fail(404, 'Profile not found.');
   return data as Json;
 }
+async function requireActiveMarketplaceAccount(uid: string) {
+  const profile = await userRow(uid);
+  if (profile.isbanned || profile.issuspended || profile.accountdeletedat) {
+    fail(403, 'This account cannot start new marketplace activity. Contact support for help with existing bookings.');
+  }
+  return profile;
+}
 async function adminRole(uid: string) {
   const { data, error } = await admin.from('adminroles').select('*').eq('userid', uid).maybeSingle();
   if (error) throw error;
@@ -246,7 +253,13 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'setActiveRole': {
       const actor = authed(); const profile = await userRow(actor); const role = input.role;
       if (!['CUSTOMER','CLEANER'].includes(role)) fail(400, 'Invalid role.');
+      if (profile.issuspended || profile.isbanned || profile.accountdeletedat) fail(403, 'This account cannot change marketplace roles. Contact support for help.');
       if (role === 'CLEANER' && (profile.verificationstatus !== 'VERIFIED' || !profile.cleaneragreementaccepted || !profile.cleaneronboardingcomplete || profile.issuspended || profile.isbanned)) fail(409, 'Complete cleaner verification and onboarding first.');
+      if (role === 'CUSTOMER' && profile.role === 'CLEANER') {
+        const { count, error } = await admin.from('jobs').select('id', { count: 'exact', head: true }).eq('cleanerid', actor).in('status', ['ASSIGNED','EN_ROUTE','IN_PROGRESS']);
+        if (error) throw error;
+        if ((count ?? 0) > 0) fail(409, 'Finish or contact support about your active cleaner booking before changing roles.');
+      }
       const { error } = await admin.from('users').update({ role, updatedat: new Date().toISOString() }).eq('id', actor);
       if (error) throw error;
       return { ok: true };
@@ -291,7 +304,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       return { ok: true };
     }
     case 'createBooking': {
-      const actor = authed(); const key = requireKey(input.idempotencyKey); const booking = input.booking ?? {};
+      const actor = authed(); await requireActiveMarketplaceAccount(actor); const key = requireKey(input.idempotencyKey); const booking = input.booking ?? {};
       await enforceRateLimit(request, actor, 'create_booking', 8, 3600);
       const [{data:config},{data:operations}]=await Promise.all([admin.from('configuration').select('value').eq('key','beta').maybeSingle(),admin.from('configuration').select('value').eq('key','operations').maybeSingle()]);
       if (config?.value?.maintenanceMode || config?.value?.disableNewBookings || operations?.value?.switches?.maintenance===true || operations?.value?.switches?.bookingCreation===true) fail(503,'BOOKINGS_DISABLED');
@@ -322,7 +335,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       return { success: true, jobId };
     }
     case 'refreshInstantMatching': {
-      const actor=authed(),jobId=text(input.jobId,80);await enforceRateLimit(request,actor,'instant_match_refresh',12,300);
+      const actor=authed(),jobId=text(input.jobId,80);await requireActiveMarketplaceAccount(actor);await enforceRateLimit(request,actor,'instant_match_refresh',12,300);
       const {data:job,error:jobError}=await admin.from('jobs').select('id,category,bookingmode,status,matchexpiresat').eq('id',jobId).eq('customerid',actor).maybeSingle();
       if(jobError)throw jobError;if(!job||job.bookingmode!=='INSTANT'||job.status!=='PENDING')fail(409,'This instant request is no longer matching.');
       if(job.matchexpiresat&&Date.parse(job.matchexpiresat)<=Date.now())return {matchedCleaners:0,expired:true};
@@ -366,6 +379,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     }
     case 'respondInstantOffer': {
       const actor=authed(), offerId=text(input.offerId,80), accept=input.accept===true, key=requireKey(input.idempotencyKey);
+      if (accept) await requireActiveMarketplaceAccount(actor);
       const {data,error}=await admin.rpc('respond_instant_offer',{p_offer_id:offerId,p_actor_id:actor,p_accept:accept,p_idempotency_key:key});
       if(error)throw error;
       if(data?.status==='CUSTOMER_ACTION_REQUIRED'&&data.customerId)await notify(data.customerId,{type:'INSTANT_BOOKING_ACCEPTED',title:'Cleaner accepted your request',body:'Review the fixed-price offer and choose your payment method to confirm the booking.',jobId:data.jobId});
@@ -431,7 +445,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const [profileResult,jobResult] = await Promise.all([admin.from('users').select('*').eq('id',actor).single(),admin.from('jobs').select('*').eq('id',jobId).single()]);
       if (profileResult.error || jobResult.error) fail(404,'Job or cleaner not found.');
       const profile=profileResult.data, job=jobResult.data;
-      if (profile.role!=='CLEANER' || profile.verificationstatus!=='VERIFIED' || !profile.cleaneragreementaccepted || !profile.cleaneronboardingcomplete || profile.issuspended || profile.isbanned || Number(profile.balance)<0) fail(403,'Complete cleaner verification and resolve any outstanding commission before bidding.');
+      if (profile.role!=='CLEANER' || profile.verificationstatus!=='VERIFIED' || !profile.cleaneragreementaccepted || !profile.cleaneronboardingcomplete || profile.issuspended || profile.isbanned || profile.accountdeletedat || Number(profile.balance)<0) fail(403,'Complete cleaner verification and resolve any outstanding commission before bidding.');
       const {data:operations}=await admin.from('configuration').select('value').eq('key','operations').maybeSingle();
       if(operations?.value?.switches?.maintenance===true||operations?.value?.switches?.bidAcceptance===true)fail(503,'Cleaner bidding is temporarily paused.');
       if (job.status!=='PENDING' || job.bookingmode==='INSTANT' || (job.biddingexpiresat && new Date(job.biddingexpiresat).getTime()<Date.now())) fail(409,'This booking is not accepting cleaner bids.');
@@ -449,6 +463,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     }
     case 'increaseJobBudget': {
       const actor=authed(); const jobId=text(input.jobId,80); const value=round2(Number(input.newBudget));
+      await requireActiveMarketplaceAccount(actor);
       const {data:job}=await admin.from('jobs').select('customerid,status,budget').eq('id',jobId).maybeSingle();
       if(!job||job.customerid!==actor) fail(403,'Only the customer can change the budget.');
       if(job.status!=='PENDING'||value<=Number(job.budget||0)||value<=0) fail(409,'A higher budget can only be set while the booking is open.');
@@ -458,6 +473,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     }
     case 'acceptBid': {
       const actor=authed(); const jobId=text(input.jobId,80), bidId=text(input.bidId,80), method=text(input.paymentMethod,20).toUpperCase(), key=requireKey(input.idempotencyKey);
+      await requireActiveMarketplaceAccount(actor);
       await enforceRateLimit(request,actor,'accept_bid',10,3600);
       const {data:booking,error:bookingError}=await admin.from('jobs').select('customerid').eq('id',jobId).maybeSingle();
       if(bookingError)throw bookingError;
@@ -656,7 +672,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const {error:storageError}=await admin.storage.from('detail-media').remove([photo.imagepath]);if(storageError)console.error('portfolio object cleanup failed',storageError.message);return {success:true};
     }
     case 'registerOrganization': {
-      const actor=authed(); const name=text(input.name,160);
+      const actor=authed(); await requireActiveMarketplaceAccount(actor); const name=text(input.name,160);
       if(name.length<2)fail(400,'Organization name is required.');
       const {data:existing}=await admin.from('organizations').select('id').eq('ownerid',actor).maybeSingle();
       if(existing)return {organizationId:existing.id};
@@ -668,7 +684,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       return {organizationId:data.id};
     }
     case 'createOrganizationCleanerInvite': {
-      const actor=authed(); const email=text(input.email ?? input.cleanerEmail,254).toLowerCase();
+      const actor=authed(); await requireActiveMarketplaceAccount(actor); const email=text(input.email ?? input.cleanerEmail,254).toLowerCase();
       const {data:org}=await admin.from('organizations').select('id').eq('ownerid',actor).maybeSingle();
       if(!org||!email.includes('@'))fail(400,'Register an organization and enter a valid cleaner email.');
       const code=crypto.randomUUID().replaceAll('-','').slice(0,18).toUpperCase(), codeHash=await hash(code);
@@ -676,7 +692,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(error)throw error; return {code};
     }
     case 'joinOrganization': {
-      const actor=authed(); const code=text(input.code,80).toUpperCase(); const codeHash=await hash(code);
+      const actor=authed(); await requireActiveMarketplaceAccount(actor); const code=text(input.code,80).toUpperCase(); const codeHash=await hash(code);
       const {data:invite}=await admin.from('organizationinvites').select('*').eq('codehash',codeHash).is('acceptedby',null).gt('expiresat',new Date().toISOString()).maybeSingle();
       if(!invite||invite.email!==String(user?.email??'').toLowerCase())fail(403,'This invitation is invalid, expired, or belongs to another email.');
       const {data:profile}=await admin.from('users').select('displayname,email,verificationstatus').eq('id',actor).single();
