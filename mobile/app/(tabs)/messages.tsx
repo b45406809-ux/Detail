@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 import {
   View,
   Text,
@@ -59,6 +61,37 @@ export default function MessagesScreen() {
   const flatListRef = useRef<FlatList>(null);
   const preserveChatScrollRef = useRef(false);
   const reachedHistoryStartRef = useRef(false);
+  const pendingMessageIntentsRef = useRef(new Map<string, { key: string; storageKey: string; imagePath?: string }>());
+
+  const getPendingMessageIntent = async (kind: 'text' | 'photo', value: string) => {
+    if (!user || !activeJobId) throw new Error('Open a booking conversation before sending a message.');
+    const intent = `${user.uid}:${activeJobId}:${kind}:${value}`;
+    const cached = pendingMessageIntentsRef.current.get(intent);
+    if (cached) return { intent, pending: cached };
+    const digest = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, intent);
+    const storageKey = `detail:pending-chat-message:${user.uid}:${digest}`;
+    const raw = await AsyncStorage.getItem(storageKey);
+    let pending: { key: string; storageKey: string; imagePath?: string };
+    try {
+      const saved = raw ? JSON.parse(raw) : null;
+      pending = saved?.key ? { ...saved, storageKey } : { key: Crypto.randomUUID(), storageKey };
+    } catch {
+      pending = { key: Crypto.randomUUID(), storageKey };
+    }
+    await AsyncStorage.setItem(storageKey, JSON.stringify({ key: pending.key, imagePath: pending.imagePath }));
+    pendingMessageIntentsRef.current.set(intent, pending);
+    return { intent, pending };
+  };
+
+  const savePendingMessageIntent = async (intent: string, pending: { key: string; storageKey: string; imagePath?: string }) => {
+    pendingMessageIntentsRef.current.set(intent, pending);
+    await AsyncStorage.setItem(pending.storageKey, JSON.stringify({ key: pending.key, imagePath: pending.imagePath }));
+  };
+
+  const clearPendingMessageIntent = async (intent: string, pending: { key: string; storageKey: string; imagePath?: string }) => {
+    pendingMessageIntentsRef.current.delete(intent);
+    await AsyncStorage.removeItem(pending.storageKey).catch(() => undefined);
+  };
 
   const isCustomer = profile?.role === 'CUSTOMER';
   const unreadField = isCustomer ? 'customerUnread' : 'cleanerUnread';
@@ -161,8 +194,10 @@ export default function MessagesScreen() {
     const text = (override ?? inputText).trim();
     if (!text || !activeJobId || !user) return;
     try {
-      const { error } = await supabase.rpc('send_job_message', { p_job_id: activeJobId, p_text: text, p_image_path: null });
+      const { intent, pending } = await getPendingMessageIntent('text', text);
+      const { error } = await supabase.rpc('send_job_message', { p_job_id: activeJobId, p_text: text, p_image_path: null, p_idempotency_key: pending.key });
       if (error) throw error;
+      await clearPendingMessageIntent(intent, pending);
       if (!override) setInputText('');
     } catch (error) {
       console.error('Could not send message:', error);
@@ -176,9 +211,15 @@ export default function MessagesScreen() {
     if (!activeJobId || !user) return;
     setIsSendingPhoto(true);
     try {
-      const imageUrl = await uploadChatPhoto(uri, activeJobId);
-      const { error } = await supabase.rpc('send_job_message', { p_job_id: activeJobId, p_text: '', p_image_path: imageUrl });
+      const { intent, pending } = await getPendingMessageIntent('photo', uri);
+      const imageUrl = pending.imagePath ?? await uploadChatPhoto(uri, activeJobId);
+      if (!pending.imagePath) {
+        pending.imagePath = imageUrl;
+        await savePendingMessageIntent(intent, pending);
+      }
+      const { error } = await supabase.rpc('send_job_message', { p_job_id: activeJobId, p_text: '', p_image_path: imageUrl, p_idempotency_key: pending.key });
       if (error) throw error;
+      await clearPendingMessageIntent(intent, pending);
     } catch (error) {
       console.error('Could not send chat photo:', error);
       Alert.alert('Photo not sent', 'Check your connection and try again.');

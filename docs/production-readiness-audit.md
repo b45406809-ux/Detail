@@ -870,9 +870,9 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Source:** [mobile/app/(tabs)/messages.tsx:113](<../mobile/app/(tabs)/messages.tsx#L113>); [mobile/services/supabase.ts:308](<../mobile/services/supabase.ts#L308>); [supabase/migrations/20261020005000_client_runtime_access.sql:14](<../supabase/migrations/20261020005000_client_runtime_access.sql#L14>)
 
-**Current implementation and remaining gap.** Direct message inserts are revoked. The `send_job_message` transaction verifies booking participation and attachment ownership, bounds text, writes the message, updates unread counters and enqueues a durable notification together. The mobile screen keeps the draft when sending fails, exposes retry/load states and paginates older messages. A per-message idempotency key and server-side per-conversation send limit are still missing, and recipient/deep-link behavior needs real-device verification.
+**Current implementation and remaining gap.** Direct message inserts are revoked. The `send_job_message` transaction verifies booking participation and attachment ownership, bounds text, enforces a per-sender/per-booking rate cap, and writes the message, unread counters and durable notification together. It serializes idempotency keys so an uncertain retry returns the original message without replaying side effects. The mobile screen persists pending operation keys and photo paths, keeps failed text in the composer and paginates older messages. Full composer draft restoration and recipient/deep-link behavior still need real-device verification.
 
-**Proposed fix.** Add idempotent send keys and server-side conversation limits to the existing transactional RPC, then complete role-safe notification routing and offline/relaunch recovery.
+**Proposed fix.** Complete role-safe notification routing and offline/relaunch recovery, including restoring unsent message text after an app restart.
 
 **Acceptance check.** Send concurrent messages, drop connections after insert, use quick replies/photos and background the recipient; drafts/counters/messages/alerts stay consistent and duplicate sends are prevented.
 
