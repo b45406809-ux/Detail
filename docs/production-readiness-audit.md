@@ -392,6 +392,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** Customer/cleaner avatars and job evidence display for authorized parties, unauthorized reads fail, and URL expiry/revocation behavior matches the privacy policy.
 
+**Implementation status (2026-10-23).** Mobile media links now expire after one hour and signing failures are surfaced instead of converted to blank values. A new storage policy permits only the assigned customer/cleaner pair to read each other's private profile photo; an unrelated account remains denied. RLS regression coverage is added and awaiting CI. Existing signed URLs remain usable until expiry, and refresh/caching behavior plus device rendering still need verification.
+
 <a id="F16"></a>
 
 ### F16 — Rate limits can be fragmented by supplied IP headers and leave costly endpoints uncovered
