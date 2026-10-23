@@ -54,7 +54,11 @@ function resolveScheduledDate(
 ): Date {
   const now = new Date();
   if (preference === 'CUSTOM' && customDate) return customDate;
-  if (preference === 'TOMORROW') return new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  if (preference === 'TOMORROW') {
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow;
+  }
   return now; // ASAP / TODAY
 }
 

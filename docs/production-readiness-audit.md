@@ -562,25 +562,29 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Severity:** P1 · **Evidence:** Code-confirmed · **Area:** Booking and dispatch
 
-**Source:** [mobile/app/booking/create.tsx:68](<../mobile/app/booking/create.tsx#L68>); [mobile/app/booking/create.tsx:272](<../mobile/app/booking/create.tsx#L272>)
+**Source:** [mobile/app/booking/create.tsx:75](<../mobile/app/booking/create.tsx#L75>); [mobile/app/booking/create.tsx:344](<../mobile/app/booking/create.tsx#L344>)
 
-**Problem and impact.** Passing a preselected category starts the wizard at CHECKLIST, while SCHEDULED versus INSTANT selection exists only on CATEGORY and defaults to SCHEDULED. House/Car shortcuts therefore skip the only normal Book Now control unless the user discovers they can go back a step. This hides the headline instant-matching functionality.
+**Problem and impact.** This was true before `b664605`: passing a preselected category used to skip the only SCHEDULED versus INSTANT control. That shortcut behavior is now fixed; see implementation status below.
 
 **Proposed fix.** Make booking mode an explicit reachable step/control for all entry paths or pass it intentionally from Home. Preserve chosen service/mode while moving through the wizard.
 
 **Acceptance check.** Enter via Home House, Home Car and generic booking; Book Now and scheduled modes are clearly selectable in every supported entry path.
 
+**Implementation status (2026-10-23).** The wizard now always opens on CATEGORY while retaining a preselected House or Car category, so both shortcuts show the booking-mode control. Generic entry uses the same step. Mobile interaction tests on physical devices are still needed to verify the shortcut flows and beta-config behavior.
+
 <a id="F28"></a>
 
-### F28 — Address edits can retain the wrong coordinates and scheduled times are weakly validated
+### F28 — Scheduled time validation is weak and address coverage remains incomplete
 
 **Severity:** P1 · **Evidence:** Code-confirmed · **Area:** Booking and dispatch
 
 **Source:** [mobile/app/booking/create.tsx:201](<../mobile/app/booking/create.tsx#L201>); [mobile/app/booking/create.tsx:54](<../mobile/app/booking/create.tsx#L54>); [supabase/functions/marketplace-api/index.ts:313](<../supabase/functions/marketplace-api/index.ts#L313>)
 
-**Problem and impact.** After selecting current location, editing address text does not invalidate those coordinates. Submission geocodes only when coordinates are missing, so cleaners can be sent to the old position. Scheduled requests can store 0,0 if geocoding fails, and custom/past dates and out-of-area locations are not consistently rejected by the API. TODAY resolves to now, TOMORROW to exactly 24 hours later, without a defined service window/timezone.
+**Problem and impact.** Address edits now clear the selected coordinates, submission geocodes the edited address, and both client and server reject missing, invalid and (0,0) pins. Custom times also have a 30-minute minimum and a 180-day maximum. The remaining gaps were that the server only checked CUSTOM timestamps, TOMORROW used a fixed 24-hour increment that can shift the local calendar date across daylight-saving changes, and there is no service-zone check, map pin correction, saved address or explicit local service window.
 
 **Proposed fix.** Maintain one confirmed address+pin object; clear/reconfirm coordinates on edits, add search/map pin correction and enforce service zones, location validity, lead times and explicit local service windows on the server.
+
+**Implementation status (2026-10-23).** The Edge API now validates the schedule preference and timestamp for every scheduled booking, rejects stale/implausible preset values, and keeps the custom lead-time/horizon checks server-side. TOMORROW is derived as the next local calendar day. Address edits already clear the old pin and invalid/missing coordinates are rejected; service-area validation, a visual pin-confirmation flow, named saved addresses and explicit local service windows remain open.
 
 **Acceptance check.** Select current GPS then type another address, book across timezones/day boundaries and submit past/out-of-zone coordinates; the final pin/time must be correct or clearly rejected.
 
@@ -1374,7 +1378,7 @@ Tariro needs Book Now, adds supplies, closes the payment browser by mistake and 
 
 | Step | UI → service/database trace | Failure or missing behavior | Proposed completion criterion |
 | --- | --- | --- | --- |
-| Start an instant car booking | Home Car shortcut → booking/create category preselection | The shortcut skips the only booking-mode choice (F27). | Book Now is clearly reachable and distinct from quote scheduling. |
+| Start an instant car booking | Home Car shortcut → booking/create category preselection | Shortcut retains Car and shows the booking-mode choice after the F27 fix; device-flow verification remains. | Book Now is clearly reachable and distinct from quote scheduling. |
 | Confirm service/price | DEEP_DETAIL + vehicle choices + supplies → server fixed-price map | Condition, size, add-ons and duration do not affect price/capacity (F29). | Immutable supported-scope quote, supplies total and accurate expected duration are disclosed. |
 | Find a nearby cleaner | create_booking → search_instant_cleaners/PostGIS → instantoffers | Dispatch needs fresh location, valid coverage and server eligibility; no-candidate/expired states leave stale requests (F26/F35). | A truthful matching state with deadline, fallback, cancellation and safe rematching. |
 | Cleaner accepts | respond_instant_offer → pending bid; customer notification | Alerts fail; routing lacks type. The cleaner has no exclusive confirmation reservation (F02/F30/F50). | Exactly one temporarily reserved eligible cleaner, clear customer confirmation deadline and no misleading acceptance. |
