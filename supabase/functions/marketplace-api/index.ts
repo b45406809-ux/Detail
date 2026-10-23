@@ -467,6 +467,9 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'acceptBid': {
       const actor=authed(); const jobId=text(input.jobId,80), bidId=text(input.bidId,80), method=text(input.paymentMethod,20).toUpperCase(), key=requireKey(input.idempotencyKey);
       await enforceRateLimit(request,actor,'accept_bid',10,3600);
+      const {data:booking,error:bookingError}=await admin.from('jobs').select('customerid').eq('id',jobId).maybeSingle();
+      if(bookingError)throw bookingError;
+      if(!booking||booking.customerid!==actor)fail(403,'Only the customer can accept a quote.');
       const [{data:config},{data:operations}]=await Promise.all([admin.from('configuration').select('value').eq('key','beta').maybeSingle(),admin.from('configuration').select('value').eq('key','operations').maybeSingle()]);
       if(config?.value?.maintenanceMode||config?.value?.disablePayments||operations?.value?.switches?.maintenance===true||operations?.value?.switches?.payments===true||operations?.value?.switches?.bidAcceptance===true)fail(503,'PAYMENTS_DISABLED');
       const {data,error}=await admin.rpc('accept_bid',{p_actor_id:actor,p_job_id:jobId,p_bid_id:bidId,p_payment_method:method,p_idempotency_key:key});
