@@ -1095,25 +1095,38 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const {error:claimError}=await admin.from('marketingcampaigns').insert({id,subject,message,status:'SENDING',recipientcount:0,createdby:actor,data:{filters:{country:filterCountry,city:filterCity,serviceInterest:filterService,preferredLanguage:filterLanguage}}});
       if(claimError?.code==='23505')fail(409,'This campaign was already submitted. Refresh campaign history before retrying.');
       if(claimError)throw claimError;
-      let recipientQuery=admin.from('betawaitlist').select('*').eq('marketingemailpermission','YES').limit(100);
-      if(filterCountry)recipientQuery=recipientQuery.eq('country',filterCountry);
-      if(filterCity)recipientQuery=recipientQuery.eq('city',filterCity);
-      if(['HOUSE','CAR','BOTH'].includes(filterService))recipientQuery=recipientQuery.eq('serviceinterest',filterService);
-      if(filterLanguage)recipientQuery=recipientQuery.eq('preferredlanguage',filterLanguage);
-      const {data:recipients,error}=await recipientQuery;
-      if(error){await admin.from('marketingcampaigns').update({status:'FAILED'}).eq('id',id).eq('status','SENDING');throw error;}
       const escapeHtml=(value:string)=>value.replace(/[<>&"']/g,char=>{
         const entities:Record<string,string>={'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'};
         return entities[char]??char;
       });
-      const emails=(recipients??[]).map((r:Json)=>({from:'Detail <hello@detailapp.co.zw>',to:[r.email],subject,html:`<p>Hi ${escapeHtml(String(r.fullname||'there'))},</p><p>${escapeHtml(message).replace(/\r?\n/g,'<br>')}</p><hr><p><a href="${url}/functions/v1/marketing-unsubscribe?token=${encodeURIComponent(r.unsubscribetoken)}">Unsubscribe</a></p>`}));
-      if(emails.length) {
-        const result=await fetch('https://api.resend.com/emails/batch',{method:'POST',headers:{authorization:`Bearer ${apiKey}`,'content-type':'application/json'},body:JSON.stringify(emails)});
-        if(!result.ok){await admin.from('marketingcampaigns').update({status:'FAILED'}).eq('id',id).eq('status','SENDING');fail(502,'Email provider rejected the campaign.');}
+      let afterId:string|undefined,recipientCount=0,hasMore=true;
+      while(hasMore){
+        let recipientQuery=admin.from('betawaitlist').select('id,email,fullname,unsubscribetoken').eq('marketingemailpermission','YES').order('id',{ascending:true}).limit(100);
+        if(afterId)recipientQuery=recipientQuery.gt('id',afterId);
+        if(filterCountry)recipientQuery=recipientQuery.eq('country',filterCountry);
+        if(filterCity)recipientQuery=recipientQuery.eq('city',filterCity);
+        if(['HOUSE','CAR','BOTH'].includes(filterService))recipientQuery=recipientQuery.eq('serviceinterest',filterService);
+        if(filterLanguage)recipientQuery=recipientQuery.eq('preferredlanguage',filterLanguage);
+        const {data:recipients,error}=await recipientQuery;
+        if(error){await admin.from('marketingcampaigns').update({status:'FAILED',data:{filters:{country:filterCountry,city:filterCity,serviceInterest:filterService,preferredLanguage:filterLanguage},failure:'audience_query'}}).eq('id',id).eq('status','SENDING');throw error;}
+        if(!recipients?.length)break;
+        afterId=recipients[recipients.length-1].id;hasMore=recipients.length===100;
+        // Recheck current consent immediately before each provider batch so an
+        // unsubscribe during a long campaign suppresses the later batch.
+        const {data:consented,error:consentError}=await admin.from('betawaitlist').select('id,email,fullname,unsubscribetoken').in('id',recipients.map(row=>row.id)).eq('marketingemailpermission','YES');
+        if(consentError){await admin.from('marketingcampaigns').update({status:'FAILED'}).eq('id',id).eq('status','SENDING');throw consentError;}
+        const emails=(consented??[]).filter((row:Json)=>typeof row.email==='string'&&typeof row.unsubscribetoken==='string').map((row:Json)=>({from:'Detail <hello@detailapp.co.zw>',to:[row.email],subject,html:`<p>Hi ${escapeHtml(String(row.fullname||'there'))},</p><p>${escapeHtml(message).replace(/\r?\n/g,'<br>')}</p><hr><p><a href="${url}/functions/v1/marketing-unsubscribe?token=${encodeURIComponent(row.unsubscribetoken)}">Unsubscribe</a></p>`}));
+        if(emails.length){
+          const result=await fetch('https://api.resend.com/emails/batch',{method:'POST',headers:{authorization:`Bearer ${apiKey}`,'content-type':'application/json'},body:JSON.stringify(emails)});
+          if(!result.ok){await admin.from('marketingcampaigns').update({status:'FAILED',recipientcount:recipientCount}).eq('id',id).eq('status','SENDING');fail(502,'Email provider rejected a campaign batch. The accepted count is retained; review the provider before creating a new campaign.');}
+          recipientCount+=emails.length;
+          const {error:progressError}=await admin.from('marketingcampaigns').update({recipientcount:recipientCount}).eq('id',id).eq('status','SENDING');
+          if(progressError)throw new ApiError(503,'A campaign batch was accepted but progress could not be saved. The campaign is locked for operator reconciliation.');
+        }
       }
-      const {error:sentError}=await admin.from('marketingcampaigns').update({status:'SENT',recipientcount:emails.length}).eq('id',id).eq('status','SENDING');if(sentError)throw sentError;
-      await admin.from('adminauditevents').upsert({id:`campaign_${id}`,action:'marketing_campaign_sent',actorid:actor,targetid:id,reason:`Campaign: ${subject}`,data:{recipientCount:emails.length},immutable:true});
-      return {recipientCount:emails.length};
+      const {error:sentError}=await admin.from('marketingcampaigns').update({status:'SENT',recipientcount:recipientCount}).eq('id',id).eq('status','SENDING');if(sentError)throw sentError;
+      await admin.from('adminauditevents').upsert({id:`campaign_${id}`,action:'marketing_campaign_sent',actorid:actor,targetid:id,reason:`Campaign: ${subject}`,data:{recipientCount},immutable:true});
+      return {recipientCount};
     }
     case 'adminDirectory': {
       const actor=authed(); await requireAdmin(actor,'admins.manage');
