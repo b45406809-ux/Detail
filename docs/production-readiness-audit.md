@@ -870,9 +870,9 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Source:** [mobile/app/(tabs)/messages.tsx:113](<../mobile/app/(tabs)/messages.tsx#L113>); [mobile/services/supabase.ts:308](<../mobile/services/supabase.ts#L308>); [supabase/migrations/20261020005000_client_runtime_access.sql:14](<../supabase/migrations/20261020005000_client_runtime_access.sql#L14>)
 
-**Problem and impact.** writeBatch executes separate requests in a loop, despite the chat comment promising atomicity. A message can be written while its job summary/unread update fails. increment is a read-modify-write and can lose concurrent counts. Sending clears the draft before success and swallows errors. There is no active Supabase trigger/API outbox for new messages; the old Firebase onMessageCreated trigger is retired. Raw direct message inserts lack a bounded text/attachment schema or per-conversation rate limit.
+**Current implementation and remaining gap.** Direct message inserts are revoked. The `send_job_message` transaction verifies booking participation and attachment ownership, bounds text, writes the message, updates unread counters and enqueues a durable notification together. The mobile screen keeps the draft when sending fails, exposes retry/load states and paginates older messages. A per-message idempotency key and server-side per-conversation send limit are still missing, and recipient/deep-link behavior needs real-device verification.
 
-**Proposed fix.** Create one transactional send-message RPC with server time, bounded content, participant/state checks, atomic unread bookkeeping and a durable notification outbox. Keep failed drafts, expose retry and paginate message history.
+**Proposed fix.** Add idempotent send keys and server-side conversation limits to the existing transactional RPC, then complete role-safe notification routing and offline/relaunch recovery.
 
 **Acceptance check.** Send concurrent messages, drop connections after insert, use quick replies/photos and background the recipient; drafts/counters/messages/alerts stay consistent and duplicate sends are prevented.
 
