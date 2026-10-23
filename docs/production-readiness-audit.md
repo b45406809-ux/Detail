@@ -236,6 +236,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** Launch sign-in on both OSes with Google configured and absent; email/SMS/Apple remain usable and each OAuth round trip signs into the intended account.
 
+**Implementation status (2026-10-23).** Google provider setup now renders only in a child component when the current platform's client ID is configured, so a missing Google ID no longer invokes the SDK invariant during sign-in screen render. Email/SMS/Apple remain independently available. Signed native OAuth round trips still require device and provider-configuration checks.
+
 <a id="F06"></a>
 
 ### F06 — All native uploads use an unsupported Supabase Blob path
@@ -250,6 +252,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** Capture and upload JPEG/HEIC/PNG on real Android and iOS devices; byte length and MIME match, signed reads work, and completion remains recoverable after upload interruption.
 
+**Implementation status (2026-10-23).** Native uploads now send an `ArrayBuffer`, enforce a 15 MB limit and image MIME allowlist, and use insert-only writes for new job/chat objects; overwrite is limited to fixed profile/verification images. Mobile type-check and lint pass. Real camera/HEIC uploads, cancellation/progress and signed-device storage policy behavior remain unverified.
+
 <a id="F07"></a>
 
 ### F07 — Mapbox download secret appears in public Expo configuration
@@ -263,6 +267,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 **Proposed fix.** Use a local config plugin that reads the build-only environment variable internally and writes native build credentials without returning the secret in public app config. Ensure native credential files and build logs are protected. Rotate any real token found in shipped manifests/artifacts.
 
 **Acceptance check.** A canary downloads token appears nowhere in public config, JS bundles, updates manifests or distributable metadata, while native SDK download succeeds.
+
+**Implementation status (2026-10-23).** The private download token is read inside a local config plugin and is no longer serialized in public Expo config; only the intentionally public styles token is exposed. CI now runs a synthetic-canary public-config check. The check passed locally; signed build artifact inspection and real native SDK download remain outstanding.
 
 <a id="F08"></a>
 
