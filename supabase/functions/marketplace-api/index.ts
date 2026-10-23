@@ -751,15 +751,25 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const table:Record<string,string>={bookings:'jobs',customers:'users',cleaners:'users',payments:'payments',products:'productsales',analytics:'reportingaggregates',support:'supportcases',waitlist:'betawaitlist'};
       const target=table[module]; if(!target)fail(400,'Unknown dashboard module.');
       const pageSize=Math.min(100,Math.max(1,Number(input.pageSize??25)));
-      let q=admin.from(target).select('*').order('createdat',{ascending:false}).limit(pageSize+1);
+      let q=admin.from(target).select('*').order('createdat',{ascending:false}).order('id',{ascending:false}).limit(pageSize+1);
       if(module==='customers')q=q.eq('role','CUSTOMER'); if(module==='cleaners')q=q.eq('role','CLEANER');
       const filters=input.filters&&typeof input.filters==='object'?input.filters as Json:{};
-      const status=text(filters.Status,30).toUpperCase();if(status&&['ACTIVE','PENDING','COMPLETED','CANCELLED','OPEN','RESOLVED','FAILED','PAID','SUSPENDED'].includes(status))q=q.eq('status',status);
-      const service=text(filters.Service,60).toUpperCase();if(service&&module==='bookings')q=q.eq('category',service);
+      const status=text(filters.Status,30).toUpperCase();
+      const allowedStatuses:Record<string,string[]>={bookings:['PENDING','CONFIRMED','ASSIGNED','EN_ROUTE','IN_PROGRESS','COMPLETED','CANCELLED'],cleaners:['AVAILABLE','BUSY','OFFLINE'],payments:['INITIATING','PENDING','CAPTURED','AUTHORIZED','ESCROWED','DELIVERED','PAID','DISPUTED','FAILED','REFUNDED'],products:['PENDING','PAID','CANCELLED'],support:['OPEN','URGENT','IN_PROGRESS','RESOLVED','CLOSED'],waitlist:['PENDING','CONFIRMED','UNSUBSCRIBED']};
+      if(status&&allowedStatuses[module]?.includes(status))q=q.eq('status',status);
+      const service=text(filters.Service,60).toUpperCase();if(service==='HOUSE'||service==='CAR'){if(module==='bookings')q=q.eq('category',service);else if(module==='cleaners')q=q.contains('servicecategories',[service]);}
       const verification=text(filters.Verification,30).toUpperCase();if(verification&&module==='cleaners')q=q.eq('verificationstatus',verification);
-      const accountState=text(filters['Account state'],30).toUpperCase();if(accountState&&module==='customers')q=q.eq('isbanned',accountState==='SUSPENDED');
+      const cleanerState=text(filters.Status,30).toUpperCase();if(cleanerState&&module==='cleaners'&&['AVAILABLE','BUSY','OFFLINE'].includes(cleanerState))q=q.eq('status',cleanerState);
+      const accountState=text(filters['Account state'],30).toUpperCase();if(accountState==='SUSPENDED'&&module==='customers')q=q.or('isbanned.eq.true,issuspended.eq.true');else if(accountState==='ACTIVE'&&module==='customers')q=q.eq('isbanned',false).eq('issuspended',false);
       const paymentType=text(filters.Type,30).toUpperCase();if(paymentType&&module==='payments')q=q.eq('provider',paymentType);
-      const cursor=text(input.cursor,100); if(cursor){const {data:prior}=await admin.from(target).select('createdat').eq('id',cursor).maybeSingle();if(prior?.createdat)q=q.lt('createdat',prior.createdat);}
+      const coverage=text(filters.Coverage,100).replace(/[%,()]/g,' ').trim();if(coverage&&module==='cleaners')q=q.ilike('servicearea',`%${coverage}%`);
+      const owner=text(filters.Owner,80);if(owner&&module==='support'&&/^[0-9a-f-]{36}$/i.test(owner))q=q.eq('ownerid',owner);
+      const reason=text(filters.Reason,100).replace(/[%,()]/g,' ').trim();if(reason&&module==='support')q=q.ilike('reason',`%${reason}%`);
+      const cleaner=text(filters.Cleaner,80);if(cleaner&&module==='products'&&/^[0-9a-f-]{36}$/i.test(cleaner))q=q.eq('cleanerid',cleaner);
+      const product=text(filters.Product,80);if(product&&module==='products')q=q.eq('productid',product);
+      const period=text(filters.Period,10).toUpperCase();if(period&&module==='analytics'&&['7D','30D','12M'].includes(period))q=q.eq('period',period);
+      const dateRange=text(filters.Date,10).toUpperCase();const days=dateRange==='TODAY'?1:dateRange==='7D'?7:dateRange==='30D'?30:0;if(days)q=q.gte('createdat',new Date(Date.now()-days*86400000).toISOString());
+      const cursor=text(input.cursor,120); if(cursor){if(!/^[A-Za-z0-9_-]{1,120}$/.test(cursor))fail(400,'Invalid page cursor.');const {data:prior}=await admin.from(target).select('createdat').eq('id',cursor).maybeSingle();if(prior?.createdat)q=q.or(`createdat.lt.${prior.createdat},and(createdat.eq.${prior.createdat},id.lt.${cursor})`);}
       if(input.search){const clean=text(input.search,100).replace(/[%,()]/g,' ').replace(/\s+/g,' ').trim();const term=`%${clean}%`;if(module==='waitlist')q=q.or(`email.ilike.${term},fullname.ilike.${term},phone.ilike.${term}`);else if(module==='customers'||module==='cleaners')q=q.or(`email.ilike.${term},displayname.ilike.${term},phone.ilike.${term}`);else if(module==='bookings')q=q.or(`id.ilike.${term},customername.ilike.${term},cleanername.ilike.${term}`);else if(module==='support')q=q.or(`id.ilike.${term},reason.ilike.${term}`);else if(module==='payments')q=q.or(`id.ilike.${term},reference.ilike.${term}`);}
       const {data,error}=await q; if(error)throw error;
       const rows=(data??[]).slice(0,pageSize).map((row:Json)=>{
