@@ -912,6 +912,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Proposed fix.** Define a strict allowlist/discriminated command schema, reject unsupported commands and make operation plus audit transactional. Render only capabilities backed by implemented workflows; build missing operational tools deliberately.
 
+**Implementation status (2026-10-23).** The API now rejects actions outside an explicit allowlist with HTTP 400, and the dashboard capability metadata now lists only workflows that have row-level controls. The operation and audit write are still not one transaction for every action; this finding remains open until durable atomicity/recovery is implemented and verified.
+
 **Acceptance check.** Unknown/unimplemented actions return a clear 4xx with no success audit; every advertised action either completes its intended change or is visibly unavailable.
 
 <a id="F55"></a>
