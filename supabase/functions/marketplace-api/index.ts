@@ -940,13 +940,14 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const paymentRefunds=new Map<string,{confirmed:number;latest?:Json}>();
       if(module==='payments'&&page.length){const ids=page.map((row:Json)=>row.id);const {data:refundRows,error:refundError}=await admin.from('paynowrefundtransactions').select('paymentid,amount,status,providerreference,createdat').in('paymentid',ids).order('createdat',{ascending:false});if(refundError)throw refundError;for(const refund of refundRows??[]){const entry=paymentRefunds.get(refund.paymentid)??{confirmed:0};if(refund.status==='CONFIRMED')entry.confirmed+=Number(refund.amount)||0;if(!entry.latest)entry.latest=refund;paymentRefunds.set(refund.paymentid,entry);}}
       const supportContext=new Map<string,Json>();
+      const profileMap=new Map<string,Json>();
       if(module==='support'&&page.length){
         const profileIds=[...new Set(page.flatMap((row:Json)=>[row.customerid,row.cleanerid,row.ownerid,row.data?.reporterId,...(Array.isArray(row.data?.assignmentHistory)?row.data.assignmentHistory.map((entry:Json)=>entry.assignee):[])]).filter((id:unknown):id is string=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id)))];
         const jobIds=[...new Set(page.map((row:Json)=>row.jobid).filter((id:unknown):id is string=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id)))];
         let profiles:Json[]=[];let jobs:Json[]=[];
         if(profileIds.length){const result=await admin.from('users').select('id,displayname,email,phone').in('id',profileIds);if(result.error)throw result.error;profiles=result.data??[];}
         if(jobIds.length){const result=await admin.from('jobs').select('id,status,paymentstatus,paymentmethod,scheduleddatetime').in('id',jobIds);if(result.error)throw result.error;jobs=result.data??[];}
-        const profileMap=new Map(profiles.map(profile=>[profile.id,profile]));const jobMap=new Map(jobs.map(job=>[job.id,job]));
+        profiles.forEach(profile=>profileMap.set(profile.id,profile));const jobMap=new Map(jobs.map(job=>[job.id,job]));
         for(const row of page){
           const customer=profileMap.get(row.customerid),cleanerProfile=profileMap.get(row.cleanerid),reporter=profileMap.get(row.data?.reporterId),job=jobMap.get(row.jobid);
           supportContext.set(row.id,{customer,cleaner:cleanerProfile,reporter,job});
