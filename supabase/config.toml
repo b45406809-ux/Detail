@@ -47,6 +47,9 @@ verify_jwt = false
 [functions.delivery-worker]
 verify_jwt = false
 
+[functions.twilio-status]
+verify_jwt = false
+
 [functions.paynow-webhook]
 verify_jwt = false
 

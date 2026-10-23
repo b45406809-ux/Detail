@@ -24,6 +24,7 @@ async function deliver(row:Record<string,any>){
       const service=Deno.env.get('TWILIO_MESSAGING_SERVICE_SID')??'',from=Deno.env.get('TWILIO_FROM_NUMBER')??'';
       if(!sid||!token||(!service&&!from))throw new Error('Twilio SMS credentials are not configured.');
       const form=new URLSearchParams({To:row.destination,Body:String(row.payload?.body??'')});if(service)form.set('MessagingServiceSid',service);else form.set('From',from);
+      form.set('StatusCallback',`${url.replace(/\/$/,'')}/functions/v1/twilio-status`);
       const response=await fetch(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(sid)}/Messages.json`,{method:'POST',headers:{authorization:`Basic ${btoa(`${sid}:${token}`)}`,'content-type':'application/x-www-form-urlencoded'},body:form.toString()});
       const result=await response.json().catch(()=>null);if(!response.ok)throw new Error(String(result?.message??`Twilio returned ${response.status}`));
       await admin.rpc('finish_notification_delivery',{p_id:row.id,p_success:true,p_error:null,p_receipt_id:result?.sid??null});return;
@@ -37,7 +38,7 @@ async function deliver(row:Record<string,any>){
 
 async function pollExpoReceipts(){
   const cutoff=new Date(Date.now()-5*60*1000).toISOString();
-  const {data,error}=await admin.from('notificationdeliveries').select('id,userid,destination,providerreceiptid').eq('provider','EXPO').eq('status','DELIVERED').not('providerreceiptid','is',null).is('receiptcheckedat',null).lt('createdat',cutoff).limit(300);
+  const {data,error}=await admin.from('notificationdeliveries').select('id,userid,destination,providerreceiptid').eq('provider','EXPO').eq('status','ACCEPTED').not('providerreceiptid','is',null).is('receiptcheckedat',null).lt('createdat',cutoff).limit(300);
   if(error||!data?.length)return;
   for(let index=0;index<data.length;index+=100){
     const batch=data.slice(index,index+100);const response=await fetch('https://exp.host/--/api/v2/push/getReceipts',{method:'POST',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify({ids:batch.map(item=>item.providerreceiptid)})});
@@ -45,7 +46,7 @@ async function pollExpoReceipts(){
     for(const item of batch){
       const receipt=receipts[item.providerreceiptid];if(!receipt)continue;
       const receiptError=receipt.status==='error'?String(receipt.message??receipt.details?.error??'Expo push receipt error'):null;
-      await admin.from('notificationdeliveries').update({receiptcheckedat:new Date().toISOString(),lastError:receiptError}).eq('id',item.id);
+      await admin.from('notificationdeliveries').update({status:receiptError?'FAILED':'ACCEPTED',providerstatus:receiptError?'RECEIPT_ERROR':'ACCEPTED',receiptcheckedat:new Date().toISOString(),lastError:receiptError}).eq('id',item.id);
       if(receipt.details?.error==='DeviceNotRegistered')await admin.from('userpushdevices').delete().eq('userid',item.userid).eq('expopushtoken',item.destination);
     }
   }
