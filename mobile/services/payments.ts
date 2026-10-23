@@ -1,4 +1,6 @@
 import * as WebBrowser from 'expo-web-browser';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 import { auth } from './supabase';
 import { callFunction } from './functions';
 
@@ -21,12 +23,25 @@ export interface PaymentResult {
 export async function addFundsToWallet(amountUSD: number): Promise<PaymentResult> {
   const user = auth.currentUser;
   if (!user) throw new Error('Not authenticated');
-  const idempotencyKey = `topup-${user.uid}-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  const storageKey = `detail:topup-intent:${user.uid}`;
+  const signature = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, String(Math.round(amountUSD * 100)));
+  let idempotencyKey = '';
+  try {
+    const saved = JSON.parse((await AsyncStorage.getItem(storageKey)) ?? 'null') as { signature?: string; key?: string } | null;
+    if (saved?.signature === signature && typeof saved.key === 'string') idempotencyKey = saved.key;
+  } catch { /* replace a corrupt retry record */ }
+  if (!idempotencyKey) {
+    idempotencyKey = Crypto.randomUUID();
+    await AsyncStorage.setItem(storageKey, JSON.stringify({ signature, key: idempotencyKey }));
+  }
 
   const data = await callFunction<
     { amount: number; currency: string; idempotencyKey: string },
     { redirectUrl: string; referenceNumber: string }
   >('createPaynowWalletTopup', { amount: amountUSD, currency: 'USD', idempotencyKey });
+  // Keep the key through network failures. Once the server confirms checkout
+  // creation, a later deliberate top-up should create a new payment attempt.
+  await AsyncStorage.removeItem(storageKey);
 
   await WebBrowser.openBrowserAsync(data.redirectUrl, {
     presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET,
