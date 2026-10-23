@@ -94,6 +94,13 @@ async function processPayment(payment: Record<string, any>) {
   if (data?.status === 'FAILED') {
     throw new Error('Paynow status was retained for reconciliation but could not be applied.');
   }
+  if (data?.status === 'IGNORED') {
+    const { error: eventError } = await admin.from('paynowproviderevents')
+      .update({ processingstatus: 'FAILED', lasterror: 'Paynow returned an unsupported payment status.' })
+      .eq('eventid', eventId);
+    if (eventError) console.error('Could not retain unsupported Paynow status', String(eventError));
+    throw new Error('Paynow returned an unsupported payment status.');
+  }
   if (data?.replayed) return { status: data.status, replayed: true };
 
   try {
