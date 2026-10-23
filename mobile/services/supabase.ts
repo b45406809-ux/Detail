@@ -34,8 +34,8 @@ function compatUser(user: SupabaseUser | null): SupabaseCompatUser | null {
     displayName: typeof profile.displayName === 'string' ? profile.displayName : undefined,
     photoURL: typeof profile.avatar_url === 'string' ? profile.avatar_url : undefined,
     _user: user,
-    getIdToken: async () => {
-      const { data, error } = await supabase.auth.getSession();
+    getIdToken: async (forceRefresh = false) => {
+      const { data, error } = forceRefresh ? await supabase.auth.refreshSession() : await supabase.auth.getSession();
       if (error || !data.session) throw error ?? new Error('Sign in required.');
       return data.session.access_token;
     },
@@ -44,7 +44,11 @@ function compatUser(user: SupabaseUser | null): SupabaseCompatUser | null {
       if (error || !data.session) throw error ?? new Error('Sign in required.');
       return { claims: { ...data.session.user.app_metadata, ...data.session.user.user_metadata } };
     },
-    reload: async () => { await supabase.auth.getUser(); },
+    reload: async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) throw error;
+      currentAuthUser = data.user;
+    },
   };
 }
 

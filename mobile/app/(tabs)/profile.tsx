@@ -26,6 +26,7 @@ import {
   Repeat,
   Camera,
   Building2,
+  Mail,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
@@ -175,6 +176,12 @@ export default function ProfileScreen() {
     {
       group: 'Account',
       items: [
+        {
+          icon: Mail,
+          label: profile?.email ? 'Email address' : 'Add verified email',
+          sub: profile?.email ? 'Manage your sign-in and payment contact' : 'Required for cleaner registration and Paynow payments',
+          onPress: () => router.push('/account/email'),
+        },
         {
           icon: History,
           label: 'Service History',

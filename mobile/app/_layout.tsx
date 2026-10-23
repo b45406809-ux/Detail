@@ -123,6 +123,7 @@ export default function RootLayout() {
             <Stack.Screen name="cleaner-agreement" />
             <Stack.Screen name="customer-agreement" />
             <Stack.Screen name="register-cleaner" />
+            <Stack.Screen name="account/email" />
             <Stack.Screen name="+not-found" />
           </Stack>
         </AuthProvider>
