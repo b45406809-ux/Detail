@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { Stack, router, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Pressable, Text, View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
 import * as Notifications from 'expo-notifications';
@@ -17,11 +18,11 @@ import { handleAuthCallback, supabase } from '../services/supabase';
 SplashScreen.preventAutoHideAsync();
 
 function AuthGuard() {
-  const { user, profile, isLoading } = useAuth();
+  const { user, profile, isLoading, profileError, refreshProfile } = useAuth();
   const segments = useSegments();
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || profileError) return;
 
     const inAuthGroup = segments[0] === '(auth)';
     const currentScreen = String((segments as string[])[0] === '(auth)' ? (segments as string[])[1] || '' : (segments as string[])[0] || '');
@@ -37,7 +38,9 @@ function AuthGuard() {
       else if (profile?.role === 'CLEANER' && profile.verificationStatus === 'VERIFIED' && profile.cleanerOnboardingComplete && !profile.cleanerAgreementAccepted) router.replace('/cleaner-agreement');
       else if (inAuthGroup && currentScreen !== 'customer-agreement') router.replace('/home');
     }
-  }, [user, profile, isLoading, segments]);
+  }, [user, profile, isLoading, profileError, segments]);
+
+  if (profileError && user) return <View className="flex-1 items-center justify-center bg-white px-8"><Text className="text-center text-base font-sans text-ink mb-5">{profileError}</Text><Pressable accessibilityRole="button" onPress={() => void refreshProfile().catch(() => undefined)} className="rounded-2xl bg-accent px-6 py-4"><Text className="font-display font-bold text-white">Try again</Text></Pressable></View>;
 
   return null;
 }

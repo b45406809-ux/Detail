@@ -19,6 +19,7 @@ interface AuthContextValue {
   user: SupabaseCompatUser | null;
   profile: UserProfile | null;
   isLoading: boolean;
+  profileError: string | null;
   refreshProfile: () => Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => Promise<void>;
 }
@@ -27,6 +28,7 @@ const AuthContext = createContext<AuthContextValue>({
   user: null,
   profile: null,
   isLoading: true,
+  profileError: null,
   refreshProfile: async () => {},
   updateProfile: async () => {},
 });
@@ -35,6 +37,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SupabaseCompatUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [listenerRevision, setListenerRevision] = useState(0);
   const userId = user?.uid;
 
   useEffect(() => {
@@ -52,6 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubAuth = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
       setProfile(null);
+      setProfileError(null);
       setIsLoading(true);
       unsubProfile?.();
       unsubProfile = null;
@@ -61,6 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         unsubProfile = onSnapshot(
           doc(db, 'users', firebaseUser.uid),
           (snap) => {
+            setProfileError(null);
             setProfile(snap.exists() ? (snap.data() as UserProfile) : null);
             if (firstLoad) {
               firstLoad = false;
@@ -69,6 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           },
           (err) => {
             console.error('Profile listener error:', err);
+            setProfileError('We could not load your account details. Check your connection and try again.');
             if (firstLoad) {
               firstLoad = false;
               setIsLoading(false);
@@ -85,12 +92,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       unsubAuth();
       unsubProfile?.();
     };
-  }, []);
+  }, [listenerRevision]);
 
   const refreshProfile = useCallback(async () => {
     if (!user) { setProfile(null); return; }
-    const snapshot = await getDoc(doc(db, 'users', user.uid));
-    setProfile(snapshot.exists() ? snapshot.data() as UserProfile : null);
+    setProfileError(null);
+    setIsLoading(true);
+    setListenerRevision((revision) => revision + 1);
+    try {
+      const snapshot = await getDoc(doc(db, 'users', user.uid));
+      setProfile(snapshot.exists() ? snapshot.data() as UserProfile : null);
+      setIsLoading(false);
+    } catch (error) {
+      setProfileError('We could not load your account details. Check your connection and try again.');
+      setIsLoading(false);
+      throw error;
+    }
   }, [user]);
 
   const updateProfile = useCallback(
@@ -103,7 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <AuthContext.Provider value={{ user, profile, isLoading, refreshProfile, updateProfile }}>
+    <AuthContext.Provider value={{ user, profile, isLoading, profileError, refreshProfile, updateProfile }}>
       {children}
     </AuthContext.Provider>
   );

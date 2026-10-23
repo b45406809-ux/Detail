@@ -464,7 +464,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Source:** [mobile/services/supabase.ts:47](<../mobile/services/supabase.ts#L47>); [mobile/services/supabase.ts:37](<../mobile/services/supabase.ts#L37>); [mobile/context/AuthContext.tsx:76](<../mobile/context/AuthContext.tsx#L76>)
 
-**Current implementation and remaining gap.** `compatUser.reload` now stores the authoritative `getUser()` result, `getIdToken(true)` refreshes the Supabase session, and `AuthContext.refreshProfile` fetches and stores the latest database profile. Auth changes clear the previous profile before attaching the next user's listener. Remaining work is to expose retryable profile-listener errors in the UI and test email confirmation/account switching under network failure; listener errors currently only reach the console.
+**Current implementation and remaining gap.** `compatUser.reload` stores the authoritative `getUser()` result, `getIdToken(true)` refreshes the Supabase session, and `AuthContext.refreshProfile` fetches and stores the latest database profile. Auth changes clear the previous profile before attaching the next user's listener. Profile-listener failures now stop route guards from treating a failed read as a missing profile and show a retry action that reattaches the listener. Email confirmation/account switching still need device testing under network failure.
 
 **Proposed fix.** Use native Supabase auth/session APIs and explicit profile refetches, update state from authoritative returned data, clear profile on user changes and expose retryable loading/error states.
 
