@@ -6,7 +6,7 @@ export async function sendEmailLoginCode(email: string, intent: 'SIGN_IN' | 'REG
     await new Promise((resolve) => setTimeout(resolve, 500));
     return;
   }
-  const { error } = await supabase.auth.signInWithOtp({ email: email.trim().toLowerCase(), options: { shouldCreateUser: intent === 'REGISTER', data: intent === 'REGISTER' ? { termsAccepted } : undefined } });
+  const { error } = await supabase.auth.signInWithOtp({ email: email.trim().toLowerCase(), options: { shouldCreateUser: intent === 'REGISTER', emailRedirectTo: 'detail://auth/callback', data: intent === 'REGISTER' ? { termsAccepted } : undefined } });
   if (error) throw error;
 }
 

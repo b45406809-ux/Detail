@@ -82,8 +82,8 @@ export async function signInWithEmailAndPassword(_auth: typeof auth, email: stri
   if (error) throw error;
   return { user: compatUser(data.user)! };
 }
-export async function createUserWithEmailAndPassword(_auth: typeof auth, email: string, password: string, options: { data?: Record<string, unknown> } = {}) {
-  const { data, error } = await supabase.auth.signUp({ email: email.trim().toLowerCase(), password, options });
+export async function createUserWithEmailAndPassword(_auth: typeof auth, email: string, password: string, options: { data?: Record<string, unknown>; emailRedirectTo?: string } = {}) {
+  const { data, error } = await supabase.auth.signUp({ email: email.trim().toLowerCase(), password, options: { ...options, emailRedirectTo: options.emailRedirectTo ?? 'detail://auth/callback' } });
   if (error) throw error;
   if (!data.user) throw new Error('Account creation did not return a user.');
   return { user: compatUser(data.user)! };
