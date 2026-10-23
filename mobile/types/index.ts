@@ -158,6 +158,16 @@ export interface Job {
   customerResponseAt?: any;
   matchExpiresAt?: any;
   instantMatchingExpired?: boolean;
+  rescheduleProposal?: {
+    id: string;
+    proposedBy: string;
+    recipientId: string;
+    proposedAt: string;
+    expiresAt: string;
+    previousDateTime?: string | null;
+    proposedDateTime: string;
+    status: 'PENDING'|'ACCEPTED'|'DECLINED';
+  };
   createdAt?: any;
   /** When the job stops accepting new bids — 30 min from creation, extended
    * by another 30 min each time the customer raises the budget. */
@@ -270,6 +280,8 @@ export type NotificationType =
   | 'COMPLETED'
   | 'CANCELLED'
   | 'RESCHEDULED'
+  | 'RESCHEDULE_REQUEST'
+  | 'RESCHEDULE_DECLINED'
   | 'PAYMENT_ESCROWED'
   | 'PAYMENT_DELIVERED'
   | 'PAYMENT_DISPUTED'

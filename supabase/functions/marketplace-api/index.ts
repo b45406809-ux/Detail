@@ -434,13 +434,19 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     }
     case 'rescheduleBooking': {
       const actor=authed(),jobId=text(input.jobId,80),scheduledDateTime=text(input.scheduledDateTime,80),key=requireKey(input.idempotencyKey),nextAt=Date.parse(scheduledDateTime);
-      if(!Number.isFinite(nextAt)||nextAt<Date.now()+2*60*60*1000)fail(400,'Choose a date at least two hours from now.');
+      if(!Number.isFinite(nextAt)||nextAt<Date.now()+2*60*60*1000||nextAt>Date.now()+180*24*60*60*1000)fail(400,'Choose a date at least two hours from now and within the next 180 days.');
       const {data:job,error}=await admin.from('jobs').select('*').eq('id',jobId).maybeSingle();if(error)throw error;
       if(!job||![job.customerid,job.cleanerid].includes(actor))fail(403,'Only a booking participant can reschedule.');
       if(!['PENDING','CONFIRMED','ASSIGNED'].includes(job.status)||Number.isFinite(Date.parse(job.scheduleddatetime??''))&&Date.parse(job.scheduleddatetime)<Date.now()+2*60*60*1000)fail(409,'This booking is too close to its start time or has already begun. Contact support for help.');
-      const iso=new Date(nextAt).toISOString();const {data:rescheduled,error:rescheduleError}=await admin.rpc('reschedule_booking',{p_job_id:jobId,p_actor_id:actor,p_scheduled_at:iso,p_idempotency_key:key});if(rescheduleError)throw rescheduleError;
-      const recipient=job.customerid===actor?job.cleanerid:job.customerid;if(recipient)await notify(recipient,{type:'RESCHEDULED',title:'Booking time changed',body:'The other participant changed the booking time. Open Detail to review it.',jobId});
-      return {success:true,scheduledDateTime:rescheduled};
+      const iso=new Date(nextAt).toISOString();const {data:proposal,error:proposalError}=await admin.rpc('propose_booking_reschedule',{p_job_id:jobId,p_actor_id:actor,p_scheduled_at:iso,p_idempotency_key:key});if(proposalError)throw proposalError;
+      return {success:true,proposalId:proposal.id,proposedDateTime:proposal.proposedDateTime,expiresAt:proposal.expiresAt};
+    }
+    case 'respondRescheduleProposal': {
+      const actor=authed(),jobId=text(input.jobId,80),key=requireKey(input.idempotencyKey);
+      if(typeof input.accept!=='boolean')fail(400,'Choose whether to accept the proposed booking time.');
+      const {data,error}=await admin.rpc('respond_booking_reschedule',{p_job_id:jobId,p_actor_id:actor,p_accept:input.accept,p_idempotency_key:key});
+      if(error)throw error;
+      return {success:true,...data};
     }
     case 'completeBooking': {
       const actor = authed(); const jobId = text(input.jobId,80); const key = requireKey(input.idempotencyKey);

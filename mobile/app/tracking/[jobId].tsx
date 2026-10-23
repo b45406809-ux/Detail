@@ -114,6 +114,7 @@ export default function TrackingScreen() {
 
   const isCustomer = profile?.role === 'CUSTOMER';
   const isCleaner = profile?.role === 'CLEANER';
+  const rescheduleProposal = job?.rescheduleProposal;
 
   useEffect(()=>{
     let active=true;
@@ -315,9 +316,26 @@ export default function TrackingScreen() {
     try {
       await callFunction('rescheduleBooking', { jobId, scheduledDateTime: rescheduleDate.toISOString(), idempotencyKey: `reschedule-${jobId}-${rescheduleDate.toISOString()}` });
       setShowRescheduleModal(false);
-      Alert.alert('Booking updated', `The new time is ${rescheduleDate.toLocaleString()}. The other participant has been notified.`);
+      Alert.alert('Request sent', `The other participant must accept ${rescheduleDate.toLocaleString()} before the booking time changes.`);
     } catch (error: any) { Alert.alert('Could not reschedule', error.message || 'Please try again.'); }
     finally { setIsSubmitting(false); }
+  };
+
+  const respondToReschedule = async (accept: boolean) => {
+    if (!jobId || !rescheduleProposal) return;
+    setIsSubmitting(true);
+    try {
+      await callFunction<{jobId:string;accept:boolean;idempotencyKey:string}, {status:string}>('respondRescheduleProposal', {
+        jobId,
+        accept,
+        idempotencyKey: `reschedule-response-${rescheduleProposal.id}-${accept?'accept':'decline'}`,
+      });
+      Alert.alert(accept ? 'Time updated' : 'Proposal declined', accept ? 'Both participants agreed to the new booking time.' : 'The existing booking time remains in place.');
+    } catch (error: any) {
+      Alert.alert('Could not respond', error?.message || 'Refresh the booking and try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCleanerStatusUpdate = async () => {
@@ -661,6 +679,7 @@ export default function TrackingScreen() {
         )}
         {isCustomer&&job.bookingMode==='INSTANT'&&job.status==='PENDING'&&<View className="bg-white rounded-2xl border border-accent/20 p-4 mb-4"><Text className="font-display font-black text-ink">{instantCleanerAccepted?'A cleaner accepted your request':'Finding a nearby cleaner'}</Text><Text className="font-sans text-xs text-ink/50 mt-1">Only verified cleaners who are online and within their travel radius receive your request. You will review the price and payment before the booking is confirmed.</Text>{instantCleanerAccepted&&<TouchableOpacity onPress={()=>router.push({pathname:'/booking/offers',params:{jobId:job.id}})} className="mt-3 rounded-xl bg-accent px-4 py-3 items-center"><Text className="font-display font-black text-white">Review cleaner and choose payment</Text></TouchableOpacity>}{job.matchExpiresAt&&Date.parse(job.matchExpiresAt)<=Date.now()&&!instantCleanerAccepted&&<Text className="font-sans text-xs text-rose-600 mt-2">No cleaner has accepted yet. You can cancel this request and create a scheduled booking.</Text>}</View>}
         {isCustomer&&job.bookingMode==='INSTANT'&&job.status==='CANCELLED'&&job.instantMatchingExpired&&<View className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4"><Text className="font-display font-black text-amber-900">This instant request has expired</Text><Text className="font-sans text-xs text-amber-800 mt-1">No cleaner accepted in time, or the accepted offer was not confirmed. Create a new booking to try again.</Text><TouchableOpacity onPress={()=>router.replace('/booking/create')} className="mt-3 rounded-xl bg-accent px-4 py-3 items-center"><Text className="font-display font-black text-white">Create another booking</Text></TouchableOpacity></View>}
+        {rescheduleProposal&&<View className="bg-violet-50 border border-violet-200 rounded-2xl p-4 mb-4"><Text className="font-display font-black text-violet-950">Proposed booking time</Text><Text className="font-sans text-sm text-violet-900 mt-1">{new Date(rescheduleProposal.proposedDateTime).toLocaleString()}</Text>{rescheduleProposal.status==='PENDING'&&Date.parse(rescheduleProposal.expiresAt)>Date.now()?user?.uid===rescheduleProposal.recipientId?<><Text className="font-sans text-xs text-violet-800 mt-2">The other participant proposed this change. The existing time stays in place until you respond.</Text><View className="flex-row gap-3 mt-3"><TouchableOpacity disabled={isSubmitting} onPress={()=>respondToReschedule(false)} className="flex-1 rounded-xl bg-white border border-violet-200 p-3 items-center"><Text className="font-display font-black text-violet-900">Decline</Text></TouchableOpacity><TouchableOpacity disabled={isSubmitting} onPress={()=>respondToReschedule(true)} className="flex-1 rounded-xl bg-accent p-3 items-center"><Text className="font-display font-black text-white">Accept new time</Text></TouchableOpacity></View></>:<Text className="font-sans text-xs text-violet-800 mt-2">Waiting for the other participant to respond. The current time is still confirmed.</Text>:rescheduleProposal.status==='ACCEPTED'?<Text className="font-sans text-xs text-emerald-800 mt-2">Accepted. The booking time has been updated.</Text>:<Text className="font-sans text-xs text-slate-600 mt-2">{rescheduleProposal.status==='DECLINED'?'Declined. The original time remains in place.':'This proposal expired. The original time remains in place.'}</Text>}</View>}
         {isCustomer&&job.customerResponseAt&&<Text className="font-sans text-xs text-ink/50 mb-4">Your completion response has been recorded.</Text>}
         {isCustomer && etaMinutes != null && (
           <View className="flex-row items-center justify-between mb-4">

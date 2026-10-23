@@ -22,6 +22,8 @@ const TYPE_ICON: Partial<Record<NotificationType, any>> = {
   COMPLETED: Info,
   CANCELLED: Info,
   RESCHEDULED: Info,
+  RESCHEDULE_REQUEST: Info,
+  RESCHEDULE_DECLINED: Info,
   MESSAGE: MessageSquare,
   PAYMENT: DollarSign,
   PAYMENT_ESCROWED: DollarSign,
