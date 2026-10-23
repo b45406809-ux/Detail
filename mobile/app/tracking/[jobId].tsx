@@ -88,6 +88,8 @@ export default function TrackingScreen() {
   const { jobId } = useLocalSearchParams<{ jobId: string }>();
   const { user, profile } = useAuth();
   const [job, setJob] = useState<Job | null>(null);
+  const [jobLoadState, setJobLoadState] = useState<'LOADING' | 'READY' | 'MISSING' | 'ERROR'>('LOADING');
+  const [jobLoadAttempt, setJobLoadAttempt] = useState(0);
   const [step, setStep] = useState<TrackingStep>('TRACKING');
   const [rating, setRating] = useState(0);
   const [problemDescription, setProblemDescription] = useState('');
@@ -174,20 +176,32 @@ export default function TrackingScreen() {
 
   useEffect(() => {
     if (!jobId) return;
-    return onSnapshot(
+    let active = true;
+    setJobLoadState('LOADING');
+    const unsubscribe = onSnapshot(
       doc(db, 'jobs', jobId),
       (snap) => {
+        if (!active) return;
         if (snap.exists()) {
           const data = { id: snap.id, ...snap.data() } as Job;
           setJob(data);
+          setJobLoadState('READY');
           if (data.status === JobStatus.COMPLETED && step === 'TRACKING') {
             setStep(isCustomer ? 'PAYMENT' : 'RATING');
           }
+        } else {
+          setJob(null);
+          setJobLoadState('MISSING');
         }
       },
-      (err) => console.error('Job listener error:', err)
+      (err) => {
+        if (!active) return;
+        console.error('Job listener error:', err);
+        setJobLoadState('ERROR');
+      }
     );
-  }, [jobId, isCustomer, step]);
+    return () => { active = false; unsubscribe(); };
+  }, [jobId, isCustomer, step, jobLoadAttempt]);
 
   useEffect(() => {
     if (['WALLET', 'CASH', 'ECOCASH', 'INNBUCKS'].includes(String(job?.paymentMethod))) setSelectedPayment(job!.paymentMethod as any);
@@ -426,8 +440,17 @@ export default function TrackingScreen() {
 
   if (!job) {
     return (
-      <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator color="#3906D2" size="large" />
+      <View className="flex-1 items-center justify-center bg-white px-8">
+        {jobLoadState === 'LOADING' ? <ActivityIndicator color="#3906D2" size="large" /> : <>
+          <Text className="font-display font-black text-ink text-lg text-center">{jobLoadState === 'MISSING' ? 'Booking unavailable' : 'Could not load booking'}</Text>
+          <Text className="font-sans text-ink/60 text-center mt-2">{jobLoadState === 'MISSING' ? 'This booking may have been removed or you may not have access.' : 'Check your connection and try again.'}</Text>
+          <TouchableOpacity accessibilityRole="button" onPress={() => { setJobLoadState('LOADING'); setJobLoadAttempt(value => value + 1); }} className="mt-5 rounded-xl bg-accent px-5 py-3">
+            <Text className="font-display font-bold text-white">Try again</Text>
+          </TouchableOpacity>
+          <TouchableOpacity accessibilityRole="button" onPress={() => router.back()} className="mt-3 px-5 py-3">
+            <Text className="font-display font-bold text-accent">Go back</Text>
+          </TouchableOpacity>
+        </>}
       </View>
     );
   }
