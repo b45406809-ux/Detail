@@ -11,7 +11,18 @@ export function Waitlist() {
   const [filters,setFilters]=useState({country:'',city:'',serviceInterest:'',preferredLanguage:''});
   const load=(next?:string)=>{setLoading(true);setError('');waitlistAdminCall<WaitlistResult>(`/api/admin/waitlist?limit=50${next?`&cursor=${encodeURIComponent(next)}`:''}`).then(data=>{setResult(data);setCursor(next)}).catch(e=>setError(e.message)).finally(()=>setLoading(false));};
   useEffect(()=>load(),[]);
-  const download=()=>{const columns=['participantType','fullName','phone','email','country','city','area','preferredLanguage','serviceInterest','marketingEmailPermission','status','createdAt'] as const;const csv=[columns.join(','),...result.rows.map(row=>columns.map(key=>`"${String(row[key]??'').replaceAll('"','""')}"`).join(','))].join('\n');const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));link.download=`detail-waitlist-${new Date().toISOString().slice(0,10)}.csv`;link.click();URL.revokeObjectURL(link.href)};
+  const download=()=>{
+    const columns=['participantType','fullName','phone','email','country','city','area','preferredLanguage','serviceInterest','marketingEmailPermission','status','createdAt'] as const;
+    const cell=(value:unknown)=>{
+      let safe=String(value??'');
+      if(/^[\s\u0000-\u001f]*[=+\-@]/.test(safe))safe=`'${safe}`;
+      return `"${safe.replaceAll('"','""')}"`;
+    };
+    const csv=[columns.map(cell).join(','),...result.rows.map(row=>columns.map(key=>cell(row[key])).join(','))].join('\r\n');
+    const url=URL.createObjectURL(new Blob([`\uFEFF${csv}`],{type:'text/csv;charset=utf-8'}));
+    const link=document.createElement('a');link.href=url;link.download=`detail-waitlist-${new Date().toISOString().slice(0,10)}.csv`;link.click();
+    window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+  };
   const send=async()=>{if(!subject.trim()||!message.trim())return setError('Enter a campaign subject and message.');if(!confirm('Send this campaign only to waitlist members who explicitly selected Yes to marketing email?'))return;setSending(true);setError('');setSent('');try{const response=await waitlistAdminCall<{recipientCount:number}>('/api/admin/campaign',{method:'POST',body:{subject,message,filters,idempotencyKey:crypto.randomUUID()}});setSent(`Campaign sent to ${response.recipientCount} opted-in recipient${response.recipientCount===1?'':'s'}.`);setSubject('');setMessage('')}catch(e:any){setError(e.message)}finally{setSending(false)}};
   return <section><header className="module-header"><div><h1>Waitlist & Email</h1><p>Contact preferences, service demand and consent-safe marketing</p></div><button onClick={()=>load(cursor)}><RefreshCw size={16}/> Refresh</button></header>
     <article className="panel consent-note"><ShieldCheck size={20}/><div><b>Consent enforced server-side</b><p>Campaigns are sent only to records whose latest marketing choice is Yes. Each message includes an unsubscribe link and every send is audited.</p></div></article>
