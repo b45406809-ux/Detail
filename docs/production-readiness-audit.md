@@ -552,6 +552,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Proposed fix.** Use explicit matching/awaiting-customer/expired states, transactional creation plus dispatch outbox, and scheduled recovery that releases offers and safely closes or reschedules abandoned requests. Let users convert to a scheduled request without duplicating it.
 
+**Implementation status (2026-10-23).** The scheduled recovery RPC now closes expired instant requests, marks pending bids and accepted offers EXPIRED, removes the open-job feed row, releases the cleaner confirmation hold through the job-state trigger, records one job event and queues a customer notification. A fresh cleaner acceptance keeps its 15-minute customer-confirmation window before the worker closes it. pgTAP now covers the grace window and cleanup. The worker still runs on a five-minute schedule, and post-create dispatch failure recovery plus a customer rebook-in-place flow remain open.
+
 **Acceptance check.** No-candidate, all-declined, expired, dispatch-failure and customer-abandonment cases each reach a defined recoverable state with no stale open feed row.
 
 <a id="F27"></a>
@@ -919,6 +921,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 **Problem and impact.** Expo ticket acceptance/Twilio message creation are immediately recorded as DELIVERED. Expo receipt errors later only set lastError, and Twilio delivery status is never reconciled. Immediate dispatch depends on a secret and a five-second best-effort call; fallback is a GitHub schedule every five minutes for three-minute offers. No dead-letter/worker-heartbeat admin view exists, and the Supabase replacement has no scheduled booking-reminder producer.
 
 **Proposed fix.** Separate queued/provider-accepted/device-delivered states, process provider receipts/callbacks, add observable dead letters and use a continuously available worker/managed scheduler appropriate to urgent offers. Implement scheduled reminders and escalation/fallback channels.
+
+**Implementation status (2026-10-23).** Delivery rows now distinguish PENDING/PROCESSING/ACCEPTED/DELIVERED/FAILED. Twilio callbacks are signature-verified and update recorded delivery state; Expo receipts are polled, failures are recorded and invalid device tokens are removed. The worker also expires unmatched instant bookings and stale offers. Immediate dispatch remains a best-effort Edge call with a five-minute scheduled fallback, so a worker outage can still outlast a short offer. Scheduled booking reminders, a dead-letter/worker-health view, and production delivery-SLA verification remain open.
 
 **Acceptance check.** Kill the immediate worker, delay scheduler execution and simulate provider acceptance followed by delivery failure; urgent offers remain timely and operators/users see truthful delivery and recovery states.
 

@@ -1,6 +1,6 @@
 begin;
 
-select plan(8);
+select plan(19);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values
@@ -66,6 +66,22 @@ select is(
   1,
   'the second customer receives exactly one pending cleaner offer'
 );
+
+insert into public.openJobs(jobId,status,category,serviceType,customerId)
+values('68f879e0-e59d-40c8-9481-5149dce50734','PENDING','HOUSE','Basic house clean','40b4bda5-953a-44d5-9b56-5dc6c024f24f');
+update public.jobs set matchExpiresAt=now()-interval '1 minute' where id='68f879e0-e59d-40c8-9481-5149dce50734';
+select is(public.expire_unmatched_instant_bookings(10),0,'a fresh customer-confirmation offer keeps its short reservation grace period');
+select is((select status from public.jobs where id='68f879e0-e59d-40c8-9481-5149dce50734'),'PENDING','a request does not cancel while the customer confirmation window is open');
+select is((select count(*)::integer from public.cleanerAvailabilityBlocks where jobId='68f879e0-e59d-40c8-9481-5149dce50734' and blockType='CONFIRMATION'),1,'the cleaner remains reserved during the customer confirmation window');
+update public.bids set createdAt=now()-interval '16 minutes' where jobId='68f879e0-e59d-40c8-9481-5149dce50734' and status='PENDING';
+select is(public.expire_unmatched_instant_bookings(10),1,'an abandoned customer confirmation expires after its grace period');
+select is((select status from public.jobs where id='68f879e0-e59d-40c8-9481-5149dce50734'),'CANCELLED','an abandoned instant request reaches a terminal status');
+select is((select status from public.bids where jobId='68f879e0-e59d-40c8-9481-5149dce50734'),'EXPIRED','the pending cleaner bid is marked expired');
+select is((select status from public.instantOffers where jobId='68f879e0-e59d-40c8-9481-5149dce50734'),'EXPIRED','the accepted cleaner offer is marked expired');
+select is((select count(*)::integer from public.cleanerAvailabilityBlocks where jobId='68f879e0-e59d-40c8-9481-5149dce50734'),0,'expiry releases the cleaner confirmation reservation');
+select is((select count(*)::integer from public.openJobs where jobId='68f879e0-e59d-40c8-9481-5149dce50734'),0,'expiry removes the stale open-job feed record');
+select is((select count(*)::integer from public.jobEvents where jobId='68f879e0-e59d-40c8-9481-5149dce50734' and type='INSTANT_MATCH_EXPIRED'),1,'expiry records one durable lifecycle event');
+select is((select count(*)::integer from public.notifications where userId='40b4bda5-953a-44d5-9b56-5dc6c024f24f' and type='INSTANT_MATCH_EXPIRED'),1,'expiry notifies the customer once');
 
 select * from finish();
 rollback;
