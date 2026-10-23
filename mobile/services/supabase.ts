@@ -239,7 +239,7 @@ export async function setDoc(ref: DocumentRef, input: Record<string, any>, optio
     if (old) {
       if (row.data) row.data = { ...((old as Record<string, any>).data ?? {}), ...row.data };
       delete row[keyOf(ref.table)];
-      if (ref.table === 'users') for (const key of ['role','accounttype','organizationid','balance','earningsbalance','commissionbalance','commissionowed','status','verificationstatus','verificationlevel','issuspended','isbanned','cleaneragreementaccepted','createdat']) delete row[key];
+      if (ref.table === 'users') for (const key of ['email','role','accounttype','organizationid','balance','earningsbalance','commissionbalance','commissionowed','status','verificationstatus','verificationlevel','issuspended','isbanned','cleaneragreementaccepted','cleaneronboardingcomplete','jobscompleted','ratingaverage','ratingcount','responsetimeaverage','walletRestricted','locationPoint','locationUpdatedAt','accountDeletedAt','createdAt']) delete row[key.toLowerCase()];
       const { error } = await supabase.from(physicalTable(ref.table)).update(row).eq(keyOf(ref.table), ref.id);
       if (error) throw error;
       return;
