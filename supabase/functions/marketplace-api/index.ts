@@ -591,13 +591,13 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(config?.value?.maintenanceMode||config?.value?.disablePayments||operations?.value?.switches?.maintenance===true||operations?.value?.switches?.payments===true||operations?.value?.switches?.bidAcceptance===true)fail(503,'PAYMENTS_DISABLED');
       const {data,error}=await admin.rpc('accept_bid',{p_actor_id:actor,p_job_id:jobId,p_bid_id:bidId,p_payment_method:method,p_idempotency_key:key});
       if(error)throw error;
-      let redirectUrl: string | null=null;
-      if(method==='PAYNOW') {
+      let redirectUrl: string | null=data.redirectUrl??null;
+      if(data.paymentMethod==='PAYNOW'&&!data.replayed) {
         const {data:profile}=await admin.from('users').select('email').eq('id',actor).single();
         const email=user?.email??profile?.email;
         if(!email)fail(409,'Add an email address to your account before paying with Paynow.');
         try { redirectUrl=await startPaynowCheckout(jobId,email,{reference:data.payment.reference,amount:data.payment.amount,cleanerName:data.cleanerName}); }
-        catch(error){await admin.from('payments').update({status:'FAILED',data:{failureReason:'INITIATION_FAILED'}}).eq('id',`${jobId}_booking`);await admin.from('jobs').update({paymentstatus:'FAILED'}).eq('id',jobId);throw error;}
+        catch(error){const {data:current}=await admin.from('payments').select('data').eq('id',`${jobId}_booking`).maybeSingle();await admin.from('payments').update({status:'FAILED',data:{...(current?.data??{}),failureReason:'INITIATION_FAILED'}}).eq('id',`${jobId}_booking`);await admin.from('jobs').update({paymentstatus:'FAILED'}).eq('id',jobId);throw error;}
       }
       if(data.cleanerId && method!=='PAYNOW') await notify(data.cleanerId,{type:'BID_ACCEPTED',title:'Quote accepted',body:'The customer accepted your quote.',jobId});
       return {...data,redirectUrl};
