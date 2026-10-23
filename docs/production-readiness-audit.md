@@ -436,7 +436,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Source:** [mobile/services/emailAuth.ts:9](<../mobile/services/emailAuth.ts#L9>); [mobile/services/supabase.ts:89](<../mobile/services/supabase.ts#L89>); [mobile/app/_layout.tsx:17](<../mobile/app/_layout.tsx#L17>)
 
-**Problem and impact.** The UI always asks for a six-digit email code, but no tracked email template config renders .Token; Supabase's default email flow is link-based. PKCE detectSessionInUrl is false on mobile and no handler exchanges recovery/signup links. reset-password and payment-return routes do not exist, and no screen updates the recovered password. Password signup routes to the same code screen without a fully specified template/callback setup.
+**Current implementation and remaining gap.** The mobile app implements both email OTP verification and a native `detail://` callback handler for PKCE codes, token hashes, and access/refresh token links. It includes password reset request and reset screens and routes Supabase `PASSWORD_RECOVERY` events into the reset screen. Callback handling also refreshes the linked email after confirmation. The remaining release blocker is operational: the Supabase Auth email templates and redirect allowlist are not versioned or verified in this repository, and real signup/recovery messages have not been tested on iOS and Android. OTP delivery still depends on Supabase's configured template rendering `{{ .Token }}`.
 
 **Proposed fix.** Choose explicit OTP versus magic-link contracts, configure versioned templates, add deep-link handlers and recovery screens, exchange PKCE codes safely and preserve intended navigation after auth.
 
@@ -450,7 +450,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Source:** [mobile/app/register-cleaner.tsx:55](<../mobile/app/register-cleaner.tsx#L55>); [supabase/functions/marketplace-api/index.ts:241](<../supabase/functions/marketplace-api/index.ts#L241>); [mobile/services/phoneAuth.ts:21](<../mobile/services/phoneAuth.ts#L21>); [supabase/migrations/20261020000000_initial_schema.sql:187](<../supabase/migrations/20261020000000_initial_schema.sql#L187>)
 
-**Problem and impact.** SMS signup creates a phone-auth account. Cleaner application requires user.email_confirmed_at, but the app has no add/link/change-email flow; resend verification fails for an account with no email. Paynow initialization also requires an email. A user following the default SMS tab can become stuck after KYC or at payment. The auth profile trigger also omits Auth.phone, so a phone-verified customer can still have no profile.phone for assigned-party calls and SMS alerts.
+**Current implementation and remaining gap.** The app now provides an account email screen that links an address with `supabase.auth.updateUser`, confirms it through a `detail://` callback, and refreshes the profile; cleaner onboarding directs phone-first users to add email before proceeding. The profile trigger synchronizes only Supabase-confirmed phone values from `auth.users`. This addresses the reported dead end in code. Provider email conflicts, confirmation delivery, and the full phone-first cleaner-to-Paynow journey still need integration testing against configured Supabase Auth and Paynow environments.
 
 **Proposed fix.** Add verified email linking to the existing Supabase identity, with clear duplicate-account/merge handling and contact recovery. Surface the requirement before incurring KYC or starting checkout.
 
@@ -464,7 +464,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Source:** [mobile/services/supabase.ts:47](<../mobile/services/supabase.ts#L47>); [mobile/services/supabase.ts:37](<../mobile/services/supabase.ts#L37>); [mobile/context/AuthContext.tsx:76](<../mobile/context/AuthContext.tsx#L76>)
 
-**Problem and impact.** compatUser.reload calls getUser but discards its result, getIdToken ignores forceRefresh, and refreshProfile is a no-op. The registration screen checks auth.currentUser.emailVerified and expects reload to change it, which may stay stale until a separate auth event. Profile listener failures are logged without a recoverable load error, and account changes can briefly retain prior profile state.
+**Current implementation and remaining gap.** `compatUser.reload` now stores the authoritative `getUser()` result, `getIdToken(true)` refreshes the Supabase session, and `AuthContext.refreshProfile` fetches and stores the latest database profile. Auth changes clear the previous profile before attaching the next user's listener. Remaining work is to expose retryable profile-listener errors in the UI and test email confirmation/account switching under network failure; listener errors currently only reach the console.
 
 **Proposed fix.** Use native Supabase auth/session APIs and explicit profile refetches, update state from authoritative returned data, clear profile on user changes and expose retryable loading/error states.
 
