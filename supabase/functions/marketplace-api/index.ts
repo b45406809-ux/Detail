@@ -23,6 +23,7 @@ const reply = (body: unknown, status = 200, origin: string | null = null) => new
 });
 function fail(status: number, message: string): never { throw new ApiError(status, message); }
 const text = (value: unknown, max = 500) => typeof value === 'string' ? value.trim().slice(0, max) : '';
+const secret = (primary: string, alias: string) => Deno.env.get(primary) || Deno.env.get(alias) || '';
 const round2 = (value: number) => Math.round(value * 100) / 100;
 const hash = async (value: string) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))).map(v => v.toString(16).padStart(2, '0')).join('');
 const requireKey = (value: unknown) => { const key = text(value, 160); if (!/^[A-Za-z0-9_-]{8,160}$/.test(key)) fail(400, 'A valid idempotency key is required.'); return key; };
@@ -108,7 +109,7 @@ async function notify(userId: string, payload: Json) {
   }
 }
 async function emailSupport(subject: string, message: string) {
-  const apiKey=Deno.env.get('RESEND_API_KEY');if(!apiKey)return;
+  const apiKey=secret('RESEND_API_KEY','EXPO_RESEND_API_KEY');if(!apiKey)return;
   try{const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:`Bearer ${apiKey}`,'content-type':'application/json'},body:JSON.stringify({from:'Detail Alerts <hello@detailapp.co.zw>',to:['support@detailapp.co.zw'],subject:subject.slice(0,180),text:message.slice(0,5000)})});if(!response.ok)console.error('support alert email failed',response.status,await response.text());}
   catch(error){console.error('support alert email could not be delivered',String(error));}
 }
@@ -201,7 +202,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const actor = authed();
       await enforceRateLimit(request, actor, 'didit_session', 5, 3600);
       if (input.consent !== true) fail(400, 'Consent to the Didit privacy notice is required.');
-      const apiKey = Deno.env.get('DIDIT_API_KEY'); const workflow = Deno.env.get('DIDIT_WORKFLOW_ID');
+      const apiKey = secret('DIDIT_API_KEY','DIDIT_KYC_SECRET_KEY'); const workflow = Deno.env.get('DIDIT_WORKFLOW_ID');
       if (!apiKey || !workflow) fail(503, 'Identity verification is not configured.');
       const profile = await userRow(actor);
       if (profile.verificationstatus === 'VERIFIED') fail(409, 'Your identity is already verified.');
@@ -218,7 +219,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       return { sessionUrl, status: 'Pending' };
     }
     case 'refreshCleanerIdentityVerification': {
-      const actor = authed(); const key = Deno.env.get('DIDIT_API_KEY');
+      const actor = authed(); const key = secret('DIDIT_API_KEY','DIDIT_KYC_SECRET_KEY');
       if (!key) fail(503, 'Identity verification is not configured.');
       const { data: kyc } = await admin.from('privatekyc').select('*').eq('userid', actor).maybeSingle();
       if (!kyc?.sessionid) fail(409, 'Start identity verification first.');
@@ -753,7 +754,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       // A repeated public signup must not overwrite contact/consent data or send
       // a confirmation email using details supplied by an unverified caller.
       if(created!==true)return {success:true};
-      const apiKey=Deno.env.get('RESEND_API_KEY');
+      const apiKey=secret('RESEND_API_KEY','EXPO_RESEND_API_KEY');
       if(apiKey)await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:`Bearer ${apiKey}`,'content-type':'application/json'},body:JSON.stringify({from:'Detail <hello@detailapp.co.zw>',to:[email],reply_to:'support@detailapp.co.zw',subject:'Your place on the Detail list',html:`<p>Hi ${fullName.replace(/[<>&"']/g,'')},</p><p>Thanks for joining the Detail waitlist.</p><p>— The Detail team</p>`})});
       return {success:true};
     }
@@ -876,7 +877,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     }
     case 'adminSendMarketingCampaign': {
       const actor=authed();await requireAdmin(actor,'marketing.send');
-      const subject=text(input.subject,140), message=text(input.message,5000), apiKey=Deno.env.get('RESEND_API_KEY');
+      const subject=text(input.subject,140), message=text(input.message,5000), apiKey=secret('RESEND_API_KEY','EXPO_RESEND_API_KEY');
       if(!subject||!message||!apiKey)fail(503,'Campaign email is not configured.');
       const {data:recipients,error}=await admin.from('betawaitlist').select('*').eq('marketingemailpermission','YES').limit(100);
       if(error)throw error;

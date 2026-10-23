@@ -23,7 +23,12 @@ async function check(label, operation) {
 }
 
 function configured(...names) {
-  return names.every((name) => Boolean(process.env[name]?.trim()));
+  return names.every((name) => Boolean(secretValue(name)));
+}
+
+function secretValue(name) {
+  const aliases = { DIDIT_API_KEY: 'DIDIT_KYC_SECRET_KEY', RESEND_API_KEY: 'EXPO_RESEND_API_KEY' };
+  return process.env[name]?.trim() || process.env[aliases[name]]?.trim() || '';
 }
 
 async function supabaseChecks() {
@@ -66,7 +71,7 @@ async function twilioAccountCheck() {
 
 async function resendAccountCheck() {
   return check('RESEND_ACCOUNT_API', async () => {
-    const key = process.env.RESEND_API_KEY;
+    const key = secretValue('RESEND_API_KEY');
     if (!key) return false;
     const response = await requestStatus('https://api.resend.com/domains', {
       headers: { authorization: `Bearer ${key}` },
@@ -119,7 +124,7 @@ async function paynowE2E() {
 
 async function diditE2E() {
   return check('DIDIT_SESSION_CREATE', async () => {
-    const key = process.env.DIDIT_API_KEY;
+    const key = secretValue('DIDIT_API_KEY');
     const workflow = process.env.DIDIT_WORKFLOW_ID;
     if (!configured('DIDIT_API_KEY', 'DIDIT_WORKFLOW_ID')) return false;
     const response = await requestStatus('https://verification.didit.me/v2/session/', {
@@ -142,7 +147,7 @@ async function diditE2E() {
 
 async function resendEmailE2E() {
   return check('RESEND_TEST_EMAIL', async () => {
-    const key = process.env.RESEND_API_KEY;
+    const key = secretValue('RESEND_API_KEY');
     const recipient = process.env.LIVE_E2E_EMAIL_TO;
     if (!configured('RESEND_API_KEY', 'LIVE_E2E_EMAIL_TO') || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) return false;
     const response = await requestStatus('https://api.resend.com/emails', {

@@ -29,9 +29,9 @@ Create a GitHub environment named `production`, enable required reviewers if des
 | `VITE_POSTHOG_KEY` | Optional public analytics project key. |
 | `FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD` | FTPS account used to publish the marketing site and dashboard. |
 | `PAYNOW_INTEGRATION_ID`, `PAYNOW_INTEGRATION_KEY` | Paynow merchant API credentials. |
-| `DIDIT_API_KEY`, `DIDIT_WORKFLOW_ID` | Cleaner identity verification provider settings. |
+| `DIDIT_API_KEY` or `DIDIT_KYC_SECRET_KEY`, `DIDIT_WORKFLOW_ID` | Cleaner identity verification provider settings. Either API-key secret name is accepted; the workflow maps both to `DIDIT_API_KEY`. |
 | `TURNSTILE_SECRET` | Server-side Turnstile verification secret. |
-| `RESEND_API_KEY` | Transactional and marketing email delivery. |
+| `RESEND_API_KEY` or `EXPO_RESEND_API_KEY` | Transactional and marketing email delivery. Either secret name is accepted; the workflow maps both to `RESEND_API_KEY`. |
 | `PAYOUT_ENCRYPTION_KEY` | Dedicated 32-byte key for encrypting payout destinations. |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_SERVICE_SID` | SMS delivery from the Supabase delivery worker. |
 | `TWILIO_FROM_NUMBER` | Optional fallback sender when no Messaging Service SID is used. |
@@ -44,6 +44,8 @@ Create a GitHub environment named `production`, enable required reviewers if des
 | `LIVE_E2E_SMS_TO` | Dedicated E.164 test phone for the manual Twilio delivery test. |
 
 The Supabase deployment workflow sends configured provider values to Supabase Edge Function secrets and deploys the database migrations and functions. Supabase supplies its project URL and platform keys to deployed functions. Keep `SUPABASE_SERVICE_ROLE_KEY` out of Vite and Expo variables; it is a Supabase server-side secret, not a GitHub Actions build argument.
+
+EAS CLI authentication uses `EXPO_TOKEN` in the shell or protected CI environment. It is separate from `MAPBOX_DOWNLOADS_TOKEN`, which is only a native SDK build credential. No client bundle should contain either secret.
 
 ## Deployment boundaries
 
