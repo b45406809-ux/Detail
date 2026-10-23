@@ -932,6 +932,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** Attempt reassignment in every booking/payment state; prohibited states reject, and successful replacements leave one cleaner/quote/payment/reservation identity with correct notices.
 
+**Implementation status (2026-10-23).** The reassignment RPC now only accepts pending, confirmed or assigned jobs, requires an available verified cleaner with an accepted agreement, updates eligible payment ownership and records old/new cleaner IDs. Database regression coverage now rejects completed/cancelled/in-progress jobs and checks the escrow owner and audit event on a successful move. Quote/reservation and displaced-cleaner notification behavior still needs broader lifecycle verification.
+
 <a id="F56"></a>
 
 ### F56 — Search, filters and pagination do not honor the displayed module contract
