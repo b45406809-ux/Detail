@@ -78,7 +78,9 @@ export default function FavoritesScreen() {
                 </View>
               </View>
               <TouchableOpacity
-                onPress={() => router.push({ pathname: '/messages', params: { cleanerId: item.cleanerId } })}
+                accessibilityLabel={`Open existing conversations with ${item.cleanerName ?? 'this cleaner'}`}
+                accessibilityHint="Choose a previous booking conversation if you have one. New chats require a booking."
+                onPress={() => router.push('/messages')}
                 className="w-10 h-10 bg-accent/10 rounded-2xl items-center justify-center"
               >
                 <MessageCircle size={16} color="#3906D2" />
