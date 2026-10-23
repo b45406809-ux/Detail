@@ -298,6 +298,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** Raw REST attempts to self-set onboarding completion, ratings, job totals, restriction flags or geospatial freshness fail regardless of client implementation.
 
+**Implementation status (2026-10-23).** Migrations reset broad `users` UPDATE grants, allow only selected profile columns, and protect server-owned fields in the trigger. Security regression coverage now checks the table grant and direct UPDATE privileges for role, onboarding, ratings, job totals, wallet restriction, suspension, verification, account deletion and dispatch-location freshness. A live production ACL inspection remains necessary because project-level defaults can differ from local migration state.
+
 <a id="F11"></a>
 
 ### F11 — Suspension and role changes are not enforced consistently across actions

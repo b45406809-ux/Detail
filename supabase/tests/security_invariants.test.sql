@@ -1,6 +1,6 @@
 begin;
 
-select plan(18);
+select plan(42);
 
 select ok(
   not has_function_privilege('anon', 'public.accept_customer_agreement(uuid)', 'execute'),
@@ -26,6 +26,33 @@ select ok(
   not has_column_privilege('authenticated', 'public.users', 'cleaneragreementaccepted', 'UPDATE'),
   'users cannot directly set cleaner legal acceptance'
 );
+select ok(
+  not has_table_privilege('authenticated', 'public.users', 'UPDATE'),
+  'authenticated users have no broad table-level profile update grant'
+);
+select ok(not has_column_privilege('authenticated','public.users','role','UPDATE'),'users cannot directly change marketplace role');
+select ok(not has_column_privilege('authenticated','public.users','cleaneronboardingcomplete','UPDATE'),'users cannot self-complete cleaner onboarding');
+select ok(not has_column_privilege('authenticated','public.users','jobscompleted','UPDATE'),'users cannot modify completed-job totals');
+select ok(not has_column_privilege('authenticated','public.users','ratingaverage','UPDATE'),'users cannot modify their aggregate rating');
+select ok(not has_column_privilege('authenticated','public.users','ratingcount','UPDATE'),'users cannot modify their rating count');
+select ok(not has_column_privilege('authenticated','public.users','walletrestricted','UPDATE'),'users cannot remove wallet restrictions');
+select ok(not has_column_privilege('authenticated','public.users','locationpoint','UPDATE'),'users cannot forge dispatch geospatial coordinates');
+select ok(not has_column_privilege('authenticated','public.users','locationupdatedat','UPDATE'),'users cannot forge location freshness');
+select ok(not has_column_privilege('authenticated','public.users','issuspended','UPDATE'),'users cannot clear their suspension');
+select ok(not has_column_privilege('authenticated','public.users','isbanned','UPDATE'),'users cannot clear their ban');
+select ok(not has_column_privilege('authenticated','public.users','verificationstatus','UPDATE'),'users cannot self-assert identity verification');
+select ok(not has_column_privilege('authenticated','public.users','accountdeletedat','UPDATE'),'users cannot change account deletion state');
+select ok(not has_column_privilege('authenticated','public.users','status','UPDATE'),'users cannot directly change dispatch availability');
+select ok(not has_column_privilege('authenticated','public.users','balance','UPDATE'),'users cannot write wallet balance');
+select ok(not has_column_privilege('authenticated','public.users','earningsbalance','UPDATE'),'users cannot write cleaner earnings');
+select ok(not has_column_privilege('authenticated','public.users','commissionbalance','UPDATE'),'users cannot write commission credit');
+select ok(not has_column_privilege('authenticated','public.users','commissionowed','UPDATE'),'users cannot modify commission debt');
+select ok(not has_column_privilege('authenticated','public.users','verificationlevel','UPDATE'),'users cannot self-assert verification level');
+select ok(not has_column_privilege('authenticated','public.users','accounttype','UPDATE'),'users cannot change account ownership type');
+select ok(not has_column_privilege('authenticated','public.users','organizationid','UPDATE'),'users cannot attach themselves to an organization');
+select ok(not has_column_privilege('authenticated','public.users','email','UPDATE'),'users cannot desynchronize profile email from auth');
+select ok(not has_column_privilege('authenticated','public.users','phone','UPDATE'),'users cannot desynchronize profile phone from auth');
+select ok(not has_column_privilege('authenticated','public.users','expopushtoken','UPDATE'),'users cannot bypass device-scoped push token registration');
 select ok(
   not has_table_privilege('authenticated', 'public.legalDocumentAcceptances', 'SELECT'),
   'legal acceptance records are not directly readable by app users'
