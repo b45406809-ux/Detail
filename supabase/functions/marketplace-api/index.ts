@@ -719,14 +719,11 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'registerOrganization': {
       const actor=authed(); await requireActiveMarketplaceAccount(actor); const name=text(input.name,160);
       if(name.length<2)fail(400,'Organization name is required.');
-      const {data:existing}=await admin.from('organizations').select('id').eq('ownerid',actor).maybeSingle();
-      if(existing)return {organizationId:existing.id};
       const registrationNumber=text(input.registrationNumber,100), phone=text(input.phone,40), country=text(input.country,80), city=text(input.city,100);
       if(!registrationNumber||!phone||!country||!city)fail(400,'Complete the organization registration details.');
-      const {data,error}=await admin.from('organizations').insert({id:actor,ownerid:actor,name,registrationnumber:registrationNumber,phone,country,city}).select('id').single();
+      const {data,error}=await admin.rpc('register_organization_secure',{p_owner_id:actor,p_name:name,p_registration_number:registrationNumber,p_phone:phone,p_country:country,p_city:city});
       if(error)throw error;
-      await admin.from('users').update({accounttype:'ORGANIZATION',organizationid:data.id}).eq('id',actor);
-      return {organizationId:data.id};
+      return {organizationId:data};
     }
     case 'createOrganizationCleanerInvite': {
       const actor=authed(); await requireActiveMarketplaceAccount(actor); const email=text(input.email ?? input.cleanerEmail,254).toLowerCase();
@@ -738,13 +735,9 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     }
     case 'joinOrganization': {
       const actor=authed(); await requireActiveMarketplaceAccount(actor); const code=text(input.code,80).toUpperCase(); const codeHash=await hash(code);
-      const {data:invite}=await admin.from('organizationinvites').select('*').eq('codehash',codeHash).is('acceptedby',null).gt('expiresat',new Date().toISOString()).maybeSingle();
-      if(!invite||invite.email!==String(user?.email??'').toLowerCase())fail(403,'This invitation is invalid, expired, or belongs to another email.');
-      const {data:profile}=await admin.from('users').select('displayname,email,verificationstatus').eq('id',actor).single();
-      if(profile?.verificationstatus!=='VERIFIED')fail(409,'Complete identity verification before joining an organization.');
-      await admin.from('organizationmembers').upsert({organizationid:invite.organizationid,userid:actor,role:'CLEANER',status:'ACTIVE',cleanername:invite.cleanername||profile.displayname,email:profile.email,verificationstatus:profile.verificationstatus},{onConflict:'organizationid,userid'});
-      await admin.from('organizationinvites').update({acceptedby:actor}).eq('id',invite.id);
-      await admin.from('users').update({organizationid:invite.organizationid}).eq('id',actor);
+      const {data,error}=await admin.rpc('join_organization_secure',{p_user_id:actor,p_email:String(user?.email??'').toLowerCase(),p_code_hash:codeHash});
+      if(error)throw error;
+      if(!data)fail(403,'This invitation is invalid, expired, or belongs to another email.');
       return {success:true};
     }
     case 'removeOrganizationCleaner': {
