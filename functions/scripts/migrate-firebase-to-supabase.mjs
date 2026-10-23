@@ -123,7 +123,9 @@ for (const old of firebaseUsers) {
   }
   if (!newId && !dryRun) {
     const email = old.email?.trim().toLowerCase() || `legacy.${old.uid}@no-email.detail.invalid`;
-    const { data, error } = await supabase.auth.admin.createUser({ email, phone: old.phoneNumber, email_confirm: !!old.emailVerified, phone_confirm: !!old.phoneNumber, password: randomBytes(36).toString('base64url'), user_metadata: { legacyFirebaseUid: old.uid, recoveryRequired: true, displayName: old.displayName ?? '' } });
+    // Firebase phone ownership is not portable to Supabase Auth. Never turn
+    // a legacy number into a verified contact during an account migration.
+    const { data, error } = await supabase.auth.admin.createUser({ email, email_confirm: !!old.emailVerified, password: randomBytes(36).toString('base64url'), user_metadata: { legacyFirebaseUid: old.uid, recoveryRequired: true, displayName: old.displayName ?? '' } });
     if (error) throw new Error(`Could not create auth account for ${old.uid}: ${error.message}`);
     newId = data.user.id;
     const { error: mapError } = await supabase.from('legacyauthmappings').upsert({ firebaseuid: old.uid, supabaseuid: newId, recoveryrequired: true });
@@ -140,6 +142,14 @@ for (const snap of userSnapshots.docs) {
   const known = ['email','displayName','photoURL','role','accountType','organizationId','balance','earningsBalance','commissionBalance','commissionOwed','status','hasAgreedToTerms','cleanerAgreementAccepted','cleanerOnboardingComplete','hasCompletedProfile','hasSetupPermissions','isSuspended','isBanned','verificationStatus','verificationLevel','serviceCategories','serviceRadiusKm','experienceYears','address','serviceArea','phone','location','jobsCompleted','ratingAverage','ratingCount','responseTimeAverage','expoPushToken','createdAt','updatedAt','metadata'];
   const extra = Object.fromEntries(Object.entries(source).filter(([key]) => !known.includes(key) && key !== 'uid'));
   const row = { id: newId, ...Object.fromEntries(known.filter(k => k !== 'organizationId' && source[k] !== undefined).map(k => [k, source[k]])), metadata: { ...(source.metadata ?? {}), ...extra, legacyFirebaseUid: snap.id } };
+  // Legacy flags are not proof of current, versioned consent or identity
+  // verification. Require users to complete these checks in the new system.
+  Object.assign(row, {
+    hasAgreedToTerms: false, cleanerAgreementAccepted: false,
+    verificationStatus: 'NOT_STARTED', verificationLevel: 1,
+    status: 'OFFLINE', phone: null, expoPushToken: null,
+    location: null,
+  });
   profileRows.push(snake(row));
   idMap.set(`users:${snap.id}`, newId);
 }
@@ -150,7 +160,6 @@ if (legacyAdminRoles.length && !dryRun) await writeRows('adminroles', legacyAdmi
 console.log(`${dryRun ? 'would restore' : 'restored'} ${legacyAdminRoles.length} legacy administrator roles`);
 
 for (const [collectionName, table, keyType] of tables) {
-  if (collectionName === 'walletTransactions' && tables.some(([name]) => name === 'transactions')) continue;
   if (collectionName === 'waitlist' && tables.some(([name]) => name === 'betaWaitlist')) {
     const primaryWaitlist = await firestore.collection('betaWaitlist').limit(1).get();
     if (!primaryWaitlist.empty) continue;
@@ -169,7 +178,7 @@ for (const [collectionName, table, keyType] of tables) {
     if (table === 'configuration') raw.key = doc.id;
     const allowed = new Set(columns[table] ?? []);
     const cols = Object.fromEntries(Object.entries(raw).filter(([k,v]) => allowed.has(k) && v !== undefined));
-    if (table !== 'configuration' && table !== 'adminRoles') cols.id = id;
+    if (table !== 'configuration' && table !== 'adminRoles' && table !== 'openJobs') cols.id = id;
     if (table === 'adminRoles') cols.userId = uidMap.get(doc.id) ?? raw.userId;
     if (table === 'openJobs') cols.jobId = raw.jobId;
     if (allowed.has('data')) {
@@ -229,8 +238,16 @@ for (const file of files) {
   const pathParts = oldPath.split('/');
   if (pathParts[0] === 'verification') { skipped++; continue; }
   if (!['job-photos','profile-photos','chat-photos','job-completion'].includes(pathParts[0])) { skipped++; continue; }
-  if (['job-completion','chat-photos'].includes(pathParts[0])) { pathParts[1] = idMap.get(`jobs:${pathParts[1]}`) ?? pathParts[1]; pathParts[2] = uidMap.get(pathParts[2]) ?? pathParts[2]; }
-  else if (['job-photos','profile-photos','verification'].includes(pathParts[0])) pathParts[1] = uidMap.get(pathParts[1]) ?? pathParts[1];
+  if (['job-completion','chat-photos'].includes(pathParts[0])) {
+    const mappedJob = idMap.get(`jobs:${pathParts[1]}`), mappedUser = uidMap.get(pathParts[2]);
+    if (!mappedJob || !mappedUser) { skipped++; continue; }
+    pathParts[1] = mappedJob; pathParts[2] = mappedUser;
+  }
+  else {
+    const mappedUser = uidMap.get(pathParts[1]);
+    if (!mappedUser) { skipped++; continue; }
+    pathParts[1] = mappedUser;
+  }
   const nextPath = pathParts.join('/');
   if (dryRun) { copied++; continue; }
   const [bytes] = await file.download();
