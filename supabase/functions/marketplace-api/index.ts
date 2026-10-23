@@ -939,7 +939,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(module==='payments'&&page.length){const ids=page.map((row:Json)=>row.id);const {data:refundRows,error:refundError}=await admin.from('paynowrefundtransactions').select('paymentid,amount,status,providerreference,createdat').in('paymentid',ids).order('createdat',{ascending:false});if(refundError)throw refundError;for(const refund of refundRows??[]){const entry=paymentRefunds.get(refund.paymentid)??{confirmed:0};if(refund.status==='CONFIRMED')entry.confirmed+=Number(refund.amount)||0;if(!entry.latest)entry.latest=refund;paymentRefunds.set(refund.paymentid,entry);}}
       const supportContext=new Map<string,Json>();
       if(module==='support'&&page.length){
-        const profileIds=[...new Set(page.flatMap((row:Json)=>[row.customerid,row.cleanerid,row.data?.reporterId]).filter((id:unknown):id is string=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id)))];
+        const profileIds=[...new Set(page.flatMap((row:Json)=>[row.customerid,row.cleanerid,row.ownerid,row.data?.reporterId,...(Array.isArray(row.data?.assignmentHistory)?row.data.assignmentHistory.map((entry:Json)=>entry.assignee):[])]).filter((id:unknown):id is string=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id)))];
         const jobIds=[...new Set(page.map((row:Json)=>row.jobid).filter((id:unknown):id is string=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id)))];
         let profiles:Json[]=[];let jobs:Json[]=[];
         if(profileIds.length){const result=await admin.from('users').select('id,displayname,email,phone').in('id',profileIds);if(result.error)throw result.error;profiles=result.data??[];}
@@ -958,13 +958,15 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         if(module==='bookings')return {id:row.id,createdAt:row.createdat,Booking:row.id,Customer:row.customername??row.customerid??'—',Cleaner:row.cleanername??row.cleanerid??'—',Service:row.servicetype??row.category??'—',Scheduled:row.scheduleddatetime??row.scheduledtime??'—',Status:row.status,Payment:row.paymentstatus??row.paymentmethod??'—'};
         if(module==='support'){
           const context=supportContext.get(row.id)??{},customer=context.customer??{},cleanerProfile=context.cleaner??{},reporter=context.reporter??{},job=context.job??{};
-          return {id:row.id,createdAt:row.createdat,Case:row.id,Booking:row.jobid??'General support',Reason:row.reason??'Support request',Opened:row.createdat,Owner:row.ownerid??'Unassigned',Status:row.status,
+          return {id:row.id,createdAt:row.createdat,Case:row.id,Booking:row.jobid??'General support',Reason:row.reason??'Support request',Opened:row.createdat,Owner:row.ownerid?(profileMap.get(row.ownerid)?.displayname??row.ownerid):'Unassigned',Status:row.status,
             reporterName:reporter.displayname??'Unknown reporter',reporterContact:[reporter.email,reporter.phone].filter(Boolean).join(' · '),
             customerName:customer.displayname??'—',customerContact:[customer.email,customer.phone].filter(Boolean).join(' · '),
             cleanerName:cleanerProfile.displayname??'—',cleanerContact:[cleanerProfile.email,cleanerProfile.phone].filter(Boolean).join(' · '),
             category:row.data?.category??row.data?.type??'GENERAL',description:row.data?.description??row.reason??'',
             bookingStatus:job.status??'—',paymentStatus:job.paymentstatus??'—',paymentMethod:job.paymentmethod??'—',scheduledAt:job.scheduleddatetime??null,
-            evidenceCount:Array.isArray(row.data?.evidence)?row.data.evidence.length:0,data:{type:row.data?.type,severity:row.data?.severity}};
+            evidenceCount:Array.isArray(row.data?.evidence)?row.data.evidence.length:0,
+            assignmentHistory:Array.isArray(row.data?.assignmentHistory)?row.data.assignmentHistory.slice(-20).map((entry:Json)=>({assignee:profileMap.get(entry.assignee)?.displayname??entry.assignee,assignedAt:entry.assignedAt,reason:entry.reason})):[],
+            data:{type:row.data?.type,severity:row.data?.severity}};
         }
         // Never return push credentials, exact coordinates, or arbitrary profile metadata.
         if(module==='customers'||module==='cleaners')return {id:row.id,createdAt:row.createdat};
@@ -1012,9 +1014,16 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
           const {error:updateError}=await admin.from('users').update({issuspended:true,status:'OFFLINE',updatedat:now}).eq('id',userId);if(updateError)throw updateError;
         } else { const {error:updateError}=await admin.from('users').update({isbanned:state==='SUSPENDED',updatedat:now}).eq('id',userId);if(updateError)throw updateError;const {error:authError}=await admin.auth.admin.updateUserById(userId,{ban_duration:state==='SUSPENDED'?'876000h':'none'});if(authError)throw authError; }
       } else if(action==='resolve_case' || action==='assign_support_case') {
-        const {data:record,error}=await admin.from('supportcases').select('data,jobid').eq('id',targetId).maybeSingle();if(error)throw error;if(!record)fail(404,'Support case not found.');
+        const {data:record,error}=await admin.from('supportcases').select('data,jobid,status').eq('id',targetId).maybeSingle();if(error)throw error;if(!record)fail(404,'Support case not found.');
+        if(action==='assign_support_case'&&['RESOLVED','CLOSED'].includes(record.status))fail(409,'A closed support case cannot be assigned.');
         let settlementDecision='';
-        const patchData={...(record.data??{}),resolution:text(input.resolution,2000)||reason,resolvedBy:actor,resolvedAt:now};
+        let patchData={...(record.data??{})};
+        if(action==='assign_support_case'){
+          const history=Array.isArray(record.data?.assignmentHistory)?record.data.assignmentHistory:[];
+          patchData={...patchData,assignmentHistory:[...history.slice(-19),{assignee:actor,assignedAt:now,reason}]};
+        }else{
+          patchData={...patchData,resolution:text(input.resolution,2000)||reason,resolvedBy:actor,resolvedAt:now};
+        }
         if(action==='resolve_case'&&record.data?.type==='COMPLETION_DISPUTE'){
           settlementDecision=text(input.settlementDecision,40).toUpperCase();
           if(!['RELEASE_EARNINGS','HOLD_FOR_REFUND'].includes(settlementDecision))fail(400,'Choose whether to release the cleaner earnings or keep them held for refund review.');
