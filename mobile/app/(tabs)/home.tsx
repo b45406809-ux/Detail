@@ -52,12 +52,12 @@ import { MapPlaceholder } from '../../components/MapPlaceholder';
 import { IS_DEMO } from '../../utils/env';
 import { callFunction } from '../../services/functions';
 import { Mapbox, IS_MAPBOX_AVAILABLE } from '../../services/mapbox';
-import { startCleanerLocationUpdates, stopCleanerLocationUpdates } from '../../services/locationTracking';
+import { completeCleanerPresenceStart, startCleanerLocationUpdates, stopCleanerLocationUpdates } from '../../services/locationTracking';
 
 const FALLBACK_REGION = { latitude: -17.8252, longitude: 31.0335, latitudeDelta: 0.12, longitudeDelta: 0.12 };
 
 export default function HomeScreen() {
-  const { user, profile } = useAuth();
+  const { user, profile, locationTrackingError } = useAuth();
   const insets = useSafeAreaInsets();
   const mapRef = useRef<React.ElementRef<typeof Mapbox.Camera>>(null);
   const [activeJob, setActiveJob] = useState<Job | null>(null);
@@ -199,6 +199,7 @@ export default function HomeScreen() {
         const point={lat:position.coords.latitude,lng:position.coords.longitude};setCurrentLocation(point);
         await callFunction('prepareCleanerLocation',point);
         await callFunction('updateCleanerPresence', { status: next });
+        completeCleanerPresenceStart();
       } else {
         await callFunction('updateCleanerPresence', { status: next });
         await stopCleanerLocationUpdates();
@@ -335,6 +336,7 @@ export default function HomeScreen() {
               <CleanerPanel
                 profile={profile}
                 status={cleanerStatus}
+                trackingIssue={locationTrackingError}
                 onToggleStatus={toggleCleanerStatus}
                 availableJobs={availableJobs}
                 currentLocation={currentLocation}
@@ -441,12 +443,14 @@ function CustomerPanel({ favorites, recentJobs }: { favorites: Favorite[]; recen
 function CleanerPanel({
   profile,
   status,
+  trackingIssue,
   onToggleStatus,
   availableJobs,
   currentLocation,
 }: {
   profile: any;
   status: string;
+  trackingIssue: string | null;
   onToggleStatus: () => void;
   availableJobs: Job[];
   currentLocation: { lat: number; lng: number } | null;
@@ -484,6 +488,12 @@ function CleanerPanel({
           </Text>
         </TouchableOpacity>
       </View>
+      {trackingIssue && (
+        <View className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 mb-4">
+          <Text className="font-display font-black text-amber-950">Location sharing needs attention</Text>
+          <Text className="font-sans text-xs text-amber-900 mt-1">{trackingIssue} Go offline, then online again after restoring permission.</Text>
+        </View>
+      )}
       <TouchableOpacity onPress={()=>router.push('/instant-offers')} className="flex-row items-center justify-between rounded-2xl bg-accent/10 border border-accent/20 px-4 py-3 mb-4">
         <Text className="font-display font-black text-accent">Nearby instant offers</Text><ChevronRight size={18} color="#3906D2"/>
       </TouchableOpacity>

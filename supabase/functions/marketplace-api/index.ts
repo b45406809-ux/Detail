@@ -361,6 +361,12 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         patch.location = {};
         patch.locationpoint = null;
         patch.locationupdatedat = null;
+      } else if (role === 'CLEANER' && profile.role !== 'CLEANER') {
+        // A newly enabled cleaner must explicitly opt in before any location is shared.
+        patch.status = 'OFFLINE';
+        patch.location = {};
+        patch.locationpoint = null;
+        patch.locationupdatedat = null;
       }
       const { error } = await admin.from('users').update(patch).eq('id', actor);
       if (error) throw error;
