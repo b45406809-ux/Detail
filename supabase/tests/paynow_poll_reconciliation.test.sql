@@ -4,7 +4,8 @@ select plan(8);
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('3d64d5d2-07cb-4dab-9dde-cb2cc4554231','authenticated','authenticated','paynow-poll@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now());
 insert into public.users(id,email,displayName,role)
-values('3d64d5d2-07cb-4dab-9dde-cb2cc4554231','paynow-poll@detail.invalid','Paynow Poll Customer','CUSTOMER');
+values('3d64d5d2-07cb-4dab-9dde-cb2cc4554231','paynow-poll@detail.invalid','Paynow Poll Customer','CUSTOMER')
+on conflict(id) do nothing;
 insert into public.jobs(id,customerId,serviceType,status,paymentStatus)
 values('d7d8f99a-b1f3-4aaf-9122-c57de004b345','3d64d5d2-07cb-4dab-9dde-cb2cc4554231','House clean','PENDING','DELIVERED');
 insert into public.payments(id,jobId,customerId,provider,amount,status,reference)
