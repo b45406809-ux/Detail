@@ -6,6 +6,7 @@ import { ArrowLeft, Bell, MessageSquare, DollarSign, Star, Zap, Info } from 'luc
 import { useAuth } from '../context/AuthContext';
 import { db, collection, query, where, onSnapshot, doc, updateDoc, orderBy, limit } from '../services/supabase';
 import { AppNotification, NotificationType } from '../types';
+import { resolveNotificationTarget } from '../services/notifications';
 
 const TYPE_ICON: Partial<Record<NotificationType, any>> = {
   NEW_BID: Zap,
@@ -59,12 +60,8 @@ export default function NotificationsScreen() {
 
   const openNotification = (n: AppNotification) => {
     if (!n.read) updateDoc(doc(db, 'notifications', n.id), { read: true }).catch(() => {});
-    if(n.data?.supportCaseId){router.push({pathname:'/support',params:{caseId:n.data.supportCaseId}});return;}
-    if(n.type==='INSTANT_BOOKING_OFFER'){router.push('/instant-offers');return;}
-    if(n.type==='INSTANT_BOOKING_ACCEPTED'){router.push({pathname:'/booking/offers',params:{jobId:n.jobId}});return;}
-    if(n.type==='NEW_SCHEDULED_JOB'){if(n.jobId)router.push({pathname:'/job/[jobId]',params:{jobId:n.jobId}});return;}
-    if(['NEW_BID','BOOKING_CREATED'].includes(n.type)){if(n.jobId)router.push({pathname:'/booking/offers',params:{jobId:n.jobId}});return;}
-    if (n.jobId) router.push({ pathname: '/tracking/[jobId]', params: { jobId: n.jobId } });
+    const target = resolveNotificationTarget({ type: n.type, jobId: n.jobId, supportCaseId: n.data?.supportCaseId });
+    if (target) router.push(target);
   };
 
   return (

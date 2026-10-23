@@ -943,6 +943,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const readPermissions:Record<string,string>={bookings:'bookings.manage',customers:'users.manage',cleaners:'users.manage',payments:'finance.read',support:'support.manage',products:'finance.read',analytics:'finance.read',waitlist:'marketing.read'};
       const actor=authed(); await requireAdmin(actor,readPermissions[module]);
       if(module==='settings'){
+        await requireAdmin(actor,undefined,true);
         const [{data:operations,error:operationsError},{data:beta,error:betaError}]=await Promise.all([
           admin.from('configuration').select('value').eq('key','operations').maybeSingle(),
           admin.from('configuration').select('value').eq('key','beta').maybeSingle(),

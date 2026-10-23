@@ -22,6 +22,13 @@ const routes: Array<[AdminRoute, string, LucideIcon]> = [
   ['admins', 'Admins & Security', ShieldCheck],
   ['settings', 'Settings', SettingsIcon],
 ];
+const routePermissions: Partial<Record<AdminRoute, string>> = {
+  bookings: 'bookings.manage',
+  customers: 'users.manage', cleaners: 'users.manage',
+  payments: 'finance.read', products: 'finance.read', analytics: 'finance.read',
+  support: 'support.manage', waitlist: 'marketing.read', blog: 'marketing.read',
+  admins: 'admins.manage', settings: '__elevated__',
+};
 
 function routeFromLocation(): { route: AdminRoute; focus?: string } {
   const segments = location.pathname.split('/').filter(Boolean);
@@ -46,9 +53,21 @@ export function AdminDashboard() {
     window.addEventListener('popstate', syncRoute);
     return () => window.removeEventListener('popstate', syncRoute);
   }, []);
+  useEffect(() => {
+    const permission = routePermissions[route];
+    if (!claims || !permission || claims.elevated || (permission !== '__elevated__' && claims.permissions.includes(permission))) return;
+    setRoute('overview'); setFocus(undefined); setMenu(false);
+    window.history.replaceState(null, '', '/admin/overview');
+  }, [claims, route]);
+  const visibleRoutes = routes.filter(([id]) => {
+    const permission = routePermissions[id];
+    return claims?.elevated || !permission || (permission !== '__elevated__' && claims?.permissions.includes(permission));
+  });
   const go = (next: string, id?: string) => {
     const valid = routes.some(([key]) => key === next);
     if (!valid) return;
+    const permission = routePermissions[next as AdminRoute];
+    if (permission && (!claims || (!claims.elevated && (permission === '__elevated__' || !claims.permissions.includes(permission))))) return;
     setRoute(next as AdminRoute); setFocus(id); setMenu(false);
     window.history.pushState(null, '', `/admin/${next}${id ? `/${encodeURIComponent(id)}` : ''}`);
   };
@@ -58,7 +77,7 @@ export function AdminDashboard() {
   return <main className="admin-root">
     <aside className={menu ? 'open' : ''}>
       <div className="brand">DETAIL.<small>ADMIN COMMAND CENTER</small></div>
-      <nav>{routes.map(([id, label, Icon]) => <button key={id} className={route === id ? 'active' : ''} onClick={() => go(id)}><Icon size={17}/>{label}</button>)}</nav>
+      <nav>{visibleRoutes.map(([id, label, Icon]) => <button key={id} className={route === id ? 'active' : ''} onClick={() => go(id)}><Icon size={17}/>{label}</button>)}</nav>
       <footer><span>Verified admin · {claims.elevated ? 'Elevated' : 'Standard'}</span><button onClick={() => supabase.auth.signOut()}><LogOut size={14}/> Sign out</button></footer>
     </aside>
     <div className="admin-content"><button className="menu-button" onClick={() => setMenu(!menu)}>{menu ? <X/> : <Menu/>}</button>{route === 'overview' ? <Overview navigate={go}/> : route === 'settings' ? <Settings/> : route === 'waitlist' ? <Waitlist/> : route === 'admins' ? <Admins/> : route === 'blog' ? <BlogManager/> : <DataModule key={`${route}:${focus ?? ''}`} kind={route} focusId={focus} navigate={go}/>}</div>

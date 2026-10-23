@@ -8,7 +8,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
-import { configureNotificationChannels } from '../services/notifications';
+import { configureNotificationChannels, resolveNotificationTarget } from '../services/notifications';
 import { DMSans_400Regular, DMSans_500Medium, DMSans_600SemiBold, DMSans_700Bold } from '@expo-google-fonts/dm-sans';
 import { Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrope';
 import { AuthProvider, useAuth } from '../context/AuthContext';
@@ -56,14 +56,8 @@ function NotificationRouter({ response, onConsumed }: { response: Notifications.
     if (profile.role === 'CLEANER' && profile.verificationStatus === 'VERIFIED' && profile.cleanerOnboardingComplete && !profile.cleanerAgreementAccepted) return;
 
     const data = response.notification.request.content.data as { jobId?: string; supportCaseId?: string; type?: string };
-    if (data.supportCaseId) router.push({ pathname: '/support', params: { caseId: data.supportCaseId } });
-    else if (data.type === 'INSTANT_BOOKING_OFFER') router.push('/instant-offers');
-    else if (data.type === 'NEW_SCHEDULED_JOB' && data.jobId) router.push({ pathname: '/job/[jobId]', params: { jobId: data.jobId } });
-    else if (data.type === 'INSTANT_BOOKING_ACCEPTED' && data.jobId) router.push({ pathname: '/booking/offers', params: { jobId: data.jobId } });
-    else if (data.jobId) {
-      const offerTypes = ['BOOKING_CREATED', 'NEW_BID'];
-      router.push({ pathname: offerTypes.includes(data.type ?? '') ? '/booking/offers' : '/tracking/[jobId]', params: { jobId: data.jobId } });
-    }
+    const target = resolveNotificationTarget(data);
+    if (target) router.push(target);
     onConsumed();
   }, [response, user, profile, isLoading, profileError, onConsumed]);
 

@@ -10,6 +10,23 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { IS_MOCK } from '../utils/env';
 
+export type NotificationTarget =
+  | { pathname: '/support'; params: { caseId: string } }
+  | '/instant-offers'
+  | { pathname: '/job/[jobId]'; params: { jobId: string } }
+  | { pathname: '/booking/offers'; params: { jobId: string } }
+  | { pathname: '/tracking/[jobId]'; params: { jobId: string } };
+
+export function resolveNotificationTarget(data: { type?: string; jobId?: string; supportCaseId?: string }): NotificationTarget | null {
+  if (data.supportCaseId) return { pathname: '/support', params: { caseId: data.supportCaseId } };
+  if (data.type === 'INSTANT_BOOKING_OFFER') return '/instant-offers';
+  if (data.type === 'NEW_SCHEDULED_JOB' && data.jobId) return { pathname: '/job/[jobId]', params: { jobId: data.jobId } };
+  if (data.type === 'INSTANT_BOOKING_ACCEPTED' && data.jobId) return { pathname: '/booking/offers', params: { jobId: data.jobId } };
+  if (!data.jobId) return null;
+  const offerTypes = ['BOOKING_CREATED', 'NEW_BID'];
+  return { pathname: offerTypes.includes(data.type ?? '') ? '/booking/offers' : '/tracking/[jobId]', params: { jobId: data.jobId } };
+}
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,

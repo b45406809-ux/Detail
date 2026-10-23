@@ -890,7 +890,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** Tap quote, instant offer, acceptance, payment, emergency and support notifications with the app foregrounded, backgrounded, signed out and cold-started; each reaches the correct authorized screen.
 
-**Implementation status (2026-10-23).** Push payloads include the notification `type`, job ID and support-case ID, and the push-device lifecycle test asserts that type survives outbox creation. In-app and push support notifications pass the case ID to the support screen; the authenticated API fetches older requested cases only for their owner, and the screen prioritizes/highlights them. Cold-start responses now wait for an authenticated, loaded profile and required onboarding before navigation, then clear the consumed response to avoid replay on the next launch. A single resolver shared with in-app routing and real-device journey testing remain open.
+**Implementation status (2026-10-23).** Push payloads include the notification `type`, job ID and support-case ID, and the push-device lifecycle test asserts that type survives outbox creation. In-app and push routing now share one destination resolver. Support alerts pass the case ID to the support screen; the authenticated API fetches older requested cases only for their owner, and the screen prioritizes/highlights them. Cold-start responses wait for an authenticated, loaded profile and required onboarding before navigation, then clear the consumed response to avoid replay on the next launch. Real-device journey testing remains open.
 
 <a id="F51"></a>
 
@@ -1017,6 +1017,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 **Source:** [site/src/admin/AdminEntry.tsx:53](<../site/src/admin/AdminEntry.tsx#L53>); [site/src/admin/Admins.tsx:12](<../site/src/admin/Admins.tsx#L12>); [site/src/admin/AdminDashboard.tsx:50](<../site/src/admin/AdminDashboard.tsx#L50>)
 
 **Problem and impact.** All navigation modules are displayed regardless of permissions. The MFA gate runs on user.id changes only; password reauthentication can replace the token with aal1 while the gate remains ready, causing confusing later API failures. There is no implemented admin revoke/disable/change-permissions/revoke-invite/session-management UI, recovery-code/lost-factor process or visible audit-log viewer despite the audit.read permission. Settings also stores a supportCopy save into local switches state, which can incorrectly show a maintenance banner until reload.
+
+**Implementation status (2026-10-23).** The dashboard now hides modules outside the signed-in admin's read permission set and redirects unauthorized deep links to Overview; the operational settings panel is restricted to elevated administrators. Server-side permission checks remain authoritative. MFA assurance refresh, role/session administration, audit-log viewing and account recovery remain open.
 
 **Proposed fix.** Make assurance and permissions reactive to session events, show only allowed tools, require MFA again after downgrade and implement audited role/invite/session revocation plus secure lost-factor recovery.
 
