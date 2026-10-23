@@ -408,7 +408,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** Changing client-supplied forwarding headers cannot reset an account quota; concurrent limits are atomic and legitimate recovery remains usable.
 
-**Implementation status (2026-10-23).** The limiter now uses an actor bucket plus only `cf-connecting-ip`; client `x-forwarded-for` and `x-real-ip` values are ignored, with Deno regression coverage for header handling. The scheduled delivery worker now removes expired rate-limit rows in bounded, skip-locked batches, backed by an expiry index and database test. Broader action coverage and confirmation that production ingress overwrites the Cloudflare header remain outstanding.
+**Implementation status (2026-10-23).** The limiter now uses an actor bucket plus only `cf-connecting-ip`; client `x-forwarded-for` and `x-real-ip` values are ignored, with Deno regression coverage for header handling. Paynow booking and wallet status polling now have per-account limits. The scheduled delivery worker now removes expired rate-limit rows in bounded, skip-locked batches, backed by an expiry index and database test. Broader action coverage and confirmation that production ingress overwrites the Cloudflare header remain outstanding.
 
 <a id="F17"></a>
 

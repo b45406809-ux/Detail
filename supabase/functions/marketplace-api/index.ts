@@ -602,7 +602,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       return {...data,redirectUrl};
     }
     case 'refreshPaynowBookingPayment': {
-      const actor=authed(), jobId=text(input.jobId,80);
+      const actor=authed(), jobId=text(input.jobId,80);await enforceRateLimit(request,actor,'paynow_booking_refresh',12,300);
       const {data:job}=await admin.from('jobs').select('customerid').eq('id',jobId).maybeSingle();
       if(!job||job.customerid!==actor)fail(403,'Only the customer can refresh this payment.');
       const {data:payment}=await admin.from('payments').select('*').eq('id',`${jobId}_booking`).maybeSingle();
@@ -635,7 +635,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       }
     }
     case 'refreshPaynowWalletTopup': {
-      const actor=authed(), reference=text(input.referenceNumber,160);
+      const actor=authed(), reference=text(input.referenceNumber,160);await enforceRateLimit(request,actor,'wallet_topup_refresh',12,300);
       const {data:payment}=await admin.from('payments').select('*').eq('reference',reference).maybeSingle();
       if(!payment||payment.customerid!==actor||payment.jobid||payment.provider!=='PAYNOW'||payment.data?.type!=='wallet_topup'||!payment.pollurl)fail(404,'Wallet payment not found.');
       const poll=new URL(payment.pollurl); if(poll.protocol!=='https:'||!['paynow.co.zw','www.paynow.co.zw'].includes(poll.hostname))fail(400,'Untrusted Paynow poll URL.');
