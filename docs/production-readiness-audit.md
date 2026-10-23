@@ -426,6 +426,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** Malformed/oversized requests and spoofed display/identity fields are rejected before writes; scheduled and instant bookings obey consistent validation.
 
+**Implementation status (2026-10-23).** The dispatcher now caps JSON bodies at 1 MiB, validates top-level/action object shape, and booking creation validates checklist size, photo ownership, finite budget, bounded coordinates and custom schedule dates. This pass also rejects non-finite cleaner radius/experience, payout and budget values and normalizes invalid admin page sizes. A complete per-action schema registry, stricter text/array bounds, and consistent validation for every lifecycle/provider action remain open.
+
 <a id="F18"></a>
 
 ### F18 — Email-code and recovery journeys lack a complete native callback contract

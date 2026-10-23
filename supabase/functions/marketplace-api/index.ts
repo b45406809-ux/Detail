@@ -320,7 +320,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const inputName = text(input.fullName, 120), phone = text(input.phone, 40), address = text(input.address, 250), area = text(input.serviceArea, 120);
       const categories = Array.isArray(input.serviceCategories) ? [...new Set(input.serviceCategories.filter((x: unknown) => x === 'HOUSE' || x === 'CAR'))] : [];
       const radius = Number(input.serviceRadiusKm ?? 15), experience = Number(input.experienceYears ?? 0);
-      if (inputName.length < 2 || phone.length < 7 || address.length < 5 || area.length < 2 || !categories.length || radius < 1 || radius > 100 || experience < 0 || experience > 60) fail(400, 'Complete all cleaner application fields with valid values.');
+      if (inputName.length < 2 || phone.length < 7 || address.length < 5 || area.length < 2 || !categories.length || !Number.isFinite(radius) || !Number.isFinite(experience) || radius < 1 || radius > 100 || experience < 0 || experience > 60) fail(400, 'Complete all cleaner application fields with valid values.');
       const { error } = await admin.from('users').update({ displayname: inputName, phone, address, servicearea: area, servicecategories: categories, serviceradiuskm: radius, experienceyears: experience, cleaneronboardingcomplete: true, updatedat: new Date().toISOString() }).eq('id', actor);
       if (error) throw error;
       return { ok: true };
@@ -572,6 +572,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'increaseJobBudget': {
       const actor=authed(); const jobId=text(input.jobId,80); const value=round2(Number(input.newBudget));
       await requireActiveMarketplaceAccount(actor);
+      if(!Number.isFinite(value)||value<=0||value>10000)fail(400,'Enter a budget between 0 and 10000.');
       const {data:job}=await admin.from('jobs').select('customerid,status,budget').eq('id',jobId).maybeSingle();
       if(!job||job.customerid!==actor) fail(403,'Only the customer can change the budget.');
       if(job.status!=='PENDING'||value<=Number(job.budget||0)||value<=0) fail(409,'A higher budget can only be set while the booking is open.');
@@ -680,6 +681,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'requestCleanerPayout': {
       const actor=authed(),operationKey=requireKey(input.idempotencyKey),amount=round2(Number(input.amount)),method=text(input.method,20).toUpperCase();
       const accountName=text(input.accountName,100),accountNumber=text(input.accountNumber,120);
+      if(!Number.isFinite(amount)||amount<5)fail(400,'Enter a valid payout amount of at least $5.');
       if(accountNumber.length<4)fail(400,'Enter a valid payout destination.');
       const requestHash=await hash(JSON.stringify({amount,method,accountName,accountNumber}));
       const {data:existing,error:existingError}=await admin.from('payoutrequests').select('id,requesthash,status').eq('cleanerid',actor).eq('operationkey',operationKey).maybeSingle();
@@ -927,7 +929,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       }
       const table:Record<string,string>={bookings:'jobs',customers:'users',cleaners:'users',payments:'payments',products:'productsales',analytics:'reportingaggregates',support:'supportcases',waitlist:'betawaitlist'};
       const target=table[module]; if(!target)fail(400,'Unknown dashboard module.');
-      const pageSize=Math.min(100,Math.max(1,Number(input.pageSize??25)));
+      const requestedPageSize=Number(input.pageSize??25),pageSize=Number.isFinite(requestedPageSize)?Math.min(100,Math.max(1,Math.floor(requestedPageSize))):25;
       let q=admin.from(target).select('*').order('createdat',{ascending:false}).order('id',{ascending:false}).limit(pageSize+1);
       if(module==='customers')q=q.eq('role','CUSTOMER'); if(module==='cleaners')q=q.eq('role','CLEANER');
       const filters=input.filters&&typeof input.filters==='object'?input.filters as Json:{};
