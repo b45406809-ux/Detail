@@ -326,6 +326,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** A nonexistent photo path, another user's object and a remote/stale arrival are rejected; support can handle legitimate permission/GPS failures with an audited override.
 
+**Implementation status (2026-10-23).** Completion-photo registration checks the stored object owner, MIME type and size; arrival requires a current coordinate within 300 m. A database regression test now covers forged paths, remote rejection and persisted in-range arrival. Cross-user object, stale-GPS and audited support-override cases remain unverified.
+
 <a id="F13"></a>
 
 ### F13 — Account deletion checks a Firebase-style claim absent from ordinary Supabase JWTs
