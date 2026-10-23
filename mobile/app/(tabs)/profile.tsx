@@ -141,7 +141,14 @@ export default function ProfileScreen() {
       { text: 'Keep account', style: 'cancel' },
       { text: 'Delete permanently', style: 'destructive', onPress: async () => {
         try { await callFunction('deleteAccount', { confirmation: 'DELETE' }); }
-        catch (error: any) { Alert.alert('Cannot delete account', error?.message ?? 'Please sign in again and retry.'); }
+        catch (error: any) {
+          if (error?.message === 'RECENT_LOGIN_REQUIRED') {
+            Alert.alert('Sign in again to continue', 'Account deletion requires a recent sign-in. Sign out, sign in again, then retry deletion.', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Sign in again', onPress: async () => { await signOut(auth); router.replace('/(auth)/sign-in'); } },
+            ]);
+          } else Alert.alert('Cannot delete account', error?.message ?? 'Please sign in again and retry.');
+        }
       } },
     ]);
   };

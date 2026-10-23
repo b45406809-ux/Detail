@@ -706,9 +706,8 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'deleteAccount': {
       const actor=authed();
       if(input.confirmation!=='DELETE')fail(400,'Type DELETE to confirm.');
-      const token=(request.headers.get('authorization')??'').replace(/^Bearer\s+/i,'').split('.')[1]??'';
-      let claims:Json; try { claims=JSON.parse(atob(token.replace(/-/g,'+').replace(/_/g,'/'))); } catch { fail(401,'Sign in again to confirm account deletion.'); }
-      if(Date.now()-Number(claims.auth_time??0)*1000>5*60*1000)fail(409,'RECENT_LOGIN_REQUIRED');
+      const lastSignInAt=Date.parse(String(user?.last_sign_in_at??'')),signInAge=Date.now()-lastSignInAt;
+      if(!Number.isFinite(lastSignInAt)||signInAge<0||signInAge>5*60*1000)fail(409,'RECENT_LOGIN_REQUIRED');
       const [{data:profile},{data:pendingPayout}]=await Promise.all([admin.from('users').select('balance').eq('id',actor).single(),admin.from('payoutrequests').select('id').eq('cleanerid',actor).eq('status','PENDING').limit(1).maybeSingle()]);
       if(Number(profile?.balance??0)>0||pendingPayout)fail(409,'Settle your wallet balance and pending payout before deleting the account.');
       const {error}=await admin.rpc('close_account',{p_user_id:actor}); if(error)throw error;
