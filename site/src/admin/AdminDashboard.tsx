@@ -24,8 +24,12 @@ const routes: Array<[AdminRoute, string, LucideIcon]> = [
 ];
 
 function routeFromLocation(): { route: AdminRoute; focus?: string } {
-  const [, route, focus] = location.pathname.split('/');
-  return { route: routes.some(([key]) => key === route) ? route as AdminRoute : 'overview', focus };
+  const segments = location.pathname.split('/').filter(Boolean);
+  const adminIndex = segments.indexOf('admin');
+  const candidate = segments[adminIndex + 1] ?? 'overview';
+  let focus: string | undefined;
+  try { focus = segments[adminIndex + 2] ? decodeURIComponent(segments[adminIndex + 2]) : undefined; } catch { focus = undefined; }
+  return { route: routes.some(([key]) => key === candidate) ? candidate as AdminRoute : 'overview', focus };
 }
 
 export function AdminDashboard() {
@@ -37,9 +41,16 @@ export function AdminDashboard() {
   const [menu, setMenu] = useState(false);
 
   useEffect(() => { verifiedAdminClaims(true).then(setClaims).catch(error => setError(error.message)); }, []);
+  useEffect(() => {
+    const syncRoute = () => { const next = routeFromLocation(); setRoute(next.route); setFocus(next.focus); setMenu(false); };
+    window.addEventListener('popstate', syncRoute);
+    return () => window.removeEventListener('popstate', syncRoute);
+  }, []);
   const go = (next: string, id?: string) => {
+    const valid = routes.some(([key]) => key === next);
+    if (!valid) return;
     setRoute(next as AdminRoute); setFocus(id); setMenu(false);
-    history.pushState(null, '', `/admin/${next}${id ? `/${encodeURIComponent(id)}` : ''}`);
+    window.history.pushState(null, '', `/admin/${next}${id ? `/${encodeURIComponent(id)}` : ''}`);
   };
 
   if (error) return <main className="admin-denied"><h1>Admin access denied</h1><p>{error}</p><p>Only a server-assigned administrator role grants access.</p><button onClick={() => supabase.auth.signOut()}>Sign out</button></main>;
