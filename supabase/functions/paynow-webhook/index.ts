@@ -86,7 +86,7 @@ Deno.serve(async request => {
       if(data.status==='DISPUTED'){const {data:admins}=await admin.from('adminroles').select('userid');for(const row of admins??[])await notifyOnce(row.userid,reference,'DISPUTED',{title:'Paynow dispute needs review',body:'A Paynow BuySafe dispute was opened. Review the support queue.',type:'PAYMENT_DISPUTED',jobId:before.jobid});}
     }
     const {error:processedError}=await admin.from('paynowproviderevents').update({
-      processingstatus:'APPLIED',processedat:new Date().toISOString(),lasterror:null,
+      processingstatus:'APPLIED',processedat:new Date().toISOString(),appliedstatus:data?.status??null,lasterror:null,
     }).eq('eventid',eventId);
     if(processedError)throw processedError;
     return new Response('OK', { status: 200 });

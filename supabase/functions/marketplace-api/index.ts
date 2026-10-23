@@ -180,13 +180,15 @@ async function startPaynowCheckout(jobId: string, email: string, details?: { ref
   return redirectUrl;
 }
 async function applyPaynowStatus(reference: string, status: string, amount: string | number) {
-  const { data, error } = await admin.rpc('apply_paynow_status', { p_reference: reference, p_status: status, p_amount: Number(amount) });
+  const eventPayload=JSON.stringify({reference,status,amount:Number(amount)});
+  const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(eventPayload)));
+  const eventId=Array.from(digest).map(value=>value.toString(16).padStart(2,'0')).join('');
+  const { data, error } = await admin.rpc('apply_paynow_provider_poll', {
+    p_event_id:eventId,p_reference:reference,p_status:status,p_amount:Number(amount),
+  });
   if (error) throw error;
-  if(data?.status==='REFUNDED'){
-    const {data:payment}=await admin.from('payments').select('id,data').eq('reference',reference).maybeSingle();
-    if(payment?.data?.refundRequest?.status==='PENDING')await admin.from('payments').update({data:{...payment.data,refundRequest:{...payment.data.refundRequest,status:'COMPLETED',completedAt:new Date().toISOString()}}}).eq('id',payment.id);
-  }
-  if (data?.cleanerId && data.status === 'ESCROWED') await notify(data.cleanerId, { type: 'PAYMENT_ESCROWED', title: 'Booking funded with BuySafe', body: 'Paynow is holding the customer payment. You can now start the booking.', jobId: data.jobId });
+  if (data?.status==='FAILED') throw new Error('Paynow status could not be reconciled. Refresh again to retry.');
+  if (!data?.replayed && data?.cleanerId && data.status === 'ESCROWED') await notify(data.cleanerId, { type: 'PAYMENT_ESCROWED', title: 'Booking funded with BuySafe', body: 'Paynow is holding the customer payment. You can now start the booking.', jobId: data.jobId });
   return data as Json;
 }
 

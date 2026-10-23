@@ -1,5 +1,5 @@
 begin;
-select plan(5);
+select plan(6);
 
 select ok(
   has_table_privilege('service_role','public.paynowproviderevents','INSERT'),
@@ -13,6 +13,10 @@ select ok(
 select ok(
   has_column_privilege('service_role','public.paynowproviderevents','processingstatus','UPDATE'),
   'the webhook can advance event processing state'
+);
+select ok(
+  has_column_privilege('service_role','public.paynowproviderevents','appliedstatus','UPDATE'),
+  'the service can record the applied payment status'
 );
 select ok(
   not has_column_privilege('service_role','public.paynowproviderevents','reference','UPDATE')
