@@ -627,6 +627,26 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const photos=await Promise.all((data??[]).map(async (photo:Json)=>{const {data:signed}=await admin.storage.from('detail-media').createSignedUrl(String(photo.imagepath),3600);return {...photo,url:signed?.signedUrl??null};}));
       return {photos};
     }
+    case 'getCleanerBookingPreview': {
+      const actor=authed(),jobId=text(input.jobId,80),profile=await userRow(actor);
+      if(profile.role!=='CLEANER'||profile.verificationstatus!=='VERIFIED'||!profile.cleaneragreementaccepted||!profile.cleaneronboardingcomplete||profile.issuspended||profile.isbanned)fail(403,'Only active, verified cleaners can review open bookings.');
+      const {data:openJob,error:openError}=await admin.from('openjobs').select('jobid,status').eq('jobid',jobId).eq('status','PENDING').maybeSingle();
+      if(openError)throw openError;if(!openJob)fail(404,'This booking is no longer accepting quotes.');
+      const {data:job,error}=await admin.from('jobs').select('id,category,servicetype,checklist,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status').eq('id',openJob.jobid).maybeSingle();
+      if(error)throw error;if(!job||job.status!=='PENDING')fail(404,'This booking is no longer accepting quotes.');
+      const source=(job.checklist&&typeof job.checklist==='object'?job.checklist:{}) as Json;
+      const strings=(value:unknown,max=12)=>Array.isArray(value)?value.filter((item):item is string=>typeof item==='string').slice(0,max).map(item=>text(item,60)):[];
+      const count=(value:unknown)=>Number.isFinite(Number(value))&&Number(value)>0?Math.min(10000,Number(value)):undefined;
+      const category=job.category==='CAR'?'CAR':'HOUSE';
+      const checklist:Json=category==='HOUSE'?{
+        category:'HOUSE',packageId:text(source.packageId,80),areas:strings(source.areas),cleaningTypes:strings(source.cleaningTypes),condition:['LIGHT','MODERATE','HEAVY'].includes(String(source.condition))?source.condition:undefined,addOns:strings(source.addOns),propertySizeSqm:count(source.propertySizeSqm),storiesCount:count(source.storiesCount),roomsCount:count(source.roomsCount),bathroomsCount:count(source.bathroomsCount),
+      }:{
+        category:'CAR',packageId:text(source.packageId,80),vehicleType:text(source.vehicleType,40),cleaningTypes:strings(source.cleaningTypes),condition:['CLEAN','AVERAGE','VERY_DIRTY'].includes(String(source.condition))?source.condition:undefined,exteriorServices:strings(source.exteriorServices),interiorServices:strings(source.interiorServices),deepServices:strings(source.deepServices),
+      };
+      const location=(job.location&&typeof job.location==='object'?job.location:{}) as Json;
+      const lat=Number(location.lat),lng=Number(location.lng);
+      return {id:job.id,customerId:'',category,serviceType:text(job.servicetype,120),checklist,description:'',location:{lat:Number.isFinite(lat)?Math.round(lat*100)/100:0,lng:Number.isFinite(lng)?Math.round(lng*100)/100:0,address:'Approximate area'},scheduledTime:job.scheduledtime,timePreference:job.timepreference,scheduledDateTime:job.scheduleddatetime,bookingMode:job.bookingmode,budget:job.budget,biddingExpiresAt:job.biddingexpiresat,estimatedDuration:job.estimatedduration,suppliesRequired:job.suppliesrequired,suppliesFee:job.suppliesfee,createdAt:job.createdat,status:job.status,photos:[],completionPhotos:[]};
+    }
     case 'addCleanerPortfolioPhoto': {
       const actor=authed(), path=text(input.imagePath,500);const profile=await userRow(actor);
       if(profile.role!=='CLEANER'||profile.verificationstatus!=='VERIFIED'||profile.issuspended||profile.isbanned)fail(403,'Only an active verified cleaner can publish portfolio photos.');

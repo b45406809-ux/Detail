@@ -46,14 +46,25 @@ export default function CleanerJobDetailScreen() {
 
   useEffect(() => {
     if (!jobId) return;
-    return onSnapshot(
+    let active = true;
+    let unavailable = false;
+    const unsubscribe = onSnapshot(
       doc(db, 'openJobs', jobId),
       (snap) => {
-        if (snap.exists()) setJob({ id: snap.id, ...snap.data() } as Job);
-        setIsLoading(false);
-      },
-      () => setIsLoading(false)
+        if (!snap.exists()) {
+          unavailable = true;
+          if (active) { setJob(null); setIsLoading(false); }
+          return;
+        }
+        const status = snap.data()?.status;
+        if (active && status) setJob((current) => current ? { ...current, status } : current);
+      }
     );
+    callFunction('getCleanerBookingPreview', { jobId })
+      .then((preview) => { if (active && !unavailable) setJob(preview as Job); })
+      .catch(() => { if (active && !unavailable) setJob(null); })
+      .finally(() => { if (active) setIsLoading(false); });
+    return () => { active = false; unsubscribe(); };
   }, [jobId]);
 
   useEffect(() => {
@@ -154,7 +165,7 @@ export default function CleanerJobDetailScreen() {
             <View className="gap-3">
               <DetailRow icon={MapPin} title="Location" value={job.location?.address ?? 'Address not provided'} accent={distance ?? undefined} />
               <DetailRow icon={DollarSign} title="Customer Budget" value={budgetLabel} />
-              <DetailRow icon={Clock} title="Estimated Duration" value={job.estimatedDuration ? `${job.estimatedDuration} hours` : '2–3 hours'} />
+              <DetailRow icon={Clock} title="Estimated Duration" value={formatDuration(job.estimatedDuration)} />
               {job.category === 'HOUSE' && (
                 <>
                   {Boolean((job.checklist as HouseChecklist)?.storiesCount || (job.checklist as HouseChecklist)?.roomsCount) && (
@@ -377,4 +388,12 @@ function getChecklistTags(job: Job): string[] {
   }
   const c = checklist as CarChecklist;
   return [...(c.cleaningTypes ?? []), ...(c.exteriorServices ?? []).slice(0, 2), ...(c.interiorServices ?? []).slice(0, 2)];
+}
+
+function formatDuration(minutes?: number): string {
+  if (!minutes || !Number.isFinite(minutes)) return 'About 2–3 hours';
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (!hours) return `${remainingMinutes} min`;
+  return remainingMinutes ? `${hours} hr ${remainingMinutes} min` : `${hours} hr`;
 }
