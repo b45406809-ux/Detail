@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, Clock3 } from 'lucide-react';
 import { BrandMark } from './BrandMark';
-import { supabase } from './supabase';
+import { functionErrorMessage, supabase } from './supabase';
 import './blog.css';
 
 type Post = {id:string;slug:string;title:string;excerpt:string;content:string;keywords:string;publishedAt?:string;updatedAt:string};
@@ -31,7 +31,7 @@ export function Blog() {
 
   useEffect(() => {
     setLoading(true); setError('');
-    supabase.functions.invoke('marketplace-api', { body: { name: 'blogPublicList', data: slug ? {slug} : {page:requestedPage, limit:6} } }).then(({data, error}) => { if (error || data?.error) throw new Error(data?.error || error?.message); return data; }).then(body => {
+    supabase.functions.invoke('marketplace-api', { body: { name: 'blogPublicList', data: slug ? {slug} : {page:requestedPage, limit:6} } }).then(async ({data, error}) => { if (error) throw new Error(await functionErrorMessage(error, data)); if(data?.error)throw new Error(data.error); return data; }).then(body => {
       if (body.post) { setPost(body.post); setMetadata(body.post); } else { setListing(body); setMetadata(); }
     }).catch(reason => setError(reason instanceof Error ? reason.message : 'The cleaning guide is temporarily unavailable.')).finally(() => setLoading(false));
   }, [slug, requestedPage]);

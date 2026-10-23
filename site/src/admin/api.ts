@@ -1,4 +1,4 @@
-import { supabase } from '../supabase';
+import { functionErrorMessage, supabase } from '../supabase';
 import type { AdminClaims, OverviewData } from './types';
 
 export async function verifiedAdminClaims(force = false): Promise<AdminClaims> {
@@ -16,7 +16,7 @@ export async function verifiedAdminClaims(force = false): Promise<AdminClaims> {
 export async function adminCall<T>(name: string, data: Record<string, unknown> = {}): Promise<T> {
   await verifiedAdminClaims();
   const { data: response, error } = await supabase.functions.invoke('marketplace-api', { body: { name, data } });
-  if (error) throw new Error(response?.error || error.message);
+  if (error) throw new Error(await functionErrorMessage(error, response));
   if (response?.error) throw new Error(response.error);
   return response as T;
 }
@@ -28,7 +28,7 @@ export async function waitlistAdminCall<T>(path: string, options: { method?: str
   const name = path.startsWith('/api/admin/waitlist') ? 'adminWaitlistQuery' : 'adminSendMarketingCampaign';
   const payload = name === 'adminWaitlistQuery' ? { ...options.body, cursor: new URL(path, location.origin).searchParams.get('cursor') } : options.body;
   const { data, error } = await supabase.functions.invoke('marketplace-api', { body: { name, data: payload } });
-  if (error) throw new Error(data?.error || error.message);
+  if (error) throw new Error(await functionErrorMessage(error, data));
   if (data?.error) throw new Error(data.error);
   return data as T;
 }
