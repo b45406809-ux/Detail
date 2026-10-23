@@ -17,6 +17,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import * as WebBrowser from 'expo-web-browser';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {
   ArrowLeft,
@@ -409,11 +411,19 @@ export default function TrackingScreen() {
   const handlePaynowRetry = async () => {
     if (!jobId) return;
     setIsSubmitting(true);
+    const keyStorage = user ? `detail:paynow-retry:${user.uid}:${jobId}` : '';
     try {
-      const idempotencyKey=`paynow-retry-${jobId}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+      let idempotencyKey = '';
+      try { idempotencyKey = keyStorage ? (await AsyncStorage.getItem(keyStorage)) ?? '' : ''; } catch { /* create a fresh retry key */ }
+      if (!idempotencyKey) {
+        idempotencyKey = Crypto.randomUUID();
+        if (keyStorage) await AsyncStorage.setItem(keyStorage, idempotencyKey);
+      }
       const result = await callFunction<{ jobId: string; idempotencyKey: string }, { success: boolean; redirectUrl: string }>('retryPaynowBookingPayment', { jobId, idempotencyKey });
+      if (keyStorage) await AsyncStorage.removeItem(keyStorage);
       if (result.redirectUrl) await WebBrowser.openBrowserAsync(result.redirectUrl, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET });
     } catch (err: any) {
+      if (keyStorage && String(err?.message ?? '').includes('already failed')) await AsyncStorage.removeItem(keyStorage).catch(() => undefined);
       Alert.alert('Paynow unavailable', err.message || 'Could not start payment. Please try again.');
     } finally {
       setIsSubmitting(false);
