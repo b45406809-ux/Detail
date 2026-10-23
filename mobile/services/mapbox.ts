@@ -1,7 +1,8 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import { IS_MOCK } from '../utils/env';
 
-export const MAPBOX_ACCESS_TOKEN = String(Constants.expoConfig?.extra?.mapboxAccessToken ?? '');
+export const MAPBOX_ACCESS_TOKEN = IS_MOCK ? '' : String(Constants.expoConfig?.extra?.mapboxAccessToken ?? '');
 export const IS_MAPBOX_AVAILABLE = Platform.OS !== 'web' && Boolean(MAPBOX_ACCESS_TOKEN)
   && Constants.executionEnvironment !== 'storeClient';
 

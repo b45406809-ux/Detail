@@ -1,9 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, type SupabaseClient, type User as SupabaseUser } from '@supabase/supabase-js';
 import { signMediaValue } from './storage';
+import { IS_MOCK } from '../utils/env';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+// Development and demo builds must never inherit production credentials. Use
+// an explicitly configured isolated backend, or fail closed against local Supabase.
+const supabaseUrl = IS_MOCK
+  ? process.env.EXPO_PUBLIC_MOCK_SUPABASE_URL ?? 'http://127.0.0.1:54321'
+  : process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+const supabaseAnonKey = IS_MOCK
+  ? process.env.EXPO_PUBLIC_MOCK_SUPABASE_ANON_KEY ?? 'local-anon-key'
+  : process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 if (!supabaseUrl || !supabaseAnonKey) console.warn('Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.');
 
 export const supabase = createClient(supabaseUrl || 'http://127.0.0.1:54321', supabaseAnonKey || 'local-anon-key', {
