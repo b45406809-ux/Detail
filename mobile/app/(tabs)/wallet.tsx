@@ -244,7 +244,7 @@ export default function WalletScreen() {
                 <View className="flex-1">
                   <Text className="text-sm font-display font-black text-slate-900">{item.description}</Text>
                   <Text className="font-sans text-xs text-slate-400 font-medium mt-0.5">
-                    {formatDate(item.createdAt)}
+                    {formatDate(item.createdAt, 'Date unavailable')}
                   </Text>
                 </View>
                 <View className="items-end">

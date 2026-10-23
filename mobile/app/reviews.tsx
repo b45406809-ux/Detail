@@ -139,7 +139,7 @@ export default function ReviewsScreen() {
                     {item.customerName || 'Customer'}
                   </Text>
                   <Text className="font-sans text-xs text-slate-400 font-medium mt-0.5">
-                    {formatDate(item.createdAt)}
+                    {formatDate(item.createdAt, 'Date unavailable')}
                   </Text>
                 </View>
                 {/* Star rating */}

@@ -1252,6 +1252,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** Old/new wallet entries and reviews show their actual dates across local timezone/day boundaries; missing timestamps are labeled honestly rather than all appearing recent.
 
+**Implementation status (2026-10-23).** Wallet and review screens already use the shared date formatter, which parses Supabase ISO strings, numeric timestamps and legacy `toDate()` values. They now label missing/invalid dates as “Date unavailable” instead of implying every record is recent. Device timezone boundary coverage remains part of the native release test matrix.
+
 ## Production capability gap matrix
 
 These are capability-level requirements and scope choices, not an additional vulnerability count. Existing partial implementation is identified to avoid rebuilding features unnecessarily.
