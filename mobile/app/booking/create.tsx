@@ -95,13 +95,15 @@ export default function CreateBookingScreen() {
   const [budget, setBudget] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingMode, setBookingMode] = useState<'SCHEDULED'|'INSTANT'>('SCHEDULED');
+  const [instantBookingEnabled, setInstantBookingEnabled] = useState(false);
   const [bookingEnabled, setBookingEnabled] = useState(false);
   const [suppliesRequired, setSuppliesRequired] = useState(false);
   const [suppliesFee, setSuppliesFee] = useState(10);
 
   useEffect(() => {
-    callFunction<{}, {suppliesFeeUsd?:number;bookingEnabled?:boolean}>('getBetaConfig',{}).then(value=>{
+    callFunction<{}, {suppliesFeeUsd?:number;bookingEnabled?:boolean;instantBookingEnabled?:boolean}>('getBetaConfig',{}).then(value=>{
       setBookingEnabled(value.bookingEnabled===true);
+      setInstantBookingEnabled(value.instantBookingEnabled===true);
       if(Number.isFinite(Number(value.suppliesFeeUsd)))setSuppliesFee(Math.max(0,Number(value.suppliesFeeUsd)));
     }).catch(()=>{});
   },[]);
@@ -323,8 +325,9 @@ export default function CreateBookingScreen() {
               <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest mt-7 mb-2">How would you like to book?</Text>
               {([
                 {id:'SCHEDULED' as const,title:'Schedule and compare quotes',copy:'Cleaners send a price for you to review.'},
-                {id:'INSTANT' as const,title:'Book now',copy:'Find an available nearby cleaner at the listed starting price.'},
+                ...(instantBookingEnabled?[{id:'INSTANT' as const,title:'Book now',copy:'Find an available nearby cleaner at the listed starting price.'}]:[]),
               ]).map(option=><TouchableOpacity key={option.id} onPress={()=>setBookingMode(option.id)} className={`p-4 rounded-2xl border-2 mb-2 ${bookingMode===option.id?'border-accent bg-accent/5':'border-ink/10 bg-white'}`}><Text className="font-display font-black text-ink">{option.title}</Text><Text className="font-sans text-xs text-ink/50 mt-1">{option.copy}</Text></TouchableOpacity>)}
+              {!instantBookingEnabled&&<Text className="font-sans text-xs text-ink/50 mt-2">Book Now will open after service pricing and estimated cleaning times are finalized.</Text>}
             </View>
           )}
 

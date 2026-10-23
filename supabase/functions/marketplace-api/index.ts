@@ -236,6 +236,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       return {
         suppliesFeeUsd:10,contactUrl:'https://wa.me/',...settings,
         bookingEnabled:settings.bookingEnabled===true&&!maintenanceMode&&!disableNewBookings,
+        instantBookingEnabled:settings.instantBookingEnabled===true,
         waitlistEnabled:settings.waitlistEnabled!==false,
         maintenanceMode,
         disableNewBookings,
@@ -403,6 +404,8 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if (JSON.stringify(booking.checklist ?? {}).length > 20000 || !booking.checklist || typeof booking.checklist !== 'object') fail(400,'A valid cleaning checklist is required.');
       const budget = Number(booking.budget ?? 0); if (!Number.isFinite(budget) || budget < 0 || budget > 10000) fail(400,'Budget must be between 0 and 10000.');
       const bookingMode = ['INSTANT','SCHEDULED'].includes(String(booking.bookingMode).toUpperCase()) ? String(booking.bookingMode).toUpperCase() : 'SCHEDULED';
+      if(bookingMode==='INSTANT'&&config?.value?.instantBookingEnabled!==true)
+        fail(503,'Book Now is temporarily unavailable while service pricing and duration are finalized. Schedule a booking to receive cleaner quotes.');
       if (bookingMode==='SCHEDULED' && booking.timePreference==='CUSTOM') {
         const scheduledAt=Date.parse(String(booking.scheduledDateTime??''));
         if(!Number.isFinite(scheduledAt)||scheduledAt<Date.now()+30*60*1000||scheduledAt>Date.now()+180*24*60*60*1000)fail(400,'Custom bookings must be at least 30 minutes from now and within the next 180 days.');
