@@ -1,5 +1,5 @@
 begin;
-select plan(3);
+select plan(4);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values
@@ -29,10 +29,10 @@ select set_config('request.jwt.claim.sub','87150e3b-4530-4438-9e1e-dbc3d14ee901'
 select is((select count(*)::integer from storage.objects where name='profile-photos/6c32a407-a8ca-4b46-9fad-6165c5f90910/avatar.jpg'),1,
   'cleaner can read the assigned customer avatar');
 select set_config('request.jwt.claim.sub','9e064150-967a-45e4-92a4-114fe8c979c0',true);
-select is((select count(*)::integer from storage.objects where name in (
-  'profile-photos/6c32a407-a8ca-4b46-9fad-6165c5f90910/avatar.jpg',
-  'profile-photos/87150e3b-4530-4438-9e1e-dbc3d14ee901/avatar.jpg')),0,
-  'an unrelated account cannot read either booking avatar');
+select is((select count(*)::integer from storage.objects where name='profile-photos/6c32a407-a8ca-4b46-9fad-6165c5f90910/avatar.jpg'),0,
+  'an unrelated account cannot read the customer's private avatar');
+select is((select count(*)::integer from storage.objects where name='profile-photos/87150e3b-4530-4438-9e1e-dbc3d14ee901/avatar.jpg'),1,
+  'verified cleaner avatars remain discoverable to authenticated customers');
 reset role;
 
 select * from finish();
