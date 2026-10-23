@@ -1093,15 +1093,17 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const subject=text(input.subject,140), message=text(input.message,5000), apiKey=secret('RESEND_API_KEY','EXPO_RESEND_API_KEY');
       if(!subject||!message||!apiKey)fail(503,'Campaign email is not configured.');
       const id=requireKey(input.idempotencyKey);
-      const {data:existing,error:existingError}=await admin.from('marketingcampaigns').select('createdby,subject,message,status,recipientcount').eq('id',id).maybeSingle();
+      const filters=input.filters&&typeof input.filters==='object'?input.filters as Json:{};
+      const filterCountry=text(filters.country,80),filterCity=text(filters.city,100),filterService=text(filters.serviceInterest,30).toUpperCase(),filterLanguage=text(filters.preferredLanguage,40);
+      const {data:existing,error:existingError}=await admin.from('marketingcampaigns').select('createdby,subject,message,status,recipientcount,data').eq('id',id).maybeSingle();
       if(existingError)throw existingError;
       if(existing){
         if(existing.createdby!==actor||existing.subject!==subject||existing.message!==message)fail(409,'This campaign key is already in use.');
+        const priorFilters=existing.data?.filters??{};
+        if(text(priorFilters.country,80)!==filterCountry||text(priorFilters.city,100)!==filterCity||text(priorFilters.serviceInterest,30).toUpperCase()!==filterService||text(priorFilters.preferredLanguage,40)!==filterLanguage)fail(409,'This campaign key was already used with a different audience.');
         if(existing.status==='SENT')return {recipientCount:Number(existing.recipientcount??0),alreadySent:true};
         fail(409,'This campaign attempt is already recorded and requires operator review before retrying.');
       }
-      const filters=input.filters&&typeof input.filters==='object'?input.filters as Json:{};
-      const filterCountry=text(filters.country,80),filterCity=text(filters.city,100),filterService=text(filters.serviceInterest,30).toUpperCase(),filterLanguage=text(filters.preferredLanguage,40);
       const {error:claimError}=await admin.from('marketingcampaigns').insert({id,subject,message,status:'SENDING',recipientcount:0,createdby:actor,data:{filters:{country:filterCountry,city:filterCity,serviceInterest:filterService,preferredLanguage:filterLanguage}}});
       if(claimError?.code==='23505')fail(409,'This campaign was already submitted. Refresh campaign history before retrying.');
       if(claimError)throw claimError;
