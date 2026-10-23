@@ -212,7 +212,7 @@ export interface Bid {
   cleanerEliteVerified?: boolean;
   bidPrice: number;
   estimatedArrival: number;
-  status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'COUNTERED';
+  status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'COUNTERED' | 'EXPIRED';
   message?: string;
   history?: OfferHistoryEntry[];
   createdAt?: any;
