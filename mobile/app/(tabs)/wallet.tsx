@@ -95,7 +95,11 @@ export default function WalletScreen() {
 
   const balance = profile?.balance ?? 0;
   const isCleaner = profile?.role === 'CLEANER';
-  const availableEarnings = isCleaner ? Math.max(0, Number(profile?.balance ?? 0) - Number(profile?.commissionBalance ?? 0)) : 0;
+  // Match request_cleaner_payout_secure: GENERAL balance also includes top-ups,
+  // so it must never be used to calculate withdrawable cleaner earnings.
+  const availableEarnings = isCleaner
+    ? Math.max(0, Number(profile?.earningsBalance ?? 0) - Number(profile?.commissionBalance ?? 0))
+    : 0;
 
   const requestPayout = async () => {
     setIsLoading(true);
