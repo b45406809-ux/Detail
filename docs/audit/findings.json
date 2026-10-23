@@ -1,0 +1,1999 @@
+{
+  "snapshot": "dae9b3b",
+  "date": "2026-10-23",
+  "branch": "codex/separate-dashboard-into-routed-modules-fl7jlh",
+  "findings": [
+    {
+      "id": "F01",
+      "severity": "P0",
+      "confidence": "Reproduced",
+      "area": "API and data contracts",
+      "title": "Browser preflight crashes the marketplace API",
+      "refs": [
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "request.method==='OPTIONS'"
+        ]
+      ],
+      "impact": "OPTIONS calls reply({}, 204), which constructs a Response with a JSON body. Fetch forbids a body for status 204. Executing the checked-in handler with an allowed localhost origin throws TypeError. Browsers preflight authenticated JSON requests, blocking the site/dashboard and public blog/waitlist calls even though native clients may work.",
+      "fix": "Return new Response(null, {status:204, headers:...}); centralize CORS and ensure error responses include the allowed origin. Add the deployed site/dashboard/blog origins.",
+      "check": "An actual browser can complete OPTIONS then POST for every public and authenticated action; rejected origins remain rejected."
+    },
+    {
+      "id": "F02",
+      "severity": "P1",
+      "confidence": "Reproduced",
+      "area": "API and data contracts",
+      "title": "Booking and safety notifications fail their database insert",
+      "refs": [
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "async function notify"
+        ],
+        [
+          "supabase/migrations/20261020000000_initial_schema.sql",
+          "create table public.notifications"
+        ]
+      ],
+      "impact": "notify() sends userId, jobId and createdAt as JSON property names. PostgreSQL stored the unquoted schema columns as userid, jobid and createdat. PostgREST does not lowercase JSON keys. The source probe confirms the wrong keys, and the function logs the resulting insert error and returns before building the durable outbox. New quotes, assignments, status updates, instant offers, SOS and support alerts therefore lose their intended notifications. The Paynow webhook uses a separate correctly lowercased insert.",
+      "fix": "Use generated database types and physical column names; persist the business event and notification/outbox together in a transaction rather than logging and discarding failures.",
+      "check": "Creating a quote, assignment, completion, support ticket and SOS produces an in-app notification plus the correct durable delivery row; inject an insert failure and verify recovery."
+    },
+    {
+      "id": "F03",
+      "severity": "P1",
+      "confidence": "Reproduced",
+      "area": "API and data contracts",
+      "title": "Cleaner feed normalization overwrites the booking ID with undefined",
+      "refs": [
+        [
+          "mobile/services/supabase.ts",
+          "if (table === 'openJobs') result.id"
+        ],
+        [
+          "mobile/app/(tabs)/home.tsx",
+          "collection(db, 'openJobs')"
+        ]
+      ],
+      "impact": "rowToData('openJobs', row) reads row.jobId although the physical row contains jobid. It adds id:undefined. Screens build {id:snapshot.id, ...snapshot.data()}, so that undefined value overwrites the correct snapshot ID. The source probe reproduces this. Feed navigation can point to /job/undefined and bidding loses its job identity.",
+      "fix": "Normalize the primary key from row.jobid or normalized.jobId exactly once; avoid overwriting snapshot identity with row data. Replace the compatibility shim with typed DTO adapters.",
+      "check": "A real lowercase openjobs row renders a stable nonempty key, opens its detail screen and submits a quote for that same UUID."
+    },
+    {
+      "id": "F04",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "API and data contracts",
+      "title": "Scheduled quotes no longer have enough job detail for cleaners",
+      "refs": [
+        [
+          "supabase/migrations/20261020010000_marketplace_hardening.sql",
+          "Do not store the whole customer payload"
+        ],
+        [
+          "mobile/app/job/[jobId].tsx",
+          "doc(db, 'openJobs', jobId)"
+        ],
+        [
+          "mobile/app/(tabs)/home.tsx",
+          "rankJobsByProximity"
+        ]
+      ],
+      "impact": "The hardened openjobs projection intentionally removes exact location, checklist, photos and description. The detail screen still reads that projection as a full Job and expects those fields; the feed sorts by coordinates that are no longer present. Even after F03, cleaners cannot assess room/vehicle scope, see the promised before photos or establish travel distance. Simply reopening the private jobs RLS policy would leak addresses and gate/pet instructions to every verified cleaner. The detail UI also labels estimatedDuration as hours although the newer schema stores minutes.",
+      "fix": "Design a sanitized pre-assignment job-summary API with service scope, estimated duration, approximate suburb/distance and explicitly authorized photos. Keep address, contact details and sensitive instructions participant-only.",
+      "check": "An eligible unassigned cleaner can price the work without seeing exact address/contact details; an unrelated customer cannot fetch that summary."
+    },
+    {
+      "id": "F05",
+      "severity": "P1",
+      "confidence": "SDK-confirmed",
+      "area": "Mobile authentication",
+      "title": "Google auth configuration can crash iOS sign-in before Apple sign-in is usable",
+      "refs": [
+        [
+          "mobile/components/SocialSignInButtons.tsx",
+          "Google.useAuthRequest"
+        ]
+      ],
+      "impact": "The hook is called unconditionally with webClientId and androidClientId but no iosClientId. The installed expo-auth-session Google provider selects iosClientId on iOS and runs an invariant during render. Its web client ID is not the fallback. The later isGoogleConfigured check cannot prevent this hook error. Missing Android configuration causes the same render-time problem.",
+      "fix": "Provide the correct platform client IDs, render the Google hook only inside a configured platform component, and keep Apple/email/SMS sign-in available independently. Configure native redirect schemes and Supabase provider audiences explicitly.",
+      "check": "Launch sign-in on both OSes with Google configured and absent; email/SMS/Apple remain usable and each OAuth round trip signs into the intended account."
+    },
+    {
+      "id": "F06",
+      "severity": "P1",
+      "confidence": "SDK-confirmed",
+      "area": "Mobile media",
+      "title": "All native uploads use an unsupported Supabase Blob path",
+      "refs": [
+        [
+          "mobile/services/storage.ts",
+          "const blob = await response.blob()"
+        ],
+        [
+          "supabase/migrations/20261020001000_storage_and_financial_rpcs.sql",
+          "Users update and remove own media"
+        ]
+      ],
+      "impact": "The shared uploadUri helper fetches a local URI into a Blob and passes that Blob to storage.upload. The installed @supabase/storage-js upload documentation explicitly warns that Blob/File/FormData do not work as intended in React Native and recommends ArrayBuffer from file bytes. This affects profile photos, before photos, completion evidence, chat and portfolio. Completion requires a photo, so upload failure can strand a job. Uploads also use upsert:true for fresh job/chat objects, while the storage UPDATE policy checks UID as the second path segment and those paths put the job UUID there. The SDK requires update/select permissions for upsert; use insert-only uploads or narrowly correct that policy.",
+      "fix": "Read local files with a supported Expo file API, upload an ArrayBuffer, validate size/type and generate a safe extension/content type. Avoid upsert for new job/chat objects and add cancellation/progress/error handling.",
+      "check": "Capture and upload JPEG/HEIC/PNG on real Android and iOS devices; byte length and MIME match, signed reads work, and completion remains recoverable after upload interruption."
+    },
+    {
+      "id": "F07",
+      "severity": "P1",
+      "confidence": "Reproduced",
+      "area": "Security and privacy",
+      "title": "Mapbox download secret appears in public Expo configuration",
+      "refs": [
+        [
+          "mobile/app.config.js",
+          "RNMapboxMapsDownloadToken: mapboxDownloadsToken"
+        ]
+      ],
+      "impact": "The private downloads token is placed in the returned plugins array. Running expo config --type public --json with a synthetic token reveals it at plugins[8][1].RNMapboxMapsDownloadToken. This confirms exposure in public config output; an installed build/updates manifest must be inspected to establish whether a real token has already shipped. This is a build secret, unlike the intentionally public map styles token.",
+      "fix": "Use a local config plugin that reads the build-only environment variable internally and writes native build credentials without returning the secret in public app config. Ensure native credential files and build logs are protected. Rotate any real token found in shipped manifests/artifacts.",
+      "check": "A canary downloads token appears nowhere in public config, JS bundles, updates manifests or distributable metadata, while native SDK download succeeds."
+    },
+    {
+      "id": "F08",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Security and privacy",
+      "title": "Direct database reads bypass admin permissions and MFA",
+      "refs": [
+        [
+          "supabase/migrations/20261020000000_initial_schema.sql",
+          "create function public.is_admin()"
+        ],
+        [
+          "supabase/migrations/20261020000000_initial_schema.sql",
+          "Payout requests visible to cleaner and admin"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "async function requireAdmin"
+        ]
+      ],
+      "impact": "RLS commonly permits public.is_admin(), which means any adminroles row, while REST SELECT grants expose users, jobs, payments, payouts, privatekyc and support. A marketing-only admin at aal1 can query sensitive tables directly, bypassing the API's finance.read/users.manage/MFA checks and its sanitized projections. This exposes precise addresses, contact details, provider poll/session URLs and payout ciphertext without needing the dashboard.",
+      "fix": "Use database permission helpers that check the requested permission and auth.jwt()->>'aal'; apply them to every sensitive table/view. Expose safe purpose-specific views/RPCs, revoke broad base-table reads and test direct REST access separately from Edge Functions.",
+      "check": "A marketing-only admin with no MFA cannot read financial/customer/KYC data through REST; a finance admin at aal2 sees only the columns their operation needs."
+    },
+    {
+      "id": "F09",
+      "severity": "P0",
+      "confidence": "Deployment-dependent",
+      "area": "Security and privacy",
+      "title": "Admin invitation write policy can permit privilege escalation under default grants",
+      "refs": [
+        [
+          "supabase/migrations/20261020000000_initial_schema.sql",
+          "Admin invites protected"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'acceptAdminInvite'"
+        ]
+      ],
+      "impact": "admininvites has an ALL policy allowing any is_admin(), while the migrations never explicitly revoke its INSERT/UPDATE/DELETE table grants. Supabase projects commonly supply broad default public-schema grants; GRANT SELECT does not remove existing write rights. Under those defaults, a low-privilege admin can insert an elevated invitation for an email they own and redeem it through the service API. The production ACL was not queried, so exploitability is conditional on effective grants.",
+      "fix": "Explicitly REVOKE all admininvites writes from anon/authenticated and make invite issuance a service-only transaction. Restrict delegation, require appropriate MFA/elevation, reject elevated values from untrusted rows and create a migration that asserts effective ACLs.",
+      "check": "Inspect has_table_privilege for anon/authenticated and attempt direct invitation insert/update/delete as a low-privilege admin; all writes must fail."
+    },
+    {
+      "id": "F10",
+      "severity": "P1",
+      "confidence": "Deployment-dependent",
+      "area": "Security and privacy",
+      "title": "User field restrictions depend on grants that are not reset",
+      "refs": [
+        [
+          "supabase/migrations/20261020000000_initial_schema.sql",
+          "grant update (email"
+        ],
+        [
+          "supabase/migrations/20261020000000_initial_schema.sql",
+          "protect_user_financial_fields"
+        ]
+      ],
+      "impact": "The schema grants column updates to users but does not first revoke a preexisting table-level UPDATE grant. The protection trigger guards many financial/trust fields but omits cleanerOnboardingComplete, jobsCompleted, ratingAverage/ratingCount and some later-added fields such as walletRestricted/locationPoint. With default broad grants, an owner can modify fields the app treats as server-owned. This must be verified against actual ACLs; client-side filtering is not a security boundary.",
+      "fix": "Reset table grants explicitly, grant the smallest safe column set, protect all server-owned columns in a trigger or service-only RPC and add role/ACL regression checks after every migration.",
+      "check": "Raw REST attempts to self-set onboarding completion, ratings, job totals, restriction flags or geospatial freshness fail regardless of client implementation."
+    },
+    {
+      "id": "F11",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Security and privacy",
+      "title": "Suspension and role changes are not enforced consistently across actions",
+      "refs": [
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'setActiveRole'"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'createBooking'"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'transitionBooking'"
+        ]
+      ],
+      "impact": "getUser verifies identity but does not enforce a central account-state policy. Some actions check suspended/banned/profile eligibility; creation, role changes to CUSTOMER, active-job location and several lifecycle actions do not. A cleaner can switch active role during an assignment, disappear from cleaner lists and then fail SQL transitions that require the active role CLEANER. Existing sessions and the distinction between temporary suspension and auth ban need explicit handling.",
+      "fix": "Separate capabilities/verified cleaner status from the UI's active view role. Enforce account state centrally for relevant actions, revoke sessions where appropriate and allow only safe resolution actions for suspended users with active work.",
+      "check": "Suspend/ban each role while a session is active; creation/dispatch/payout permissions follow the policy, while history/support access and active-job resolution remain controlled."
+    },
+    {
+      "id": "F12",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Security and privacy",
+      "title": "Completion evidence and arrival can be fabricated without a stored photo or presence check",
+      "refs": [
+        [
+          "supabase/migrations/20261020012000_fix_completion_photo_rpc.sql",
+          "if p_path is null"
+        ],
+        [
+          "supabase/migrations/20261020010000_marketplace_hardening.sql",
+          "create or replace function public.mark_booking_arrived"
+        ]
+      ],
+      "impact": "add_completion_photo verifies only a path prefix; it does not check storage.objects existence, object owner, size or MIME. A modified client can add a nonexistent own-prefix path and satisfy the completion-photo count. mark_booking_arrived only checks actor/status, so arrival and start can be recorded remotely. Together these weaken proof of service even though financial settlement is server-side.",
+      "fix": "Verify uploaded object metadata in a transactional evidence registration step. Use a recent location/geofence check and/or customer start PIN, with an explicit support override for GPS failure. Treat photos as evidence rather than proof that work occurred.",
+      "check": "A nonexistent photo path, another user's object and a remote/stale arrival are rejected; support can handle legitimate permission/GPS failures with an audited override."
+    },
+    {
+      "id": "F13",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Mobile authentication",
+      "title": "Account deletion checks a Firebase-style claim absent from ordinary Supabase JWTs",
+      "refs": [
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "claims.auth_time"
+        ],
+        [
+          "mobile/app/(tabs)/profile.tsx",
+          "handleDeleteAccount"
+        ]
+      ],
+      "impact": "Deletion treats a missing auth_time claim as zero, then rejects any token more than five minutes old. Ordinary Supabase access tokens carry iat/amr authentication timestamps rather than Firebase's auth_time. There is no app flow that obtains the required claim. Eligible users can be repeatedly told to sign in again without ever passing the check.",
+      "fix": "Implement recent authentication using verified Supabase session/authentication-method data or a purpose-bound server challenge. Offer a visible reauthentication path and sign out/clear local state after successful deletion.",
+      "check": "A freshly reauthenticated email, phone, Google and Apple user can delete an eligible account; an old or stolen session cannot."
+    },
+    {
+      "id": "F14",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Security and privacy",
+      "title": "Deletion leaves sensitive location/media/history data and misses some financial obligations",
+      "refs": [
+        [
+          "supabase/migrations/20261020003000_admin_and_privacy.sql",
+          "create or replace function public.close_account"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'deleteAccount'"
+        ]
+      ],
+      "impact": "close_account clears users.location but not later-added locationPoint/locationUpdatedAt; it does not remove storage objects or sanitize jobs.location, jobs.data, messages, bids and support JSON. deletion checks only PENDING payouts, not APPROVED, and close_account's payment list misses direct AUTHORIZED/WALLET CAPTURED obligations on completed jobs. The SQL anonymization and Auth deletion are separate steps with no recovery job. Data can be partly erased while authentication remains active, or financial/support records can remain linked to identifiable media.",
+      "fix": "Define a retained-record/redaction policy; block every unresolved obligation, close/revoke sessions, enqueue durable deletion/redaction across DB, storage and providers, and reconcile failures. Preserve legally required financial records with a pseudonymous identifier.",
+      "check": "Seed every media folder, precise coordinate column and pending/approved/captured obligation; deletion either blocks clearly or fully executes the documented redaction with a retryable audit trail."
+    },
+    {
+      "id": "F15",
+      "severity": "P2",
+      "confidence": "Code-confirmed",
+      "area": "Security and privacy",
+      "title": "Media access is long-lived and some assigned-party avatars are unreadable",
+      "refs": [
+        [
+          "mobile/services/storage.ts",
+          "createSignedUrl(path, 60 * 60 * 24 * 7)"
+        ],
+        [
+          "supabase/migrations/20261020005000_client_runtime_access.sql",
+          "Verified cleaner profile photos"
+        ]
+      ],
+      "impact": "The adapter signs every storage path for seven days. Existing links continue to work after role changes/removal during their lifetime, while failed signing is silently converted to an empty string. Assigned cleaners have no equivalent policy to read a customer's private profile photo, so copied customerPhoto paths in jobs can become blank. The app also previews raw detail-media paths immediately after upload.",
+      "fix": "Use short-lived purpose-specific signed URLs with controlled refresh/cache, preserve structured media errors and add narrowly scoped participant avatar access. Sign upload previews separately; keep database paths stable.",
+      "check": "Customer/cleaner avatars and job evidence display for authorized parties, unauthorized reads fail, and URL expiry/revocation behavior matches the privacy policy."
+    },
+    {
+      "id": "F16",
+      "severity": "P2",
+      "confidence": "Code-confirmed",
+      "area": "Security and privacy",
+      "title": "Rate limits can be fragmented by supplied IP headers and leave costly endpoints uncovered",
+      "refs": [
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "async function enforceRateLimit"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'refreshCleanerIdentityVerification'"
+        ]
+      ],
+      "impact": "The limiter keys action+actor+IP and trusts cf-connecting-ip/x-real-ip/x-forwarded-for without an independent per-actor bucket. Deployment must guarantee those headers are overwritten; otherwise changing a header creates a fresh quota. Didit refresh, payment polls/retries, public signup and several admin operations have no corresponding bounded limiter. Expired rate-limit rows have no cleanup.",
+      "fix": "Use a trusted ingress-derived address, separate actor/IP/global budgets and provider-specific limits; clean expired counters. Add rate policies to polling, retries, public writes and expensive search/media-signing operations.",
+      "check": "Changing client-supplied forwarding headers cannot reset an account quota; concurrent limits are atomic and legitimate recovery remains usable."
+    },
+    {
+      "id": "F17",
+      "severity": "P2",
+      "confidence": "Code-confirmed",
+      "area": "API and data contracts",
+      "title": "Many requests lack bounded server-side schemas",
+      "refs": [
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "const payload=await request.json()"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "const booking = input.booking ?? {}"
+        ]
+      ],
+      "impact": "The dispatcher accepts arbitrary JSON without a body-size cap or per-action schema. createBooking stores the whole booking JSON, trusts customer display fields, description/time data and has much weaker scheduled-coordinate validation than instant mode. Several numeric handlers rely on comparisons that do not reject NaN/Infinity, and schema errors become generic 500s. Client controls are easy to bypass.",
+      "fix": "Introduce bounded discriminated request schemas, finite numeric/UUID/date checks, server-derived identity fields and constrained JSON columns. Return stable safe error codes and field-level validation messages.",
+      "check": "Malformed/oversized requests and spoofed display/identity fields are rejected before writes; scheduled and instant bookings obey consistent validation."
+    },
+    {
+      "id": "F18",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Mobile authentication",
+      "title": "Email-code and recovery journeys lack a complete native callback contract",
+      "refs": [
+        [
+          "mobile/services/emailAuth.ts",
+          "signInWithOtp"
+        ],
+        [
+          "mobile/services/supabase.ts",
+          "redirectTo: 'detail://reset-password'"
+        ],
+        [
+          "mobile/app/_layout.tsx",
+          "function AuthGuard"
+        ]
+      ],
+      "impact": "The UI always asks for a six-digit email code, but no tracked email template config renders .Token; Supabase's default email flow is link-based. PKCE detectSessionInUrl is false on mobile and no handler exchanges recovery/signup links. reset-password and payment-return routes do not exist, and no screen updates the recovered password. Password signup routes to the same code screen without a fully specified template/callback setup.",
+      "fix": "Choose explicit OTP versus magic-link contracts, configure versioned templates, add deep-link handlers and recovery screens, exchange PKCE codes safely and preserve intended navigation after auth.",
+      "check": "Complete new email-code signup, returning login, password signup/verification and forgotten-password recovery from real emails on both native OSes."
+    },
+    {
+      "id": "F19",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Mobile authentication",
+      "title": "Phone-first users cannot complete required email-based cleaner onboarding or Paynow setup",
+      "refs": [
+        [
+          "mobile/app/register-cleaner.tsx",
+          "const emailVerified"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "Verify your identity and email before applying."
+        ],
+        [
+          "mobile/services/phoneAuth.ts",
+          "signInWithOtp"
+        ],
+        [
+          "supabase/migrations/20261020000000_initial_schema.sql",
+          "create function public.on_auth_user_created()"
+        ]
+      ],
+      "impact": "SMS signup creates a phone-auth account. Cleaner application requires user.email_confirmed_at, but the app has no add/link/change-email flow; resend verification fails for an account with no email. Paynow initialization also requires an email. A user following the default SMS tab can become stuck after KYC or at payment. The auth profile trigger also omits Auth.phone, so a phone-verified customer can still have no profile.phone for assigned-party calls and SMS alerts.",
+      "fix": "Add verified email linking to the existing Supabase identity, with clear duplicate-account/merge handling and contact recovery. Surface the requirement before incurring KYC or starting checkout.",
+      "check": "A fresh SMS-only user adds and verifies an email without creating another user ID, completes cleaner onboarding and can pay; existing-email conflicts have a safe path."
+    },
+    {
+      "id": "F20",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Mobile authentication",
+      "title": "Auth refresh helpers do not refresh the state used by onboarding",
+      "refs": [
+        [
+          "mobile/services/supabase.ts",
+          "reload: async"
+        ],
+        [
+          "mobile/services/supabase.ts",
+          "getIdToken: async"
+        ],
+        [
+          "mobile/context/AuthContext.tsx",
+          "refreshProfile = useCallback"
+        ]
+      ],
+      "impact": "compatUser.reload calls getUser but discards its result, getIdToken ignores forceRefresh, and refreshProfile is a no-op. The registration screen checks auth.currentUser.emailVerified and expects reload to change it, which may stay stale until a separate auth event. Profile listener failures are logged without a recoverable load error, and account changes can briefly retain prior profile state.",
+      "fix": "Use native Supabase auth/session APIs and explicit profile refetches, update state from authoritative returned data, clear profile on user changes and expose retryable loading/error states.",
+      "check": "Verify email in another app, return and tap refresh; onboarding unblocks immediately. Account switch and initial network failure never expose stale profile data or an endless spinner."
+    },
+    {
+      "id": "F21",
+      "severity": "P2",
+      "confidence": "Code-confirmed",
+      "area": "Mobile authentication",
+      "title": "Legal and onboarding route guards conflict with intended navigation",
+      "refs": [
+        [
+          "mobile/app/_layout.tsx",
+          "if (!user && !inAuthGroup)"
+        ],
+        [
+          "mobile/app/(auth)/sign-in.tsx",
+          "router.push('/customer-agreement')"
+        ],
+        [
+          "mobile/app/(auth)/create-profile.tsx",
+          "hasAgreedToTerms: true"
+        ]
+      ],
+      "impact": "The unauthenticated guard redirects every non-auth route to splash, including the legal documents linked from sign-in. Conversely, logged-in users are forced through onboarding only while inside the auth group, so direct links to non-auth screens can bypass it. Terms are represented by mutable booleans with no server-side document version or timestamp record.",
+      "fix": "Allow public legal/recovery routes, gate authenticated routes by capability and onboarding state consistently, and record versioned terms acceptance on the server.",
+      "check": "Signed-out users can read terms/privacy and return to signup; incomplete users cannot jump to booking; accepted document version/time can be retrieved for audit."
+    },
+    {
+      "id": "F22",
+      "severity": "P2",
+      "confidence": "Code-confirmed",
+      "area": "Mobile authentication",
+      "title": "Permission onboarding blocks customers who decline location and forgets existing OS grants",
+      "refs": [
+        [
+          "mobile/app/(auth)/permissions.tsx",
+          "const [granted"
+        ],
+        [
+          "mobile/app/(auth)/permissions.tsx",
+          "if (!granted.location)"
+        ]
+      ],
+      "impact": "The permission screen initializes grants as empty instead of querying the OS, and refuses to continue without foreground location even though manual address entry exists. A denied-permanently user gets an OK-only alert without a settings link. Customers can be locked out of booking/history unnecessarily.",
+      "fix": "Read existing OS permission state, support manual-address customer usage, provide settings/retry controls, and request background location only in the cleaner online flow.",
+      "check": "Fresh, already-granted, denied and permanently-denied installs each have a clear usable path; customer booking works with a manually confirmed location."
+    },
+    {
+      "id": "F23",
+      "severity": "P2",
+      "confidence": "Code-confirmed",
+      "area": "API and data contracts",
+      "title": "Service errors lose their actionable details on the client",
+      "refs": [
+        [
+          "mobile/services/functions.ts",
+          "if (error)"
+        ],
+        [
+          "site/src/admin/api.ts",
+          "if (error) throw"
+        ],
+        [
+          "mobile/app/(auth)/sign-in.tsx",
+          "err.code === 'auth/user-not-found'"
+        ]
+      ],
+      "impact": "Supabase FunctionsHttpError keeps the response body in its context, while these wrappers look for response.error after an invocation failure. Domain messages are often replaced by a generic non-2xx error. Email/password auth still maps Firebase error codes. Many screens catch silently or replace all causes with 'try again', making insufficient commission, missing email, unavailable cleaner and actual outages indistinguishable.",
+      "fix": "Parse the safe structured error body from FunctionsHttpError.context, adopt Supabase auth codes and display operation-specific recovery actions. Preserve user input on retry and log only redacted diagnostics.",
+      "check": "Exercise validation, insufficient balance, auth expiry, provider outage and network loss; users see the right next action and no secret/provider body is exposed."
+    },
+    {
+      "id": "F24",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Booking and dispatch",
+      "title": "There is no usable complete booking activity/re-entry screen",
+      "refs": [
+        [
+          "mobile/app/(tabs)/_layout.tsx",
+          "name=\"activity\""
+        ],
+        [
+          "mobile/app/(tabs)/home.tsx",
+          "where('status', 'in'"
+        ],
+        [
+          "mobile/app/history.tsx",
+          "where('status', 'in'"
+        ]
+      ],
+      "impact": "The tab layout names activity, but no activity route exists. Home shows at most one assigned/en-route/in-progress job and completed recents; history shows only completed/cancelled jobs. Pending quote requests, unaccepted instant requests and multiple/future assignments lack a complete list. Leaving or killing the app can strand a request and encourage duplicate creation.",
+      "fix": "Implement an Activity screen with pending, upcoming, active, needs-action and past bookings, server pagination and a clear next action based on payment/lifecycle state. Open each booking by participant identity, independent of current view role.",
+      "check": "Create multiple future bookings plus a pending request, terminate/relaunch the app, switch roles and recover every item and required payment action."
+    },
+    {
+      "id": "F25",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Booking and dispatch",
+      "title": "Booking, top-up and payout retries can create duplicate operations",
+      "refs": [
+        [
+          "mobile/app/booking/create.tsx",
+          "idempotencyKey: `booking-"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'createPaynowWalletTopup'"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'requestCleanerPayout'"
+        ],
+        [
+          "supabase/migrations/20261020010000_marketplace_hardening.sql",
+          "where idempotencyKey='created_'"
+        ]
+      ],
+      "impact": "Booking keys are regenerated from Date.now on every press; top-ups generate a new server UUID every request; payout creation has no client operation key. A lost response followed by retry can create another job, checkout or reserved payout. create_booking's duplicate lookup is global rather than scoped to actor, and no unique actor/creation-key constraint serializes simultaneous initial requests.",
+      "fix": "Persist one operation UUID per user intent across retries/restarts; enforce actor-scoped uniqueness transactionally and return the original result. Add idempotency to top-up/payout creation and separate retrying from starting a new transaction.",
+      "check": "Drop the first response after commit and retry concurrently or after relaunch: exactly one booking/payment/payout exists and exactly one amount is reserved."
+    },
+    {
+      "id": "F26",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Booking and dispatch",
+      "title": "Instant requests do not reach a clean terminal state when matching expires",
+      "refs": [
+        [
+          "supabase/functions/delivery-worker/index.ts",
+          "offerExpiryError"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'refreshInstantMatching'"
+        ],
+        [
+          "mobile/app/tracking/[jobId].tsx",
+          "No cleaner has accepted yet"
+        ]
+      ],
+      "impact": "The worker expires instantoffers but does not expire/cancel the pending job or its openjobs row. A request can remain PENDING after its three-minute matching deadline, appear in a scheduled feed and retain misleading controls. Failed post-create matching can also leave a committed job even though the API returns an error. Accepted-but-unconfirmed customer requests have no payment-confirmation deadline or release flow.",
+      "fix": "Use explicit matching/awaiting-customer/expired states, transactional creation plus dispatch outbox, and scheduled recovery that releases offers and safely closes or reschedules abandoned requests. Let users convert to a scheduled request without duplicating it.",
+      "check": "No-candidate, all-declined, expired, dispatch-failure and customer-abandonment cases each reach a defined recoverable state with no stale open feed row."
+    },
+    {
+      "id": "F27",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Booking and dispatch",
+      "title": "Primary service shortcuts skip the Book Now choice",
+      "refs": [
+        [
+          "mobile/app/booking/create.tsx",
+          "useState(preselectedCategory ? 1 : 0)"
+        ],
+        [
+          "mobile/app/booking/create.tsx",
+          "step === 'CATEGORY'"
+        ]
+      ],
+      "impact": "Passing a preselected category starts the wizard at CHECKLIST, while SCHEDULED versus INSTANT selection exists only on CATEGORY and defaults to SCHEDULED. House/Car shortcuts therefore skip the only normal Book Now control unless the user discovers they can go back a step. This hides the headline instant-matching functionality.",
+      "fix": "Make booking mode an explicit reachable step/control for all entry paths or pass it intentionally from Home. Preserve chosen service/mode while moving through the wizard.",
+      "check": "Enter via Home House, Home Car and generic booking; Book Now and scheduled modes are clearly selectable in every supported entry path."
+    },
+    {
+      "id": "F28",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Booking and dispatch",
+      "title": "Address edits can retain the wrong coordinates and scheduled times are weakly validated",
+      "refs": [
+        [
+          "mobile/app/booking/create.tsx",
+          "let resolvedCoordinates = coordinates"
+        ],
+        [
+          "mobile/app/booking/create.tsx",
+          "return now; // ASAP / TODAY"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "bookingMode==='INSTANT'&&(!Number.isFinite"
+        ]
+      ],
+      "impact": "After selecting current location, editing address text does not invalidate those coordinates. Submission geocodes only when coordinates are missing, so cleaners can be sent to the old position. Scheduled requests can store 0,0 if geocoding fails, and custom/past dates and out-of-area locations are not consistently rejected by the API. TODAY resolves to now, TOMORROW to exactly 24 hours later, without a defined service window/timezone.",
+      "fix": "Maintain one confirmed address+pin object; clear/reconfirm coordinates on edits, add search/map pin correction and enforce service zones, location validity, lead times and explicit local service windows on the server.",
+      "check": "Select current GPS then type another address, book across timezones/day boundaries and submit past/out-of-zone coordinates; the final pin/time must be correct or clearly rejected."
+    },
+    {
+      "id": "F29",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Booking and dispatch",
+      "title": "Instant pricing and availability duration ignore cleaning scope",
+      "refs": [
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "const prices: Record<string,number>"
+        ],
+        [
+          "supabase/migrations/20261020010000_marketplace_hardening.sql",
+          "greatest(30,least(720,coalesce"
+        ],
+        [
+          "mobile/constants/services.ts",
+          "SERVICE_PACKAGES"
+        ]
+      ],
+      "impact": "Fixed prices depend only on serviceId plus supplies. Property size, rooms, condition, vehicle details and add-ons captured by the wizard do not affect the instant quote. The client does not send a derived duration; SQL defaults to 120 minutes even for a basic car wash or deep house clean. Availability blocks and cleaner payout expectations are therefore detached from actual work.",
+      "fix": "Create a versioned server-side service catalog with supported scope, base units, add-ons, duration/capacity and service-area pricing. Persist an immutable quote snapshot and require a reviewed change-order for extra work.",
+      "check": "A small wash and a large/deep house request receive appropriate price/duration; unsupported scopes request a quote instead of a misleading instant fixed price."
+    },
+    {
+      "id": "F30",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Booking and dispatch",
+      "title": "Cleaner acceptance is not reserved exclusively during customer confirmation",
+      "refs": [
+        [
+          "supabase/migrations/20261020010000_marketplace_hardening.sql",
+          "create or replace function public.respond_instant_offer"
+        ],
+        [
+          "supabase/migrations/20261020010000_marketplace_hardening.sql",
+          "status='ACCEPTED'"
+        ]
+      ],
+      "impact": "An accepted instant offer inserts a PENDING bid and leaves the job PENDING without reserving cleaner availability. The same cleaner can accept other instant requests while waiting for customer payment. The check for an already ACCEPTED bid does not match the PENDING bid just created. Assignment constraints eventually stop overlapping final assignments, but customers can pay/accept against promises that cannot all be fulfilled.",
+      "fix": "Use a short exclusive cleaner reservation linked to the offer and customer-confirmation deadline; lock/revalidate offers, payment intent and availability together. Release or advance to another candidate on timeout.",
+      "check": "Two customers confirm competing instant requests at the same time; exactly one gets that cleaner and the other receives a clear alternative without a stranded charge."
+    },
+    {
+      "id": "F31",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Booking and dispatch",
+      "title": "Quote creation and rejection can race acceptance and create duplicates",
+      "refs": [
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'submitBid'"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'rejectBid'"
+        ],
+        [
+          "supabase/migrations/20261020000000_initial_schema.sql",
+          "create table public.bids"
+        ]
+      ],
+      "impact": "The API checks job eligibility then inserts/updates in separate requests with no locked job state, and the schema has no unique active quote per cleaner/job. The UI's alreadyBid check is bypassable. A request started before assignment can insert a new pending bid after assignment, and rejectBid can race an acceptance without a coherent outcome.",
+      "fix": "Move quote issuance/withdrawal/rejection into transactional RPCs locking the job, enforce one active quote per cleaner/job and compare versions/status. Return a stable result for retries and distinguish expiry from rejection.",
+      "check": "Concurrent duplicate quote submissions and accept/reject/expire races preserve one consistent accepted quote and never leave a new open quote on a closed job."
+    },
+    {
+      "id": "F32",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Booking and dispatch",
+      "title": "Rescheduling can collide with the booking\u2019s own existing buffer",
+      "refs": [
+        [
+          "supabase/migrations/20261020010000_marketplace_hardening.sql",
+          "create or replace function public.on_job_reschedule_availability"
+        ],
+        [
+          "supabase/migrations/20261020010000_marketplace_hardening.sql",
+          "exclude using gist"
+        ]
+      ],
+      "impact": "The exclusion constraint is immediate, and the reschedule trigger updates BOOKING and BUFFER rows in separate statements. Moving a two-hour booking 30 minutes later makes its new booking row overlap its old buffer before that buffer is moved, causing a false availability rejection even if no other booking exists.",
+      "fix": "Replace that booking's blocks together atomically, or use a correctly deferred exclusion strategy within a transactional reschedule RPC. Keep the final exclusion check against other jobs/manual blocks.",
+      "check": "Move one assigned booking forward/backward by 30 minutes and across another booking: self-only moves succeed; genuine cleaner overlaps fail and preserve the original blocks."
+    },
+    {
+      "id": "F33",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Booking and dispatch",
+      "title": "Either party can unilaterally change an agreed booking time",
+      "refs": [
+        [
+          "supabase/migrations/20261020010000_marketplace_hardening.sql",
+          "create or replace function public.reschedule_booking"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'rescheduleBooking'"
+        ]
+      ],
+      "impact": "A customer or cleaner can immediately change scheduledDateTime, including a previously instant request, without the other participant accepting material changes. The update does not consistently refresh scheduledTime/timePreference/openjobs summary or reminders. An accepted cleaner can be committed to an inconvenient time with only a best-effort notification.",
+      "fix": "Make rescheduling a proposal/acceptance workflow after assignment, with expiry, quote/fee impact and a no-penalty decline policy. Update all schedule projections/reminders and preserve the prior agreement until acceptance.",
+      "check": "Both actors propose, accept, decline and ignore a time change; nobody is silently committed, and all screens show the same accepted schedule."
+    },
+    {
+      "id": "F34",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Booking and dispatch",
+      "title": "Public launch status and operational kill switches do not match server enforcement",
+      "refs": [
+        [
+          "supabase/seed.sql",
+          "bookingEnabled"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "config?.value?.maintenanceMode"
+        ],
+        [
+          "site/src/supabase.ts",
+          "waitlistEnabled"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'getBetaConfig'"
+        ]
+      ],
+      "impact": "The seeded/site beta flag bookingEnabled=false says bookings are closed, but createBooking ignores that flag and checks different disableNewBookings/maintenance properties. waitlistEnabled is enforced in the UI but not joinWaitlist. getBetaConfig does not incorporate operations switches, and several retry/settlement actions bypass payment pause checks. Opening/pausing the business has inconsistent meanings.",
+      "fix": "Define one documented configuration contract and explicit launch/capability gates in the API/database. Fail safely on unavailable configuration and distinguish blocking new work from allowing necessary settlement/recovery.",
+      "check": "Toggle each gate while clients are open and call endpoints directly; public copy, mobile controls and server behavior agree without preventing safe closure/refunds."
+    },
+    {
+      "id": "F35",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Booking and dispatch",
+      "title": "Cleaner online state, background tracking and session lifecycle are not synchronized",
+      "refs": [
+        [
+          "mobile/app/(tabs)/home.tsx",
+          "const [cleanerStatus"
+        ],
+        [
+          "mobile/services/locationTracking.ts",
+          "TaskManager.defineTask"
+        ],
+        [
+          "mobile/app/(tabs)/profile.tsx",
+          "await signOut(auth)"
+        ]
+      ],
+      "impact": "cleanerStatus is initialized once and never synchronized from changing profile status, so the UI can say offline while the server is online or vice versa. Background location is stopped only by the Home toggle, not on logout/role switch/deletion. Returning to an online account does not reliably restart/reconcile its task, and a new cleaner defaults to AVAILABLE. Tracking does not surface freshness; route requests run whenever coordinate changes arrive.",
+      "fix": "Implement an availability lifecycle manager tied to auth, capabilities, app foreground and active assignment. Start/stop tasks explicitly, reconcile server presence, expire stale online leases and display location timestamps/errors. Debounce/cancel route requests.",
+      "check": "Restart, logout, switch roles, revoke permission and lose network while online/on-job; the visible state matches server/task state and location sharing obeys consent."
+    },
+    {
+      "id": "F36",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Completion and money",
+      "title": "Completion review controls are skipped and cleaners are sent to rate themselves",
+      "refs": [
+        [
+          "mobile/app/tracking/[jobId].tsx",
+          "setStep(isCustomer ? 'PAYMENT' : 'RATING')"
+        ],
+        [
+          "mobile/app/tracking/[jobId].tsx",
+          "Was the cleaning completed as requested?"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'submitRating'"
+        ]
+      ],
+      "impact": "When the job becomes COMPLETED, the listener immediately moves the customer to PAYMENT and the cleaner to RATING. The completion-confirm/report-issue controls exist only in the TRACKING render, which is bypassed. The cleaner sees 'Rate your cleaner', but the rating RPC only accepts the customer. Reopening an already paid/rated completed booking also restarts PAYMENT rather than showing its receipt.",
+      "fix": "Derive a role-specific next action from authoritative completion response/payment/rating state. Keep evidence review and dispute reachable before settlement; provide a cleaner earnings/receipt view and an idempotent completed-booking detail screen.",
+      "check": "Each role completes, disputes, leaves/reopens and revisits a paid/rated booking; all controls remain appropriate and no duplicate payment/rating is requested."
+    },
+    {
+      "id": "F37",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Completion and money",
+      "title": "A completion dispute does not actually hold wallet settlement or earnings release",
+      "refs": [
+        [
+          "supabase/migrations/20261020010000_marketplace_hardening.sql",
+          "create or replace function public.complete_booking_customer_response"
+        ],
+        [
+          "supabase/migrations/20261020002000_marketplace_transactions.sql",
+          "create or replace function public.settle_job_payment"
+        ],
+        [
+          "supabase/migrations/20261020008000_paynow_completion_ledger.sql",
+          "create or replace function public.release_paynow_earnings"
+        ]
+      ],
+      "impact": "Dispute records a support case and JSON response, but settle_job_payment does not check that response or an open dispute. release_paynow_earnings checks only job COMPLETED, provider PAID and releasedAt. completeBooking calls release before the customer reviews. Auto-confirm only writes a response/event; it does not drive an integrated settlement policy. The app's protected-until-review promise is not enforced by a unified state machine.",
+      "fix": "Separate work submitted, customer accepted, disputed, auto-accepted and financially settled states. Place explicit financial holds and release only through the documented resolution/timeout policy, coordinated with provider authority.",
+      "check": "A disputed completion cannot be settled or paid out until resolved; confirmation/timeouts release exactly once; refund-after-release creates a tracked recoverable liability."
+    },
+    {
+      "id": "F38",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Completion and money",
+      "title": "Wallet sub-balances and active-role-dependent top-ups do not form a consistent ledger",
+      "refs": [
+        [
+          "supabase/migrations/20261020001000_storage_and_financial_rpcs.sql",
+          "if p_balance_type = 'GENERAL'"
+        ],
+        [
+          "supabase/migrations/20261020010000_marketplace_hardening.sql",
+          "balance_type:=case when current_status='CLEANER'"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'setActiveRole'"
+        ]
+      ],
+      "impact": "GENERAL debits change aggregate balance without reducing earnings/commission sub-balances. A cleaner switching to customer can spend aggregate money while earnings/commission still claim it exists; later payouts/reserves can fail or reconciliation becomes inconsistent. Top-up allocation and refund reversal choose the user's current role when callbacks arrive, not an immutable purpose/source stored when payment was created. A role change during checkout can put credits/reversals into a different bucket.",
+      "fix": "Use explicit immutable wallet accounts/purposes and a balanced ledger with available/reserved amounts. Store top-up destination at initiation, reverse the original credit source and enforce aggregate/subaccount invariants transactionally.",
+      "check": "Switch roles before a top-up/refund callback and spend/payout in different orders; ledger-derived balances always reconcile and no bucket can be spent twice."
+    },
+    {
+      "id": "F39",
+      "severity": "P1",
+      "confidence": "Reproduced",
+      "area": "Completion and money",
+      "title": "Payout availability differs between the app and secure RPC",
+      "refs": [
+        [
+          "mobile/app/(tabs)/wallet.tsx",
+          "const availableEarnings"
+        ],
+        [
+          "supabase/migrations/20261020010000_marketplace_hardening.sql",
+          "available:=greatest(0,u.earningsBalance-u.commissionBalance)"
+        ]
+      ],
+      "impact": "The UI shows balance minus commissionBalance, while request_cleaner_payout_secure permits earningsBalance minus commissionBalance. With balance=120, earnings=100 and commission credit=20, the UI offers $100 while the backend permits $80. Independent commission credit should not reduce earned withdrawable money in this way, and a role-switch/GENERAL spend can produce further disagreement.",
+      "fix": "Define the financial model first (F38), then return a server-computed withdrawable/reserved/restricted breakdown and use that exact value in the UI. Show pending/approved/paid payout history and restriction reasons.",
+      "check": "All combinations of earnings, commission credit, holds, refunds and customer spending produce identical UI/API withdrawal limits and ledger totals."
+    },
+    {
+      "id": "F40",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Completion and money",
+      "title": "Cancellation fees ignore who cancelled and leave wallet funds unallocated",
+      "refs": [
+        [
+          "supabase/migrations/20261020002000_marketplace_transactions.sql",
+          "refund_amount := round"
+        ],
+        [
+          "supabase/migrations/20261020009000_marketplace_operations.sql",
+          "refund:=round"
+        ]
+      ],
+      "impact": "A WALLET booking cancelled while EN_ROUTE or IN_PROGRESS refunds 50% whether the actor is the customer or the cleaner. Thus a cleaner cancelling can cost the customer half the price. The retained remainder is not posted to a cleaner compensation/platform fee account, and the payment row is not coherently closed/refunded. Admin cancellation repeats the same policy and direct-payment cancellation returns commission reserves without tracking service compensation.",
+      "fix": "Implement an explicit actor/reason/time policy with disclosed fees, protected no-fault cases, full ledger allocation and consistent payment/refund states. Avoid charging a customer for cleaner failure without an adjudicated reason.",
+      "check": "Test customer, cleaner, no-show, safety, admin and system cancellations at every stage; all money is assigned to named accounts and each customer sees an explainable receipt."
+    },
+    {
+      "id": "F41",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Completion and money",
+      "title": "The latest Paynow status function removed monotonic event safeguards",
+      "refs": [
+        [
+          "supabase/migrations/20261020010000_marketplace_hardening.sql",
+          "create or replace function public.apply_paynow_status"
+        ],
+        [
+          "supabase/migrations/20261020002000_marketplace_transactions.sql",
+          "status_rank jsonb"
+        ]
+      ],
+      "impact": "The final replacement drops the earlier status-rank and DISPUTED terminal protection. A delayed Awaiting Delivery callback can move DELIVERED or DISPUTED back to ESCROWED. A dispute may then look funded/usable again. Signed callbacks prove provider origin, not that an older event is the newest authoritative state.",
+      "fix": "Persist an append-only provider event inbox, deduplicate events, apply a documented transition graph and reconcile ambiguous/out-of-order changes with a fresh signed provider poll. Keep refunds/disputes as explicit holds, not simple ranks.",
+      "check": "Replay duplicate and out-of-order signed callbacks across ESCROWED/DELIVERED/PAID/DISPUTED/REFUNDED; no invalid regression, duplicate release or cleared dispute occurs."
+    },
+    {
+      "id": "F42",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Completion and money",
+      "title": "Acceptance replay can skip ownership checks and restart an unrelated payment method",
+      "refs": [
+        [
+          "supabase/migrations/20261020010000_marketplace_hardening.sql",
+          "if event_exists then return jsonb_build_object"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "if(method==='PAYNOW')"
+        ],
+        [
+          "mobile/app/booking/offers.tsx",
+          "idempotencyKey: `accept-"
+        ]
+      ],
+      "impact": "accept_bid returns an existing event before verifying j.customerId equals the actor. The key format is predictable from job/bid UUIDs visible to the accepted cleaner. The API then trusts the current request's paymentMethod to decide whether to start a Paynow checkout, even on an idempotent replay of a wallet/direct/paid booking. Checkout failure overwrites payment.data with only failureReason. At minimum a participant can provoke an unauthorized payment-state change; payment reinitialization and metadata loss are also possible.",
+      "fix": "Authenticate/authorize before returning cached results, scope idempotency to actor+operation and return an immutable result describing the original method/reference. Never initiate a provider side effect on a completed replay; merge failure metadata without destroying settlement/refund fields.",
+      "check": "Replay acceptance as the customer and accepted cleaner with the same key and changed method: only the authorized original result is returned and no second checkout/state mutation occurs."
+    },
+    {
+      "id": "F43",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Completion and money",
+      "title": "Paynow retries can leave a booking permanently INITIATING and discard old callback identity",
+      "refs": [
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'retryPaynowBookingPayment'"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "pollurl:null,redirecturl:null"
+        ]
+      ],
+      "impact": "Retry replaces the single reference and clears checkout URLs before calling the provider. Unlike first acceptance it has no catch that records a retryable failure. If provider init fails, status stays INITIATING, while another retry is allowed only for FAILED/CANCELLED. A valid delayed callback for the previous reference can no longer find that payment. No separate payment-attempt history preserves it.",
+      "fix": "Model immutable attempts under a payment intent, persist each reference, record every failure and use a durable provider-operation state machine. Poll/reconcile old attempts before creating a new one and prohibit duplicate funded attempts.",
+      "check": "Fail every network boundary before/after provider acceptance, then retry and deliver a late old callback; the booking recovers without losing or double-counting payment."
+    },
+    {
+      "id": "F44",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Completion and money",
+      "title": "Pending checkout cannot reliably be resumed after dismissing or killing the app",
+      "refs": [
+        [
+          "mobile/app/tracking/[jobId].tsx",
+          "const handlePaynowRetry"
+        ],
+        [
+          "mobile/app/tracking/[jobId].tsx",
+          "status === 'FAILED'"
+        ],
+        [
+          "supabase/functions/paynow-return/index.ts",
+          "detail://payment-return"
+        ]
+      ],
+      "impact": "The backend stores redirecturl, but the PENDING tracking UI offers a poll rather than a resume checkout action. Retry is limited to FAILED/CANCELLED. payment-return has no native route/handler and the active booking list is incomplete (F24). Closing checkout or receiving a return link can leave an assigned cleaner waiting with no obvious customer payment path.",
+      "fix": "Add an authenticated get/resume payment intent action, a native return handler that reconciles server state, and Activity cards for payment-required jobs. A return link is only a navigation hint and must never mark a payment paid.",
+      "check": "Dismiss checkout, terminate the app, return through a deep link and resume on another device; the original checkout/payment remains accessible and authoritative."
+    },
+    {
+      "id": "F45",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Completion and money",
+      "title": "Payment callbacks and completion side effects lack durable recovery/reconciliation",
+      "refs": [
+        [
+          "supabase/functions/paynow-webhook/index.ts",
+          "before.status!==data.status"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "if (job.paymentmethod === 'PAYNOW') await admin.rpc"
+        ],
+        [
+          "supabase/functions/delivery-worker/index.ts",
+          "Deno.serve"
+        ]
+      ],
+      "impact": "The Paynow callback commits status then sends push directly; if notification fails after the DB update, a replay sees the status unchanged and skips notification. completeBooking ignores the RPC result/error from earnings release. There is no scheduled payment poller, provider-event journal, orphan-attempt repair or ledger-vs-provider reconciliation job; the delivery worker only handles notifications/expiry. Missed callbacks or partial failure can remain unresolved indefinitely.",
+      "fix": "Persist provider inbox/outbox and business effects transactionally, retry through workers, expose stuck records to operations and reconcile provider/payment/ledger totals on a schedule.",
+      "check": "Crash between every callback/notification/release step and replay; the system converges to one settled payment, one earning and recoverable notifications without manual SQL edits."
+    },
+    {
+      "id": "F46",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Completion and money",
+      "title": "Refund UI records a request but does not implement a complete financial refund workflow",
+      "refs": [
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "action==='request_refund'"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "refundRequest:{amount,reason,status:'PENDING'"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "refundRequest?.status==='PENDING'"
+        ]
+      ],
+      "impact": "Refund actions write metadata/support cases for manual provider action; they do not send money. Partial requests are permitted, but apply_paynow_status insists callback amount matches the original full payment, and refund metadata is marked completed on any REFUNDED status without a refund-specific amount/reference ledger. Cumulative/refund-after-release liability and operator completion are not fully represented. The dashboard's Refunded value uses requested amount before confirmation.",
+      "fix": "Expose REQUESTED/APPROVED/SUBMITTED/CONFIRMED/FAILED states clearly, support the provider's actual partial-refund contract, record refund transactions and cumulative limits, and reconcile cleaner/platform/customer balances. Label manual portal work explicitly.",
+      "check": "Full/partial/repeated/failed/refund-after-payout cases reconcile to provider evidence; requested refunds never appear as already paid and totals cannot exceed the capture."
+    },
+    {
+      "id": "F47",
+      "severity": "P1",
+      "confidence": "Provider validation required",
+      "area": "Completion and money",
+      "title": "BuySafe escrow behavior is asserted without an executable provider contract check",
+      "refs": [
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "function paynowClient"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "const checkout = client.createPayment"
+        ],
+        [
+          "mobile/app/help.tsx",
+          "Paynow BuySafe"
+        ]
+      ],
+      "impact": "The app labels checkout as BuySafe and gates service on Awaiting Delivery/Delivered/Paid, but code calls the SDK's standard createPayment/send endpoint with no explicit BuySafe option. This may be correct only for a specifically configured merchant integration. The repository does not establish that configuration or validate the actual escrow/delivery/refund semantics. A successful generic checkout-init smoke test does not prove funds are held as promised.",
+      "fix": "Verify merchant/integration configuration and current Paynow BuySafe contract in staging, document exact statuses, permitted methods, release timing and dispute/refund behavior, and encode provider fixtures/contract checks. Adjust product promises to the verified behavior.",
+      "check": "Demonstrate an actual sandbox/staging escrow lifecycle with provider evidence, including cancellation/dispute/refund and no cleaner release before the agreed conditions."
+    },
+    {
+      "id": "F48",
+      "severity": "P2",
+      "confidence": "Code-confirmed",
+      "area": "Completion and money",
+      "title": "Payout queue lacks a direct rejection path and complete payout/account recovery controls",
+      "refs": [
+        [
+          "supabase/migrations/20261020010000_marketplace_hardening.sql",
+          "p.status<>'APPROVED'"
+        ],
+        [
+          "site/src/admin/Modules.tsx",
+          "p.status==='PENDING'"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'revealPayoutDestination'"
+        ]
+      ],
+      "impact": "PENDING payouts can only be approved in the UI; rejection is allowed only after approval by a different admin. Invalid requests can keep funds reserved unnecessarily. The approving admin can reveal a destination and send a manual transfer even though they cannot mark it paid, increasing duplicate/manual-payment risk. The mobile app lacks a complete payout status/history/reason/destination-management journey.",
+      "fix": "Support reasoned rejection/cancellation of pending requests, enforce distinct initiator/approver/settler responsibilities before revealing/payment, add transfer idempotency and show clear cleaner payout history/recovery.",
+      "check": "Reject invalid pending requests without unnecessary approval, prevent the first approver from initiating the transfer, and reconcile interrupted manual transfers exactly once."
+    },
+    {
+      "id": "F49",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Messaging and notifications",
+      "title": "Chat has no durable notification path and its claimed atomic batch is sequential",
+      "refs": [
+        [
+          "mobile/app/(tabs)/messages.tsx",
+          "const batch = writeBatch(db)"
+        ],
+        [
+          "mobile/services/supabase.ts",
+          "commit: async"
+        ],
+        [
+          "supabase/migrations/20261020005000_client_runtime_access.sql",
+          "grant update (data)"
+        ]
+      ],
+      "impact": "writeBatch executes separate requests in a loop, despite the chat comment promising atomicity. A message can be written while its job summary/unread update fails. increment is a read-modify-write and can lose concurrent counts. Sending clears the draft before success and swallows errors. There is no active Supabase trigger/API outbox for new messages; the old Firebase onMessageCreated trigger is retired. Raw direct message inserts lack a bounded text/attachment schema or per-conversation rate limit.",
+      "fix": "Create one transactional send-message RPC with server time, bounded content, participant/state checks, atomic unread bookkeeping and a durable notification outbox. Keep failed drafts, expose retry and paginate message history.",
+      "check": "Send concurrent messages, drop connections after insert, use quick replies/photos and background the recipient; drafts/counters/messages/alerts stay consistent and duplicate sends are prevented."
+    },
+    {
+      "id": "F50",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Messaging and notifications",
+      "title": "Notification payloads omit the routing type that the app expects",
+      "refs": [
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "data:{...(payload.jobId"
+        ],
+        [
+          "mobile/app/_layout.tsx",
+          "data.type==='INSTANT_BOOKING_OFFER'"
+        ],
+        [
+          "mobile/app/notifications.tsx",
+          "const openNotification"
+        ]
+      ],
+      "impact": "The outbox payload includes jobId/supportCaseId but not type, while the native response router uses type to distinguish NEW_BID and instant offers. The in-app notification list also always routes job items to tracking. A cleaner's instant offer can open a private jobs record before assignment (RLS denies it), and a customer quote can open tracking instead of offer review. Cold-start routing occurs before auth/profile readiness and does not preserve a pending destination.",
+      "fix": "Define a versioned notification deep-link contract including event type, safe target and actor/role context; route both in-app/push through one resolver after session hydration. Deduplicate last-response navigation and verify access on destination load.",
+      "check": "Tap quote, instant offer, acceptance, payment, emergency and support notifications with the app foregrounded, backgrounded, signed out and cold-started; each reaches the correct authorized screen."
+    },
+    {
+      "id": "F51",
+      "severity": "P2",
+      "confidence": "Code-confirmed",
+      "area": "Messaging and notifications",
+      "title": "Realtime reads and media signing are expensive and several screens can spin forever",
+      "refs": [
+        [
+          "mobile/services/supabase.ts",
+          "event: '*', schema: 'public'"
+        ],
+        [
+          "mobile/services/supabase.ts",
+          "async function fetchRows"
+        ],
+        [
+          "mobile/app/tracking/[jobId].tsx",
+          "if (!job)"
+        ],
+        [
+          "mobile/app/(tabs)/messages.tsx",
+          "orderBy('createdAt', 'asc')"
+        ]
+      ],
+      "impact": "Every relevant table event triggers a full select and recursive signed-URL generation, with no row filter/debounce/reconnect state. Chat and conversations are unpaginated; Realtime status errors are not surfaced. Tracking does not resolve loading on missing/inaccessible jobs, and multiple listeners lack error UI. A stale read can complete after unsubscribe and overwrite state. Pull-to-refresh on Home only waits 600ms without refetching.",
+      "fix": "Add scoped subscriptions, bounded keyset pagination, stable DTO/media caches, request cancellation/version checks and explicit loading/empty/offline/error states. Implement real focus/reconnect/manual refresh behavior and backpressure.",
+      "check": "Run large chat/history feeds and frequent location updates under poor network; network/signing volume remains bounded, stale replies are ignored and every screen recovers from denied/missing records."
+    },
+    {
+      "id": "F52",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Messaging and notifications",
+      "title": "Delivery status and scheduling do not meet urgent dispatch needs",
+      "refs": [
+        [
+          "supabase/functions/delivery-worker/index.ts",
+          "p_success:true"
+        ],
+        [
+          ".github/workflows/notification-delivery.yml",
+          "cron: '*/5 * * * *'"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "schedulerSecret"
+        ]
+      ],
+      "impact": "Expo ticket acceptance/Twilio message creation are immediately recorded as DELIVERED. Expo receipt errors later only set lastError, and Twilio delivery status is never reconciled. Immediate dispatch depends on a secret and a five-second best-effort call; fallback is a GitHub schedule every five minutes for three-minute offers. No dead-letter/worker-heartbeat admin view exists, and the Supabase replacement has no scheduled booking-reminder producer.",
+      "fix": "Separate queued/provider-accepted/device-delivered states, process provider receipts/callbacks, add observable dead letters and use a continuously available worker/managed scheduler appropriate to urgent offers. Implement scheduled reminders and escalation/fallback channels.",
+      "check": "Kill the immediate worker, delay scheduler execution and simulate provider acceptance followed by delivery failure; urgent offers remain timely and operators/users see truthful delivery and recovery states."
+    },
+    {
+      "id": "F53",
+      "severity": "P1",
+      "confidence": "Reproduced",
+      "area": "Admin dashboard",
+      "title": "Dashboard hard reloads and browser back/forward do not resolve routed modules",
+      "refs": [
+        [
+          "site/src/admin/AdminDashboard.tsx",
+          "const [, route, focus] = location.pathname.split"
+        ]
+      ],
+      "impact": "For /admin/bookings, the parser reads route='admin' and focus='bookings', then falls back to Overview. It is one URL segment short. go() uses pushState without a popstate listener. In an isolated browser with mocked auth/API, reloading /admin/bookings rendered Overview and navigating back from Support left Support visible at /admin/bookings.",
+      "fix": "Use a real router or a tested /admin/:module/:id parser plus history synchronization. Reset module-local filters/focus when route parameters change and preserve authorization checks on reload.",
+      "check": "Deep-link, reload, back and forward through all modules and focused records; URL, selected navigation and rendered content always match."
+    },
+    {
+      "id": "F54",
+      "severity": "P1",
+      "confidence": "Reproduced",
+      "area": "Admin dashboard",
+      "title": "Unsupported admin mutations return success and create a misleading audit record",
+      "refs": [
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'adminMutation'"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "return {ok:true,auditId:key}"
+        ],
+        [
+          "site/src/admin/Modules.tsx",
+          "const configs"
+        ]
+      ],
+      "impact": "adminMutation has no rejecting final else for unknown actions: it writes an audit event and returns ok even if nothing was changed. The isolated dispatcher probe confirms change_status returns success with only an adminauditevents write. The module configs advertise create booking, change status, internal notes, products, inventory and exports, but many are not rendered or implemented. An audit entry can therefore imply an operation occurred when it did not.",
+      "fix": "Define a strict allowlist/discriminated command schema, reject unsupported commands and make operation plus audit transactional. Render only capabilities backed by implemented workflows; build missing operational tools deliberately.",
+      "check": "Unknown/unimplemented actions return a clear 4xx with no success audit; every advertised action either completes its intended change or is visibly unavailable."
+    },
+    {
+      "id": "F55",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Admin dashboard",
+      "title": "Admin reassignment can reopen closed jobs and disconnect cleaner payment ownership",
+      "refs": [
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "action==='reassign_booking'"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "status:'ASSIGNED',updatedat:now"
+        ]
+      ],
+      "impact": "Reassignment does not reject COMPLETED/CANCELLED/in-progress jobs and directly sets ASSIGNED. It checks availability/verification but not cleanerAgreementAccepted. It does not transfer/reverse original commission reserves, update payments.cleanerid, bid ownership, contact details or earnings, or notify the displaced cleaner. A completed paid booking can be reopened with stale financial metadata.",
+      "fix": "Move reassignment to a transactional state-aware RPC that checks agreements/availability, restricts supported stages, preserves payment/commission obligations and records/alerts both parties. Require a separate remediation workflow for already-completed work.",
+      "check": "Attempt reassignment in every booking/payment state; prohibited states reject, and successful replacements leave one cleaner/quote/payment/reservation identity with correct notices."
+    },
+    {
+      "id": "F56",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Admin dashboard",
+      "title": "Search, filters and pagination do not honor the displayed module contract",
+      "refs": [
+        [
+          "site/src/admin/Modules.tsx",
+          "All {f.toLowerCase()}"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "else if(module==='bookings')q=q.or"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "q=q.lt('createdat',prior.createdat)"
+        ]
+      ],
+      "impact": "Every filter offers Active/Pending/Completed/Cancelled even for service, verification, coverage and date, leading to invalid enum comparisons or ignored selections. Booking ID search applies ilike to a UUID column, which PostgreSQL does not support without a cast. Cursor queries use only createdat, so rows sharing timestamps (common after imports) can be skipped. There is no robust previous-page state, and focus/search props do not reliably reload a reused module.",
+      "fix": "Define typed per-module filters, safe UUID/name search and deterministic compound cursors (createdat,id) with matching indexes. Implement expected sorting/date controls and consistent navigation/focus state.",
+      "check": "Search by full/partial UUID and names, use every filter with realistic data and page through equal-timestamp rows under concurrent inserts without skips/duplicates."
+    },
+    {
+      "id": "F57",
+      "severity": "P1",
+      "confidence": "Reproduced / code-confirmed",
+      "area": "Admin dashboard",
+      "title": "Revenue chart understates money and attention links do not open the support case",
+      "refs": [
+        [
+          "supabase/migrations/20261020009000_marketplace_operations.sql",
+          "'revenueSeries'"
+        ],
+        [
+          "site/src/admin/Overview.tsx",
+          "value / 100"
+        ],
+        [
+          "site/src/admin/Overview.tsx",
+          "a.caseId ? 'support'"
+        ]
+      ],
+      "impact": "The metrics RPC returns revenueSeries.amount in USD, while the chart uses a cents formatter. $120 is displayed as $1.20. The top metric is explicitly converted to cents in the API, which hides this unit mismatch. Attention JSON supplies a support-case id plus bookingId but no caseId, so the UI routes every item toward booking operations instead of the support case. Retry uses setPeriod(p=>p), which causes no refetch.",
+      "fix": "Use explicit money types/units in the DTO, normalize the revenue series once and return caseId separately from bookingId. Implement a real retry/refetch trigger and loading/error states.",
+      "check": "Compare chart and metric values against exact ledger/provider fixtures; clicking an urgent case opens its case detail, and retry reissues a failed request."
+    },
+    {
+      "id": "F58",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Admin dashboard",
+      "title": "Support operators cannot read or resolve the full customer problem in the current UI",
+      "refs": [
+        [
+          "site/src/admin/Modules.tsx",
+          "support:{title:'Support Cases'"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "return {...row,id:row.id,createdAt:row.createdat}"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "action==='resolve_case'"
+        ]
+      ],
+      "impact": "The table expects Case/Booking/Opened/Owner but receives raw id/jobid/createdat/ownerid; several cells render dashes. Ticket descriptions, evidence, reporter and payment context live in data and have no case-detail interface. Resolve case marks a record resolved with notes but does not notify participants, settle/refund a related booking, enforce response SLAs or maintain an operator conversation. Several issue reporters do not notify support at all.",
+      "fix": "Build a support case workspace with authorized evidence, booking/payment timeline, assignment/severity/SLA, customer-visible replies and links to audited financial actions. Separate resolving a case from merely adding a note.",
+      "check": "Handle a damaged-property report, no-show and disputed completion from intake through communication, financial action and closure; every participant/operator sees the correct status and evidence."
+    },
+    {
+      "id": "F59",
+      "severity": "P2",
+      "confidence": "Code-confirmed",
+      "area": "Admin dashboard",
+      "title": "Admin session and access management is incomplete",
+      "refs": [
+        [
+          "site/src/admin/AdminEntry.tsx",
+          "},[user.id])"
+        ],
+        [
+          "site/src/admin/Admins.tsx",
+          "supabase.auth.signInWithPassword"
+        ],
+        [
+          "site/src/admin/AdminDashboard.tsx",
+          "routes.map"
+        ]
+      ],
+      "impact": "All navigation modules are displayed regardless of permissions. The MFA gate runs on user.id changes only; password reauthentication can replace the token with aal1 while the gate remains ready, causing confusing later API failures. There is no implemented admin revoke/disable/change-permissions/revoke-invite/session-management UI, recovery-code/lost-factor process or visible audit-log viewer despite the audit.read permission. Settings also stores a supportCopy save into local switches state, which can incorrectly show a maintenance banner until reload.",
+      "fix": "Make assurance and permissions reactive to session events, show only allowed tools, require MFA again after downgrade and implement audited role/invite/session revocation plus secure lost-factor recovery.",
+      "check": "Downgrade assurance, revoke an admin while online and recover a lost authenticator; access changes immediately and every privileged transition remains auditable."
+    },
+    {
+      "id": "F60",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Organizations and discovery",
+      "title": "Organization signup/join can leave partial state and the screen may not refresh",
+      "refs": [
+        [
+          "mobile/app/organization.tsx",
+          "doc(db, 'organizations', user.uid)"
+        ],
+        [
+          "supabase/migrations/20261020000000_initial_schema.sql",
+          "alter publication supabase_realtime add table public.organizationMembers"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'joinOrganization'"
+        ]
+      ],
+      "impact": "The screen waits on an organizations realtime listener, but organizations is not added to the publication; registration does not explicitly reload state, so it can remain on the registration form. Joining an invite performs three unchecked separate writes, allows multiple org memberships while users has one organizationid, and stores a verification snapshot that later becomes stale. Removing a member can clear a different/current affiliation if memberships drift.",
+      "fix": "Use transactional organization registration/invite acceptance/removal with explicit membership invariants and role checks, return the new organization DTO, map all columns, and refresh or subscribe to published tables. Show live verified/suspended state rather than a fixed badge.",
+      "check": "Register without app restart; interrupt each join/remove step; accept invitations concurrently/from a second organization; roster and user affiliation remain consistent and verified status is current."
+    },
+    {
+      "id": "F61",
+      "severity": "P2",
+      "confidence": "Code-confirmed",
+      "area": "Organizations and discovery",
+      "title": "Favorites and cleaner discovery do not provide the promised rebooking path",
+      "refs": [
+        [
+          "mobile/app/favorites.tsx",
+          "params: { cleanerId: item.cleanerId }"
+        ],
+        [
+          "mobile/app/(tabs)/messages.tsx",
+          "useLocalSearchParams<{ jobId?"
+        ],
+        [
+          "mobile/app/cleaners.tsx",
+          "renderItem={({ item })"
+        ]
+      ],
+      "impact": "Favorites' message button passes cleanerId, but Messages only consumes jobId and supports assigned-job conversations. The list promises quick rebooking but has no such action; cleaner search cards have no detailed public profile/availability/request-this-cleaner flow. Search fetches at most 250 candidates before distance sorting, so nearest/highest-rated results can be arbitrarily excluded as the marketplace grows.",
+      "fix": "Add a safe public cleaner profile, real review/portfolio detail, availability and explicit invitation/rebooking flow. Keep chat booking-scoped, or deliberately design authorized prebooking messaging. Move geospatial search/paging into the database.",
+      "check": "Find, inspect, favorite and rebook a specific eligible cleaner; disabled/departed cleaners are handled honestly, and nearest search remains correct beyond 250 profiles."
+    },
+    {
+      "id": "F62",
+      "severity": "P2",
+      "confidence": "Measured / code-confirmed",
+      "area": "UI and accessibility",
+      "title": "Readable contrast, accessible controls and mobile layout need a dedicated pass",
+      "refs": [
+        [
+          "site/src/styles.css",
+          ".dark-card>a"
+        ],
+        [
+          "site/src/admin/admin.css",
+          ".metric span"
+        ],
+        [
+          "mobile/app/(tabs)/_layout.tsx",
+          "tabBarShowLabel: false"
+        ]
+      ],
+      "impact": "Marketing links use #3906D2 on #0D0A24, measured contrast about 1.96:1; purple stat labels on #1E0378 are about 1.59:1. Several admin muted labels are below 4.5:1. Mobile has many icon-only controls without labels/roles, 9\u201311px important text, absolute-height bottom navigation and a missing tab. A mocked browser check at 375px found a 1px horizontal overflow; native text scaling, screen readers, keyboard avoidance and small-screen wallets still require device verification.",
+      "fix": "Apply WCAG AA text/control contrast, accessible names/states, minimum touch targets, dynamic font scaling and focus management. Test narrow widths, large text, VoiceOver/TalkBack, keyboard and reduced motion; fix overflow and use safe-area-aware layouts.",
+      "check": "Complete all five journeys at large text and with a screen reader; every control has a clear purpose/state and core content/actions remain visible without inaccessible gestures."
+    },
+    {
+      "id": "F63",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Marketing and blog",
+      "title": "The public blog origin is blocked by its own backend",
+      "refs": [
+        [
+          "site/src/main.tsx",
+          "const isBlogHost"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "const allowedOrigins = new Set"
+        ]
+      ],
+      "impact": "The frontend routes blog.detail.co.zw and blog.detailapp.co.zw to Blog, but neither host is in allowedOrigins. Blog calls to marketplace-api receive 403 before dispatch, even after fixing F01. The deployment workflow copies site and dashboard artifacts but has no explicit blog deployment/host check. Blog rendering/meta is entirely client-side, with static homepage OG/sitemap metadata, which weakens article previews/indexing and does not return a real article 404.",
+      "fix": "Add the approved blog origins, explicitly provision/deploy its host and use prerender/SSR/static generation for published articles, canonical/OG metadata, sitemap and real HTTP status codes.",
+      "check": "Load/list/open/unpublish an article on both intended production blog domains with browser CORS and a JS-free crawler; metadata and 404 behavior match that article."
+    },
+    {
+      "id": "F64",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Marketing and blog",
+      "title": "An unauthenticated visitor can overwrite another email\u2019s waitlist consent/contact data",
+      "refs": [
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'joinWaitlist'"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "existing?await admin.from('betawaitlist').update(payload)"
+        ]
+      ],
+      "impact": "Passing CAPTCHA proves a human, not email ownership. joinWaitlist looks up any supplied email and overwrites its name/phone, marketing choice and unsubscribe token. A third party can opt someone else back into marketing and invalidate their old unsubscribe link. Signup also sends a confirmation email without a durable send quota/double opt-in flow; server validation is weaker than the UI's required fields.",
+      "fix": "Require email ownership confirmation before subscription/consent changes, preserve unsubscribe identity and an append-only consent history, rate-limit public writes and suppress repeated confirmations. Store pending unverified signups separately.",
+      "check": "Submit another person's email and replay signup after unsubscribe: existing consent/contact details remain protected until that mailbox confirms the change."
+    },
+    {
+      "id": "F65",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Marketing and blog",
+      "title": "Campaign targeting is ignored and sends are not idempotent",
+      "refs": [
+        [
+          "site/src/admin/Waitlist.tsx",
+          "body:{subject,message,filters,idempotencyKey"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'adminSendMarketingCampaign'"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "const id=requireKey(input.idempotencyKey)"
+        ]
+      ],
+      "impact": "The UI submits country/city/service/language filters, but the API ignores them and selects the first 100 consented records without a deterministic campaign cursor. It sends email before validating/storing the idempotency key and never checks for an already-sent campaign. Retrying the same key or even submitting an invalid key can send duplicates; records beyond the first 100 may never be reached. Unsubscribe can race a snapshotted bulk send.",
+      "fix": "Validate/authorize before effects, show an audience preview/count and persist a campaign/recipient outbox with targeting, suppression, per-recipient state and provider idempotency. Recheck consent at send time and make batches resumable.",
+      "check": "Filter each audience, send more than 100 recipients, retry after provider success/response loss and unsubscribe during a send; only the intended currently consented recipients receive one message."
+    },
+    {
+      "id": "F66",
+      "severity": "P2",
+      "confidence": "Code-confirmed",
+      "area": "Marketing and blog",
+      "title": "Waitlist retries, deduplication and CSV export have correctness/security gaps",
+      "refs": [
+        [
+          "site/src/main.tsx",
+          "className=\"cf-turnstile\""
+        ],
+        [
+          "supabase/migrations/20261020000000_initial_schema.sql",
+          "create table public.betaWaitlist"
+        ],
+        [
+          "site/src/admin/Waitlist.tsx",
+          "const download="
+        ]
+      ],
+      "impact": "There is no unique normalized email constraint, so concurrent check-then-insert requests can duplicate records/consent. The Turnstile widget has no explicit mount/reset/expired-token lifecycle; retrying after a server failure can reuse a consumed token. The UI promises inbox confirmation even when RESEND_API_KEY is missing or delivery fails. CSV values are quoted but not neutralized for spreadsheet formulas such as =... entered in names.",
+      "fix": "Add normalized-email uniqueness/transactional upsert, explicit CAPTCHA lifecycle/error controls, truthful confirmation delivery state and formula-safe CSV serialization. Preserve consent records while deduplicating.",
+      "check": "Run concurrent signup, expired CAPTCHA, provider failure and spreadsheet-formula payloads; retries work, one record exists and exported cells remain data rather than formulas."
+    },
+    {
+      "id": "F67",
+      "severity": "P2",
+      "confidence": "Code-confirmed",
+      "area": "Marketing and blog",
+      "title": "Trust and service promises exceed implemented product capabilities",
+      "refs": [
+        [
+          "site/src/main.tsx",
+          "two-way ratings"
+        ],
+        [
+          "mobile/app/(auth)/welcome.tsx",
+          "background verification"
+        ],
+        [
+          "mobile/app/help.tsx",
+          "Live chat:"
+        ],
+        [
+          "mobile/app/privacy-policy.tsx",
+          "privacy@detail"
+        ]
+      ],
+      "impact": "Marketing claims two-way ratings, the native welcome describes rigorous identity and background checks, and support copy promises live-chat hours. The active API implements only customer-to-cleaner ratings, Didit identity decisions and support tickets/email, with no background-check adjudication or live operator chat. Office/specialist offerings are broader than the HOUSE/CAR catalog's supported structured scope. The mobile privacy policy lists the placeholder contact privacy@detail and says location is tracked only during active cleaning sessions, although the implementation also shares an online cleaner position before a booking.",
+      "fix": "Make claims and badges correspond to completed named checks/capabilities. Label demo ratings/portraits as previews, publish truthful support availability and either implement or clearly defer two-way reviews/commercial/specialist scope. Replace placeholder legal contacts and align privacy/location disclosures with the actual online/background behavior and retention policy.",
+      "check": "Every public trust/service claim can be traced to an implemented check, operational procedure or clearly labeled future/beta capability."
+    },
+    {
+      "id": "F68",
+      "severity": "P1",
+      "confidence": "Code-confirmed / local readiness checked",
+      "area": "Deployment and operations",
+      "title": "Expected credential names do not match this workspace\u2019s configured aliases",
+      "refs": [
+        [
+          ".github/workflows/deploy-supabase.yml",
+          "DIDIT_API_KEY:"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "Deno.env.get('DIDIT_API_KEY')"
+        ],
+        [
+          "scripts/live_provider_checks.mjs",
+          "process.env.RESEND_API_KEY"
+        ],
+        [
+          "mobile/app.config.js",
+          "const mapboxDownloadsToken"
+        ]
+      ],
+      "impact": "The branch reads DIDIT_API_KEY and RESEND_API_KEY with no alias fallback, while this workspace has DIDIT_KYC_SECRET_KEY and EXPO_RESEND_API_KEY instead. Local presence checks also found no DIDIT_WORKFLOW_ID, MAPBOX_DOWNLOADS_TOKEN, SUPABASE_SERVICE_ROLE_KEY or EXPO_TOKEN. A Supabase secret key is present under a different local name. These observations describe the workspace only, not deployed project/CI secret stores. The earlier alias changes are still absent from this branch.",
+      "fix": "Standardize a credential contract and add the intended aliases in backend/tests/workflows/docs, with no values logged. Validate all required server/build/provider settings at deployment. Keep EAS auth in EXPO_TOKEN and download credentials build-only; scope Supabase server keys to operator/backend use.",
+      "check": "Run a values-redacted readiness check for local, staging, GitHub, Supabase and EAS environments; then prove each integration with a controlled staging test using its canonical/accepted alias."
+    },
+    {
+      "id": "F69",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Deployment and operations",
+      "title": "Production deployment is not gated by completed validation and can publish a partial release",
+      "refs": [
+        [
+          ".github/workflows/deploy.yml",
+          "cancel-in-progress: true"
+        ],
+        [
+          ".github/workflows/deploy-supabase.yml",
+          "name: Deploy Supabase backend"
+        ],
+        [
+          ".github/workflows/ci.yml",
+          "name: Validate Detail"
+        ]
+      ],
+      "impact": "Site deployment, Supabase deployment and validation run independently on pushes to main. There is no dependency requiring all validation to pass before release. cPanel FTPS replaces live files and cancels in-progress deployment; an interrupted upload or independently applied DB/API release can leave mixed versions. Supabase deployment lacks an explicit concurrency lock/release artifact strategy. Dependencies/actions/CLI versions also float in several release steps.",
+      "fix": "Build immutable validated artifacts, gate deployments on required checks and a compatible release plan, serialize production migrations, use backward-compatible schema changes and atomic/versioned site activation. Pin release tools/actions and retain a tested rollback path.",
+      "check": "Fail validation and interrupt deployment at each step; production never activates an unvalidated/mixed release, and rollback restores the previous compatible app/API safely."
+    },
+    {
+      "id": "F70",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Deployment and operations",
+      "title": "Automated validation does not exercise the business/security journeys it claims to support",
+      "refs": [
+        [
+          ".github/workflows/ci.yml",
+          "Type-check Edge Functions"
+        ],
+        [
+          "qa/booking-lifecycle.md",
+          "No end-to-end"
+        ],
+        [
+          "mobile/.maestro/01-email-sign-in.yaml",
+          "id: welcome-skip"
+        ],
+        [
+          "mobile/app/(auth)/welcome.tsx",
+          "router.push('/(auth)/sign-in')"
+        ]
+      ],
+      "impact": "CI builds/type-checks/lints and resets/lints a local database, but has no behavioral RLS matrix, lifecycle/ledger invariant, concurrency, callback replay, notification routing or browser journey suite. Maestro's welcome-skip test ID is absent from Welcome, and its documentation still specifies Firebase accounts. Existing QA documents explicitly say end-to-end/provider sandbox execution is not yet claimed. This audit demonstrates bugs that pass the existing static checks.",
+      "fix": "Turn the QA matrices into executable isolated tests: direct REST/RPC permissions, transactional money/state tests, mocked-provider contracts, browser journeys and native device smoke flows. Repair selectors/data fixtures and make critical journey failures release-blocking.",
+      "check": "CI detects F01/F02/F03/F36/F41/F53-type regressions and a real staging/device release matrix passes without production data or money."
+    },
+    {
+      "id": "F71",
+      "severity": "P1",
+      "confidence": "Dependency scan",
+      "area": "Deployment and operations",
+      "title": "Locked mobile and payment dependency trees have unresolved advisories",
+      "refs": [
+        [
+          "mobile/package.json",
+          "\"expo\""
+        ],
+        [
+          "functions/package.json",
+          "\"paynow\""
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "npm:paynow@2.2.2"
+        ]
+      ],
+      "impact": "Registry npm audit --omit=dev reported mobile: 100 affected dependency entries (1 critical, 81 high, 18 moderate), functions: 18 (9 high, 9 moderate), site: zero production entries. Many mobile entries are propagated through Expo/build tooling rather than 100 independent remotely exploitable app flaws. The critical mobile chain includes tar; legacy/payment trees include axios/follow-redirects/node-forge advisories. Active Edge Functions import paynow@2.2.2, so payment-related transitive risk needs Deno-specific analysis too. The root lockfile adds 14 affected production dependency entries (3 critical, 9 high, 2 moderate), including obsolete MapLibre/Express-related chains. The active root scripts delegate to site; remove unused dependencies after import/use analysis rather than treating all root advisories as exposed production endpoints.",
+      "fix": "Upgrade Expo/React Native using the supported compatibility matrix, update the payment SDK/transitives with contract tests, produce separate build/runtime SBOMs and evaluate advisory reachability. Do not apply a blind audit --force upgrade that breaks native compatibility.",
+      "check": "Record fixed versions and reachable attack paths for each remaining high/critical advisory; site/mobile/native builds and provider fixtures pass on the updated supported stack."
+    },
+    {
+      "id": "F72",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Deployment and operations",
+      "title": "Firebase cutover importer has schema and ledger-loss hazards",
+      "refs": [
+        [
+          "functions/scripts/migrate-firebase-to-supabase.mjs",
+          "if (table !== 'configuration' && table !== 'adminRoles') cols.id = id"
+        ],
+        [
+          "functions/scripts/migrate-firebase-to-supabase.mjs",
+          "collectionName === 'walletTransactions'"
+        ],
+        [
+          "functions/scripts/migrate-firebase-to-supabase.mjs",
+          "actorId: uidMap.get(raw.actorId"
+        ]
+      ],
+      "impact": "The generic import adds cols.id to openJobs even though its primary key is jobid and there is no id column, so importing those rows can fail. walletTransactions is skipped unconditionally because the configured tables array always contains transactions, even if that source collection is empty. Event actor IDs are remapped once in remapKey and then looked up again in uidMap, which can erase actors. Other concerns include media path layout, imported plaintext payout destinations, stale verified state, identity conflicts and dry-run mode not validating target writes/constraints.",
+      "fix": "Use per-table typed importers, precompute all identity/reference maps, merge/deduplicate both ledger source collections and run integrity/count/balance/object/actor checks. Stage imports, reconcile against signed source snapshots, and rehearse restart/failure/rollback before a write freeze.",
+      "check": "A representative legacy fixture imports every open job, ledger record and event actor correctly; rerun is idempotent and table counts, foreign keys, balances and media ACLs reconcile exactly."
+    },
+    {
+      "id": "F73",
+      "severity": "P1 if reachable",
+      "confidence": "Conditional legacy exposure",
+      "area": "Deployment and operations",
+      "title": "Retained Cloudflare deployment tooling can recreate an insecure obsolete service",
+      "refs": [
+        [
+          "scripts/deploy-cloudflare-waitlist.py",
+          "admin_password = os.environ.get"
+        ],
+        [
+          "cloudflare/waitlist-worker.mjs",
+          "if (!env.TURNSTILE_SECRET) return"
+        ],
+        [
+          "functions/package.json",
+          "Firebase Functions are retired"
+        ]
+      ],
+      "impact": "The retired D1 deploy helper defaults an initial admin password to the admin email when no password is configured, and can reset an incomplete bootstrap to that fallback. The legacy worker's CAPTCHA check fails open without its secret, login has no robust rate limit/MFA and older endpoints have weaker authorization/placeholder operations. These are not the active Supabase path, but the scripts are still executable and may describe an existing legacy deployment. No live legacy endpoint was probed.",
+      "fix": "Quarantine/remove executable legacy deployment paths, fail closed with required strong one-time credentials if a rollback service is intentionally retained, revoke obsolete access and verify legacy hosts are retired or protected. Keep archives visibly separate from deployable code.",
+      "check": "Inventory actual DNS/workers/Firebase runtimes with authorized operators; no obsolete public admin service can be created or accessed using fallback credentials."
+    },
+    {
+      "id": "F74",
+      "severity": "P1",
+      "confidence": "Missing production evidence",
+      "area": "Deployment and operations",
+      "title": "Operational observability, recovery and release readiness are not demonstrated",
+      "refs": [
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "console.error"
+        ],
+        [
+          ".github/workflows/notification-delivery.yml",
+          "Detail notification delivery"
+        ],
+        [
+          "docs/supabase-cutover.md",
+          "rollback"
+        ]
+      ],
+      "impact": "There is no implemented end-to-end correlation/error telemetry, user-safe incident IDs, provider/worker/financial reconciliation dashboard, alert thresholds, restore-test evidence or load/capacity results. Logs alone cannot tell operators which customers/jobs lost an alert, payment transition or deletion step. GitHub schedule success does not establish an urgent dispatch/safety SLA. Repository runbooks are useful but are not proof that backups, PITR, support staffing and rollback work in the deployed project.",
+      "fix": "Define service objectives and instrument errors/latency/outbox/provider lag, add redacted correlation IDs and alerts, maintain a financial exception queue, rehearse restores/rollback and run capacity/device acceptance tests before broad launch.",
+      "check": "A staged provider outage and DB/app failure trigger actionable alerts and are recovered using documented procedures with measured data loss/recovery times and reconciled money."
+    },
+    {
+      "id": "F75",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Security and privacy",
+      "title": "KYC and contact trust have no complete lifecycle or verified-contact binding",
+      "refs": [
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "case 'refreshCleanerIdentityVerification'"
+        ],
+        [
+          "supabase/functions/marketplace-api/index.ts",
+          "const inputName = text(input.fullName"
+        ],
+        [
+          "mobile/app/register-cleaner.tsx",
+          "handleSendVerification"
+        ]
+      ],
+      "impact": "Didit status is refreshed only when a user requests it; no signed provider webhook/recheck worker, expiry/revocation policy or operational review queue keeps verification current. An approved decision plus application/agreement immediately grants cleaner access without the separately advertised background review. Profile phone/address are arbitrary editable text rather than verified auth contacts, yet phone is used for direct calls and operational SMS. The customer/cleaner can present a contact number they do not own.",
+      "fix": "Define check types/expiry and provider webhook/poll reconciliation, separate identity verification from operational approval, reverify material identity changes and bind notification/call contacts to verified ownership. Provide a documented manual review/appeal/recovery path without exposing raw identity documents.",
+      "check": "Exercise pending, abandoned, revoked, expired and manually reviewed identities plus changed email/phone; badges and booking eligibility reflect current named checks and only owned verified numbers receive account communications."
+    },
+    {
+      "id": "F76",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Deployment and operations",
+      "title": "Demo/development mode does not isolate production side effects",
+      "refs": [
+        [
+          "mobile/utils/env.ts",
+          "IS_MOCK = IS_DEV || IS_DEMO"
+        ],
+        [
+          "mobile/services/emailAuth.ts",
+          "supabase.auth.signInAnonymously"
+        ],
+        [
+          "mobile/services/functions.ts",
+          "supabase.functions.invoke"
+        ],
+        [
+          "mobile/services/payments.ts",
+          "'createPaynowWalletTopup'"
+        ]
+      ],
+      "impact": "Comments describe safe mocked/backend-free demo builds, but IS_MOCK only changes selected authentication/UI paths. callFunction, KYC, bookings and payments still use the configured Supabase backend. Mock authentication itself calls signInAnonymously against that backend. A demo build with a usable real session can perform real actions, while normal Metro development cannot exercise genuine SMS/email OTP because __DEV__ always forces mock behavior.",
+      "fix": "Use explicit dev/staging/production environments with backend-enforced separation, fake provider adapters/test fixtures and a visible environment indicator for nonproduction builds. Make real staging auth testable deliberately and prohibit demo credentials/endpoints in production release configuration.",
+      "check": "Attempt booking/KYC/top-up/payout from a demo build configured incorrectly: production rejects it, while isolated demo/staging flows remain testable without real provider side effects."
+    },
+    {
+      "id": "F77",
+      "severity": "P1",
+      "confidence": "Code-confirmed",
+      "area": "Security and privacy",
+      "title": "Push tokens are not revoked per device on logout or account changes",
+      "refs": [
+        [
+          "mobile/app/(tabs)/profile.tsx",
+          "await signOut(auth)"
+        ],
+        [
+          "mobile/services/notifications.ts",
+          "getExpoPushToken"
+        ],
+        [
+          "supabase/migrations/20261020000000_initial_schema.sql",
+          "expoPushToken text"
+        ]
+      ],
+      "impact": "The model stores one Expo token on users. Logout does not remove that device's registration, and an already-onboarded user signing into another device may never run the permission/token setup step. Notifications for a previous account can reach a shared/logged-out device; one device overwrites another, and disabling notifications clears the user's token globally.",
+      "fix": "Register authenticated per-device push endpoints with revocation/session lifecycle, refresh tokens on foreground/login and deactivate only the logging-out device. Avoid sensitive lock-screen content and keep delivery/channel preferences per account/device.",
+      "check": "Sign in/out of two accounts on one device and one account on two devices; only authorized current devices receive the intended alerts and one device's preference does not disable another."
+    },
+    {
+      "id": "F78",
+      "severity": "P2",
+      "confidence": "Code-confirmed",
+      "area": "UI and accessibility",
+      "title": "Wallet and review dates still expect Firestore Timestamp objects",
+      "refs": [
+        [
+          "mobile/app/(tabs)/wallet.tsx",
+          "item.createdAt?.toDate"
+        ],
+        [
+          "mobile/app/reviews.tsx",
+          "item.createdAt?.toDate"
+        ],
+        [
+          "mobile/services/supabase.ts",
+          "const normalized = Object.fromEntries"
+        ]
+      ],
+      "impact": "Supabase returns ISO timestamps and the adapter leaves them as strings, but wallet/review rows call createdAt?.toDate?.() and fall back to 'Recent'. Dates therefore disappear even for old transactions/reviews, weakening the history users need to reconcile money and reputation. Other screens use separate ad hoc date parsing.",
+      "fix": "Define one typed date/time DTO and locale/timezone formatting helper, parse ISO values consistently and explicitly handle invalid/missing timestamps.",
+      "check": "Old/new wallet entries and reviews show their actual dates across local timezone/day boundaries; missing timestamps are labeled honestly rather than all appearing recent."
+    }
+  ],
+  "capability_gaps": [
+    {
+      "id": "G01",
+      "priority": "Before public launch",
+      "capability": "A recoverable customer and cleaner Activity hub",
+      "current_state": "Missing/partial; F24/F36/F44",
+      "completion": "Pending, upcoming, active, payment-required, disputed and historical jobs with receipts, resumption and pagination."
+    },
+    {
+      "id": "G02",
+      "priority": "Before public launch",
+      "capability": "Authoritative quote and service catalog",
+      "current_state": "Partial; F28/F29",
+      "completion": "Server pricing/duration by scope, supplies, service area and add-ons; immutable accepted quote and reviewed change orders."
+    },
+    {
+      "id": "G03",
+      "priority": "Before public launch",
+      "capability": "Reliable dispatch and supply operations",
+      "current_state": "Partial; F26/F30/F35/F52",
+      "completion": "Online leases, dispatch rounds, exclusive offers, confirmation timeouts, safe rematching and operator exception queue."
+    },
+    {
+      "id": "G04",
+      "priority": "Before public launch",
+      "capability": "Service area and address quality",
+      "current_state": "Partial; F28",
+      "completion": "Search/pin correction, saved named addresses, coverage/lead-time validation, approximate prebooking disclosure and exact participant access."
+    },
+    {
+      "id": "G05",
+      "priority": "Before public launch",
+      "capability": "Cleaner availability calendar",
+      "current_state": "Only booking-derived blocks exist",
+      "completion": "Working hours, breaks, manual blocks, leave, timezone, travel buffers and a calendar that actually controls dispatch/assignment."
+    },
+    {
+      "id": "G06",
+      "priority": "Before public launch",
+      "capability": "Customer-approved schedule and work changes",
+      "current_state": "Partial; F33",
+      "completion": "Reschedule/change-order proposals, expiry and consent; preserve the previous agreement until accepted."
+    },
+    {
+      "id": "G07",
+      "priority": "Before public launch",
+      "capability": "Arrival/start/no-show protocol",
+      "current_state": "Partial; F12/F40",
+      "completion": "Arrival evidence or customer PIN, grace periods, customer/cleaner no-show reporting, fair cancellation rules and safe support overrides."
+    },
+    {
+      "id": "G08",
+      "priority": "Before public launch",
+      "capability": "Proof, quality review and rework",
+      "current_state": "Partial; F12/F36/F37",
+      "completion": "Before/after checklist, reachable customer approval/dispute, evidence retention, missed-item/rework workflow and quality-resolution policy."
+    },
+    {
+      "id": "G09",
+      "priority": "Before public launch",
+      "capability": "One financial source of truth",
+      "current_state": "Partial; F38\u2013F48",
+      "completion": "Double-entry or equivalent auditable subledgers, holds/reversals, immutable intents/attempts/refunds, payout states and automated reconciliation."
+    },
+    {
+      "id": "G10",
+      "priority": "Before public launch",
+      "capability": "Receipts and explainable charges",
+      "current_state": "Partial/missing",
+      "completion": "Customer receipts and cleaner statements showing gross, fees, supplies, refunds, payout holds and method-specific protection; invoice/tax treatment agreed for the business."
+    },
+    {
+      "id": "G11",
+      "priority": "Before public launch",
+      "capability": "Full identity/contact/account lifecycle",
+      "current_state": "Partial; F13/F18\u2013F21/F75",
+      "completion": "Verified email/phone linking, provider account conflicts, recent reauth, recovery, session/device revocation, profile corrections and durable account deletion."
+    },
+    {
+      "id": "G12",
+      "priority": "Before public launch",
+      "capability": "Current vetting and appeals",
+      "current_state": "Partial; F75",
+      "completion": "Named identity/qualification/background checks, operational approval where promised, expiry/revocation, manual review and appeal without unneeded document storage."
+    },
+    {
+      "id": "G13",
+      "priority": "Before public launch",
+      "capability": "Safety operations",
+      "current_state": "Partial; F02/F12/F52/F58",
+      "completion": "Staffed incident handling, emergency contact guidance, severity/SLA/escalation, block/report counterpart, evidence and abuse-resistant controls. An SOS button alone is insufficient."
+    },
+    {
+      "id": "G14",
+      "priority": "Before public launch",
+      "capability": "Usable operational dashboard",
+      "current_state": "Partial; F53\u2013F60",
+      "completion": "Case/booking/payment detail timelines, valid filters, dispatch/reassignment, refunds, owner assignment, notes, audit viewer, reasons and truthful status."
+    },
+    {
+      "id": "G15",
+      "priority": "Before public launch",
+      "capability": "Least-privilege staff administration",
+      "current_state": "Partial; F08\u2013F10/F59",
+      "completion": "Direct DB permission matrix, MFA assurance, role delegation boundaries, invite/session revocation, offboarding and lost-factor recovery."
+    },
+    {
+      "id": "G16",
+      "priority": "Before public launch",
+      "capability": "Durable messaging and notifications",
+      "current_state": "Partial; F49\u2013F52/F77",
+      "completion": "Transactional chat/outbox, delivery receipts, per-device preferences, reliable deep links, scheduled reminders, offline retry and abuse controls."
+    },
+    {
+      "id": "G17",
+      "priority": "Before public launch",
+      "capability": "Privacy/media lifecycle",
+      "current_state": "Partial; F06/F14/F15",
+      "completion": "Secure native uploads, EXIF/location hygiene, narrowly scoped signed media, deletion/retention, consent versioning, access/export/correction process and shared-device handling."
+    },
+    {
+      "id": "G18",
+      "priority": "Before public launch",
+      "capability": "Accessible and resilient mobile experience",
+      "current_state": "Partial; F22/F23/F51/F62",
+      "completion": "Large text/screen readers, usable denied-permission/manual-address path, offline/retry states, draft persistence, keyboard/safe-area checks and visible stale tracking."
+    },
+    {
+      "id": "G19",
+      "priority": "Before public launch",
+      "capability": "Production-grade release and recovery",
+      "current_state": "Not demonstrated; F69\u2013F74",
+      "completion": "Behavioral security/concurrency tests, compatible rollout/rollback, telemetry/alerts, restore drills, load tests and actual signed Android/iOS device/store acceptance."
+    },
+    {
+      "id": "G20",
+      "priority": "Before using marketing audience",
+      "capability": "Consent-safe marketing",
+      "current_state": "Partial; F64\u2013F66",
+      "completion": "Double opt-in/ownership, immutable consent history, suppression, precise audience filters, previews, quotas and resumable idempotent campaigns."
+    },
+    {
+      "id": "G21",
+      "priority": "If commercial teams are in launch scope",
+      "capability": "Real organization operations",
+      "current_state": "Membership only; F60",
+      "completion": "Verified business profile, seats/roles, team availability/dispatch, who is legally supplying the service, customer booking ownership, consolidated billing and staff earnings/permissions."
+    },
+    {
+      "id": "G22",
+      "priority": "After core launch unless explicitly promised",
+      "capability": "Recurring and saved bookings",
+      "current_state": "Not implemented as a complete flow",
+      "completion": "Repeat schedules, skip/pause/change recurring visits, preferred cleaner substitution and explicit pricing/consent per occurrence."
+    },
+    {
+      "id": "G23",
+      "priority": "After core launch unless explicitly promised",
+      "capability": "Two-way reputation and moderation",
+      "current_state": "Only customer-to-cleaner rating exists",
+      "completion": "Cleaner-to-customer review, eligibility/window, moderation/appeal/abuse protection and clear aggregation; never invent a background-check badge."
+    },
+    {
+      "id": "G24",
+      "priority": "After core launch",
+      "capability": "Promotions, referrals and tips",
+      "current_state": "No complete active flow",
+      "completion": "Server-validated discount/referral rules and tip accounting, fraud limits and settlement/reporting; add only after ledger reliability."
+    },
+    {
+      "id": "G25",
+      "priority": "After core launch unless promised",
+      "capability": "Product catalog and cleaner inventory",
+      "current_state": "Dashboard skeleton/table only",
+      "completion": "Catalog, stock ownership, pricing, attributed sales, inventory movement, QR checkout, refunds and commission; hide the module until real."
+    },
+    {
+      "id": "G26",
+      "priority": "Before enabling new languages/markets",
+      "capability": "Localization and country rules",
+      "current_state": "Preferences collected; app mainly English",
+      "completion": "Real localization, CAT/local timezone formatting, address/phone/currency support and translated terms/support templates; avoid presenting preference as implemented language support."
+    },
+    {
+      "id": "G27",
+      "priority": "Before relying on analytics for decisions",
+      "capability": "Operational and behavioral analytics",
+      "current_state": "Partial reporting skeleton",
+      "completion": "Revenue vs GMV vs commission definitions, retention/conversion/fulfilment/quality/fraud metrics, reproducible aggregates, consent-safe behavioral events and no fake zero/placeholder metrics."
+    },
+    {
+      "id": "G28",
+      "priority": "Before presenting blog as an acquisition channel",
+      "capability": "Published content delivery",
+      "current_state": "Partial; F63",
+      "completion": "Working production host/CORS, article prerendering, canonical/OG/schema/sitemap updates, redirects and real not-found/unpublished behavior."
+    },
+    {
+      "id": "G29",
+      "priority": "Before broad distribution",
+      "capability": "Mobile account and release hardening",
+      "current_state": "Partial",
+      "completion": "Platform-backed refresh-token storage where appropriate, app foreground/session refresh management, minimum-client/API compatibility, supported Expo/RN SDK, signed builds and crash/rollout monitoring."
+    },
+    {
+      "id": "G30",
+      "priority": "Business decision before selling the promise",
+      "capability": "Damage, insurance and service guarantees",
+      "current_state": "No complete operational workflow visible",
+      "completion": "Define damage/quality claims, supporting evidence, response windows, responsibility/cover and customer communication with qualified local legal/insurance advice where needed."
+    }
+  ]
+}

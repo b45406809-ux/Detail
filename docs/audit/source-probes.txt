@@ -1,0 +1,6 @@
+preflight: TypeError Response constructor: Invalid response status code 204
+notification insert column keys: userId,title,body,type,jobId,data,createdAt
+unsupported admin mutation result: {"ok":true,"auditId":"audit-key-123"} writes: adminauditevents
+openJobs normalization: {"serviceType":"Home","jobId":"job-123","customerId":"customer-123","status":"PENDING"} id: undefined
+admin route parsing: [{"path":"/admin/bookings","route":"admin","focus":"bookings"},{"path":"/admin/support/case-123","route":"admin","focus":"support"}]
+payout mismatch example: UI balance120-commission20 = 100 API earnings100-commission20 = 80

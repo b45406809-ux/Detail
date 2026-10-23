@@ -1,0 +1,250 @@
+path,category,lines
+.agents/skills/supabase-postgres-best-practices/CHANGELOG.md,Repository skills/guidance,73
+.agents/skills/supabase-postgres-best-practices/SKILL.md,Repository skills/guidance,64
+.agents/skills/supabase-postgres-best-practices/references/_contributing.md,Repository skills/guidance,170
+.agents/skills/supabase-postgres-best-practices/references/_sections.md,Repository skills/guidance,39
+.agents/skills/supabase-postgres-best-practices/references/_template.md,Repository skills/guidance,34
+.agents/skills/supabase-postgres-best-practices/references/advanced-full-text-search.md,Repository skills/guidance,55
+.agents/skills/supabase-postgres-best-practices/references/advanced-jsonb-indexing.md,Repository skills/guidance,49
+.agents/skills/supabase-postgres-best-practices/references/conn-idle-timeout.md,Repository skills/guidance,46
+.agents/skills/supabase-postgres-best-practices/references/conn-limits.md,Repository skills/guidance,44
+.agents/skills/supabase-postgres-best-practices/references/conn-pooling.md,Repository skills/guidance,41
+.agents/skills/supabase-postgres-best-practices/references/conn-prepared-statements.md,Repository skills/guidance,46
+.agents/skills/supabase-postgres-best-practices/references/data-batch-inserts.md,Repository skills/guidance,54
+.agents/skills/supabase-postgres-best-practices/references/data-n-plus-one.md,Repository skills/guidance,53
+.agents/skills/supabase-postgres-best-practices/references/data-pagination.md,Repository skills/guidance,50
+.agents/skills/supabase-postgres-best-practices/references/data-upsert.md,Repository skills/guidance,50
+.agents/skills/supabase-postgres-best-practices/references/lock-advisory.md,Repository skills/guidance,56
+.agents/skills/supabase-postgres-best-practices/references/lock-deadlock-prevention.md,Repository skills/guidance,68
+.agents/skills/supabase-postgres-best-practices/references/lock-short-transactions.md,Repository skills/guidance,50
+.agents/skills/supabase-postgres-best-practices/references/lock-skip-locked.md,Repository skills/guidance,54
+.agents/skills/supabase-postgres-best-practices/references/monitor-explain-analyze.md,Repository skills/guidance,45
+.agents/skills/supabase-postgres-best-practices/references/monitor-pg-stat-statements.md,Repository skills/guidance,55
+.agents/skills/supabase-postgres-best-practices/references/monitor-vacuum-analyze.md,Repository skills/guidance,55
+.agents/skills/supabase-postgres-best-practices/references/query-composite-indexes.md,Repository skills/guidance,44
+.agents/skills/supabase-postgres-best-practices/references/query-covering-indexes.md,Repository skills/guidance,40
+.agents/skills/supabase-postgres-best-practices/references/query-index-types.md,Repository skills/guidance,48
+.agents/skills/supabase-postgres-best-practices/references/query-missing-indexes.md,Repository skills/guidance,43
+.agents/skills/supabase-postgres-best-practices/references/query-partial-indexes.md,Repository skills/guidance,45
+.agents/skills/supabase-postgres-best-practices/references/schema-constraints.md,Repository skills/guidance,80
+.agents/skills/supabase-postgres-best-practices/references/schema-data-types.md,Repository skills/guidance,46
+.agents/skills/supabase-postgres-best-practices/references/schema-foreign-key-indexes.md,Repository skills/guidance,59
+.agents/skills/supabase-postgres-best-practices/references/schema-lowercase-identifiers.md,Repository skills/guidance,55
+.agents/skills/supabase-postgres-best-practices/references/schema-partitioning.md,Repository skills/guidance,55
+.agents/skills/supabase-postgres-best-practices/references/schema-primary-keys.md,Repository skills/guidance,61
+.agents/skills/supabase-postgres-best-practices/references/security-privileges.md,Repository skills/guidance,54
+.agents/skills/supabase-postgres-best-practices/references/security-rls-basics.md,Repository skills/guidance,50
+.agents/skills/supabase-postgres-best-practices/references/security-rls-performance.md,Repository skills/guidance,63
+.agents/skills/supabase/CHANGELOG.md,Repository skills/guidance,97
+.agents/skills/supabase/SKILL.md,Repository skills/guidance,155
+.agents/skills/supabase/assets/feedback-issue-template.md,Repository skills/guidance,17
+.agents/skills/supabase/references/skill-feedback.md,Repository skills/guidance,17
+.env.example,Other/supporting assets,37
+.firebaserc,Other/supporting assets,13
+.github/workflows/ci.yml,CI/deployment/ops/tooling,95
+.github/workflows/deploy-supabase.yml,CI/deployment/ops/tooling,70
+.github/workflows/deploy.yml,CI/deployment/ops/tooling,99
+.github/workflows/migrate-cloudflare-waitlist.yml,CI/deployment/ops/tooling,38
+.github/workflows/notification-delivery.yml,CI/deployment/ops/tooling,39
+.github/workflows/ops-runner.yml,CI/deployment/ops/tooling,443
+.github/workflows/publish-marketing-assets.yml,CI/deployment/ops/tooling,41
+.gitignore,Other/supporting assets,14
+.npmrc,Other/supporting assets,1
+README.md,Other/supporting assets,21
+cloudflare/marketing-assets-worker.mjs,Legacy backend / retained Cloudflare assets,12
+cloudflare/migrations/0001_waitlist.sql,Legacy backend / retained Cloudflare assets,27
+cloudflare/migrations/0002_admin_auth.sql,Legacy backend / retained Cloudflare assets,6
+cloudflare/migrations/0003_blog.sql,Legacy backend / retained Cloudflare assets,9
+cloudflare/migrations/0004_mobile_core.sql,Legacy backend / retained Cloudflare assets,68
+cloudflare/waitlist-worker.mjs,Legacy backend / retained Cloudflare assets,137
+cmd.txt,Other/supporting assets,1
+docs/cloudflare-waitlist.md,Docs/QA,7
+docs/cpanel-deployment.md,Docs/QA,54
+docs/didit-kyc-setup.md,Docs/QA,14
+docs/firebase-setup-and-troubleshooting.md,Docs/QA,5
+docs/github-actions-ops.md,Docs/QA,30
+docs/github-actions.md,Docs/QA,62
+docs/ios-app-store-readiness.md,Docs/QA,13
+docs/live-api-credentials.md,Docs/QA,39
+docs/mobile-figma-ui-spec.md,Docs/QA,989
+docs/supabase-cutover.md,Docs/QA,37
+firebase-applet-config.json,Other/supporting assets,10
+firebase-blueprint.json,Other/supporting assets,144
+firebase.json,Legacy backend / retained Cloudflare assets,34
+firestore.indexes.json,Legacy backend / retained Cloudflare assets,403
+firestore.rules,Legacy backend / retained Cloudflare assets,194
+functions/.gitignore,Legacy backend / retained Cloudflare assets,4
+functions/README.md,Legacy backend / retained Cloudflare assets,86
+functions/package-lock.json,Legacy backend / retained Cloudflare assets,3046
+functions/package.json,Legacy backend / retained Cloudflare assets,30
+functions/scripts/bootstrap-admin.mjs,Migration/bootstrap utilities,18
+functions/scripts/bootstrap-supabase-admin.mjs,Migration/bootstrap utilities,27
+functions/scripts/migrate-firebase-to-supabase.mjs,Migration/bootstrap utilities,243
+functions/src/index.ts,Legacy backend / retained Cloudflare assets,1277
+functions/tsconfig.json,Legacy backend / retained Cloudflare assets,18
+marketing/README.md,Other/supporting assets,52
+marketing/fonts/OFL.txt,Other/supporting assets,93
+metadata.json,Other/supporting assets,12
+mobile/.env.example,Mobile services/components/config/assets,6
+mobile/.eslintrc.js,Mobile services/components/config/assets,5
+mobile/.gitignore,Mobile services/components/config/assets,24
+mobile/.maestro/00-auth-smoke.yaml,Mobile services/components/config/assets,13
+mobile/.maestro/01-email-sign-in.yaml,Mobile services/components/config/assets,21
+mobile/.maestro/README.md,Mobile services/components/config/assets,32
+mobile/app.config.js,Mobile services/components/config/assets,24
+mobile/app.json,Mobile services/components/config/assets,102
+mobile/app/(auth)/_layout.tsx,Mobile routes,13
+mobile/app/(auth)/create-profile.tsx,Mobile routes,230
+mobile/app/(auth)/forgot-password.tsx,Mobile routes,172
+mobile/app/(auth)/permissions.tsx,Mobile routes,148
+mobile/app/(auth)/sign-in.tsx,Mobile routes,429
+mobile/app/(auth)/splash.tsx,Mobile routes,59
+mobile/app/(auth)/verify-email.tsx,Mobile routes,67
+mobile/app/(auth)/verify.tsx,Mobile routes,178
+mobile/app/(auth)/welcome.tsx,Mobile routes,118
+mobile/app/(tabs)/_layout.tsx,Mobile routes,67
+mobile/app/(tabs)/home.tsx,Mobile routes,604
+mobile/app/(tabs)/messages.tsx,Mobile routes,369
+mobile/app/(tabs)/profile.tsx,Mobile routes,409
+mobile/app/(tabs)/wallet.tsx,Mobile routes,336
+mobile/app/+not-found.tsx,Mobile routes,16
+mobile/app/_layout.tsx,Mobile routes,117
+mobile/app/booking/confirmation.tsx,Mobile routes,56
+mobile/app/booking/create.tsx,Mobile routes,854
+mobile/app/booking/offers.tsx,Mobile routes,381
+mobile/app/cleaner-agreement.tsx,Mobile routes,182
+mobile/app/cleaners.tsx,Mobile routes,93
+mobile/app/customer-agreement.tsx,Mobile routes,103
+mobile/app/favorites.tsx,Mobile routes,95
+mobile/app/help.tsx,Mobile routes,172
+mobile/app/history.tsx,Mobile routes,225
+mobile/app/index.tsx,Mobile routes,12
+mobile/app/instant-offers.tsx,Mobile routes,17
+mobile/app/job/[jobId].tsx,Mobile routes,380
+mobile/app/notifications.tsx,Mobile routes,96
+mobile/app/organization.tsx,Mobile routes,121
+mobile/app/portfolio.tsx,Mobile routes,46
+mobile/app/privacy-policy.tsx,Mobile routes,64
+mobile/app/register-cleaner.tsx,Mobile routes,343
+mobile/app/reviews.tsx,Mobile routes,169
+mobile/app/support.tsx,Mobile routes,15
+mobile/app/tracking/[jobId].tsx,Mobile routes,1030
+mobile/assets/adaptive-icon.png,Mobile services/components/config/assets,
+mobile/assets/favicon.png,Mobile services/components/config/assets,
+mobile/assets/intro.mp4,Mobile services/components/config/assets,
+mobile/assets/notification-icon.png,Mobile services/components/config/assets,
+mobile/assets/splash.png,Mobile services/components/config/assets,
+mobile/babel.config.js,Mobile services/components/config/assets,9
+mobile/components/BottomSheet.tsx,Mobile services/components/config/assets,99
+mobile/components/CountryPickerModal.tsx,Mobile services/components/config/assets,181
+mobile/components/ErrorBoundary.tsx,Mobile services/components/config/assets,56
+mobile/components/Logo.tsx,Mobile services/components/config/assets,36
+mobile/components/MapPlaceholder.tsx,Mobile services/components/config/assets,48
+mobile/components/SocialSignInButtons.tsx,Mobile services/components/config/assets,155
+mobile/components/StarRating.tsx,Mobile services/components/config/assets,24
+mobile/components/Wordmark.tsx,Mobile services/components/config/assets,39
+mobile/components/glass/GlassCard.tsx,Mobile services/components/config/assets,107
+mobile/components/glass/GlassIconButton.tsx,Mobile services/components/config/assets,68
+mobile/components/glass/GlassSheet.tsx,Mobile services/components/config/assets,82
+mobile/components/glass/RoleToggle.tsx,Mobile services/components/config/assets,81
+mobile/components/glass/index.ts,Mobile services/components/config/assets,4
+mobile/constants/countries.ts,Mobile services/components/config/assets,72
+mobile/constants/services.ts,Mobile services/components/config/assets,70
+mobile/constants/theme.ts,Mobile services/components/config/assets,39
+mobile/context/AuthContext.tsx,Mobile services/components/config/assets,94
+mobile/eas.json,Mobile services/components/config/assets,34
+mobile/expo-env.d.ts,Mobile services/components/config/assets,3
+mobile/global.css,Mobile services/components/config/assets,3
+mobile/metro.config.js,Mobile services/components/config/assets,6
+mobile/nativewind-env.d.ts,Mobile services/components/config/assets,1
+mobile/package-lock.json,Mobile services/components/config/assets,16748
+mobile/package.json,Mobile services/components/config/assets,64
+mobile/scripts/generate-notification-sounds.js,Mobile services/components/config/assets,42
+mobile/services/emailAuth.ts,Mobile services/components/config/assets,23
+mobile/services/functions.ts,Mobile services/components/config/assets,12
+mobile/services/locationTracking.ts,Mobile services/components/config/assets,31
+mobile/services/mapbox.ts,Mobile services/components/config/assets,25
+mobile/services/matching.ts,Mobile services/components/config/assets,91
+mobile/services/notifications.ts,Mobile services/components/config/assets,43
+mobile/services/payments.ts,Mobile services/components/config/assets,54
+mobile/services/phoneAuth.ts,Mobile services/components/config/assets,49
+mobile/services/storage.ts,Mobile services/components/config/assets,60
+mobile/services/supabase.ts,Mobile services/components/config/assets,313
+mobile/tailwind.config.js,Mobile services/components/config/assets,54
+mobile/tsconfig.json,Mobile services/components/config/assets,23
+mobile/types/index.ts,Mobile services/components/config/assets,277
+mobile/utils/env.ts,Mobile services/components/config/assets,14
+package-lock.json,Other/supporting assets,3902
+package.json,Other/supporting assets,39
+qa/admin-dashboard.md,Docs/QA,19
+qa/booking-lifecycle.md,Docs/QA,24
+scripts/deploy-cloudflare-waitlist.py,CI/deployment/ops/tooling,77
+scripts/generate-instagram-carousel.py,CI/deployment/ops/tooling,99
+scripts/live_provider_checks.mjs,CI/deployment/ops/tooling,240
+scripts/migrate_cloudflare_waitlist_to_supabase.py,CI/deployment/ops/tooling,219
+scripts/redact_gha_ops_log.py,CI/deployment/ops/tooling,22
+scripts/requirements-marketing.txt,CI/deployment/ops/tooling,3
+scripts/upload-marketing-assets-cloudflare.py,CI/deployment/ops/tooling,51
+site/.env.example,Site/dashboard/blog,7
+site/README.md,Site/dashboard/blog,21
+site/dashboard.html,Site/dashboard/blog,31
+site/index.html,Site/dashboard/blog,31
+site/package-lock.json,Site/dashboard/blog,1808
+site/package.json,Site/dashboard/blog,24
+site/public/.htaccess,Site/dashboard/blog,16
+site/public/app-icon.svg,Site/dashboard/blog,1
+site/public/favicon.svg,Site/dashboard/blog,1
+site/public/llms.txt,Site/dashboard/blog,16
+site/public/og-dashboard.png,Site/dashboard/blog,
+site/public/og-dashboard.svg,Site/dashboard/blog,46
+site/public/og-image.png,Site/dashboard/blog,
+site/public/og-image.svg,Site/dashboard/blog,1
+site/public/robots.txt,Site/dashboard/blog,14
+site/public/sitemap.xml,Site/dashboard/blog,7
+site/src/Blog.tsx,Site/dashboard/blog,47
+site/src/BrandMark.tsx,Site/dashboard/blog,8
+site/src/admin/AdminDashboard.tsx,Site/dashboard/blog,55
+site/src/admin/AdminEntry.tsx,Site/dashboard/blog,65
+site/src/admin/Admins.tsx,Site/dashboard/blog,13
+site/src/admin/BlogManager.tsx,Site/dashboard/blog,105
+site/src/admin/InviteAcceptance.tsx,Site/dashboard/blog,15
+site/src/admin/Modules.tsx,Site/dashboard/blog,32
+site/src/admin/Overview.tsx,Site/dashboard/blog,23
+site/src/admin/Settings.tsx,Site/dashboard/blog,4
+site/src/admin/Waitlist.tsx,Site/dashboard/blog,22
+site/src/admin/admin.css,Site/dashboard/blog,7
+site/src/admin/api.ts,Site/dashboard/blog,38
+site/src/admin/session.ts,Site/dashboard/blog,10
+site/src/admin/types.ts,Site/dashboard/blog,10
+site/src/analytics.ts,Site/dashboard/blog,16
+site/src/blog.css,Site/dashboard/blog,3
+site/src/main.tsx,Site/dashboard/blog,58
+site/src/platform.ts,Site/dashboard/blog,5
+site/src/react-dom-client.d.ts,Site/dashboard/blog,5
+site/src/styles.css,Site/dashboard/blog,12
+site/src/supabase.ts,Site/dashboard/blog,20
+site/tsconfig.json,Site/dashboard/blog,1
+site/vite.config.ts,Site/dashboard/blog,20
+skills-lock.json,Other/supporting assets,17
+storage.rules,Legacy backend / retained Cloudflare assets,52
+supabase/config.toml,Active backend/schema,57
+supabase/functions/delivery-worker/index.ts,Active backend/schema,65
+supabase/functions/deno.json,Active backend/schema,3
+supabase/functions/marketing-unsubscribe/index.ts,Active backend/schema,15
+supabase/functions/marketplace-api/index.ts,Active backend/schema,870
+supabase/functions/paynow-return/index.ts,Active backend/schema,11
+supabase/functions/paynow-webhook/index.ts,Active backend/schema,56
+supabase/migrations/20261020000000_initial_schema.sql,Active backend/schema,268
+supabase/migrations/20261020001000_storage_and_financial_rpcs.sql,Active backend/schema,92
+supabase/migrations/20261020002000_marketplace_transactions.sql,Active backend/schema,241
+supabase/migrations/20261020003000_admin_and_privacy.sql,Active backend/schema,86
+supabase/migrations/20261020004000_paynow_wallet_topups.sql,Active backend/schema,63
+supabase/migrations/20261020005000_client_runtime_access.sql,Active backend/schema,39
+supabase/migrations/20261020006000_rating_and_public_config.sql,Active backend/schema,28
+supabase/migrations/20261020007000_waitlist_fields.sql,Active backend/schema,3
+supabase/migrations/20261020008000_paynow_completion_ledger.sql,Active backend/schema,20
+supabase/migrations/20261020009000_marketplace_operations.sql,Active backend/schema,79
+supabase/migrations/20261020010000_marketplace_hardening.sql,Active backend/schema,671
+supabase/migrations/20261020011000_blog_content.sql,Active backend/schema,20
+supabase/migrations/20261020012000_fix_completion_photo_rpc.sql,Active backend/schema,53
+supabase/seed.sql,Active backend/schema,5

@@ -1,0 +1,3084 @@
+{
+  "site-prod": {
+    "counts": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "error": null,
+    "packages": {}
+  },
+  "site-all": {
+    "counts": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "error": null,
+    "packages": {}
+  },
+  "mobile-prod": {
+    "counts": {
+      "info": 0,
+      "low": 0,
+      "moderate": 18,
+      "high": 81,
+      "critical": 1,
+      "total": 100
+    },
+    "error": null,
+    "packages": {
+      "@expo/bunyan": {
+        "name": "@expo/bunyan",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "uuid"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/@expo/bunyan"
+        ],
+        "fixAvailable": true
+      },
+      "@expo/cli": {
+        "name": "@expo/cli",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "@expo/code-signing-certificates",
+          "@expo/config",
+          "@expo/config-plugins",
+          "@expo/metro-config",
+          "@expo/plist",
+          "@expo/prebuild-config",
+          "@expo/rudder-sdk-node",
+          "@react-native/dev-middleware",
+          "cacache",
+          "fast-glob",
+          "node-forge",
+          "tar",
+          "tempy"
+        ],
+        "effects": [
+          "expo"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/@expo/cli"
+        ],
+        "fixAvailable": false
+      },
+      "@expo/code-signing-certificates": {
+        "name": "@expo/code-signing-certificates",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "node-forge"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/@expo/code-signing-certificates"
+        ],
+        "fixAvailable": true
+      },
+      "@expo/config": {
+        "name": "@expo/config",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "@expo/config-plugins"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/@expo/config"
+        ],
+        "fixAvailable": true
+      },
+      "@expo/config-plugins": {
+        "name": "@expo/config-plugins",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "@expo/plist",
+          "xcode"
+        ],
+        "effects": [
+          "@expo/config",
+          "@expo/prebuild-config"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/@expo/config-plugins"
+        ],
+        "fixAvailable": true
+      },
+      "@expo/metro-config": {
+        "name": "@expo/metro-config",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "@expo/config",
+          "postcss"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/@expo/metro-config"
+        ],
+        "fixAvailable": true
+      },
+      "@expo/metro-runtime": {
+        "name": "@expo/metro-runtime",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/@expo/metro-runtime"
+        ],
+        "fixAvailable": true
+      },
+      "@expo/plist": {
+        "name": "@expo/plist",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "@xmldom/xmldom"
+        ],
+        "effects": [
+          "@expo/config-plugins"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/@expo/plist"
+        ],
+        "fixAvailable": true
+      },
+      "@expo/prebuild-config": {
+        "name": "@expo/prebuild-config",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "@expo/config",
+          "@expo/config-plugins"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/@expo/prebuild-config"
+        ],
+        "fixAvailable": true
+      },
+      "@expo/rudder-sdk-node": {
+        "name": "@expo/rudder-sdk-node",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "@expo/bunyan",
+          "uuid"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/@expo/rudder-sdk-node"
+        ],
+        "fixAvailable": true
+      },
+      "@jest/environment": {
+        "name": "@jest/environment",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "@jest/fake-timers"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/@jest/environment"
+        ],
+        "fixAvailable": true
+      },
+      "@jest/fake-timers": {
+        "name": "@jest/fake-timers",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "jest-message-util"
+        ],
+        "effects": [
+          "@jest/environment",
+          "jest-environment-node"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/@jest/fake-timers"
+        ],
+        "fixAvailable": true
+      },
+      "@jest/transform": {
+        "name": "@jest/transform",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "jest-haste-map",
+          "micromatch"
+        ],
+        "effects": [
+          "babel-jest"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/@jest/transform"
+        ],
+        "fixAvailable": true
+      },
+      "@react-native-async-storage/async-storage": {
+        "name": "@react-native-async-storage/async-storage",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/@react-native-async-storage/async-storage"
+        ],
+        "fixAvailable": false
+      },
+      "@react-native-community/datetimepicker": {
+        "name": "@react-native-community/datetimepicker",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "expo",
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/@react-native-community/datetimepicker"
+        ],
+        "fixAvailable": false
+      },
+      "@react-native/babel-plugin-codegen": {
+        "name": "@react-native/babel-plugin-codegen",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "@react-native/codegen"
+        ],
+        "effects": [
+          "@react-native/babel-preset"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/@react-native/babel-plugin-codegen"
+        ],
+        "fixAvailable": true
+      },
+      "@react-native/babel-preset": {
+        "name": "@react-native/babel-preset",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "@react-native/babel-plugin-codegen"
+        ],
+        "effects": [
+          "@react-native/metro-babel-transformer",
+          "babel-preset-expo"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/@react-native/babel-preset"
+        ],
+        "fixAvailable": true
+      },
+      "@react-native/codegen": {
+        "name": "@react-native/codegen",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "jscodeshift"
+        ],
+        "effects": [
+          "@react-native/babel-plugin-codegen"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/@react-native/codegen"
+        ],
+        "fixAvailable": true
+      },
+      "@react-native/community-cli-plugin": {
+        "name": "@react-native/community-cli-plugin",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "@react-native/dev-middleware",
+          "@react-native/metro-babel-transformer",
+          "metro",
+          "metro-config"
+        ],
+        "effects": [
+          "react-native"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/@react-native/community-cli-plugin"
+        ],
+        "fixAvailable": false
+      },
+      "@react-native/dev-middleware": {
+        "name": "@react-native/dev-middleware",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "selfsigned"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/@react-native/dev-middleware"
+        ],
+        "fixAvailable": true
+      },
+      "@react-native/metro-babel-transformer": {
+        "name": "@react-native/metro-babel-transformer",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "@react-native/babel-preset"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/@react-native/metro-babel-transformer"
+        ],
+        "fixAvailable": true
+      },
+      "@react-native/virtualized-lists": {
+        "name": "@react-native/virtualized-lists",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/@react-native/virtualized-lists"
+        ],
+        "fixAvailable": true
+      },
+      "@react-navigation/bottom-tabs": {
+        "name": "@react-navigation/bottom-tabs",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "@react-navigation/elements",
+          "react-native",
+          "react-native-safe-area-context",
+          "react-native-screens"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-router/node_modules/@react-navigation/bottom-tabs"
+        ],
+        "fixAvailable": true
+      },
+      "@react-navigation/core": {
+        "name": "@react-navigation/core",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "query-string"
+        ],
+        "effects": [
+          "@react-navigation/native"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/@react-navigation/core"
+        ],
+        "fixAvailable": false
+      },
+      "@react-navigation/elements": {
+        "name": "@react-navigation/elements",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "react-native",
+          "react-native-safe-area-context"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-router/node_modules/@react-navigation/elements"
+        ],
+        "fixAvailable": true
+      },
+      "@react-navigation/native": {
+        "name": "@react-navigation/native",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "@react-navigation/core",
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/@react-navigation/native"
+        ],
+        "fixAvailable": false
+      },
+      "@react-navigation/native-stack": {
+        "name": "@react-navigation/native-stack",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "@react-navigation/elements",
+          "react-native",
+          "react-native-safe-area-context",
+          "react-native-screens"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-router/node_modules/@react-navigation/native-stack"
+        ],
+        "fixAvailable": true
+      },
+      "@rnmapbox/maps": {
+        "name": "@rnmapbox/maps",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "expo",
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/@rnmapbox/maps"
+        ],
+        "fixAvailable": false
+      },
+      "@xmldom/xmldom": {
+        "name": "@xmldom/xmldom",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1117097,
+            "name": "@xmldom/xmldom",
+            "dependency": "@xmldom/xmldom",
+            "title": "xmldom: XML injection via unsafe CDATA serialization allows attacker-controlled markup insertion",
+            "url": "https://github.com/advisories/GHSA-wh4c-j3r5-mjhp",
+            "severity": "high",
+            "cwe": [
+              "CWE-91"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+            },
+            "range": "<0.8.12"
+          },
+          {
+            "source": 1117894,
+            "name": "@xmldom/xmldom",
+            "dependency": "@xmldom/xmldom",
+            "title": "xmldom: Uncontrolled recursion in XML serialization leads to DoS",
+            "url": "https://github.com/advisories/GHSA-2v35-w6hq-6mfw",
+            "severity": "high",
+            "cwe": [
+              "CWE-674"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<0.8.13"
+          },
+          {
+            "source": 1117897,
+            "name": "@xmldom/xmldom",
+            "dependency": "@xmldom/xmldom",
+            "title": "xmldom has XML injection through unvalidated DocumentType serialization",
+            "url": "https://github.com/advisories/GHSA-f6ww-3ggp-fr8h",
+            "severity": "high",
+            "cwe": [
+              "CWE-91"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<0.8.13"
+          },
+          {
+            "source": 1117900,
+            "name": "@xmldom/xmldom",
+            "dependency": "@xmldom/xmldom",
+            "title": "xmldom has XML node injection through unvalidated processing instruction serialization",
+            "url": "https://github.com/advisories/GHSA-x6wf-f3px-wcqx",
+            "severity": "high",
+            "cwe": [
+              "CWE-91"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<0.8.13"
+          },
+          {
+            "source": 1117903,
+            "name": "@xmldom/xmldom",
+            "dependency": "@xmldom/xmldom",
+            "title": "xmldom has XML node injection through unvalidated comment serialization",
+            "url": "https://github.com/advisories/GHSA-j759-j44w-7fr8",
+            "severity": "high",
+            "cwe": [
+              "CWE-91"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<0.8.13"
+          },
+          {
+            "source": 1158518,
+            "name": "@xmldom/xmldom",
+            "dependency": "@xmldom/xmldom",
+            "title": "xmldom: XML fragment injection via invalid EntityReference.nodeName during requireWellFormed serialization",
+            "url": "https://github.com/advisories/GHSA-6gmq-8vp8-gcm6",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-116"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=0.7.0 <=0.8.14"
+          },
+          {
+            "source": 1193689,
+            "name": "@xmldom/xmldom",
+            "dependency": "@xmldom/xmldom",
+            "title": "xmldom: Element name injection via createElement() bypasses requireWellFormed",
+            "url": "https://github.com/advisories/GHSA-w2rr-34g9-rvrj",
+            "severity": "high",
+            "cwe": [
+              "CWE-91"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=0.7.0 <=0.8.13"
+          },
+          {
+            "source": 1193692,
+            "name": "@xmldom/xmldom",
+            "dependency": "@xmldom/xmldom",
+            "title": "xmldom: Attribute name injection via setAttribute() bypasses requireWellFormed",
+            "url": "https://github.com/advisories/GHSA-4w3w-2rp5-g8jm",
+            "severity": "high",
+            "cwe": [
+              "CWE-91"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=0.7.0 <=0.8.13"
+          },
+          {
+            "source": 1193696,
+            "name": "@xmldom/xmldom",
+            "dependency": "@xmldom/xmldom",
+            "title": "xmldom: Processing Instruction Target Injection Bypasses requireWellFormed",
+            "url": "https://github.com/advisories/GHSA-c7q8-3ch8-vqpv",
+            "severity": "high",
+            "cwe": [
+              "CWE-91"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=0.7.0 <=0.8.14"
+          },
+          {
+            "source": 1193700,
+            "name": "@xmldom/xmldom",
+            "dependency": "@xmldom/xmldom",
+            "title": "xmldom: DocType `name` Injection Bypasses requireWellFormed",
+            "url": "https://github.com/advisories/GHSA-27p8-2357-5qqv",
+            "severity": "high",
+            "cwe": [
+              "CWE-91"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=0.7.0 <=0.8.14"
+          },
+          {
+            "source": 1193705,
+            "name": "@xmldom/xmldom",
+            "dependency": "@xmldom/xmldom",
+            "title": "xmldom: Parser silently accepts a not-well-formed end tag whose name is followed by a line break and trailing content",
+            "url": "https://github.com/advisories/GHSA-6h8r-xr42-gp59",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-1286"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=0.7.0 <=0.8.14"
+          },
+          {
+            "source": 1193708,
+            "name": "@xmldom/xmldom",
+            "dependency": "@xmldom/xmldom",
+            "title": "xmldom: Quadratic-time attribute deduplication",
+            "url": "https://github.com/advisories/GHSA-8344-3jmq-59r6",
+            "severity": "high",
+            "cwe": [
+              "CWE-407"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=0.7.0 <=0.8.14"
+          },
+          {
+            "source": 1193709,
+            "name": "@xmldom/xmldom",
+            "dependency": "@xmldom/xmldom",
+            "title": "xmldom: End-tag Whitespace-Trim Regex ReDoS \u2014 quadratic backtracking in the 0.8.x end-tag parser",
+            "url": "https://github.com/advisories/GHSA-x4fp-j954-r2f4",
+            "severity": "high",
+            "cwe": [
+              "CWE-400",
+              "CWE-1333"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=0.7.0 <=0.8.14"
+          },
+          {
+            "source": 1193712,
+            "name": "@xmldom/xmldom",
+            "dependency": "@xmldom/xmldom",
+            "title": "xmldom: Quadratic-memory consumption",
+            "url": "https://github.com/advisories/GHSA-965w-775f-mr7g",
+            "severity": "high",
+            "cwe": [
+              "CWE-770"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=0.7.0 <=0.8.14"
+          },
+          {
+            "source": 1193715,
+            "name": "@xmldom/xmldom",
+            "dependency": "@xmldom/xmldom",
+            "title": "xmldom: Quadratic-time parsing via the malformed-input recovery path \u2014 `parseElementStartPart` re-scan and `normalize()` adjacent-text merge",
+            "url": "https://github.com/advisories/GHSA-93r5-fhx6-vmg9",
+            "severity": "high",
+            "cwe": [
+              "CWE-400",
+              "CWE-407"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=0.7.0 <=0.8.14"
+          }
+        ],
+        "effects": [
+          "@expo/plist"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/@xmldom/xmldom"
+        ],
+        "fixAvailable": true
+      },
+      "babel-jest": {
+        "name": "babel-jest",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "@jest/transform"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/babel-jest"
+        ],
+        "fixAvailable": true
+      },
+      "babel-preset-expo": {
+        "name": "babel-preset-expo",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "@react-native/babel-preset"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/babel-preset-expo"
+        ],
+        "fixAvailable": true
+      },
+      "braces": {
+        "name": "braces",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1240992,
+            "name": "braces",
+            "dependency": "braces",
+            "title": "braces vulnerable to stack-exhaustion denial of service through deeply nested patterns",
+            "url": "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+            "severity": "high",
+            "cwe": [
+              "CWE-674"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<=3.0.3"
+          }
+        ],
+        "effects": [
+          "chokidar",
+          "micromatch"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/braces"
+        ],
+        "fixAvailable": true
+      },
+      "cacache": {
+        "name": "cacache",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "tar"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/cacache"
+        ],
+        "fixAvailable": true
+      },
+      "chokidar": {
+        "name": "chokidar",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "braces"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/chokidar"
+        ],
+        "fixAvailable": true
+      },
+      "decode-uri-component": {
+        "name": "decode-uri-component",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1147955,
+            "name": "decode-uri-component",
+            "dependency": "decode-uri-component",
+            "title": "decode-uri-component: Denial of service via exponential decoding of malformed percent-encoded input",
+            "url": "https://github.com/advisories/GHSA-vcc3-ghjq-m6fr",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-400",
+              "CWE-405",
+              "CWE-407",
+              "CWE-1176"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=0.4.2"
+          }
+        ],
+        "effects": [
+          "query-string"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/decode-uri-component"
+        ],
+        "fixAvailable": false
+      },
+      "del": {
+        "name": "del",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "globby"
+        ],
+        "effects": [
+          "tempy"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/del"
+        ],
+        "fixAvailable": true
+      },
+      "expo": {
+        "name": "expo",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "@expo/cli",
+          "@expo/config",
+          "@expo/config-plugins",
+          "@expo/metro-config",
+          "@expo/metro-runtime",
+          "babel-preset-expo",
+          "expo-asset",
+          "expo-constants",
+          "expo-file-system",
+          "expo-font",
+          "expo-keep-awake",
+          "expo-modules-autolinking",
+          "react-native",
+          "react-native-webview"
+        ],
+        "effects": [
+          "@react-native-community/datetimepicker",
+          "@rnmapbox/maps",
+          "expo-apple-authentication",
+          "expo-application",
+          "expo-asset",
+          "expo-blur",
+          "expo-constants",
+          "expo-crypto",
+          "expo-device",
+          "expo-file-system",
+          "expo-font",
+          "expo-haptics",
+          "expo-image",
+          "expo-image-loader",
+          "expo-image-picker",
+          "expo-keep-awake",
+          "expo-linear-gradient",
+          "expo-location",
+          "expo-notifications",
+          "expo-router",
+          "expo-splash-screen",
+          "expo-task-manager",
+          "expo-video",
+          "expo-web-browser"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/expo"
+        ],
+        "fixAvailable": false
+      },
+      "expo-apple-authentication": {
+        "name": "expo-apple-authentication",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "expo",
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-apple-authentication"
+        ],
+        "fixAvailable": false
+      },
+      "expo-application": {
+        "name": "expo-application",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "expo"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-application"
+        ],
+        "fixAvailable": true
+      },
+      "expo-asset": {
+        "name": "expo-asset",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "expo",
+          "expo-constants",
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-asset"
+        ],
+        "fixAvailable": false
+      },
+      "expo-auth-session": {
+        "name": "expo-auth-session",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "expo-application",
+          "expo-constants",
+          "expo-crypto",
+          "expo-linking",
+          "expo-web-browser",
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-auth-session"
+        ],
+        "fixAvailable": false
+      },
+      "expo-blur": {
+        "name": "expo-blur",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "expo",
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-blur"
+        ],
+        "fixAvailable": false
+      },
+      "expo-constants": {
+        "name": "expo-constants",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "@expo/config",
+          "expo",
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-constants"
+        ],
+        "fixAvailable": false
+      },
+      "expo-crypto": {
+        "name": "expo-crypto",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "expo"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-crypto"
+        ],
+        "fixAvailable": false
+      },
+      "expo-device": {
+        "name": "expo-device",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "expo"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-device"
+        ],
+        "fixAvailable": false
+      },
+      "expo-file-system": {
+        "name": "expo-file-system",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "expo",
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo/node_modules/expo-file-system"
+        ],
+        "fixAvailable": true
+      },
+      "expo-font": {
+        "name": "expo-font",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "expo"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-font"
+        ],
+        "fixAvailable": false
+      },
+      "expo-haptics": {
+        "name": "expo-haptics",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "expo"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-haptics"
+        ],
+        "fixAvailable": false
+      },
+      "expo-image": {
+        "name": "expo-image",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "expo",
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-image"
+        ],
+        "fixAvailable": false
+      },
+      "expo-image-loader": {
+        "name": "expo-image-loader",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "expo"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-image-loader"
+        ],
+        "fixAvailable": true
+      },
+      "expo-image-picker": {
+        "name": "expo-image-picker",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "expo",
+          "expo-image-loader"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-image-picker"
+        ],
+        "fixAvailable": false
+      },
+      "expo-keep-awake": {
+        "name": "expo-keep-awake",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "expo"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo/node_modules/expo-keep-awake"
+        ],
+        "fixAvailable": true
+      },
+      "expo-linear-gradient": {
+        "name": "expo-linear-gradient",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "expo",
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-linear-gradient"
+        ],
+        "fixAvailable": false
+      },
+      "expo-linking": {
+        "name": "expo-linking",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "expo-constants",
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-linking"
+        ],
+        "fixAvailable": false
+      },
+      "expo-location": {
+        "name": "expo-location",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "expo"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-location"
+        ],
+        "fixAvailable": false
+      },
+      "expo-modules-autolinking": {
+        "name": "expo-modules-autolinking",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "fast-glob"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-modules-autolinking"
+        ],
+        "fixAvailable": true
+      },
+      "expo-notifications": {
+        "name": "expo-notifications",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "expo",
+          "expo-application",
+          "expo-constants",
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-notifications"
+        ],
+        "fixAvailable": false
+      },
+      "expo-router": {
+        "name": "expo-router",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "@expo/metro-runtime",
+          "@react-navigation/bottom-tabs",
+          "@react-navigation/native-stack",
+          "expo",
+          "expo-constants",
+          "expo-linking",
+          "react-native-is-edge-to-edge",
+          "react-native-reanimated",
+          "react-native-safe-area-context",
+          "react-native-screens"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-router"
+        ],
+        "fixAvailable": false
+      },
+      "expo-splash-screen": {
+        "name": "expo-splash-screen",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "@expo/prebuild-config",
+          "expo"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-splash-screen"
+        ],
+        "fixAvailable": false
+      },
+      "expo-status-bar": {
+        "name": "expo-status-bar",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-status-bar"
+        ],
+        "fixAvailable": false
+      },
+      "expo-task-manager": {
+        "name": "expo-task-manager",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "expo",
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-task-manager"
+        ],
+        "fixAvailable": false
+      },
+      "expo-video": {
+        "name": "expo-video",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "expo",
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-video"
+        ],
+        "fixAvailable": false
+      },
+      "expo-web-browser": {
+        "name": "expo-web-browser",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "expo",
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/expo-web-browser"
+        ],
+        "fixAvailable": false
+      },
+      "fast-glob": {
+        "name": "fast-glob",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "micromatch"
+        ],
+        "effects": [
+          "expo-modules-autolinking",
+          "globby"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/fast-glob"
+        ],
+        "fixAvailable": true
+      },
+      "globby": {
+        "name": "globby",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "fast-glob"
+        ],
+        "effects": [
+          "del"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/globby"
+        ],
+        "fixAvailable": true
+      },
+      "image-size": {
+        "name": "image-size",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1239765,
+            "name": "image-size",
+            "dependency": "image-size",
+            "title": "image-size: JXL and HEIF parsers allow denial of service through infinite loops",
+            "url": "https://github.com/advisories/GHSA-5p2g-fcmc-qvqq",
+            "severity": "high",
+            "cwe": [
+              "CWE-835"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=1.2.0 <=2.0.2"
+          },
+          {
+            "source": 1239766,
+            "name": "image-size",
+            "dependency": "image-size",
+            "title": "image-size: ICNS parser allows denial of service through an infinite loop",
+            "url": "https://github.com/advisories/GHSA-w3rx-r6r6-pgpr",
+            "severity": "high",
+            "cwe": [
+              "CWE-835"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=0.6.3 <=2.0.2"
+          }
+        ],
+        "effects": [
+          "metro"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/image-size"
+        ],
+        "fixAvailable": false
+      },
+      "jest-environment-node": {
+        "name": "jest-environment-node",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "@jest/environment",
+          "@jest/fake-timers"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/jest-environment-node"
+        ],
+        "fixAvailable": true
+      },
+      "jest-haste-map": {
+        "name": "jest-haste-map",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "micromatch"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/jest-haste-map"
+        ],
+        "fixAvailable": true
+      },
+      "jest-message-util": {
+        "name": "jest-message-util",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "micromatch"
+        ],
+        "effects": [
+          "@jest/fake-timers"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/jest-message-util"
+        ],
+        "fixAvailable": true
+      },
+      "jscodeshift": {
+        "name": "jscodeshift",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "micromatch"
+        ],
+        "effects": [
+          "@react-native/codegen"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/jscodeshift"
+        ],
+        "fixAvailable": true
+      },
+      "lucide-react-native": {
+        "name": "lucide-react-native",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "react-native",
+          "react-native-svg"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/lucide-react-native"
+        ],
+        "fixAvailable": false
+      },
+      "metro": {
+        "name": "metro",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "image-size",
+          "metro-config",
+          "metro-file-map",
+          "metro-transform-worker"
+        ],
+        "effects": [
+          "@react-native/community-cli-plugin",
+          "metro-config",
+          "metro-transform-worker"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/metro"
+        ],
+        "fixAvailable": false
+      },
+      "metro-config": {
+        "name": "metro-config",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "metro"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/metro-config"
+        ],
+        "fixAvailable": true
+      },
+      "metro-file-map": {
+        "name": "metro-file-map",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "micromatch"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/metro-file-map"
+        ],
+        "fixAvailable": true
+      },
+      "metro-transform-worker": {
+        "name": "metro-transform-worker",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "metro"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/metro-transform-worker"
+        ],
+        "fixAvailable": true
+      },
+      "micromatch": {
+        "name": "micromatch",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "braces"
+        ],
+        "effects": [
+          "@jest/transform",
+          "fast-glob",
+          "jest-haste-map",
+          "jest-message-util",
+          "jscodeshift",
+          "metro-file-map"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/micromatch"
+        ],
+        "fixAvailable": true
+      },
+      "nativewind": {
+        "name": "nativewind",
+        "severity": "moderate",
+        "isDirect": true,
+        "via": [
+          "react-native-css-interop",
+          "tailwindcss"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/nativewind"
+        ],
+        "fixAvailable": false
+      },
+      "node-forge": {
+        "name": "node-forge",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1240912,
+            "name": "node-forge",
+            "dependency": "node-forge",
+            "title": "node-forge RSA PKCS#1 v1.5 signature verification accepts extra nested DigestAlgorithm elements",
+            "url": "https://github.com/advisories/GHSA-86w9-cpqp-85rv",
+            "severity": "high",
+            "cwe": [
+              "CWE-347"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+            },
+            "range": "<=1.4.0"
+          }
+        ],
+        "effects": [
+          "@expo/cli",
+          "@expo/code-signing-certificates",
+          "selfsigned"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/node-forge"
+        ],
+        "fixAvailable": false
+      },
+      "postcss": {
+        "name": "postcss",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1117015,
+            "name": "postcss",
+            "dependency": "postcss",
+            "title": "PostCSS has XSS via Unescaped </style> in its CSS Stringify Output",
+            "url": "https://github.com/advisories/GHSA-qx2v-qp2m-jg93",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-79"
+            ],
+            "cvss": {
+              "score": 6.1,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"
+            },
+            "range": "<8.5.10"
+          },
+          {
+            "source": 1124252,
+            "name": "postcss",
+            "dependency": "postcss",
+            "title": "PostCSS: Arbitrary file read and information disclosure via attacker-controlled sourceMappingURL in CSS comments",
+            "url": "https://github.com/advisories/GHSA-6g55-p6wh-862q",
+            "severity": "high",
+            "cwe": [
+              "CWE-22",
+              "CWE-200"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+            },
+            "range": "<=8.5.11"
+          },
+          {
+            "source": 1130709,
+            "name": "postcss",
+            "dependency": "postcss",
+            "title": "PostCSS: incomplete fix of GHSA-6g55-p6wh-862q \u2014 attacker-controlled sourceMappingURL reads arbitrary .map files when `from` is unset",
+            "url": "https://github.com/advisories/GHSA-fxqj-rqcc-2cmp",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-22",
+              "CWE-200"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=8.5.22"
+          },
+          {
+            "source": 1139510,
+            "name": "postcss",
+            "dependency": "postcss",
+            "title": "PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL) leads to Arbitrary .map File Disclosure",
+            "url": "https://github.com/advisories/GHSA-r28c-9q8g-f849",
+            "severity": "high",
+            "cwe": [
+              "CWE-22"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+            },
+            "range": "<=8.5.17"
+          }
+        ],
+        "effects": [
+          "@expo/metro-config",
+          "postcss-import",
+          "postcss-js",
+          "postcss-load-config",
+          "postcss-nested",
+          "tailwindcss"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/postcss"
+        ],
+        "fixAvailable": false
+      },
+      "postcss-import": {
+        "name": "postcss-import",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "postcss"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/postcss-import"
+        ],
+        "fixAvailable": true
+      },
+      "postcss-js": {
+        "name": "postcss-js",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "postcss"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/postcss-js"
+        ],
+        "fixAvailable": true
+      },
+      "postcss-load-config": {
+        "name": "postcss-load-config",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "postcss"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/postcss-load-config"
+        ],
+        "fixAvailable": true
+      },
+      "postcss-nested": {
+        "name": "postcss-nested",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "postcss",
+          "postcss-selector-parser"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/postcss-nested"
+        ],
+        "fixAvailable": true
+      },
+      "postcss-selector-parser": {
+        "name": "postcss-selector-parser",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1241232,
+            "name": "postcss-selector-parser",
+            "dependency": "postcss-selector-parser",
+            "title": "PostCSS: Quadratic complexity in flat selector parsing allows CPU exhaustion",
+            "url": "https://github.com/advisories/GHSA-rj75-hqrm-r3gf",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-400",
+              "CWE-407"
+            ],
+            "cvss": {
+              "score": 5.9,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<7.1.6"
+          }
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/postcss-selector-parser"
+        ],
+        "fixAvailable": true
+      },
+      "query-string": {
+        "name": "query-string",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "decode-uri-component"
+        ],
+        "effects": [
+          "@react-navigation/core"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/query-string"
+        ],
+        "fixAvailable": false
+      },
+      "react-native": {
+        "name": "react-native",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "@react-native/codegen",
+          "@react-native/community-cli-plugin",
+          "@react-native/virtualized-lists",
+          "babel-jest",
+          "jest-environment-node"
+        ],
+        "effects": [
+          "@expo/metro-runtime",
+          "@react-native-async-storage/async-storage",
+          "@react-native/virtualized-lists",
+          "@react-navigation/bottom-tabs",
+          "@react-navigation/elements",
+          "@react-navigation/native-stack",
+          "expo-auth-session",
+          "expo-linking",
+          "expo-status-bar",
+          "lucide-react-native",
+          "react-native-gesture-handler",
+          "react-native-is-edge-to-edge",
+          "react-native-reanimated",
+          "react-native-safe-area-context",
+          "react-native-screens",
+          "react-native-svg",
+          "react-native-webview"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/react-native"
+        ],
+        "fixAvailable": false
+      },
+      "react-native-css-interop": {
+        "name": "react-native-css-interop",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "react-native",
+          "react-native-reanimated",
+          "tailwindcss"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/react-native-css-interop"
+        ],
+        "fixAvailable": true
+      },
+      "react-native-gesture-handler": {
+        "name": "react-native-gesture-handler",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/react-native-gesture-handler"
+        ],
+        "fixAvailable": false
+      },
+      "react-native-is-edge-to-edge": {
+        "name": "react-native-is-edge-to-edge",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/react-native-is-edge-to-edge"
+        ],
+        "fixAvailable": true
+      },
+      "react-native-reanimated": {
+        "name": "react-native-reanimated",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/react-native-reanimated"
+        ],
+        "fixAvailable": false
+      },
+      "react-native-safe-area-context": {
+        "name": "react-native-safe-area-context",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/react-native-safe-area-context"
+        ],
+        "fixAvailable": false
+      },
+      "react-native-screens": {
+        "name": "react-native-screens",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/react-native-screens"
+        ],
+        "fixAvailable": false
+      },
+      "react-native-svg": {
+        "name": "react-native-svg",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/react-native-svg"
+        ],
+        "fixAvailable": false
+      },
+      "react-native-webview": {
+        "name": "react-native-webview",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "react-native"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/react-native-webview"
+        ],
+        "fixAvailable": false
+      },
+      "selfsigned": {
+        "name": "selfsigned",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "node-forge"
+        ],
+        "effects": [
+          "@react-native/dev-middleware"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/selfsigned"
+        ],
+        "fixAvailable": true
+      },
+      "tailwindcss": {
+        "name": "tailwindcss",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "chokidar",
+          "fast-glob",
+          "micromatch",
+          "postcss",
+          "postcss-import",
+          "postcss-js",
+          "postcss-load-config",
+          "postcss-nested",
+          "postcss-selector-parser"
+        ],
+        "effects": [
+          "nativewind",
+          "react-native-css-interop"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/tailwindcss"
+        ],
+        "fixAvailable": false
+      },
+      "tar": {
+        "name": "tar",
+        "severity": "critical",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1112659,
+            "name": "tar",
+            "dependency": "tar",
+            "title": "node-tar Vulnerable to Arbitrary File Creation/Overwrite via Hardlink Path Traversal",
+            "url": "https://github.com/advisories/GHSA-34x7-hfp2-rc4v",
+            "severity": "high",
+            "cwe": [
+              "CWE-22",
+              "CWE-59"
+            ],
+            "cvss": {
+              "score": 8.2,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:L/A:N"
+            },
+            "range": "<7.5.7"
+          },
+          {
+            "source": 1113300,
+            "name": "tar",
+            "dependency": "tar",
+            "title": "node-tar is Vulnerable to Arbitrary File Overwrite and Symlink Poisoning via Insufficient Path Sanitization",
+            "url": "https://github.com/advisories/GHSA-8qq5-rm4j-mr97",
+            "severity": "high",
+            "cwe": [
+              "CWE-22"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=7.5.2"
+          },
+          {
+            "source": 1113375,
+            "name": "tar",
+            "dependency": "tar",
+            "title": "Arbitrary File Read/Write via Hardlink Target Escape Through Symlink Chain in node-tar Extraction",
+            "url": "https://github.com/advisories/GHSA-83g3-92jg-28cx",
+            "severity": "high",
+            "cwe": [
+              "CWE-22"
+            ],
+            "cvss": {
+              "score": 7.1,
+              "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:N"
+            },
+            "range": "<7.5.8"
+          },
+          {
+            "source": 1114200,
+            "name": "tar",
+            "dependency": "tar",
+            "title": "tar has Hardlink Path Traversal via Drive-Relative Linkpath",
+            "url": "https://github.com/advisories/GHSA-qffp-2rhf-9h96",
+            "severity": "high",
+            "cwe": [
+              "CWE-22",
+              "CWE-59"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=7.5.9"
+          },
+          {
+            "source": 1114302,
+            "name": "tar",
+            "dependency": "tar",
+            "title": "node-tar Symlink Path Traversal via Drive-Relative Linkpath",
+            "url": "https://github.com/advisories/GHSA-9ppj-qmqm-q256",
+            "severity": "high",
+            "cwe": [
+              "CWE-22"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=7.5.10"
+          },
+          {
+            "source": 1114680,
+            "name": "tar",
+            "dependency": "tar",
+            "title": "Race Condition in node-tar Path Reservations via Unicode Ligature Collisions on macOS APFS",
+            "url": "https://github.com/advisories/GHSA-r6q2-hw4h-h46w",
+            "severity": "high",
+            "cwe": [
+              "CWE-176",
+              "CWE-367"
+            ],
+            "cvss": {
+              "score": 8.8,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:H/A:L"
+            },
+            "range": "<=7.5.3"
+          },
+          {
+            "source": 1120782,
+            "name": "tar",
+            "dependency": "tar",
+            "title": "node-tar applies PAX size override to intermediary GNU long-name/long-link headers, causing tar parser interpretation differential (file smuggling)",
+            "url": "https://github.com/advisories/GHSA-vmf3-w455-68vh",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-436"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=7.5.15"
+          },
+          {
+            "source": 1123939,
+            "name": "tar",
+            "dependency": "tar",
+            "title": "node-tar: Process crash via PAX numeric path type confusion",
+            "url": "https://github.com/advisories/GHSA-w8wr-v893-vjvp",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-704"
+            ],
+            "cvss": {
+              "score": 5.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": "<=7.5.17"
+          },
+          {
+            "source": 1123940,
+            "name": "tar",
+            "dependency": "tar",
+            "title": "node-tar: Decompression/parse DoS via unlimited input",
+            "url": "https://github.com/advisories/GHSA-23hp-3jrh-7fpw",
+            "severity": "critical",
+            "cwe": [
+              "CWE-770"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<=7.5.18"
+          },
+          {
+            "source": 1123941,
+            "name": "tar",
+            "dependency": "tar",
+            "title": "node-tar: Negative tar entry size causes infinite loop in archive replace",
+            "url": "https://github.com/advisories/GHSA-8x88-c5mf-7j5w",
+            "severity": "high",
+            "cwe": [
+              "CWE-835"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<=7.5.17"
+          },
+          {
+            "source": 1123942,
+            "name": "tar",
+            "dependency": "tar",
+            "title": "node-tar: Uncaught Exception DoS via NUL byte in PAX path/linkpath records",
+            "url": "https://github.com/advisories/GHSA-gvwx-54wh-qm9j",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-248"
+            ],
+            "cvss": {
+              "score": 5.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": "<=7.5.16"
+          },
+          {
+            "source": 1145647,
+            "name": "tar",
+            "dependency": "tar",
+            "title": "node-tar: Uncontrolled recursion in mapHas/filesFilter allows uncatchable stack-overflow DoS via crafted long-path tar with member selection",
+            "url": "https://github.com/advisories/GHSA-r292-9mhp-454m",
+            "severity": "high",
+            "cwe": [
+              "CWE-400",
+              "CWE-674"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<=7.5.20"
+          }
+        ],
+        "effects": [
+          "cacache"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/tar"
+        ],
+        "fixAvailable": true
+      },
+      "tempy": {
+        "name": "tempy",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "del"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/tempy"
+        ],
+        "fixAvailable": true
+      },
+      "uuid": {
+        "name": "uuid",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1119441,
+            "name": "uuid",
+            "dependency": "uuid",
+            "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+            "url": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-787",
+              "CWE-1285"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+            },
+            "range": "<11.1.1"
+          }
+        ],
+        "effects": [
+          "@expo/bunyan",
+          "@expo/rudder-sdk-node",
+          "xcode"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/uuid",
+          "node_modules/xcode/node_modules/uuid"
+        ],
+        "fixAvailable": true
+      },
+      "xcode": {
+        "name": "xcode",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "uuid"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/xcode"
+        ],
+        "fixAvailable": true
+      }
+    }
+  },
+  "functions-prod": {
+    "counts": {
+      "info": 0,
+      "low": 0,
+      "moderate": 9,
+      "high": 9,
+      "critical": 0,
+      "total": 18
+    },
+    "error": null,
+    "packages": {
+      "@google-cloud/firestore": {
+        "name": "@google-cloud/firestore",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "google-gax"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/@google-cloud/firestore"
+        ],
+        "fixAvailable": true
+      },
+      "@google-cloud/storage": {
+        "name": "@google-cloud/storage",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "gaxios",
+          "google-auth-library",
+          "retry-request",
+          "teeny-request"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/@google-cloud/storage"
+        ],
+        "fixAvailable": true
+      },
+      "@grpc/grpc-js": {
+        "name": "@grpc/grpc-js",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1240622,
+            "name": "@grpc/grpc-js",
+            "dependency": "@grpc/grpc-js",
+            "title": "@grpc/grpc-js: In certain configurations, getAuthContext can return unauthorized certificates as though they were authorized",
+            "url": "https://github.com/advisories/GHSA-m9gg-hp2v-232j",
+            "severity": "high",
+            "cwe": [
+              "CWE-295"
+            ],
+            "cvss": {
+              "score": 7.4,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N"
+            },
+            "range": ">=1.14.0 <1.14.5"
+          },
+          {
+            "source": 1240624,
+            "name": "@grpc/grpc-js",
+            "dependency": "@grpc/grpc-js",
+            "title": "@grpc/grpc-js: The server transmits some error messages thrown by method handlers to the client in status messages",
+            "url": "https://github.com/advisories/GHSA-f596-whhp-79r4",
+            "severity": "low",
+            "cwe": [
+              "CWE-550"
+            ],
+            "cvss": {
+              "score": 3.7,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:N/A:N"
+            },
+            "range": ">=1.14.0 <1.14.5"
+          }
+        ],
+        "effects": [
+          "google-gax"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/@grpc/grpc-js"
+        ],
+        "fixAvailable": true
+      },
+      "axios": {
+        "name": "axios",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "follow-redirects"
+        ],
+        "effects": [
+          "paynow",
+          "pesepay"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/axios"
+        ],
+        "fixAvailable": false
+      },
+      "firebase-admin": {
+        "name": "firebase-admin",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "@google-cloud/firestore",
+          "@google-cloud/storage",
+          "node-forge",
+          "uuid"
+        ],
+        "effects": [
+          "firebase-functions"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/firebase-admin"
+        ],
+        "fixAvailable": false
+      },
+      "firebase-functions": {
+        "name": "firebase-functions",
+        "severity": "moderate",
+        "isDirect": true,
+        "via": [
+          "firebase-admin"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/firebase-functions"
+        ],
+        "fixAvailable": false
+      },
+      "follow-redirects": {
+        "name": "follow-redirects",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1242604,
+            "name": "follow-redirects",
+            "dependency": "follow-redirects",
+            "title": "follow-redirects array-form headers bypass cross-origin credential stripping",
+            "url": "https://github.com/advisories/GHSA-q3jh-wrc6-jgq8",
+            "severity": "high",
+            "cwe": [
+              "CWE-200",
+              "CWE-212"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=1.16.0 <1.16.1"
+          },
+          {
+            "source": 1242605,
+            "name": "follow-redirects",
+            "dependency": "follow-redirects",
+            "title": "follow-redirects sensitiveHeaders regex escaping can expose credential headers",
+            "url": "https://github.com/advisories/GHSA-8r9p-f939-6h3c",
+            "severity": "high",
+            "cwe": [
+              "CWE-185",
+              "CWE-200"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=1.16.0 <1.16.1"
+          }
+        ],
+        "effects": [
+          "axios"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/follow-redirects"
+        ],
+        "fixAvailable": false
+      },
+      "gaxios": {
+        "name": "gaxios",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "uuid"
+        ],
+        "effects": [
+          "gcp-metadata",
+          "google-auth-library",
+          "gtoken"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/gaxios"
+        ],
+        "fixAvailable": true
+      },
+      "gcp-metadata": {
+        "name": "gcp-metadata",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "gaxios"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/gcp-metadata"
+        ],
+        "fixAvailable": true
+      },
+      "google-auth-library": {
+        "name": "google-auth-library",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "gaxios",
+          "gcp-metadata",
+          "gtoken"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/google-auth-library"
+        ],
+        "fixAvailable": true
+      },
+      "google-gax": {
+        "name": "google-gax",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "@grpc/grpc-js",
+          "google-auth-library",
+          "retry-request",
+          "uuid"
+        ],
+        "effects": [
+          "@google-cloud/firestore"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/google-gax"
+        ],
+        "fixAvailable": true
+      },
+      "gtoken": {
+        "name": "gtoken",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "gaxios"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/gtoken"
+        ],
+        "fixAvailable": true
+      },
+      "node-forge": {
+        "name": "node-forge",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1240912,
+            "name": "node-forge",
+            "dependency": "node-forge",
+            "title": "node-forge RSA PKCS#1 v1.5 signature verification accepts extra nested DigestAlgorithm elements",
+            "url": "https://github.com/advisories/GHSA-86w9-cpqp-85rv",
+            "severity": "high",
+            "cwe": [
+              "CWE-347"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+            },
+            "range": "<=1.4.0"
+          }
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/node-forge"
+        ],
+        "fixAvailable": true
+      },
+      "paynow": {
+        "name": "paynow",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "axios"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/paynow"
+        ],
+        "fixAvailable": false
+      },
+      "pesepay": {
+        "name": "pesepay",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "axios"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/pesepay"
+        ],
+        "fixAvailable": false
+      },
+      "retry-request": {
+        "name": "retry-request",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "teeny-request"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/retry-request"
+        ],
+        "fixAvailable": true
+      },
+      "teeny-request": {
+        "name": "teeny-request",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "uuid"
+        ],
+        "effects": [
+          "@google-cloud/storage",
+          "retry-request"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/teeny-request"
+        ],
+        "fixAvailable": true
+      },
+      "uuid": {
+        "name": "uuid",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1119441,
+            "name": "uuid",
+            "dependency": "uuid",
+            "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+            "url": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-787",
+              "CWE-1285"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+            },
+            "range": "<11.1.1"
+          }
+        ],
+        "effects": [
+          "firebase-admin",
+          "gaxios",
+          "teeny-request"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/gaxios/node_modules/uuid",
+          "node_modules/google-gax/node_modules/uuid",
+          "node_modules/teeny-request/node_modules/uuid",
+          "node_modules/uuid"
+        ],
+        "fixAvailable": false
+      }
+    }
+  },
+  "root-prod": {
+    "counts": {
+      "info": 0,
+      "low": 0,
+      "moderate": 2,
+      "high": 9,
+      "critical": 3,
+      "total": 14
+    },
+    "error": null,
+    "packages": {
+      "@firebase/firestore": {
+        "name": "@firebase/firestore",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "@grpc/grpc-js"
+        ],
+        "effects": [
+          "@firebase/firestore-compat",
+          "firebase"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/@firebase/firestore"
+        ],
+        "fixAvailable": false
+      },
+      "@firebase/firestore-compat": {
+        "name": "@firebase/firestore-compat",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "@firebase/firestore"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/@firebase/firestore-compat"
+        ],
+        "fixAvailable": true
+      },
+      "@grpc/grpc-js": {
+        "name": "@grpc/grpc-js",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1240623,
+            "name": "@grpc/grpc-js",
+            "dependency": "@grpc/grpc-js",
+            "title": "@grpc/grpc-js: In certain configurations, getAuthContext can return unauthorized certificates as though they were authorized",
+            "url": "https://github.com/advisories/GHSA-m9gg-hp2v-232j",
+            "severity": "high",
+            "cwe": [
+              "CWE-295"
+            ],
+            "cvss": {
+              "score": 7.4,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N"
+            },
+            "range": "<1.13.6"
+          },
+          {
+            "source": 1240625,
+            "name": "@grpc/grpc-js",
+            "dependency": "@grpc/grpc-js",
+            "title": "@grpc/grpc-js: The server transmits some error messages thrown by method handlers to the client in status messages",
+            "url": "https://github.com/advisories/GHSA-f596-whhp-79r4",
+            "severity": "low",
+            "cwe": [
+              "CWE-550"
+            ],
+            "cvss": {
+              "score": 3.7,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:N/A:N"
+            },
+            "range": "<1.13.6"
+          }
+        ],
+        "effects": [
+          "@firebase/firestore"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/@grpc/grpc-js"
+        ],
+        "fixAvailable": false
+      },
+      "@tailwindcss/node": {
+        "name": "@tailwindcss/node",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "source-map-js"
+        ],
+        "effects": [
+          "@tailwindcss/vite"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/@tailwindcss/node"
+        ],
+        "fixAvailable": false
+      },
+      "@tailwindcss/vite": {
+        "name": "@tailwindcss/vite",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "@tailwindcss/node"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/@tailwindcss/vite"
+        ],
+        "fixAvailable": false
+      },
+      "body-parser": {
+        "name": "body-parser",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "qs"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/body-parser"
+        ],
+        "fixAvailable": true
+      },
+      "express": {
+        "name": "express",
+        "severity": "critical",
+        "isDirect": true,
+        "via": [
+          "body-parser",
+          "proxy-addr",
+          "qs"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/express"
+        ],
+        "fixAvailable": false
+      },
+      "firebase": {
+        "name": "firebase",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "@firebase/firestore",
+          "@firebase/firestore-compat"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/firebase"
+        ],
+        "fixAvailable": false
+      },
+      "maplibre-gl": {
+        "name": "maplibre-gl",
+        "severity": "critical",
+        "isDirect": true,
+        "via": [
+          {
+            "source": 1193680,
+            "name": "maplibre-gl",
+            "dependency": "maplibre-gl",
+            "title": "MapLibre GL JS: XSS Sanitizer Bypass in DOM.sanitize() via Live NamedNodeMap Removal Skip",
+            "url": "https://github.com/advisories/GHSA-jrc7-96c5-q579",
+            "severity": "critical",
+            "cwe": [
+              "CWE-79"
+            ],
+            "cvss": {
+              "score": 10,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:N"
+            },
+            "range": "<=6.4.0"
+          }
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/maplibre-gl"
+        ],
+        "fixAvailable": false
+      },
+      "postcss": {
+        "name": "postcss",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "source-map-js"
+        ],
+        "effects": [
+          "vite"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/postcss"
+        ],
+        "fixAvailable": false
+      },
+      "proxy-addr": {
+        "name": "proxy-addr",
+        "severity": "critical",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1241210,
+            "name": "proxy-addr",
+            "dependency": "proxy-addr",
+            "title": "proxy-addr vulnerable to IP spoofing via IPv4-mapped IPv6 trust subnet",
+            "url": "https://github.com/advisories/GHSA-jqcg-44mw-7w3h",
+            "severity": "critical",
+            "cwe": [
+              "CWE-290",
+              "CWE-348",
+              "CWE-697"
+            ],
+            "cvss": {
+              "score": 9.1,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N"
+            },
+            "range": ">=1.1.0 <2.0.8"
+          }
+        ],
+        "effects": [
+          "express"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/proxy-addr"
+        ],
+        "fixAvailable": false
+      },
+      "qs": {
+        "name": "qs",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1158506,
+            "name": "qs",
+            "dependency": "qs",
+            "title": "qs array-limit bypass via bracket-key comma parsing",
+            "url": "https://github.com/advisories/GHSA-x5fp-wj9c-mxmx",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-770"
+            ],
+            "cvss": {
+              "score": 3.7,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": ">=6.14.2 <=6.15.3"
+          },
+          {
+            "source": 1158507,
+            "name": "qs",
+            "dependency": "qs",
+            "title": "qs: Denial of Service via Attacker Controlled isBuffer",
+            "url": "https://github.com/advisories/GHSA-4mjr-xmp4-gh2g",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-248",
+              "CWE-703"
+            ],
+            "cvss": {
+              "score": 5.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": ">=2.2.5 <6.16.0"
+          }
+        ],
+        "effects": [
+          "body-parser"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/qs"
+        ],
+        "fixAvailable": true
+      },
+      "source-map-js": {
+        "name": "source-map-js",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1241209,
+            "name": "source-map-js",
+            "dependency": "source-map-js",
+            "title": "source-map-js allows event-loop denial of service through indexed source-map section offsets",
+            "url": "https://github.com/advisories/GHSA-68fv-2mgg-jv7q",
+            "severity": "high",
+            "cwe": [
+              "CWE-1284"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=1.0.0 <1.2.2"
+          }
+        ],
+        "effects": [
+          "@tailwindcss/node",
+          "postcss"
+        ],
+        "range": "",
+        "nodes": [
+          "node_modules/source-map-js"
+        ],
+        "fixAvailable": false
+      },
+      "vite": {
+        "name": "vite",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          {
+            "source": 1242622,
+            "name": "vite",
+            "dependency": "vite",
+            "title": "launch-editor: escapeCmdArgs() omits % escaping on Windows",
+            "url": "https://github.com/advisories/GHSA-698v-4r3x-3vcv",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-78"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=6.4.3"
+          },
+          {
+            "source": 1242651,
+            "name": "vite",
+            "dependency": "vite",
+            "title": "launch-editor: Editor CLI flag misinterpretation causing arbitrary command execution for some editors",
+            "url": "https://github.com/advisories/GHSA-r825-w8mm-5pxw",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-88"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=6.4.3"
+          },
+          {
+            "source": 1242658,
+            "name": "vite",
+            "dependency": "vite",
+            "title": "launch-editor: `fs.existsSync()` existence check can be bypassed on Windows",
+            "url": "https://github.com/advisories/GHSA-587h-7wmj-h5pm",
+            "severity": "high",
+            "cwe": [
+              "CWE-77"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=6.4.3"
+          },
+          {
+            "source": 1242724,
+            "name": "vite",
+            "dependency": "vite",
+            "title": "Vite: Cross origin script execution through Vite custom middleware",
+            "url": "https://github.com/advisories/GHSA-9jrq-w75r-8gcw",
+            "severity": "low",
+            "cwe": [
+              "CWE-80"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=6.4.3"
+          },
+          {
+            "source": 1242730,
+            "name": "vite",
+            "dependency": "vite",
+            "title": "Vite: Files outside `server.fs.allow` could be served when project paths match system paths on non-Windows machine",
+            "url": "https://github.com/advisories/GHSA-rq7h-c2jc-7f22",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-22",
+              "CWE-284"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=6.4.3"
+          },
+          "postcss"
+        ],
+        "effects": [],
+        "range": "",
+        "nodes": [
+          "node_modules/vite"
+        ],
+        "fixAvailable": false
+      }
+    }
+  }
+}

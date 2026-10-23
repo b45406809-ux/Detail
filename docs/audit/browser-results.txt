@@ -1,0 +1,10 @@
+Built site in Chromium; all non-asset requests intercepted; fake auth/API fixtures match the final RPC response schema. No live Supabase/provider requests.
+
+marketing 375px dimensions: { viewport: 375, body: 376 }
+admin hard reload /admin/bookings h1: [ 'Overview' ]
+admin errors: []
+overview chart tooltip: Oct 22: US$1.20
+overview attention text: Safety issue
+8m · Open →
+admin browser back: /admin/bookings h1: [ 'Support Cases' ]
+page errors: []
