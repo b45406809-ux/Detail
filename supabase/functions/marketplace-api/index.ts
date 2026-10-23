@@ -835,10 +835,10 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(input.privacyAccepted!==true)fail(400,'Accept the privacy notice to join the waitlist.');
       const email=text(input.email,254).toLowerCase(); const fullName=text(input.fullName,120); const token=text(input.turnstileToken,4000);
       if(!email.includes('@')||fullName.length<2||text(input.phone,40).length<7)fail(400,'Enter your name, email and phone number.');
-      const secret=Deno.env.get('TURNSTILE_SECRET');
-      if(!secret)fail(503,'Waitlist security is not configured.');
+      const turnstileSecret=Deno.env.get('TURNSTILE_SECRET');
+      if(!turnstileSecret)fail(503,'Waitlist security is not configured.');
       if(!token)fail(400,'Complete the security check.');
-      const response=await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({secret,response:token})});const verdict=await response.json();if(!verdict.success)fail(400,'Security check failed. Please try again.');
+      const response=await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({secret:turnstileSecret,response:token})});const verdict=await response.json();if(!verdict.success)fail(400,'Security check failed. Please try again.');
       await enforceRateLimit(request,`waitlist:${await hash(email)}`,'waitlist_signup',3,3600);
       const consent=input.marketingEmailPermission==='YES'; const unsubscribeToken=crypto.randomUUID()+crypto.randomUUID();
       const {data:created,error}=await admin.rpc('register_waitlist_entry',{p_email:email,p_full_name:fullName,p_phone:text(input.phone,40),p_country:text(input.country,80),p_city:text(input.city,100),p_area:text(input.area,120),p_participant_type:text(input.participantType,30),p_service_interest:text(input.serviceInterest,30),p_preferred_language:text(input.preferredLanguage,40),p_marketing_consent:consent,p_unsubscribe_token:unsubscribeToken,p_data:{campaign:input.campaign??{}}});
