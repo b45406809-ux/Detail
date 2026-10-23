@@ -151,6 +151,11 @@ function paynowClient() {
   client.returnUrl = Deno.env.get('PAYNOW_RETURN_URL') || `${url}/functions/v1/paynow-return`;
   return client;
 }
+function trustedPaynowUrl(raw: string) {
+  const parsed = new URL(raw);
+  if (parsed.protocol !== 'https:' || !['paynow.co.zw', 'www.paynow.co.zw'].includes(parsed.hostname)) fail(502, 'Paynow returned an untrusted checkout URL.');
+  return parsed.toString();
+}
 async function startPaynowCheckout(jobId: string, email: string, details?: { reference?: string; amount?: number; cleanerName?: string; serviceType?: string; attemptKey?: string }) {
   const { data: payment, error } = await admin.from('payments').select('*').eq('id', `${jobId}_booking`).single();
   if (error) throw error;
@@ -164,14 +169,15 @@ async function startPaynowCheckout(jobId: string, email: string, details?: { ref
   checkout.add(`Detail ${details?.serviceType ?? job.servicetype ?? 'cleaning'} with ${details?.cleanerName ?? job.cleanername ?? 'Cleaner'} (${jobId})`, price);
   const result = await client.send(checkout);
   if (!result?.success || !result.redirectUrl || !result.pollUrl) throw new Error(String(result?.error ?? 'Paynow did not return a checkout URL.'));
+  const redirectUrl = trustedPaynowUrl(String(result.redirectUrl));
   const pollUrl = new URL(String(result.pollUrl));
   if (pollUrl.protocol !== 'https:' || !['paynow.co.zw', 'www.paynow.co.zw'].includes(pollUrl.hostname)) fail(502, 'Paynow returned an untrusted poll URL.');
   const paymentData=details?.attemptKey?{...(payment.data??{}),retryAttempt:{...(payment.data?.retryAttempt??{}),status:'PENDING',checkoutCreatedAt:new Date().toISOString()}}:payment.data;
-  const {error:paymentUpdateError}=await admin.from('payments').update({ status: 'PENDING', redirecturl: String(result.redirectUrl), pollurl: String(result.pollUrl), ...(details?.attemptKey?{data:paymentData}:{}), updatedat: new Date().toISOString() }).eq('id', payment.id);
+  const {error:paymentUpdateError}=await admin.from('payments').update({ status: 'PENDING', redirecturl: redirectUrl, pollurl: String(result.pollUrl), ...(details?.attemptKey?{data:paymentData}:{}), updatedat: new Date().toISOString() }).eq('id', payment.id);
   if(paymentUpdateError)throw paymentUpdateError;
   const {error:jobUpdateError}=await admin.from('jobs').update({ paymentstatus: 'PENDING' }).eq('id', jobId);
   if(jobUpdateError)throw jobUpdateError;
-  return String(result.redirectUrl);
+  return redirectUrl;
 }
 async function applyPaynowStatus(reference: string, status: string, amount: string | number) {
   const { data, error } = await admin.rpc('apply_paynow_status', { p_reference: reference, p_status: status, p_amount: Number(amount) });
@@ -613,6 +619,16 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const applied=await applyPaynowStatus(String(result.reference),String(result.status),String(result.amount));
       return {success:true,status:applied.status};
     }
+    case 'resumePaynowBookingPayment': {
+      const actor=authed(),jobId=text(input.jobId,80);await enforceRateLimit(request,actor,'paynow_booking_resume',12,300);
+      const {data:job,error:jobError}=await admin.from('jobs').select('customerid').eq('id',jobId).maybeSingle();
+      if(jobError)throw jobError;
+      if(!job||job.customerid!==actor)fail(403,'Only the customer can resume this payment.');
+      const {data:payment,error:paymentError}=await admin.from('payments').select('provider,status,redirecturl').eq('id',`${jobId}_booking`).maybeSingle();
+      if(paymentError)throw paymentError;
+      if(!payment||payment.provider!=='PAYNOW'||payment.status!=='PENDING'||!payment.redirecturl)fail(409,'There is no pending Paynow checkout to resume. Refresh the payment status first.');
+      return {success:true,redirectUrl:trustedPaynowUrl(payment.redirecturl)};
+    }
     case 'retryPaynowBookingPayment': {
       const actor=authed(), jobId=text(input.jobId,80),idempotencyKey=requireKey(input.idempotencyKey);
       await enforceRateLimit(request,actor,'paynow_booking_retry',5,3600);
@@ -669,9 +685,10 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const client=paynowClient(), checkout=client.createPayment(reference,email); checkout.add('Detail wallet top-up',amount);
       const result=await client.send(checkout);
       if(!result?.success||!result.redirectUrl||!result.pollUrl){await admin.from('payments').update({status:'FAILED'}).eq('id',id);fail(502,'Paynow could not start the wallet top-up.');}
+      const redirectUrl=trustedPaynowUrl(String(result.redirectUrl));
       const poll=new URL(String(result.pollUrl)); if(poll.protocol!=='https:'||!['paynow.co.zw','www.paynow.co.zw'].includes(poll.hostname))fail(502,'Paynow returned an untrusted poll URL.');
-      await admin.from('payments').update({status:'PENDING',pollurl:String(result.pollUrl),redirecturl:String(result.redirectUrl),updatedat:new Date().toISOString()}).eq('id',id);
-      return {redirectUrl:String(result.redirectUrl),referenceNumber:reference};
+      await admin.from('payments').update({status:'PENDING',pollurl:String(result.pollUrl),redirecturl:redirectUrl,updatedat:new Date().toISOString()}).eq('id',id);
+      return {redirectUrl,referenceNumber:reference};
     }
     case 'settleJobPayment': {
       const actor=authed(); const jobId=text(input.jobId,80), method=text(input.paymentMethod,20).toUpperCase();

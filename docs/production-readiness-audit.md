@@ -786,7 +786,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Source:** [supabase/functions/marketplace-api/index.ts:491](<../supabase/functions/marketplace-api/index.ts#L491>); [supabase/functions/marketplace-api/index.ts:497](<../supabase/functions/marketplace-api/index.ts#L497>)
 
-**Problem and impact.** Retry replaces the single reference and clears checkout URLs before calling the provider. Unlike first acceptance it has no catch that records a retryable failure. If provider init fails, status stays INITIATING, while another retry is allowed only for FAILED/CANCELLED. A valid delayed callback for the previous reference can no longer find that payment. No separate payment-attempt history preserves it.
+**Current implementation and remaining gap.** Booking retries now claim each attempt transactionally, preserve prior Paynow references in `paynowPaymentAttempts`, return an existing checkout for a repeated idempotency key, and mark failed or timed-out initiation attempts for a deliberate retry. Late callback reconciliation against archived attempts and automated provider reconciliation remain open under F45.
 
 **Proposed fix.** Model immutable attempts under a payment intent, persist each reference, record every failure and use a durable provider-operation state machine. Poll/reconcile old attempts before creating a new one and prohibit duplicate funded attempts.
 
@@ -800,7 +800,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Source:** [mobile/app/tracking/[jobId].tsx:374](<../mobile/app/tracking/[jobId].tsx#L374>); [mobile/app/tracking/[jobId].tsx:505](<../mobile/app/tracking/[jobId].tsx#L505>); [supabase/functions/paynow-return/index.ts:1](<../supabase/functions/paynow-return/index.ts#L1>)
 
-**Problem and impact.** The backend stores redirecturl, but the PENDING tracking UI offers a poll rather than a resume checkout action. Retry is limited to FAILED/CANCELLED. payment-return has no native route/handler and the active booking list is incomplete (F24). Closing checkout or receiving a return link can leave an assigned cleaner waiting with no obvious customer payment path.
+**Current implementation and remaining gap.** Activity now includes active and pending bookings, and the tracking screen can request the existing customer-owned Paynow redirect through a rate-limited resume action when payment remains PENDING. Checkout redirects are restricted to HTTPS Paynow hosts before storing or opening them. Deep-link handling still does not navigate a Paynow return into a booking, and resume/status behavior needs real provider/device testing.
 
 **Proposed fix.** Add an authenticated get/resume payment intent action, a native return handler that reconciles server state, and Activity cards for payment-required jobs. A return link is only a navigation hint and must never mark a payment paid.
 

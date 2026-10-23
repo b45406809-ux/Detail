@@ -412,6 +412,20 @@ export default function TrackingScreen() {
     }
   };
 
+  const handlePaynowResume = async () => {
+    if (!jobId) return;
+    setIsSubmitting(true);
+    try {
+      const result = await callFunction<{ jobId: string }, { redirectUrl: string }>('resumePaynowBookingPayment', { jobId });
+      await WebBrowser.openBrowserAsync(result.redirectUrl, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET });
+      await handlePaynowRefresh();
+    } catch (err: any) {
+      Alert.alert('Could not resume Paynow', err.message || 'Refresh the payment status and try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handlePaynowRetry = async () => {
     if (!jobId) return;
     setIsSubmitting(true);
@@ -575,6 +589,9 @@ export default function TrackingScreen() {
                 {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-display font-black text-sm uppercase tracking-widest">Refresh Paynow Status</Text>}
               </TouchableOpacity>
             )}
+            {status === 'PENDING' && <TouchableOpacity onPress={handlePaynowResume} disabled={isSubmitting} className="border border-accent/20 bg-accent/5 py-4 rounded-[32px] items-center mb-3">
+              <Text className="font-display font-black text-sm uppercase tracking-widest text-accent">Resume Paynow Checkout</Text>
+            </TouchableOpacity>}
             <TouchableOpacity onPress={() => Linking.openURL('https://www.paynow.co.zw/').catch(() => Alert.alert('Could not open Paynow', 'Open paynow.co.zw in your browser.'))} className="py-4 items-center">
               <Text className="font-sans text-accent font-bold">Open Paynow Customer Portal</Text>
             </TouchableOpacity>
