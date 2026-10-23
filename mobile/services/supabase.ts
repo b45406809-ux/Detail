@@ -77,6 +77,14 @@ export async function createUserWithEmailAndPassword(_auth: typeof auth, email: 
   return { user: compatUser(data.user)! };
 }
 export async function signOut(_auth: typeof auth) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    const { error: tokenError } = await supabase
+      .from('users')
+      .update({ expoPushToken: null })
+      .eq('id', user.id);
+    if (tokenError) console.warn('Could not revoke the signed-in device push token:', tokenError.message);
+  }
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
 }
