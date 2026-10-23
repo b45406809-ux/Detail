@@ -889,10 +889,16 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(error)throw error;
       // A repeated public signup must not overwrite contact/consent data or send
       // a confirmation email using details supplied by an unverified caller.
-      if(created!==true)return {success:true};
+      if(created!==true)return {success:true,confirmationEmailSent:false,alreadyRegistered:true};
       const apiKey=secret('RESEND_API_KEY','EXPO_RESEND_API_KEY');
-      if(apiKey)await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:`Bearer ${apiKey}`,'content-type':'application/json'},body:JSON.stringify({from:'Detail <hello@detailapp.co.zw>',to:[email],reply_to:'support@detailapp.co.zw',subject:'Your place on the Detail list',html:`<p>Hi ${fullName.replace(/[<>&"']/g,'')},</p><p>Thanks for joining the Detail waitlist.</p><p>— The Detail team</p>`})});
-      return {success:true};
+      let confirmationEmailSent=false;
+      if(apiKey){
+        try{
+          const confirmation=await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:`Bearer ${apiKey}`,'content-type':'application/json'},body:JSON.stringify({from:'Detail <hello@detailapp.co.zw>',to:[email],reply_to:'support@detailapp.co.zw',subject:'Your place on the Detail list',html:`<p>Hi ${fullName.replace(/[<>&"']/g,'')},</p><p>Thanks for joining the Detail waitlist.</p><p>— The Detail team</p>`})});
+          confirmationEmailSent=confirmation.ok;
+        }catch{/* The waitlist record is saved; report email delivery truthfully below. */}
+      }
+      return {success:true,confirmationEmailSent};
     }
     case 'adminOverview': {
       const actor=authed(); await requireAdmin(actor);
