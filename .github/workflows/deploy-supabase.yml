@@ -84,3 +84,4 @@ jobs:
           npx --yes supabase@latest functions deploy paynow-return --project-ref "$SUPABASE_PROJECT_REF"
           npx --yes supabase@latest functions deploy marketing-unsubscribe --project-ref "$SUPABASE_PROJECT_REF"
           npx --yes supabase@latest functions deploy delivery-worker --project-ref "$SUPABASE_PROJECT_REF"
+          npx --yes supabase@latest functions deploy twilio-status --project-ref "$SUPABASE_PROJECT_REF"
