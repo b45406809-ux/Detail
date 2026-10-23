@@ -86,6 +86,8 @@ jobs:
         run: |
           supabase start
           supabase db reset --local
+      - name: Run database security invariant tests
+        run: supabase test db --local
       - name: Lint local database schema
         run: supabase db lint --local --schema public --fail-on error
       - name: Type-check Edge Functions
