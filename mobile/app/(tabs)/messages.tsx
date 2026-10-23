@@ -25,12 +25,14 @@ import {
   onSnapshot,
   orderBy,
   limit,
+  getDocs,
   supabase,
 } from '../../services/supabase';
 import { uploadChatPhoto } from '../../services/storage';
 import { ChatMessage } from '../../types';
 
 const QUICK_REPLIES = ['On my way!', 'Sounds good', "I'm here", 'Thank you!'];
+const messageTime = (value: any) => value?.toDate?.().getTime?.() ?? new Date(value).getTime();
 
 interface Conversation {
   jobId: string;
@@ -49,7 +51,12 @@ export default function MessagesScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const [chatError, setChatError] = useState('');
   const flatListRef = useRef<FlatList>(null);
+  const preserveChatScrollRef = useRef(false);
+  const reachedHistoryStartRef = useRef(false);
 
   const isCustomer = profile?.role === 'CUSTOMER';
   const unreadField = isCustomer ? 'customerUnread' : 'cleanerUnread';
@@ -97,12 +104,53 @@ export default function MessagesScreen() {
       orderBy('createdAt', 'desc'),
       limit(100)
     );
+    setMessages([]);
+    setHasOlderMessages(false);
+    setChatError('');
+    reachedHistoryStartRef.current = false;
     return onSnapshot(q, (snap) => {
-      setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChatMessage)).reverse());
+      const page = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChatMessage)).reverse();
+      setHasOlderMessages(snap.size >= 100 && !reachedHistoryStartRef.current);
+      setMessages(current => {
+        const merged = new Map(current.map(message => [message.id, message]));
+        page.forEach(message => merged.set(message.id, message));
+        return [...merged.values()].sort((left, right) => messageTime(left.createdAt) - messageTime(right.createdAt));
+      });
       // Scroll to bottom on new messages
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-    });
+    }, err => setChatError(err.message || 'Messages could not be refreshed.'));
   }, [activeJobId, user]);
+
+  const loadOlderMessages = async () => {
+    const oldest = messages[0];
+    if (!activeJobId || !oldest || isLoadingOlder) return;
+    const requestedJobId = activeJobId;
+    setIsLoadingOlder(true);
+    setChatError('');
+    try {
+      const page = await getDocs(query(
+        collection(db, 'messages'),
+        where('jobId', '==', activeJobId),
+        where('createdAt', '<', oldest.createdAt),
+        orderBy('createdAt', 'desc'),
+        limit(100)
+      ));
+      if (activeJobId !== requestedJobId) return;
+      const older = page.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage)).reverse();
+      preserveChatScrollRef.current = true;
+      setMessages(current => {
+        const merged = new Map(older.map(message => [message.id, message]));
+        current.forEach(message => merged.set(message.id, message));
+        return [...merged.values()].sort((left, right) => messageTime(left.createdAt) - messageTime(right.createdAt));
+      });
+      reachedHistoryStartRef.current = page.size < 100;
+      setHasOlderMessages(page.size === 100);
+    } catch (error: any) {
+      setChatError(error.message || 'Older messages could not be loaded.');
+    } finally {
+      setIsLoadingOlder(false);
+    }
+  };
 
   const sendMessage = async (override?: string) => {
     const text = (override ?? inputText).trim();
@@ -197,13 +245,14 @@ export default function MessagesScreen() {
           </View>
 
           {/* Messages */}
-          {messages.length >= 100 && <Text className="px-4 pt-2 text-center text-xs text-slate-500">Showing the 100 most recent messages.</Text>}
+          {chatError ? <Text accessibilityRole="alert" className="px-4 py-2 text-center text-xs text-rose-700">{chatError}</Text> : null}
           <FlatList
             ref={flatListRef}
             data={messages}
             keyExtractor={(m) => m.id}
             contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 16, gap: 8 }}
-            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+            onContentSizeChange={() => { if (preserveChatScrollRef.current) { preserveChatScrollRef.current = false; return; } flatListRef.current?.scrollToEnd({ animated: false }); }}
+            ListHeaderComponent={hasOlderMessages ? <TouchableOpacity accessibilityRole="button" disabled={isLoadingOlder} onPress={loadOlderMessages} className="self-center rounded-full bg-slate-100 px-4 py-2"><Text className="text-xs font-bold text-slate-700">{isLoadingOlder ? 'Loading older messages…' : 'Load older messages'}</Text></TouchableOpacity> : null}
             renderItem={({ item }) => {
               const isMe = item.senderId === user?.uid;
               return (
