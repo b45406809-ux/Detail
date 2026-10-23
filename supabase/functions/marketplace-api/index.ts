@@ -10,7 +10,9 @@ const admin = createClient(url, serviceKey, { auth: { persistSession: false, aut
 const authClient = createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const allowedOrigins = new Set([
   'https://detail.co.zw', 'https://www.detail.co.zw', 'https://dashboard.detail.co.zw',
+  'https://blog.detail.co.zw',
   'https://detailapp.co.zw', 'https://www.detailapp.co.zw', 'https://dashboard.detailapp.co.zw',
+  'https://blog.detailapp.co.zw',
   'http://localhost:5173', 'http://localhost:8081',
 ]);
 
