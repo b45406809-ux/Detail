@@ -1134,6 +1134,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** Fail validation and interrupt deployment at each step; production never activates an unvalidated/mixed release, and rollback restores the previous compatible app/API safely.
 
+**Implementation status (2026-10-23).** The cPanel and Supabase deployment workflows now trigger only after the `Validate Detail` workflow succeeds on `main`, and both check out the exact validated commit SHA. Supabase deployments are serialized. This prevents a failed validation from releasing code, but does not make the separate site/backend deployments atomic or provide rollback; F69 remains open for immutable release artifacts and compatible activation/recovery.
+
 <a id="F70"></a>
 
 ### F70 — Automated validation does not exercise the business/security journeys it claims to support
