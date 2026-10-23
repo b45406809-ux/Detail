@@ -172,6 +172,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** An actual browser can complete OPTIONS then POST for every public and authenticated action; rejected origins remain rejected.
 
+**Implementation status (2026-10-23).** OPTIONS now returns a bodyless 204 with the allowed CORS headers, and the origin allowlist covers the current site, dashboard, blog and local development hosts. Edge type-check passes in CI; an actual browser-to-deployed-function preflight check remains outstanding.
+
 <a id="F02"></a>
 
 ### F02 — Booking and safety notifications fail their database insert
@@ -185,6 +187,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 **Proposed fix.** Use generated database types and physical column names; persist the business event and notification/outbox together in a transaction rather than logging and discarding failures.
 
 **Acceptance check.** Creating a quote, assignment, completion, support ticket and SOS produces an in-app notification plus the correct durable delivery row; inject an insert failure and verify recovery.
+
+**Implementation status (2026-10-23).** The API now calls a service-only database function that inserts the in-app notification and Expo/Twilio delivery rows in one transaction, avoiding the incorrect direct insert payload. The durable delivery worker retries provider delivery. Provider delivery and failure recovery still require integration testing against configured providers.
 
 <a id="F03"></a>
 
@@ -200,6 +204,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** A real lowercase openjobs row renders a stable nonempty key, opens its detail screen and submits a quote for that same UUID.
 
+**Implementation status (2026-10-23).** The adapter now derives the open-job document ID from the physical `jobid` primary key, and the detail screen uses that ID when requesting a server-filtered booking preview. Mobile type-check passes in CI; a real-row navigation and quote submission check remains outstanding.
+
 <a id="F04"></a>
 
 ### F04 — Scheduled quotes no longer have enough job detail for cleaners
@@ -213,6 +219,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 **Proposed fix.** Design a sanitized pre-assignment job-summary API with service scope, estimated duration, approximate suburb/distance and explicitly authorized photos. Keep address, contact details and sensitive instructions participant-only.
 
 **Acceptance check.** An eligible unassigned cleaner can price the work without seeing exact address/contact details; an unrelated customer cannot fetch that summary.
+
+**Implementation status (2026-10-23).** The cleaner preview endpoint verifies the caller is an active, verified cleaner, checks that the booking is still open, returns normalized service scope and an approximate location, and withholds the address, customer identity, description and photos. Scheduled-nearby notifications were added for eligible cleaners. End-to-end scope rendering, distance ranking and the policy for safely shareable reference photos still require validation.
 
 <a id="F05"></a>
 
