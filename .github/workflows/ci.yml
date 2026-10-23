@@ -94,6 +94,8 @@ jobs:
         run: supabase db lint --local --schema public --fail-on error
       - name: Type-check Edge Functions
         run: deno check --config supabase/functions/deno.json supabase/functions/*/index.ts
+      - name: Test Supabase session authentication checks
+        run: deno test --config supabase/functions/deno.json supabase/functions/_shared/session_auth_test.ts
       - name: Stop local Supabase
         if: always()
         run: supabase stop --no-backup

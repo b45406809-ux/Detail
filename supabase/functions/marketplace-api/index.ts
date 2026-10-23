@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient, type User } from 'npm:@supabase/supabase-js@2.80.0';
 import { Paynow } from 'npm:paynow@2.2.2';
+import { hasRecentSupabaseAuthentication } from '../_shared/session_auth.ts';
 
 const url = Deno.env.get('SUPABASE_URL') ?? '';
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
@@ -849,8 +850,9 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'deleteAccount': {
       const actor=authed();
       if(input.confirmation!=='DELETE')fail(400,'Type DELETE to confirm.');
-      const lastSignInAt=Date.parse(String(user?.last_sign_in_at??'')),signInAge=Date.now()-lastSignInAt;
-      if(!Number.isFinite(lastSignInAt)||signInAge<0||signInAge>5*60*1000)fail(409,'RECENT_LOGIN_REQUIRED');
+      // getUser above validates this token; the signed AMR timestamps prove
+      // this session's recent authentication, unlike account-wide sign-in time.
+      if(!hasRecentSupabaseAuthentication(tokenClaims(request).amr,Date.now(),5*60*1000))fail(409,'RECENT_LOGIN_REQUIRED');
       const [profileResult,payoutResult,bookingResult]=await Promise.all([admin.from('users').select('balance,earningsbalance,commissionbalance,commissionowed,walletrestricted').eq('id',actor).single(),admin.from('payoutrequests').select('id').eq('cleanerid',actor).in('status',['PENDING','APPROVED']).limit(1).maybeSingle(),admin.from('jobs').select('id').or(`customerid.eq.${actor},cleanerid.eq.${actor}`)]);
       if(profileResult.error)throw profileResult.error;if(payoutResult.error)throw payoutResult.error;if(bookingResult.error)throw bookingResult.error;
       const profile=profileResult.data,pendingPayout=payoutResult.data,bookings=bookingResult.data;

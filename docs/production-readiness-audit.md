@@ -346,6 +346,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** A freshly reauthenticated email, phone, Google and Apple user can delete an eligible account; an old or stolen session cannot.
 
+**Implementation status (2026-10-23).** Account deletion now checks the verified current access token’s Supabase `amr` authentication-method timestamp, rather than the account-wide `last_sign_in_at` value that another device can refresh. A recent sign-in on this same session is required. Provider-specific reauthentication and stale-session behavior still need signed-device verification.
+
 <a id="F14"></a>
 
 ### F14 — Deletion leaves sensitive location/media/history data and misses some financial obligations
