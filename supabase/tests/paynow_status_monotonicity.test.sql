@@ -9,7 +9,8 @@ values(
 );
 
 insert into public.users(id,email,displayName,role)
-values('0b44ed65-1f77-4a20-a513-a5baad558cb4','paynow-status-test@detail.invalid','Paynow Test Customer','CUSTOMER');
+values('0b44ed65-1f77-4a20-a513-a5baad558cb4','paynow-status-test@detail.invalid','Paynow Test Customer','CUSTOMER')
+on conflict(id) do update set email=excluded.email,displayName=excluded.displayName,role='CUSTOMER';
 
 insert into public.jobs(id,customerId,serviceType,status,paymentStatus)
 values('7cdd0c69-f6d0-41bd-b2fb-a8e8e1c09214','0b44ed65-1f77-4a20-a513-a5baad558cb4','House clean','PENDING','DELIVERED');
