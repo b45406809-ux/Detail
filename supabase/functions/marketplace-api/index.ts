@@ -728,9 +728,11 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(!token)fail(400,'Complete the security check.');
       const response=await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({secret,response:token})});const verdict=await response.json();if(!verdict.success)fail(400,'Security check failed. Please try again.');
       const consent=input.marketingEmailPermission==='YES'; const unsubscribeToken=crypto.randomUUID()+crypto.randomUUID();
-      const payload={email,fullname:fullName,phone:text(input.phone,40),country:text(input.country,80),city:text(input.city,100),area:text(input.area,120),participanttype:text(input.participantType,30),serviceinterest:text(input.serviceInterest,30),preferredlanguage:text(input.preferredLanguage,40),marketingemailpermission:consent?'YES':'NO',marketingconsent:{granted:consent,timestamp:new Date().toISOString(),source:'website',version:'2026-10-20'},unsubscribetoken:unsubscribeToken,data:{campaign:input.campaign??{}}};
-      const {data:existing,error:lookupError}=await admin.from('betawaitlist').select('id').eq('email',email).order('createdat',{ascending:true}).limit(1).maybeSingle(); if(lookupError)throw lookupError;
-      const {error}=existing?await admin.from('betawaitlist').update(payload).eq('id',existing.id):await admin.from('betawaitlist').insert(payload); if(error)throw error;
+      const {data:created,error}=await admin.rpc('register_waitlist_entry',{p_email:email,p_full_name:fullName,p_phone:text(input.phone,40),p_country:text(input.country,80),p_city:text(input.city,100),p_area:text(input.area,120),p_participant_type:text(input.participantType,30),p_service_interest:text(input.serviceInterest,30),p_preferred_language:text(input.preferredLanguage,40),p_marketing_consent:consent,p_unsubscribe_token:unsubscribeToken,p_data:{campaign:input.campaign??{}}});
+      if(error)throw error;
+      // A repeated public signup must not overwrite contact/consent data or send
+      // a confirmation email using details supplied by an unverified caller.
+      if(created!==true)return {success:true};
       const apiKey=Deno.env.get('RESEND_API_KEY');
       if(apiKey)await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:`Bearer ${apiKey}`,'content-type':'application/json'},body:JSON.stringify({from:'Detail <hello@detailapp.co.zw>',to:[email],reply_to:'support@detailapp.co.zw',subject:'Your place on the Detail list',html:`<p>Hi ${fullName.replace(/[<>&"']/g,'')},</p><p>Thanks for joining the Detail waitlist.</p><p>— The Detail team</p>`})});
       return {success:true};
