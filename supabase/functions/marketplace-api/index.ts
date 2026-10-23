@@ -249,18 +249,27 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       return { sessionUrl, status: 'Pending' };
     }
     case 'refreshCleanerIdentityVerification': {
-      const actor = authed(); const key = secret('DIDIT_API_KEY','DIDIT_KYC_SECRET_KEY');
+      const actor = authed(); await enforceRateLimit(request,actor,'didit_status_refresh',10,3600); const key = secret('DIDIT_API_KEY','DIDIT_KYC_SECRET_KEY');
       if (!key) fail(503, 'Identity verification is not configured.');
       const { data: kyc } = await admin.from('privatekyc').select('*').eq('userid', actor).maybeSingle();
       if (!kyc?.sessionid) fail(409, 'Start identity verification first.');
-      const response = await fetch(`https://verification.didit.me/v2/session/${encodeURIComponent(kyc.sessionid)}/decision/`, { headers: { 'x-api-key': key } });
-      const decision = await response.json().catch(() => ({}));
-      if (!response.ok || (decision.session_id && decision.session_id !== kyc.sessionid)) fail(503, 'Could not check verification yet.');
-      const raw = String(decision.status ?? 'Pending').toLowerCase();
-      const status = ['approved','verified'].includes(raw) ? 'VERIFIED' : ['declined','rejected','failed','expired','abandoned','cancelled','canceled'].includes(raw) ? 'REJECTED' : 'PENDING';
+      let response:Response;
+      try { response=await fetch(`https://verification.didit.me/v2/session/${encodeURIComponent(kyc.sessionid)}/decision/`,{headers:{'x-api-key':key}}); }
+      catch { fail(503,'Could not check verification yet.'); }
+      const decision=await response.json().catch(()=>null);
+      if(!response.ok||!decision||decision.session_id!==kyc.sessionid||typeof decision.status!=='string')fail(503,'Could not check verification yet.');
+      const raw=decision.status.trim().toLowerCase();
+      const accepted=['approved','verified'].includes(raw);
+      const rejected=['declined','rejected','failed','expired','abandoned','cancelled','canceled'].includes(raw);
+      const pending=['pending','in progress','in_progress','processing','review','reviewing'].includes(raw);
+      if(!accepted&&!rejected&&!pending)fail(503,'Verification returned an unrecognized status. Try again later.');
+      const profile=await userRow(actor);
+      const status=accepted?'VERIFIED':rejected?'REJECTED':profile.verificationstatus==='VERIFIED'?'VERIFIED':'PENDING';
       const now = new Date().toISOString();
-      await admin.from('users').update({ verificationstatus: status, verificationlevel: status === 'VERIFIED' ? 2 : 1, updatedat: now }).eq('id', actor);
-      await admin.from('privatekyc').update({ status: decision.status ?? 'Pending', updatedat: now }).eq('userid', actor);
+      const {error:userError}=await admin.from('users').update({verificationstatus:status,verificationlevel:status==='VERIFIED'?2:1,updatedat:now}).eq('id',actor);
+      if(userError)throw userError;
+      const {error:kycError}=await admin.from('privatekyc').update({status:decision.status,updatedat:now}).eq('userid',actor);
+      if(kycError)throw kycError;
       return { status };
     }
     case 'acceptCleanerAgreement': {
