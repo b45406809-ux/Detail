@@ -19,12 +19,20 @@ jobs:
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PAYNOW_INTEGRATION_ID: ${{ secrets.PAYNOW_INTEGRATION_ID }}
+          PAYNOW_INTEGRATION_KEY: ${{ secrets.PAYNOW_INTEGRATION_KEY }}
         run: |
           if [ -n "$SUPABASE_URL" ] && [ -n "$CRON_SECRET" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
             echo "Set the SUPABASE_URL and CRON_SECRET repository secrets to enable delivery."
+          fi
+          if [ -n "$PAYNOW_INTEGRATION_ID" ] && [ -n "$PAYNOW_INTEGRATION_KEY" ]; then
+            echo "paynow_ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "paynow_ready=false" >> "$GITHUB_OUTPUT"
+            echo "Paynow reconciliation is skipped until its integration credentials are configured."
           fi
       - name: Process notification deliveries and Expo receipts
         if: steps.config.outputs.ready == 'true'
@@ -34,6 +42,17 @@ jobs:
         run: |
           curl --fail-with-body --silent --show-error \
             --request POST "$SUPABASE_URL/functions/v1/delivery-worker" \
+            --header "x-scheduler-secret: $CRON_SECRET" \
+            --header "content-type: application/json" \
+            --data '{}'
+      - name: Reconcile stale Paynow payments
+        if: steps.config.outputs.ready == 'true' && steps.config.outputs.paynow_ready == 'true'
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 120 --retry 2 \
+            --request POST "$SUPABASE_URL/functions/v1/paynow-reconcile" \
             --header "x-scheduler-secret: $CRON_SECRET" \
             --header "content-type: application/json" \
             --data '{}'

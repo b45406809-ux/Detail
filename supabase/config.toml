@@ -69,6 +69,9 @@ verify_jwt = false
 [functions.paynow-webhook]
 verify_jwt = false
 
+[functions.paynow-reconcile]
+verify_jwt = false
+
 [functions.paynow-return]
 verify_jwt = false
 
