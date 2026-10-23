@@ -103,6 +103,7 @@ export interface UserProfile {
   hasSetupPermissions?: boolean;
   phone?: string;
   location?: { lat: number; lng: number };
+  locationUpdatedAt?: string;
   verificationLevel?: VerificationLevel;
   ratingAverage?: number;
   ratingCount?: number;

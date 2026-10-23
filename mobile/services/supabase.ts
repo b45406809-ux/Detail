@@ -218,6 +218,7 @@ function rowToData(table: string, row: Record<string, any>) {
   const known = ['id','data',...(camelColumns[table] ?? [])];
   const names = new Map(known.map(name => [name.toLowerCase(), name]));
   const normalized = Object.fromEntries(Object.entries(row).map(([key,value]) => [names.get(key.toLowerCase()) ?? key,value]));
+  if (table === 'users' && row.locationupdatedat !== undefined) normalized.locationUpdatedAt = row.locationupdatedat;
   const result = { ...normalized.data, ...normalized };
   delete result.data;
   delete result.__signedData;

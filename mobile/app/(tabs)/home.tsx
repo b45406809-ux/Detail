@@ -337,6 +337,7 @@ export default function HomeScreen() {
                 profile={profile}
                 status={cleanerStatus}
                 trackingIssue={locationTrackingError}
+                locationUpdatedAt={profile.locationUpdatedAt}
                 onToggleStatus={toggleCleanerStatus}
                 availableJobs={availableJobs}
                 currentLocation={currentLocation}
@@ -440,10 +441,34 @@ function CustomerPanel({ favorites, recentJobs }: { favorites: Favorite[]; recen
   );
 }
 
+function LocationFreshness({ updatedAt }: { updatedAt?: string }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(timer);
+  }, []);
+  const timestamp = updatedAt ? Date.parse(updatedAt) : NaN;
+  const ageMs = Number.isFinite(timestamp) ? Math.max(0, now - timestamp) : null;
+  const stale = ageMs === null || ageMs > 2 * 60_000;
+  const label = ageMs === null
+    ? 'Location update not received yet'
+    : ageMs < 10_000
+      ? 'Location updated just now'
+      : `Location updated ${Math.floor(ageMs / 60_000)} min ago`;
+  return (
+    <View className={`rounded-xl px-3 py-2 mb-4 ${stale ? 'bg-amber-50' : 'bg-emerald-50'}`}>
+      <Text className={`font-sans text-xs font-bold ${stale ? 'text-amber-900' : 'text-emerald-800'}`}>
+        {stale ? `${label} · nearby matching may pause until refreshed` : label}
+      </Text>
+    </View>
+  );
+}
+
 function CleanerPanel({
   profile,
   status,
   trackingIssue,
+  locationUpdatedAt,
   onToggleStatus,
   availableJobs,
   currentLocation,
@@ -451,6 +476,7 @@ function CleanerPanel({
   profile: any;
   status: string;
   trackingIssue: string | null;
+  locationUpdatedAt?: string;
   onToggleStatus: () => void;
   availableJobs: Job[];
   currentLocation: { lat: number; lng: number } | null;
@@ -493,6 +519,9 @@ function CleanerPanel({
           <Text className="font-display font-black text-amber-950">Location sharing needs attention</Text>
           <Text className="font-sans text-xs text-amber-900 mt-1">{trackingIssue} Go offline, then online again after restoring permission.</Text>
         </View>
+      )}
+      {isAvailable && (
+        <LocationFreshness updatedAt={locationUpdatedAt} />
       )}
       <TouchableOpacity onPress={()=>router.push('/instant-offers')} className="flex-row items-center justify-between rounded-2xl bg-accent/10 border border-accent/20 px-4 py-3 mb-4">
         <Text className="font-display font-black text-accent">Nearby instant offers</Text><ChevronRight size={18} color="#3906D2"/>

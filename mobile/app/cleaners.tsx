@@ -10,7 +10,7 @@ import { db, addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimest
 import { callFunction } from '../services/functions';
 import { Favorite } from '../types';
 
-type Cleaner = { uid: string; displayName: string; photoURL?: string; ratingAverage?: number; ratingCount?: number; serviceArea?: string; serviceCategories?: string[]; portfolio?: {url:string;caption?:string}[]; distanceKm?:number|null };
+type Cleaner = { uid: string; displayName: string; photoURL?: string; ratingAverage?: number; ratingCount?: number; serviceArea?: string; serviceCategories?: string[]; portfolio?: {url:string;caption?:string}[]; available?: boolean; distanceKm?:number|null };
 
 export default function CleanersScreen() {
   const { user } = useAuth();
@@ -83,6 +83,7 @@ export default function CleanersScreen() {
             <Text className="text-sm font-display font-black text-ink">{item.displayName || 'Detail cleaner'}</Text>
             <View className="flex-row items-center gap-1 mt-1"><Star size={12} color="#f59e0b" fill="#f59e0b" /><Text className="font-sans text-xs font-bold text-ink/60">{item.ratingAverage ? item.ratingAverage.toFixed(1) : 'New'}{item.ratingCount ? ` · ${item.ratingCount} reviews` : ''}</Text></View>
             <Text className="font-sans text-[11px] text-ink/45 mt-1" numberOfLines={1}>{[item.serviceArea, ...(item.serviceCategories ?? [])].filter(Boolean).join(' · ') || 'Identity verified'}{item.distanceKm!==null&&item.distanceKm!==undefined?` · ${item.distanceKm} km away`:''}</Text>
+            <Text className={`font-sans text-[10px] font-bold mt-1 ${item.available ? 'text-emerald-700' : 'text-slate-400'}`}>{item.available ? 'Online now' : 'Not online for immediate requests'}</Text>
             {!!item.portfolio?.length && <View className="mt-2 flex-row gap-1.5">{item.portfolio.slice(0,3).map((photo,index)=><Image key={`${item.uid}-portfolio-${index}`} source={{uri:photo.url}} className="h-9 w-11 rounded-lg" resizeMode="cover" accessibilityLabel={photo.caption||'Cleaner work sample'}/>)}</View>}
           </View>
           <TouchableOpacity onPress={() => toggleFavorite(item)} accessibilityLabel={saved ? 'Remove from favorites' : 'Save to favorites'} className={`w-10 h-10 rounded-2xl items-center justify-center ${saved ? 'bg-red-50' : 'bg-accent/10'}`}><Heart size={18} color={saved ? '#E5484D' : '#3906D2'} fill={saved ? '#E5484D' : 'transparent'} /></TouchableOpacity>

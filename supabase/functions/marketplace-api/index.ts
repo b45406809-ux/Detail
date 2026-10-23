@@ -163,6 +163,10 @@ function paynowClient() {
   client.returnUrl = Deno.env.get('PAYNOW_RETURN_URL') || `${url}/functions/v1/paynow-return`;
   return client;
 }
+function cleanerLocationIsFresh(status: unknown, locationUpdatedAt: unknown, now = Date.now()): boolean {
+  const timestamp = typeof locationUpdatedAt === 'string' ? Date.parse(locationUpdatedAt) : NaN;
+  return status === 'AVAILABLE' && Number.isFinite(timestamp) && timestamp > now - 2 * 60 * 1000;
+}
 function trustedPaynowUrl(raw: string) {
   const parsed = new URL(raw);
   if (parsed.protocol !== 'https:' || !['paynow.co.zw', 'www.paynow.co.zw'].includes(parsed.hostname)) fail(502, 'Paynow returned an untrusted checkout URL.');
@@ -816,17 +820,17 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const search=text(input.search,80).replace(/[^a-zA-Z0-9 -]/g,' ').trim().replace(/\s+/g,' ');
       const category=['HOUSE','CAR'].includes(text(input.category,10).toUpperCase())?text(input.category,10).toUpperCase():'';
       const lat=Number(input.lat),lng=Number(input.lng),radius=Math.min(100,Math.max(1,Number(input.radiusKm)||25));const useNearby=Number.isFinite(lat)&&Number.isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180;
-      let query=admin.from('users').select('id,displayname,photourl,servicearea,servicecategories,serviceradiuskm,ratingaverage,ratingcount,jobscompleted,verificationstatus,location').eq('role','CLEANER').eq('verificationstatus','VERIFIED').eq('cleaneragreementaccepted',true).eq('issuspended',false).eq('isbanned',false).limit(250);
+      let query=admin.from('users').select('id,displayname,photourl,servicearea,servicecategories,serviceradiuskm,ratingaverage,ratingcount,jobscompleted,verificationstatus,status,location,locationupdatedat').eq('role','CLEANER').eq('verificationstatus','VERIFIED').eq('cleaneragreementaccepted',true).eq('issuspended',false).eq('isbanned',false).limit(250);
       if(search)query=query.or(`displayname.ilike.%${search}%,servicearea.ilike.%${search}%`);
       if(category)query=query.contains('servicecategories',[category]);
       const {data,error}=await query;
       if(error)throw error;
-      const candidates=(data??[]).map((row:Json)=>{const point=row.location??{};const cleanerLat=Number(point.lat??point.latitude),cleanerLng=Number(point.lng??point.longitude);let distanceKm:number|null=null;if(useNearby&&Number.isFinite(cleanerLat)&&Number.isFinite(cleanerLng)){const radians=(n:number)=>n*Math.PI/180;const dLat=radians(cleanerLat-lat),dLng=radians(cleanerLng-lng),a=Math.sin(dLat/2)**2+Math.cos(radians(lat))*Math.cos(radians(cleanerLat))*Math.sin(dLng/2)**2;distanceKm=6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}return {row,distanceKm};}).filter((item:any)=>!useNearby||(item.distanceKm!==null&&item.distanceKm<=Math.min(radius,Number(item.row.serviceradiuskm)||radius))).sort((a:any,b:any)=>useNearby?(a.distanceKm??99999)-(b.distanceKm??99999):Number(b.row.ratingaverage??0)-Number(a.row.ratingaverage??0)).slice(0,100);
+      const candidates=(data??[]).map((row:Json)=>{const point=row.location??{};const cleanerLat=Number(point.lat??point.latitude),cleanerLng=Number(point.lng??point.longitude);const online=cleanerLocationIsFresh(row.status,row.locationupdatedat);let distanceKm:number|null=null;if(useNearby&&online&&Number.isFinite(cleanerLat)&&Number.isFinite(cleanerLng)){const radians=(n:number)=>n*Math.PI/180;const dLat=radians(cleanerLat-lat),dLng=radians(cleanerLng-lng),a=Math.sin(dLat/2)**2+Math.cos(radians(lat))*Math.cos(radians(cleanerLat))*Math.sin(dLng/2)**2;distanceKm=6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}return {row,distanceKm,online};}).filter((item:any)=>!useNearby||(item.online&&item.distanceKm!==null&&item.distanceKm<=Math.min(radius,Number(item.row.serviceradiuskm)||radius))).sort((a:any,b:any)=>useNearby?(a.distanceKm??99999)-(b.distanceKm??99999):Number(b.row.ratingaverage??0)-Number(a.row.ratingaverage??0)).slice(0,100);
       const profiles=await Promise.all(candidates.map(async ({row,distanceKm}:any)=>{
         const {data:portfolio}=await admin.from('cleanerportfolio').select('imagepath,caption').eq('cleanerid',row.id).order('createdat',{ascending:false}).limit(6);
         const photos=await Promise.all((portfolio??[]).map(async (photo:Json)=>{const {data:signed}=await admin.storage.from('detail-media').createSignedUrl(String(photo.imagepath),3600);return signed?.signedUrl?{url:signed.signedUrl,caption:photo.caption}:null;}));
         const avatar=row.photourl?.startsWith('detail-media/')?await admin.storage.from('detail-media').createSignedUrl(String(row.photourl).slice('detail-media/'.length),3600):null;
-        return {uid:row.id,displayName:row.displayname,photoURL:avatar?.data?.signedUrl??row.photourl,portfolio:photos.filter(Boolean),serviceArea:row.servicearea,serviceCategories:row.servicecategories,ratingAverage:row.ratingaverage,ratingCount:row.ratingcount,jobsCompleted:row.jobscompleted,verificationStatus:row.verificationstatus,distanceKm:distanceKm===null?null:Math.round(distanceKm)};
+        return {uid:row.id,displayName:row.displayname,photoURL:avatar?.data?.signedUrl??row.photourl,portfolio:photos.filter(Boolean),serviceArea:row.servicearea,serviceCategories:row.servicecategories,ratingAverage:row.ratingaverage,ratingCount:row.ratingcount,jobsCompleted:row.jobscompleted,verificationStatus:row.verificationstatus,available:cleanerLocationIsFresh(row.status,row.locationupdatedat),distanceKm:distanceKm===null?null:Math.round(distanceKm)};
       }));
       return {cleaners:profiles};
     }
@@ -1232,6 +1236,8 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     default: fail(404,`Unknown marketplace action: ${name}`);
   }
 }
+
+export { cleanerLocationIsFresh };
 
 Deno.serve(async request => {
   const origin=request.headers.get('origin');
