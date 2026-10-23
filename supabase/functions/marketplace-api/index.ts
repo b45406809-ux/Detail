@@ -132,7 +132,7 @@ function paynowClient() {
   client.returnUrl = Deno.env.get('PAYNOW_RETURN_URL') || `${url}/functions/v1/paynow-return`;
   return client;
 }
-async function startPaynowCheckout(jobId: string, email: string, details?: { reference?: string; amount?: number; cleanerName?: string; serviceType?: string }) {
+async function startPaynowCheckout(jobId: string, email: string, details?: { reference?: string; amount?: number; cleanerName?: string; serviceType?: string; attemptKey?: string }) {
   const { data: payment, error } = await admin.from('payments').select('*').eq('id', `${jobId}_booking`).single();
   if (error) throw error;
   const { data: job, error: jobError } = await admin.from('jobs').select('*').eq('id', jobId).single();
@@ -147,8 +147,11 @@ async function startPaynowCheckout(jobId: string, email: string, details?: { ref
   if (!result?.success || !result.redirectUrl || !result.pollUrl) throw new Error(String(result?.error ?? 'Paynow did not return a checkout URL.'));
   const pollUrl = new URL(String(result.pollUrl));
   if (pollUrl.protocol !== 'https:' || !['paynow.co.zw', 'www.paynow.co.zw'].includes(pollUrl.hostname)) fail(502, 'Paynow returned an untrusted poll URL.');
-  await admin.from('payments').update({ status: 'PENDING', redirecturl: String(result.redirectUrl), pollurl: String(result.pollUrl), updatedat: new Date().toISOString() }).eq('id', payment.id);
-  await admin.from('jobs').update({ paymentstatus: 'PENDING' }).eq('id', jobId);
+  const paymentData=details?.attemptKey?{...(payment.data??{}),retryAttempt:{...(payment.data?.retryAttempt??{}),status:'PENDING',checkoutCreatedAt:new Date().toISOString()}}:payment.data;
+  const {error:paymentUpdateError}=await admin.from('payments').update({ status: 'PENDING', redirecturl: String(result.redirectUrl), pollurl: String(result.pollUrl), ...(details?.attemptKey?{data:paymentData}:{}), updatedat: new Date().toISOString() }).eq('id', payment.id);
+  if(paymentUpdateError)throw paymentUpdateError;
+  const {error:jobUpdateError}=await admin.from('jobs').update({ paymentstatus: 'PENDING' }).eq('id', jobId);
+  if(jobUpdateError)throw jobUpdateError;
   return String(result.redirectUrl);
 }
 async function applyPaynowStatus(reference: string, status: string, amount: string | number) {
@@ -525,15 +528,26 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       return {success:true,status:applied.status};
     }
     case 'retryPaynowBookingPayment': {
-      const actor=authed(), jobId=text(input.jobId,80);
+      const actor=authed(), jobId=text(input.jobId,80),idempotencyKey=requireKey(input.idempotencyKey);
+      await enforceRateLimit(request,actor,'paynow_booking_retry',5,3600);
       const [{data:job},{data:payment},{data:profile}] = await Promise.all([admin.from('jobs').select('*').eq('id',jobId).maybeSingle(),admin.from('payments').select('*').eq('id',`${jobId}_booking`).maybeSingle(),admin.from('users').select('email').eq('id',actor).maybeSingle()]);
-      if(!job||!payment||job.customerid!==actor||job.paymentmethod!=='PAYNOW'||!['FAILED','CANCELLED'].includes(payment.status))fail(409,'This Paynow payment cannot be retried.');
+      if(!job||!payment||job.customerid!==actor||job.paymentmethod!=='PAYNOW')fail(409,'This Paynow payment cannot be retried.');
       const email=user?.email??profile?.email; if(!email)fail(409,'Add an email address before paying with Paynow.');
-      const reference=`${jobId}-${crypto.randomUUID().slice(0,12)}`;
-      await admin.from('payments').update({status:'INITIATING',reference,pollurl:null,redirecturl:null,updatedat:new Date().toISOString()}).eq('id',payment.id);
-      await admin.from('jobs').update({paymentstatus:'INITIATING'}).eq('id',jobId);
-      const redirectUrl=await startPaynowCheckout(jobId,email,{reference,amount:Number(payment.amount),cleanerName:job.cleanername,serviceType:job.servicetype});
-      return {success:true,redirectUrl};
+      const {data:claim,error:claimError}=await admin.rpc('claim_paynow_booking_retry',{p_job_id:jobId,p_customer_id:actor,p_idempotency_key:idempotencyKey});if(claimError)throw claimError;
+      if(claim.status==='PENDING'&&claim.redirectUrl)return {success:true,redirectUrl:claim.redirectUrl};
+      if(claim.status==='IN_PROGRESS')fail(409,'Paynow checkout is still starting. Wait a moment, then refresh payment status.');
+      const reference=String(claim.reference);
+      try{
+        const redirectUrl=await startPaynowCheckout(jobId,email,{reference,amount:Number(payment.amount),cleanerName:job.cleanername,serviceType:job.servicetype,attemptKey:idempotencyKey});
+        return {success:true,redirectUrl};
+      }catch(error){
+        const {data:latest}=await admin.from('payments').select('data').eq('id',payment.id).maybeSingle();
+        const retryAttempt={...(latest?.data?.retryAttempt??{}),status:'FAILED',failedAt:new Date().toISOString()};
+        const {error:paymentError}=await admin.from('payments').update({status:'FAILED',data:{...(latest?.data??{}),retryAttempt},updatedat:new Date().toISOString()}).eq('id',payment.id);
+        const {error:jobError}=await admin.from('jobs').update({paymentstatus:'FAILED',updatedat:new Date().toISOString()}).eq('id',jobId);
+        if(paymentError||jobError)console.error('Paynow retry failed and status recovery was incomplete',paymentError?.message,jobError?.message);
+        throw error;
+      }
     }
     case 'refreshPaynowWalletTopup': {
       const actor=authed(), reference=text(input.referenceNumber,160);

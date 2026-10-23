@@ -27,13 +27,29 @@ Deno.serve(async request => {
     const update = paynow.parseStatusUpdate(raw);
     if (!update.reference || !update.status || !update.amount) return new Response('Invalid status update', { status: 400 });
     const reference=String(update.reference);
-    const {data:before,error:lookupError}=await admin.from('payments').select('id,customerid,cleanerid,jobid,status,data').eq('reference',reference).maybeSingle();if(lookupError)throw lookupError;
+    let canonicalReference=reference;
+    let {data:before,error:lookupError}=await admin.from('payments').select('id,reference,customerid,cleanerid,jobid,status,data').eq('reference',reference).maybeSingle();if(lookupError)throw lookupError;
+    if(!before){
+      const {data:attempt,error:attemptError}=await admin.from('paynowpaymentattempts').select('paymentid').eq('reference',reference).maybeSingle();if(attemptError)throw attemptError;
+      if(attempt){const {data:payment,error:paymentError}=await admin.from('payments').select('id,reference,customerid,cleanerid,jobid,status,data').eq('id',attempt.paymentid).maybeSingle();if(paymentError)throw paymentError;before=payment??null;canonicalReference=payment?.reference??reference;}
+    }
     const { data, error } = await admin.rpc('apply_paynow_status', {
-      p_reference: reference, p_status: String(update.status), p_amount: Number(update.amount),
+      p_reference: canonicalReference, p_status: String(update.status), p_amount: Number(update.amount),
     });
     if (error) throw error;
+    if(before&&reference!==canonicalReference&&before.jobid&&['ESCROWED','DELIVERED','PAID','DISPUTED'].includes(data?.status)){
+      const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(reference)));
+      const attemptHash=Array.from(digest.slice(0,16)).map(value=>value.toString(16).padStart(2,'0')).join('');
+      const caseId=`retry_${attemptHash}`;
+      await admin.from('supportcases').upsert({id:caseId,jobid:before.jobid,customerid:before.customerid,cleanerid:before.cleanerid,
+        reason:'A previous Paynow checkout attempt received a captured status after a retry was created.',status:'URGENT',
+        data:{type:'PAYNOW_RETRY_DUPLICATE',paymentId:before.id,previousReference:reference,currentReference:canonicalReference,paymentStatus:data.status}},
+        {onConflict:'id',ignoreDuplicates:true});
+      const {data:admins}=await admin.from('adminroles').select('userid');
+      for(const row of admins??[])await notifyOnce(row.userid,reference,'RETRY_DUPLICATE',{title:'Paynow retry needs reconciliation',body:'An earlier checkout attempt received a captured status after a retry. Review the urgent support case.',type:'PAYMENT_DISPUTED',jobId:before.jobid});
+    }
     if(data?.status==='REFUNDED'){
-      const {data:payment}=await admin.from('payments').select('id,data').eq('reference',reference).maybeSingle();
+      const {data:payment}=await admin.from('payments').select('id,data').eq('id',before?.id??'').maybeSingle();
       if(payment?.data?.refundRequest?.status==='PENDING')await admin.from('payments').update({data:{...payment.data,refundRequest:{...payment.data.refundRequest,status:'COMPLETED',completedAt:new Date().toISOString()}}}).eq('id',payment.id);
     }
     if(before&&data?.status&&before.status!==data.status){

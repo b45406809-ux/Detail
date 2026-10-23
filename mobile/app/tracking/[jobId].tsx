@@ -393,7 +393,8 @@ export default function TrackingScreen() {
     if (!jobId) return;
     setIsSubmitting(true);
     try {
-      const result = await callFunction<{ jobId: string }, { success: boolean; redirectUrl: string }>('retryPaynowBookingPayment', { jobId });
+      const idempotencyKey=`paynow-retry-${jobId}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+      const result = await callFunction<{ jobId: string; idempotencyKey: string }, { success: boolean; redirectUrl: string }>('retryPaynowBookingPayment', { jobId, idempotencyKey });
       if (result.redirectUrl) await WebBrowser.openBrowserAsync(result.redirectUrl, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET });
     } catch (err: any) {
       Alert.alert('Paynow unavailable', err.message || 'Could not start payment. Please try again.');
