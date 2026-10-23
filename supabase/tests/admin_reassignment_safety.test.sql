@@ -15,12 +15,12 @@ values
 on conflict(id) do update set role=excluded.role,status=excluded.status,verificationStatus=excluded.verificationStatus,
   cleanerAgreementAccepted=excluded.cleanerAgreementAccepted,cleanerOnboardingComplete=excluded.cleanerOnboardingComplete;
 
-insert into public.jobs(id,customerId,cleanerId,category,serviceType,status)
+insert into public.jobs(id,customerId,cleanerId,category,serviceType,status,scheduledDateTime)
 values
-  ('185fd004-5139-4f48-a6d0-1554b8bf9f9d','6c71d302-d700-4b31-85b5-c485f5f51357','9f171a9b-c535-47f7-bd0f-7d7452c7e9b2','HOUSE','Completed clean','COMPLETED'),
-  ('fe88bc25-d435-45d6-8fd0-281aa64c3a1a','6c71d302-d700-4b31-85b5-c485f5f51357','9f171a9b-c535-47f7-bd0f-7d7452c7e9b2','HOUSE','Cancelled clean','CANCELLED'),
-  ('0e97dc4a-3bd9-47a3-b658-e3f90d84c29b','6c71d302-d700-4b31-85b5-c485f5f51357','9f171a9b-c535-47f7-bd0f-7d7452c7e9b2','HOUSE','In progress clean','IN_PROGRESS'),
-  ('8ee75ac2-e139-4876-93d5-838783f9a9ea','6c71d302-d700-4b31-85b5-c485f5f51357','9f171a9b-c535-47f7-bd0f-7d7452c7e9b2','HOUSE','Assigned clean','ASSIGNED');
+  ('185fd004-5139-4f48-a6d0-1554b8bf9f9d','6c71d302-d700-4b31-85b5-c485f5f51357','9f171a9b-c535-47f7-bd0f-7d7452c7e9b2','HOUSE','Completed clean','COMPLETED',now()+interval '1 day'),
+  ('fe88bc25-d435-45d6-8fd0-281aa64c3a1a','6c71d302-d700-4b31-85b5-c485f5f51357','9f171a9b-c535-47f7-bd0f-7d7452c7e9b2','HOUSE','Cancelled clean','CANCELLED',now()+interval '2 days'),
+  ('0e97dc4a-3bd9-47a3-b658-e3f90d84c29b','6c71d302-d700-4b31-85b5-c485f5f51357','9f171a9b-c535-47f7-bd0f-7d7452c7e9b2','HOUSE','In progress clean','IN_PROGRESS',now()+interval '3 days'),
+  ('8ee75ac2-e139-4876-93d5-838783f9a9ea','6c71d302-d700-4b31-85b5-c485f5f51357','9f171a9b-c535-47f7-bd0f-7d7452c7e9b2','HOUSE','Assigned clean','ASSIGNED',now()+interval '4 days');
 
 insert into public.payments(id,jobId,customerId,cleanerId,amount,status)
 values('reassign-payment','8ee75ac2-e139-4876-93d5-838783f9a9ea','6c71d302-d700-4b31-85b5-c485f5f51357','9f171a9b-c535-47f7-bd0f-7d7452c7e9b2',40,'ESCROWED');
