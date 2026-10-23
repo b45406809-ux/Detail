@@ -96,10 +96,10 @@ export default function WalletScreen() {
 
   const balance = profile?.balance ?? 0;
   const isCleaner = profile?.role === 'CLEANER';
-  // Match request_cleaner_payout_secure: GENERAL balance also includes top-ups,
-  // so it must never be used to calculate withdrawable cleaner earnings.
+  // Commission top-ups are tracked in a separate bucket and must not reduce
+  // already-cleared earnings; payout holds debit earningsBalance atomically.
   const availableEarnings = isCleaner
-    ? Math.max(0, Number(profile?.earningsBalance ?? 0) - Number(profile?.commissionBalance ?? 0))
+    ? Math.max(0, Number(profile?.earningsBalance ?? 0))
     : 0;
 
   const requestPayout = async () => {
