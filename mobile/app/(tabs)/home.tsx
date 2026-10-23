@@ -180,16 +180,22 @@ export default function HomeScreen() {
   const toggleCleanerStatus = async () => {
     const next = cleanerStatus === 'AVAILABLE' ? 'OFFLINE' : 'AVAILABLE';
     try {
-      await callFunction('updateCleanerPresence', { status: next });
       if(next==='AVAILABLE') {
         await startCleanerLocationUpdates();
         const position=await Location.getCurrentPositionAsync({accuracy:Location.Accuracy.Balanced});
         const point={lat:position.coords.latitude,lng:position.coords.longitude};setCurrentLocation(point);
-        await callFunction('updateCleanerLocation',point);
-      } else await stopCleanerLocationUpdates();
+        await callFunction('prepareCleanerLocation',point);
+        await callFunction('updateCleanerPresence', { status: next });
+      } else {
+        await callFunction('updateCleanerPresence', { status: next });
+        await stopCleanerLocationUpdates();
+      }
       setCleanerStatus(next);
     } catch(error:any) {
-      if(next==='AVAILABLE')await callFunction('updateCleanerPresence',{status:'OFFLINE'}).catch(()=>{});
+      if(next==='AVAILABLE'){
+        await stopCleanerLocationUpdates().catch(()=>{});
+        await callFunction('updateCleanerPresence',{status:'OFFLINE'}).catch(()=>{});
+      }
       Alert.alert('Location permission needed',error?.message||'Detail needs background location permission while you are online.');
     }
   };

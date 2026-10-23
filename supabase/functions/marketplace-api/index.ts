@@ -304,8 +304,15 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const actor = authed(); const profile = await userRow(actor);
       if (!['AVAILABLE','OFFLINE'].includes(input.status) || profile.role !== 'CLEANER' || profile.verificationstatus !== 'VERIFIED' || !profile.cleaneragreementaccepted || profile.issuspended || profile.isbanned) fail(403, 'Only an approved cleaner can change availability.');
       if(input.status==='OFFLINE'){
-        const {count}=await admin.from('jobs').select('id',{count:'exact',head:true}).eq('cleanerid',actor).in('status',['ASSIGNED','EN_ROUTE','IN_PROGRESS']);
+        const {count,error}=await admin.from('jobs').select('id',{count:'exact',head:true}).eq('cleanerid',actor).in('status',['ASSIGNED','EN_ROUTE','IN_PROGRESS']);
+        if(error)throw error;
         if((count??0)>0)fail(409,'Finish or contact support about your active booking before going offline.');
+      } else {
+        const locationAt=Date.parse(String(profile.locationupdatedat??''));
+        if(!profile.locationpoint||!Number.isFinite(locationAt)||Date.now()-locationAt>2*60*1000)fail(409,'Share a fresh location before going online.');
+        const {count,error}=await admin.from('jobs').select('id',{count:'exact',head:true}).eq('cleanerid',actor).in('status',['ASSIGNED','EN_ROUTE','IN_PROGRESS']);
+        if(error)throw error;
+        if((count??0)>0)fail(409,'You have an active booking and cannot take new requests yet.');
       }
       const patch: Json = { status: input.status, updatedat: new Date().toISOString() };
       if (input.status === 'OFFLINE') { patch.locationpoint = null; patch.locationupdatedat = null; }
@@ -316,12 +323,21 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'updateCleanerLocation': {
       const actor = authed(); const profile = await userRow(actor); const lat = Number(input.lat), lng = Number(input.lng);
       if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat)>90 || Math.abs(lng)>180) fail(400,'Invalid coordinates.');
-      if (profile.role !== 'CLEANER' || profile.verificationstatus !== 'VERIFIED' || !profile.cleaneragreementaccepted || profile.status !== 'AVAILABLE' || profile.issuspended || profile.isbanned) fail(403,'Only an approved cleaner who is online can share location.');
+      if (profile.role !== 'CLEANER' || profile.verificationstatus !== 'VERIFIED' || !profile.cleaneragreementaccepted || profile.status !== 'AVAILABLE' || profile.issuspended || profile.isbanned) fail(403,'Only an approved online cleaner can share availability location.');
       const point = `SRID=4326;POINT(${lng} ${lat})`;
       const { error } = await admin.from('users').update({ location: { lat, lng }, locationpoint: point, locationupdatedat: new Date().toISOString(), updatedat: new Date().toISOString() }).eq('id', actor);
       if (error) throw error;
       await admin.from('jobs').update({cleanerlocation:{lat,lng},cleanerlocationupdatedat:new Date().toISOString()}).eq('cleanerid',actor).in('status',['ASSIGNED','EN_ROUTE','IN_PROGRESS']);
       return { ok: true };
+    }
+    case 'prepareCleanerLocation': {
+      const actor=authed(),profile=await userRow(actor),lat=Number(input.lat),lng=Number(input.lng);
+      if(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)fail(400,'Invalid coordinates.');
+      if(profile.role!=='CLEANER'||profile.verificationstatus!=='VERIFIED'||!profile.cleaneragreementaccepted||profile.status!=='OFFLINE'||profile.issuspended||profile.isbanned)fail(403,'Only an approved offline cleaner can prepare an availability location.');
+      const point=`SRID=4326;POINT(${lng} ${lat})`;
+      const {error}=await admin.from('users').update({location:{lat,lng},locationpoint:point,locationupdatedat:new Date().toISOString(),updatedat:new Date().toISOString()}).eq('id',actor);
+      if(error)throw error;
+      return {ok:true};
     }
     case 'updateActiveJobLocation': {
       const actor = authed(); const jobId = text(input.jobId, 80); const lat = Number(input.lat), lng = Number(input.lng);
