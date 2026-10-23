@@ -17,7 +17,10 @@ values
  ('801342e6-d0a3-4473-85d2-e9557cc1a010','presence-stale@detail.invalid','Stale Cleaner','CLEANER','AVAILABLE','VERIFIED',true,'{"lat":-17.8,"lng":31.0}',extensions.st_setsrid(extensions.st_makepoint(31.0,-17.8),4326)::extensions.geography,now()-interval '6 minutes'),
  ('801342e6-d0a3-4473-85d2-e9557cc1a011','presence-stale-second@detail.invalid','Second Stale Cleaner','CLEANER','AVAILABLE','VERIFIED',true,'{"lat":-17.8,"lng":31.0}',extensions.st_setsrid(extensions.st_makepoint(31.0,-17.8),4326)::extensions.geography,now()-interval '6 minutes'),
  ('801342e6-d0a3-4473-85d2-e9557cc1a012','presence-fresh@detail.invalid','Fresh Cleaner','CLEANER','AVAILABLE','VERIFIED',true,'{"lat":-17.8,"lng":31.0}',extensions.st_setsrid(extensions.st_makepoint(31.0,-17.8),4326)::extensions.geography,now()-interval '1 minute'),
- ('801342e6-d0a3-4473-85d2-e9557cc1a013','presence-offline@detail.invalid','Offline Cleaner','CLEANER','OFFLINE','VERIFIED',true,'{"lat":-17.8,"lng":31.0}',extensions.st_setsrid(extensions.st_makepoint(31.0,-17.8),4326)::extensions.geography,now()-interval '1 hour');
+ ('801342e6-d0a3-4473-85d2-e9557cc1a013','presence-offline@detail.invalid','Offline Cleaner','CLEANER','OFFLINE','VERIFIED',true,'{"lat":-17.8,"lng":31.0}',extensions.st_setsrid(extensions.st_makepoint(31.0,-17.8),4326)::extensions.geography,now()-interval '1 hour')
+on conflict(id) do update set email=excluded.email,displayName=excluded.displayName,role=excluded.role,status=excluded.status,
+  verificationStatus=excluded.verificationStatus,cleanerAgreementAccepted=excluded.cleanerAgreementAccepted,
+  location=excluded.location,locationPoint=excluded.locationPoint,locationUpdatedAt=excluded.locationUpdatedAt;
 
 select is(public.expire_stale_cleaner_presence(now(),1),1,'a bounded run expires at most its limit of stale cleaners');
 select is((select status from public.users where id='801342e6-d0a3-4473-85d2-e9557cc1a010'),'OFFLINE'::text,'stale available cleaner is marked offline');
