@@ -28,11 +28,21 @@ const round2 = (value: number) => Math.round(value * 100) / 100;
 const hash = async (value: string) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))).map(v => v.toString(16).padStart(2, '0')).join('');
 const requireKey = (value: unknown) => { const key = text(value, 160); if (!/^[A-Za-z0-9_-]{8,160}$/.test(key)) fail(400, 'A valid idempotency key is required.'); return key; };
 async function enforceRateLimit(request: Request, actor: string, action: string, max: number, windowSeconds: number) {
-  const ip = request.headers.get('cf-connecting-ip') ?? request.headers.get('x-real-ip') ?? request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-  const key = await hash(`${action}:${actor}:${ip}`);
-  const { data, error } = await admin.rpc('consume_rate_limit', { p_key: key, p_max: max, p_window_seconds: windowSeconds });
-  if (error) { console.error('rate-limit check failed', error.message); fail(503, 'This action is temporarily unavailable. Try again shortly.'); }
-  if (data !== true) fail(429, 'Too many attempts. Please wait before trying again.');
+  // Never trust x-real-ip or x-forwarded-for: callers can supply both. The
+  // Cloudflare edge overwrites cf-connecting-ip; actor limits remain primary.
+  const identities = [`actor:${actor}`];
+  const trustedIp = text(request.headers.get('cf-connecting-ip'), 80);
+  if (trustedIp) identities.push(`edge-ip:${trustedIp}`);
+  for (const identity of identities) {
+    const key = await hash(`${action}:${identity}`);
+    const { data, error } = await admin.rpc('consume_rate_limit', {
+      p_key: key,
+      p_max: identity.startsWith('edge-ip:') ? max * 10 : max,
+      p_window_seconds: windowSeconds,
+    });
+    if (error) { console.error('rate-limit check failed', error.message); fail(503, 'This action is temporarily unavailable. Try again shortly.'); }
+    if (data !== true) fail(429, 'Too many attempts. Please wait before trying again.');
+  }
 }
 function tokenClaims(request:Request):Json{
   const token=(request.headers.get('authorization')??'').replace(/^Bearer /,'');
@@ -759,6 +769,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(!secret)fail(503,'Waitlist security is not configured.');
       if(!token)fail(400,'Complete the security check.');
       const response=await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({secret,response:token})});const verdict=await response.json();if(!verdict.success)fail(400,'Security check failed. Please try again.');
+      await enforceRateLimit(request,`waitlist:${await hash(email)}`,'waitlist_signup',3,3600);
       const consent=input.marketingEmailPermission==='YES'; const unsubscribeToken=crypto.randomUUID()+crypto.randomUUID();
       const {data:created,error}=await admin.rpc('register_waitlist_entry',{p_email:email,p_full_name:fullName,p_phone:text(input.phone,40),p_country:text(input.country,80),p_city:text(input.city,100),p_area:text(input.area,120),p_participant_type:text(input.participantType,30),p_service_interest:text(input.serviceInterest,30),p_preferred_language:text(input.preferredLanguage,40),p_marketing_consent:consent,p_unsubscribe_token:unsubscribeToken,p_data:{campaign:input.campaign??{}}});
       if(error)throw error;
