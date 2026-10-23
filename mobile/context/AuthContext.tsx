@@ -5,6 +5,7 @@ import {
   onAuthStateChanged,
   doc,
   onSnapshot,
+  getDoc,
   setDoc,
   updateDoc,
   serverTimestamp,
@@ -38,6 +39,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const unsubAuth = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
+      setProfile(null);
+      setIsLoading(true);
       unsubProfile?.();
       unsubProfile = null;
 
@@ -72,8 +75,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // No-op: onSnapshot keeps profile live automatically
-  const refreshProfile = useCallback(async () => {}, []);
+  const refreshProfile = useCallback(async () => {
+    if (!user) { setProfile(null); return; }
+    const snapshot = await getDoc(doc(db, 'users', user.uid));
+    setProfile(snapshot.exists() ? snapshot.data() as UserProfile : null);
+  }, [user]);
 
   const updateProfile = useCallback(
     async (data: Partial<UserProfile>) => {

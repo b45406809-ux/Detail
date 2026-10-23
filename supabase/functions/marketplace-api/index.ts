@@ -247,11 +247,16 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       return { status };
     }
     case 'acceptCleanerAgreement': {
-      const actor = authed(); const profile = await userRow(actor);
-      if (!profile.cleaneronboardingcomplete || profile.verificationstatus !== 'VERIFIED') fail(409, 'Complete registration and identity verification first.');
-      const { error } = await admin.from('users').update({ role: 'CLEANER', cleaneragreementaccepted: true, hasagreedtoterms: true, updatedat: new Date().toISOString() }).eq('id', actor);
+      const actor = authed();
+      const { error } = await admin.rpc('accept_cleaner_agreement',{p_user_id:actor});
       if (error) throw error;
       return { ok: true };
+    }
+    case 'acceptCustomerAgreement': {
+      const actor=authed();
+      const {error}=await admin.rpc('accept_customer_agreement',{p_user_id:actor});
+      if(error)throw error;
+      return {ok:true,version:'customer-2026-10-23'};
     }
     case 'submitCleanerApplication': {
       const actor = authed(); const profile = await userRow(actor);

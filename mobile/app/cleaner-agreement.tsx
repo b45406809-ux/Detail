@@ -146,6 +146,7 @@ export default function CleanerAgreementScreen() {
             <Text className="font-sans text-xs text-slate-400 font-medium mb-6">
               Please read all terms before accepting
             </Text>
+            <Text className="font-sans text-xs text-slate-500 font-bold mb-6">Version cleaner-2026-10-23</Text>
             {TERMS.map(({ title, body }) => (
               <View key={title} className="mb-6">
                 <Text className="text-base font-display font-black text-slate-900 mb-2">{title}</Text>

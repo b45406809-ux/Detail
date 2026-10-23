@@ -87,7 +87,6 @@ export default function CreateProfileScreen() {
           status: 'AVAILABLE',
           hasCompletedProfile: true,
           hasSetupPermissions: false,
-          hasAgreedToTerms: true,
           createdAt: serverTimestamp(),
         },
         { merge: true }

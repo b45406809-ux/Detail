@@ -1,8 +1,10 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { Alert, ActivityIndicator, View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
+import { useAuth } from '../context/AuthContext';
+import { callFunction } from '../services/functions';
 
 // Full text of the Detail Customer Agreement (Catalyst Labs (PRIVATE) LIMITED,
 // trading as Detail — Zimbabwe). Condensed section-by-section from the source
@@ -72,6 +74,21 @@ const SECTIONS = [
 ];
 
 export default function CustomerAgreementScreen() {
+  const { user, profile, refreshProfile } = useAuth();
+  const [isAccepting, setIsAccepting] = useState(false);
+  const acceptAgreement = async () => {
+    if (!user) { router.back(); return; }
+    setIsAccepting(true);
+    try {
+      await callFunction('acceptCustomerAgreement');
+      await refreshProfile();
+      if (!profile?.hasCompletedProfile) router.replace('/(auth)/create-profile');
+      else if (!profile.hasSetupPermissions) router.replace('/(auth)/permissions');
+      else router.replace('/home');
+    } catch (error) {
+      Alert.alert('Could not save your agreement', error instanceof Error ? error.message : 'Please try again.');
+    } finally { setIsAccepting(false); }
+  };
   return (
     <SafeAreaView className="flex-1 bg-white">
       <View className="flex-row items-center gap-3 px-5 pt-4 pb-4 border-b border-slate-100">
@@ -91,12 +108,16 @@ export default function CustomerAgreementScreen() {
         <Text className="font-sans text-xs text-slate-400 font-medium mb-6">
           By booking a Service through Detail, you agree to these terms
         </Text>
+        <Text className="font-sans text-xs text-slate-500 font-bold mb-6">Version customer-2026-10-23</Text>
         {SECTIONS.map(({ title, body }) => (
           <View key={title} className="mb-6">
             <Text className="text-base font-display font-black text-slate-900 mb-2">{title}</Text>
             <Text className="font-sans text-sm text-slate-600 font-medium leading-relaxed">{body}</Text>
           </View>
         ))}
+        <TouchableOpacity onPress={acceptAgreement} disabled={isAccepting} accessibilityRole="button" className="mb-8 rounded-2xl bg-accent py-4 items-center">
+          {isAccepting ? <ActivityIndicator color="#fff" /> : <Text className="font-display font-black uppercase tracking-widest text-white">{user ? 'I have read and accept' : 'Back to sign in'}</Text>}
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );

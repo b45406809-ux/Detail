@@ -24,23 +24,18 @@ function AuthGuard() {
     if (isLoading) return;
 
     const inAuthGroup = segments[0] === '(auth)';
-    const currentScreen = String((segments as string[])[1] || '');
+    const currentScreen = String((segments as string[])[0] === '(auth)' ? (segments as string[])[1] || '' : (segments as string[])[0] || '');
     const isPasswordRecovery = inAuthGroup && currentScreen === 'reset-password';
+    const isPublicLegal = ['customer-agreement', 'privacy-policy'].includes(currentScreen);
 
-    if (!user && !inAuthGroup) {
+    if (!user && !inAuthGroup && !isPublicLegal) {
       router.replace('/(auth)/splash');
-    } else if (user && inAuthGroup && !isPasswordRecovery) {
-      if (!profile?.hasCompletedProfile) {
-        if (currentScreen !== 'create-profile') {
-          router.replace('/(auth)/create-profile');
-        }
-      } else if (!profile?.hasSetupPermissions) {
-        if (currentScreen !== 'permissions') {
-          router.replace('/(auth)/permissions');
-        }
-      } else {
-        router.replace('/home');
-      }
+    } else if (user && !isPasswordRecovery) {
+      if (!profile?.hasAgreedToTerms && currentScreen !== 'customer-agreement') router.replace('/customer-agreement');
+      else if (!profile?.hasCompletedProfile && currentScreen !== 'create-profile') router.replace('/(auth)/create-profile');
+      else if (!profile?.hasSetupPermissions && currentScreen !== 'permissions') router.replace('/(auth)/permissions');
+      else if (profile?.role === 'CLEANER' && profile.verificationStatus === 'VERIFIED' && profile.cleanerOnboardingComplete && !profile.cleanerAgreementAccepted) router.replace('/cleaner-agreement');
+      else if (inAuthGroup && currentScreen !== 'customer-agreement') router.replace('/home');
     }
   }, [user, profile, isLoading, segments]);
 
