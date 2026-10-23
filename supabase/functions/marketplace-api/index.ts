@@ -470,7 +470,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'submitBid': {
       const actor = authed(); const jobId = text(input.jobId,80); const bidPrice=round2(Number(input.bidPrice)); const eta=Number(input.estimatedArrival);
       await enforceRateLimit(request,actor,'submit_bid',20,3600);
-      if (!jobId || bidPrice <= 0 || eta < 1 || eta > 120) fail(400,'A valid job, bid amount and arrival estimate are required.');
+      if (!jobId || !Number.isFinite(bidPrice) || bidPrice < 1 || bidPrice > 10000 || !Number.isInteger(eta) || eta < 1 || eta > 120) fail(400,'A valid job, bid amount and arrival estimate are required.');
       const [profileResult,jobResult] = await Promise.all([admin.from('users').select('*').eq('id',actor).single(),admin.from('jobs').select('*').eq('id',jobId).single()]);
       if (profileResult.error || jobResult.error) fail(404,'Job or cleaner not found.');
       const profile=profileResult.data, job=jobResult.data;
@@ -478,16 +478,15 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const {data:operations}=await admin.from('configuration').select('value').eq('key','operations').maybeSingle();
       if(operations?.value?.switches?.maintenance===true||operations?.value?.switches?.bidAcceptance===true)fail(503,'Cleaner bidding is temporarily paused.');
       if (job.status!=='PENDING' || job.bookingmode==='INSTANT' || (job.biddingexpiresat && new Date(job.biddingexpiresat).getTime()<Date.now())) fail(409,'This booking is not accepting cleaner bids.');
-      const { data, error } = await admin.from('bids').insert({jobid:jobId,cleanerid:actor,cleanername:profile.displayname,cleanerphoto:profile.photourl,cleanerrating:profile.ratingaverage,cleanerjobscompleted:profile.jobscompleted,bidprice:bidPrice,estimatedarrival:eta,message:text(input.message,500)||null,status:'PENDING',history:[{by:'CLEANER',price:bidPrice,message:text(input.message,500)||null,createdAt:new Date().toISOString()}]}).select('id').single();
-      if (error?.code === '23505') fail(409,'You already have an active quote for this booking.');
+      const { data, error } = await admin.rpc('submit_bid_secure',{p_job_id:jobId,p_cleaner_id:actor,p_bid_price:bidPrice,p_estimated_arrival:eta,p_message:text(input.message,500)});
+      if(error?.message?.includes('active quote'))fail(409,'You already have an active quote for this booking.');
       if (error) throw error;
       await notify(job.customerid,{type:'NEW_BID',title:'New cleaner quote',body:`${profile.displayname || 'A cleaner'} sent a quote for your booking.`,jobId});
-      return {success:true,bidId:data.id};
+      return {success:true,bidId:data};
     }
     case 'rejectBid': {
-      const actor=authed(); const {data:job}=await admin.from('jobs').select('customerid').eq('id',input.jobId).maybeSingle();
-      if (!job || job.customerid!==actor) fail(403,'Only the customer can reject a bid.');
-      const {error}=await admin.from('bids').update({status:'REJECTED'}).eq('id',input.bidId).eq('jobid',input.jobId).in('status',['PENDING','COUNTERED']);
+      const actor=authed(),jobId=text(input.jobId,80),bidId=text(input.bidId,80);
+      const {error}=await admin.rpc('reject_bid_secure',{p_job_id:jobId,p_bid_id:bidId,p_customer_id:actor});
       if(error) throw error; return {success:true};
     }
     case 'increaseJobBudget': {
