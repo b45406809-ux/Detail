@@ -51,6 +51,8 @@ export default function MessagesScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [conversationError, setConversationError] = useState('');
+  const [chatRetry, setChatRetry] = useState(0);
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [chatError, setChatError] = useState('');
@@ -64,6 +66,8 @@ export default function MessagesScreen() {
   // Load conversations from jobs the user is part of
   useEffect(() => {
     if (!user) return;
+    setIsLoading(true);
+    setConversationError('');
     const field = isCustomer ? 'customerId' : 'cleanerId';
     const q = query(collection(db, 'jobs'), where(field, '==', user.uid));
     return onSnapshot(
@@ -84,10 +88,11 @@ export default function MessagesScreen() {
           }));
         setConversations(convos);
         setIsLoading(false);
+        setConversationError('');
       },
-      () => setIsLoading(false)
+      (err) => { setIsLoading(false); setConversationError(err.message || 'Conversations could not be loaded.'); }
     );
-  }, [user, isCustomer, unreadField]);
+  }, [user, isCustomer, unreadField, chatRetry]);
 
   // Load messages for active conversation and reset unread count
   useEffect(() => {
@@ -119,7 +124,7 @@ export default function MessagesScreen() {
       // Scroll to bottom on new messages
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     }, err => setChatError(err.message || 'Messages could not be refreshed.'));
-  }, [activeJobId, user]);
+  }, [activeJobId, user, chatRetry]);
 
   const loadOlderMessages = async () => {
     const oldest = messages[0];
@@ -245,7 +250,7 @@ export default function MessagesScreen() {
           </View>
 
           {/* Messages */}
-          {chatError ? <Text accessibilityRole="alert" className="px-4 py-2 text-center text-xs text-rose-700">{chatError}</Text> : null}
+          {chatError ? <View className="items-center px-4 py-2"><Text accessibilityRole="alert" className="text-center text-xs text-rose-700">{chatError}</Text><TouchableOpacity accessibilityRole="button" onPress={() => setChatRetry(value => value + 1)} className="mt-1 rounded-full bg-rose-50 px-3 py-1"><Text className="text-xs font-bold text-rose-800">Retry messages</Text></TouchableOpacity></View> : null}
           <FlatList
             ref={flatListRef}
             data={messages}
@@ -341,6 +346,11 @@ export default function MessagesScreen() {
       {isLoading ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color="#3906d2" />
+        </View>
+      ) : conversationError ? (
+        <View className="flex-1 items-center justify-center px-6">
+          <Text accessibilityRole="alert" className="text-center text-sm text-rose-700">{conversationError}</Text>
+          <TouchableOpacity accessibilityRole="button" onPress={() => { setIsLoading(true); setChatRetry(value => value + 1); }} className="mt-4 rounded-full bg-accent px-5 py-3"><Text className="font-bold text-white">Try again</Text></TouchableOpacity>
         </View>
       ) : conversations.length === 0 ? (
         <View className="flex-1 items-center justify-center px-6">
