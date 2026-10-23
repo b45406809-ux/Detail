@@ -85,20 +85,12 @@ async function requireAdmin(uid: string, permission?: string, elevated = false) 
 async function notify(userId: string, payload: Json) {
   const supportCaseId=text(payload.supportCaseId,100);
   const storedData={...(payload.data&&typeof payload.data==='object'?payload.data:{}),...(supportCaseId?{supportCaseId}:{})};
-  // PostgreSQL folds the unquoted camelCase schema identifiers to lowercase.
-  // PostgREST JSON keys are case-sensitive, so send the physical column names.
-  const { data: notification,error } = await admin.from('notifications').insert({ userid:userId, title:text(payload.title,160), body:text(payload.body,1000), type:text(payload.type,50)||'SYSTEM', jobid:text(payload.jobId,80)||null, data:storedData, createdat:new Date().toISOString() }).select('id').single();
-  if(error){console.error('notification insert failed',error.message);return;}
-  const {data:profile}=await admin.from('users').select('expopushtoken,phone').eq('id',userId).maybeSingle();
-  if(!profile)return;
-  const type=text(payload.type,50),urgent=/EMERGENCY|DISPUT|PAYMENT|PAYOUT|REFUND/i.test(type);
-  const deliveries:Json[]=[];
-  if(profile.expopushtoken)deliveries.push({notificationid:notification.id,userid:userId,provider:'EXPO',destination:profile.expopushtoken,payload:{title:text(payload.title,160),body:text(payload.body,500),sound:urgent?'urgent.wav':'booking.wav',channelId:urgent?'urgent':'bookings',data:{...(payload.jobId?{jobId:payload.jobId}:{}),...(supportCaseId?{supportCaseId}:{})}}});
-  const smsTypes=new Set(['EMERGENCY','PAYMENT_DISPUTED','PAYMENT_DELIVERED','CANCELLATION_REVIEW','CANCELLED','ASSIGNED','EN_ROUTE','CLEANER_ARRIVED','COMPLETED','INSTANT_BOOKING_ACCEPTED']);
-  if(profile.phone&&/^\+[1-9]\d{7,14}$/.test(profile.phone)&&smsTypes.has(type))deliveries.push({notificationid:notification.id,userid:userId,provider:'TWILIO',destination:profile.phone,payload:{body:`Detail: ${text(payload.title,100)}. ${text(payload.body,300)}${payload.jobId?` Booking ${text(payload.jobId,40)}.`:''}`}});
-  if(deliveries.length){
-    const {error:queueError}=await admin.from('notificationdeliveries').upsert(deliveries,{onConflict:'notificationid,provider',ignoreDuplicates:true});
-    if(queueError){console.error('notification queue insert failed',queueError.message);return;}
+  const {data:result,error}=await admin.rpc('create_notification_outbox',{
+    p_user_id:userId,p_title:text(payload.title,160),p_body:text(payload.body,1000),p_type:text(payload.type,50)||'SYSTEM',
+    p_job_id:text(payload.jobId,80)||null,p_data:storedData,
+  });
+  if(error){console.error('notification and delivery enqueue failed',error.message);return;}
+  if(result?.hasDeliveries){
     // Run the durable outbox immediately for low-latency booking and safety
     // alerts. The scheduled worker remains the retry/recovery path.
     const schedulerSecret=Deno.env.get('CRON_SECRET')??'';
