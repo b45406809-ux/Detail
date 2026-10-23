@@ -723,7 +723,12 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const {data:job}=await admin.from('jobs').select('*').eq('id',jobId).maybeSingle();
       if(!job||![job.customerid,job.cleanerid].includes(actor)||reason.length<3)fail(400,'A booking participant and issue description are required.');
       const id=crypto.randomUUID(); const {error}=await admin.from('supportcases').insert({id,jobid:jobId,customerid:job.customerid,cleanerid:job.cleanerid,reason,status:'OPEN',data:{reporterId:actor,evidence:Array.isArray(input.evidence)?input.evidence.slice(0,5):[]}});
-      if(error)throw error; return {success:true,caseId:id};
+      if(error)throw error;
+      const {data:admins,error:adminError}=await admin.from('adminroles').select('userid');
+      if(adminError)console.error('support case admin notification lookup failed',adminError.message);
+      await Promise.all((admins??[]).map(row=>notify(row.userid,{type:'SUPPORT_CASE',title:'New booking support report',body:`${reason.slice(0,120)}. Booking ${jobId}.`,jobId,supportCaseId:id})));
+      await emailSupport(`New booking support report: ${jobId}`,`A booking issue was reported. Case ${id}. Booking ${jobId}. Reporter ${actor}. ${reason}`);
+      return {success:true,caseId:id};
     }
     case 'reportEmergency': {
       const actor=authed(),jobId=text(input.jobId,80),description=text(input.description,1000)||'Emergency safety alert';
@@ -929,12 +934,36 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const cursor=text(input.cursor,120); if(cursor){if(!/^[A-Za-z0-9_-]{1,120}$/.test(cursor))fail(400,'Invalid page cursor.');const {data:prior}=await admin.from(target).select('createdat').eq('id',cursor).maybeSingle();if(prior?.createdat)q=q.or(`createdat.lt.${prior.createdat},and(createdat.eq.${prior.createdat},id.lt.${cursor})`);}
       if(input.search){const clean=text(input.search,100).replace(/[%,()]/g,' ').replace(/\s+/g,' ').trim();const term=`%${clean}%`;if(module==='waitlist')q=q.or(`email.ilike.${term},fullname.ilike.${term},phone.ilike.${term}`);else if(module==='customers'||module==='cleaners')q=q.or(`email.ilike.${term},displayname.ilike.${term},phone.ilike.${term}`);else if(module==='bookings')q=q.or(`id.ilike.${term},customername.ilike.${term},cleanername.ilike.${term}`);else if(module==='support')q=q.or(`id.ilike.${term},reason.ilike.${term}`);else if(module==='payments')q=q.or(`id.ilike.${term},reference.ilike.${term}`);}
       const {data,error}=await q; if(error)throw error;
-      const rows=(data??[]).slice(0,pageSize).map((row:Json)=>{
+      const page=(data??[]).slice(0,pageSize);
+      const supportContext=new Map<string,Json>();
+      if(module==='support'&&page.length){
+        const profileIds=[...new Set(page.flatMap((row:Json)=>[row.customerid,row.cleanerid,row.data?.reporterId]).filter((id:unknown):id is string=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id)))];
+        const jobIds=[...new Set(page.map((row:Json)=>row.jobid).filter((id:unknown):id is string=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id)))];
+        let profiles:Json[]=[];let jobs:Json[]=[];
+        if(profileIds.length){const result=await admin.from('users').select('id,displayname,email,phone').in('id',profileIds);if(result.error)throw result.error;profiles=result.data??[];}
+        if(jobIds.length){const result=await admin.from('jobs').select('id,status,paymentstatus,paymentmethod,scheduleddatetime').in('id',jobIds);if(result.error)throw result.error;jobs=result.data??[];}
+        const profileMap=new Map(profiles.map(profile=>[profile.id,profile]));const jobMap=new Map(jobs.map(job=>[job.id,job]));
+        for(const row of page){
+          const customer=profileMap.get(row.customerid),cleanerProfile=profileMap.get(row.cleanerid),reporter=profileMap.get(row.data?.reporterId),job=jobMap.get(row.jobid);
+          supportContext.set(row.id,{customer,cleaner:cleanerProfile,reporter,job});
+        }
+      }
+      const rows=page.map((row:Json)=>{
         if(module==='waitlist')return {id:row.id,participantType:row.participanttype,fullName:row.fullname,email:row.email,phone:row.phone,country:row.country,city:row.city,area:row.area,preferredLanguage:row.preferredlanguage,serviceInterest:row.serviceinterest,marketingEmailPermission:row.marketingemailpermission,status:row.status,createdAt:row.createdat};
         if(module==='customers')return {id:row.id,createdAt:row.createdat,Customer:row.displayname??'Customer',Contact:[row.email,row.phone].filter(Boolean).join(' · '),State:row.isbanned?'SUSPENDED':row.issuspended?'SUSPENDED':'ACTIVE',Bookings:row.jobscompleted??0,'Total spend':'—',Upcoming:'—'};
         if(module==='cleaners')return {id:row.id,createdAt:row.createdat,Cleaner:row.displayname??'Cleaner',Verification:row.verificationstatus??'PENDING',Coverage:row.servicearea??'—',Availability:row.status??'OFFLINE',Assignments:row.jobscompleted??0,Rating:row.ratingaverage??0,Earnings:'Restricted'};
         if(module==='payments')return {id:row.id,createdAt:row.createdat,Payment:row.reference??row.id,Booking:row.jobid??'—',Customer:row.customerid??'—',Captured:row.status==='PAID'?row.amount:0,Refunded:row.data?.refundRequest?.amount??0,'Processor ref':row.reference??'—',Status:row.status};
         if(module==='bookings')return {id:row.id,createdAt:row.createdat,Booking:row.id,Customer:row.customername??row.customerid??'—',Cleaner:row.cleanername??row.cleanerid??'—',Service:row.servicetype??row.category??'—',Scheduled:row.scheduleddatetime??row.scheduledtime??'—',Status:row.status,Payment:row.paymentstatus??row.paymentmethod??'—'};
+        if(module==='support'){
+          const context=supportContext.get(row.id)??{},customer=context.customer??{},cleanerProfile=context.cleaner??{},reporter=context.reporter??{},job=context.job??{};
+          return {id:row.id,createdAt:row.createdat,Case:row.id,Booking:row.jobid??'General support',Reason:row.reason??'Support request',Opened:row.createdat,Owner:row.ownerid??'Unassigned',Status:row.status,
+            reporterName:reporter.displayname??'Unknown reporter',reporterContact:[reporter.email,reporter.phone].filter(Boolean).join(' · '),
+            customerName:customer.displayname??'—',customerContact:[customer.email,customer.phone].filter(Boolean).join(' · '),
+            cleanerName:cleanerProfile.displayname??'—',cleanerContact:[cleanerProfile.email,cleanerProfile.phone].filter(Boolean).join(' · '),
+            category:row.data?.category??row.data?.type??'GENERAL',description:row.data?.description??row.reason??'',
+            bookingStatus:job.status??'—',paymentStatus:job.paymentstatus??'—',paymentMethod:job.paymentmethod??'—',scheduledAt:job.scheduleddatetime??null,
+            evidenceCount:Array.isArray(row.data?.evidence)?row.data.evidence.length:0,data:{type:row.data?.type,severity:row.data?.severity}};
+        }
         // Never return push credentials, exact coordinates, or arbitrary profile metadata.
         if(module==='customers'||module==='cleaners')return {id:row.id,createdAt:row.createdat};
         return {...row,id:row.id,createdAt:row.createdat};
@@ -991,6 +1020,11 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         }
         const {error:updateError}=await admin.from('supportcases').update({status:action==='resolve_case'?'RESOLVED':'IN_PROGRESS',ownerid:actor,data:patchData}).eq('id',targetId);if(updateError)throw updateError;
         if(settlementDecision==='RELEASE_EARNINGS'&&record.jobid){const {error:releaseError}=await admin.rpc('release_paynow_earnings',{p_job_id:record.jobid});if(releaseError)throw releaseError;}
+        if(action==='resolve_case'){
+          const {data:caseParties}=await admin.from('supportcases').select('customerid,cleanerid,jobid').eq('id',targetId).maybeSingle();
+          const recipients=[...new Set([caseParties?.customerid,caseParties?.cleanerid].filter((id):id is string=>typeof id==='string'&&id!==actor))];
+          await Promise.all(recipients.map(userId=>notify(userId,{type:'SUPPORT_CASE_RESOLVED',title:'Support updated your case',body:'The support team reviewed your case. Open Support in Detail to see the latest status.',jobId:caseParties?.jobid,supportCaseId:targetId})));
+        }
       } else if(action==='reschedule_booking') {
         const scheduled=text(input.scheduledDateTime,80), parsed=Date.parse(scheduled);if(!Number.isFinite(parsed)||parsed<=Date.now())fail(400,'Choose a future booking date and time.');
         const {data:job,error}=await admin.from('jobs').select('status,customerid,cleanerid').eq('id',targetId).maybeSingle();if(error)throw error;if(!job||['COMPLETED','CANCELLED'].includes(job.status))fail(409,'This booking cannot be rescheduled.');
