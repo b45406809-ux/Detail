@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Stack, router, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Pressable, Text, View } from 'react-native';
+import { Alert, Pressable, Text, View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
 import * as Notifications from 'expo-notifications';
@@ -87,6 +87,7 @@ export default function RootLayout() {
       if (!url || !url.startsWith('detail://')) return;
       void handleAuthCallback(url).catch(error => {
         console.warn('Could not complete the authentication link:', error instanceof Error ? error.message : 'unknown error');
+        Alert.alert('Link could not be completed', 'This sign-in or recovery link may have expired or already been used. Return to Detail and request a new code or recovery link.');
       });
     };
     Linking.getInitialURL().then(consumeAuthUrl).catch(() => undefined);
