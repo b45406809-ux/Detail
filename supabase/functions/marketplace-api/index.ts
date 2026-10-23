@@ -599,11 +599,16 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(error)throw error; return {success:true};
     }
     case 'requestCleanerPayout': {
-      const actor=authed(); const amount=round2(Number(input.amount)); const method=text(input.method,20).toUpperCase();
+      const actor=authed(),operationKey=requireKey(input.idempotencyKey),amount=round2(Number(input.amount)),method=text(input.method,20).toUpperCase();
+      const accountName=text(input.accountName,100),accountNumber=text(input.accountNumber,120);
+      if(accountNumber.length<4)fail(400,'Enter a valid payout destination.');
+      const requestHash=await hash(JSON.stringify({amount,method,accountName,accountNumber}));
+      const {data:existing,error:existingError}=await admin.from('payoutrequests').select('id,requesthash,status').eq('cleanerid',actor).eq('operationkey',operationKey).maybeSingle();
+      if(existingError)throw existingError;
+      if(existing){if(existing.requesthash!==requestHash)fail(409,'This payout retry key was already used for different details.');return {success:true,payoutRequestId:existing.id,status:existing.status};}
       await enforceRateLimit(request,actor,'cleaner_payout_request',4,86400);
-      const accountNumber=text(input.accountNumber,120);if(accountNumber.length<4)fail(400,'Enter a valid payout destination.');
       const encrypted=await encryptPayoutAccount(accountNumber),last4=accountNumber.slice(-4).replace(/[^A-Za-z0-9]/g,'0');
-      const {data,error}=await admin.rpc('request_cleaner_payout_secure',{p_cleaner_id:actor,p_amount:amount,p_method:method,p_account_name:text(input.accountName,100),p_ciphertext:encrypted,p_last4:last4});
+      const {data,error}=await admin.rpc('request_cleaner_payout_idempotent',{p_cleaner_id:actor,p_amount:amount,p_method:method,p_account_name:accountName,p_ciphertext:encrypted,p_last4:last4,p_operation_key:operationKey,p_request_hash:requestHash});
       if(error)throw error; return {success:true,payoutRequestId:data,status:'PENDING'};
     }
     case 'listPayoutRequests': {

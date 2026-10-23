@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 import {
   View,
   Text,
@@ -103,9 +105,20 @@ export default function WalletScreen() {
     : 0;
 
   const requestPayout = async () => {
+    if (!user) return;
     setIsLoading(true);
     try {
-      await callFunction('requestCleanerPayout', { amount: Number(payoutAmount), method: payoutMethod, accountName: payoutName, accountNumber: payoutDestination });
+      const request={amount:Number(payoutAmount),method:payoutMethod,accountName:payoutName.trim(),accountNumber:payoutDestination.trim()};
+      const storageKey=`detail:payout-intent:${user.uid}`;
+      const signature=await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256,JSON.stringify(request));
+      let idempotencyKey='';
+      try {
+        const saved=JSON.parse((await AsyncStorage.getItem(storageKey))??'null') as {signature?:string;key?:string}|null;
+        if(saved?.signature===signature&&typeof saved.key==='string')idempotencyKey=saved.key;
+      } catch { /* replace a corrupt saved retry record */ }
+      if(!idempotencyKey){idempotencyKey=Crypto.randomUUID();await AsyncStorage.setItem(storageKey,JSON.stringify({signature,key:idempotencyKey}));}
+      await callFunction('requestCleanerPayout', { ...request, idempotencyKey });
+      await AsyncStorage.removeItem(storageKey);
       setIsPayoutOpen(false); setPayoutAmount(''); setPayoutName(''); setPayoutDestination('');
       Alert.alert('Payout requested', 'Your cleared earnings are reserved. Detail will send the transfer and update the request status.');
     } catch (error: any) {
