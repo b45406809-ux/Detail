@@ -31,9 +31,10 @@ export function toCleanerBookingSummary(job: Json) {
   const selections = source.selections && typeof source.selections === 'object' && !Array.isArray(source.selections) ? source.selections as Json : {};
   const choices = source.choices && typeof source.choices === 'object' && !Array.isArray(source.choices) ? source.choices as Json : {};
   const category = job.category === 'CAR' ? 'CAR' : 'HOUSE';
+  const conditionValue = String(source.condition ?? choices.condition ?? '').trim().toUpperCase().replace(/[^A-Z]+/g, '_').replace(/^_|_$/g, '');
   const condition = category === 'HOUSE'
-    ? ['LIGHT', 'MODERATE', 'HEAVY'].includes(String(source.condition ?? choices.condition)) ? source.condition ?? choices.condition : undefined
-    : ['CLEAN', 'AVERAGE', 'VERY_DIRTY'].includes(String(source.condition ?? choices.condition)) ? source.condition ?? choices.condition : undefined;
+    ? ({ LIGHT: 'LIGHT', MODERATE: 'MODERATE', NORMAL: 'MODERATE', NORMAL_MODERATE: 'MODERATE', HEAVY: 'HEAVY', VERY_HEAVY: 'HEAVY' } as Record<string, string>)[conditionValue]
+    : ({ CLEAN: 'CLEAN', LIGHT: 'CLEAN', LIGHT_DIRT: 'CLEAN', AVERAGE: 'AVERAGE', NORMAL: 'AVERAGE', NORMAL_DIRT: 'AVERAGE', MODERATE: 'AVERAGE', VERY_DIRTY: 'VERY_DIRTY', HEAVY: 'VERY_DIRTY', HEAVY_DIRT: 'VERY_DIRTY', SEVERE: 'VERY_DIRTY' } as Record<string, string>)[conditionValue];
   const packageIds = safeStrings(source.cleaningTypes, category === 'HOUSE' ? Object.keys(HOUSE_SERVICES) : Object.keys(CAR_SERVICES));
   const selected = (direct: unknown, key: string, allowed: readonly string[]) => safeStrings([
     ...(Array.isArray(direct) ? direct : []),
