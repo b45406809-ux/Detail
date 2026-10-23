@@ -455,7 +455,6 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if (!Array.isArray(job.completionphotos) || job.completionphotos.length < 1) fail(409,'Add at least one completion photo before submitting the finished booking.');
       const { error } = await admin.rpc('transition_booking',{p_job_id:jobId,p_actor_id:actor,p_new_status:'COMPLETED',p_idempotency_key:key,p_reason:null});
       if (error) throw error;
-      if (job.paymentmethod === 'PAYNOW') await admin.rpc('release_paynow_earnings',{p_job_id:jobId});
       await notify(job.customerid,{type:'COMPLETED',title:'Booking completed',body:'Your cleaning is complete. Confirm delivery in Paynow BuySafe, then leave a rating.',jobId});
       return { success:true };
     }
@@ -868,9 +867,16 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
           const {error:updateError}=await admin.from('users').update({issuspended:true,status:'OFFLINE',updatedat:now}).eq('id',userId);if(updateError)throw updateError;
         } else { const {error:updateError}=await admin.from('users').update({isbanned:state==='SUSPENDED',updatedat:now}).eq('id',userId);if(updateError)throw updateError;const {error:authError}=await admin.auth.admin.updateUserById(userId,{ban_duration:state==='SUSPENDED'?'876000h':'none'});if(authError)throw authError; }
       } else if(action==='resolve_case' || action==='assign_support_case') {
-        const {data:record,error}=await admin.from('supportcases').select('data').eq('id',targetId).maybeSingle();if(error)throw error;if(!record)fail(404,'Support case not found.');
+        const {data:record,error}=await admin.from('supportcases').select('data,jobid').eq('id',targetId).maybeSingle();if(error)throw error;if(!record)fail(404,'Support case not found.');
+        let settlementDecision='';
         const patchData={...(record.data??{}),resolution:text(input.resolution,2000)||reason,resolvedBy:actor,resolvedAt:now};
+        if(action==='resolve_case'&&record.data?.type==='COMPLETION_DISPUTE'){
+          settlementDecision=text(input.settlementDecision,40).toUpperCase();
+          if(!['RELEASE_EARNINGS','HOLD_FOR_REFUND'].includes(settlementDecision))fail(400,'Choose whether to release the cleaner earnings or keep them held for refund review.');
+          patchData.settlementDecision=settlementDecision;
+        }
         const {error:updateError}=await admin.from('supportcases').update({status:action==='resolve_case'?'RESOLVED':'IN_PROGRESS',ownerid:actor,data:patchData}).eq('id',targetId);if(updateError)throw updateError;
+        if(settlementDecision==='RELEASE_EARNINGS'&&record.jobid){const {error:releaseError}=await admin.rpc('release_paynow_earnings',{p_job_id:record.jobid});if(releaseError)throw releaseError;}
       } else if(action==='reschedule_booking') {
         const scheduled=text(input.scheduledDateTime,80), parsed=Date.parse(scheduled);if(!Number.isFinite(parsed)||parsed<=Date.now())fail(400,'Choose a future booking date and time.');
         const {data:job,error}=await admin.from('jobs').select('status,customerid,cleanerid').eq('id',targetId).maybeSingle();if(error)throw error;if(!job||['COMPLETED','CANCELLED'].includes(job.status))fail(409,'This booking cannot be rescheduled.');

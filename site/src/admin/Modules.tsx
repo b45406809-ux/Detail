@@ -33,7 +33,16 @@ export function DataModule({ kind, focusId }: {kind:ModuleKey; focusId?:string})
     if(label==='Reschedule'){const scheduledDateTime=window.prompt('New booking date and time (ISO format, e.g. 2026-11-10T10:00:00+02:00)');if(!scheduledDateTime)return;extra.scheduledDateTime=scheduledDateTime;}
     if(label==='Assign / reassign'){const cleanerId=window.prompt('Cleaner account ID to assign');if(!cleanerId)return;extra.cleanerId=cleanerId;}
     if(label==='Request refund'){const amount=window.prompt('Refund amount in USD (issue it in the Paynow portal after recording this request)');if(!amount)return;extra.amount=Number(amount);}
-    if(label==='Resolve case'){extra.resolution=window.prompt('Resolution notes')||'';}
+    if(label==='Resolve case'){
+      extra.resolution=window.prompt('Resolution notes')||'';
+      if(row?.data?.type==='COMPLETION_DISPUTE'){
+        const decision=window.prompt('Settlement decision: enter RELEASE_EARNINGS or HOLD_FOR_REFUND');
+        if(!decision)return;
+        const normalized=decision.trim().toUpperCase();
+        if(!['RELEASE_EARNINGS','HOLD_FOR_REFUND'].includes(normalized)){setError('Choose RELEASE_EARNINGS or HOLD_FOR_REFUND.');return;}
+        extra.settlementDecision=normalized;
+      }
+    }
     if(label==='Change account state'){extra.state=window.confirm('Suspend this account? Choose Cancel to reactivate.')?'SUSPENDED':'ACTIVE';}
     const reason=window.prompt(`${label}: enter the operational reason`);if(!reason)return;if(!window.confirm(`Confirm ${label} for ${targetId}? This action is audited.`))return;
     const actionNames:Record<string,string>={'Cancel':'cancel_booking','Reschedule':'reschedule_booking','Assign / reassign':'reassign_booking','Change account state':'change_account_state','Deactivate':'deactivate_cleaner','Request refund':'request_refund','Resolve case':'resolve_case','Add internal note':'add_internal_note'};
