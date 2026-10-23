@@ -881,7 +881,14 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const module=text(input.module,40);
       const readPermissions:Record<string,string>={bookings:'bookings.manage',customers:'users.manage',cleaners:'users.manage',payments:'finance.read',support:'support.manage',products:'finance.read',analytics:'finance.read',waitlist:'marketing.read'};
       const actor=authed(); await requireAdmin(actor,readPermissions[module]);
-      if(module==='settings'){const {data}=await admin.from('configuration').select('value').eq('key','operations').maybeSingle();return data?.value??{switches:{},supportCopy:''};}
+      if(module==='settings'){
+        const [{data:operations,error:operationsError},{data:beta,error:betaError}]=await Promise.all([
+          admin.from('configuration').select('value').eq('key','operations').maybeSingle(),
+          admin.from('configuration').select('value').eq('key','beta').maybeSingle(),
+        ]);
+        if(operationsError)throw operationsError;if(betaError)throw betaError;
+        return {...(operations?.value??{switches:{},supportCopy:''}),bookingEnabled:beta?.value?.bookingEnabled===true};
+      }
       const table:Record<string,string>={bookings:'jobs',customers:'users',cleaners:'users',payments:'payments',products:'productsales',analytics:'reportingaggregates',support:'supportcases',waitlist:'betawaitlist'};
       const target=table[module]; if(!target)fail(400,'Unknown dashboard module.');
       const pageSize=Math.min(100,Math.max(1,Number(input.pageSize??25)));
@@ -938,10 +945,17 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(!targetId && action!=='update_kill_switch')fail(400,'Select a specific record before applying this action.');
       const now=new Date().toISOString();
       if(action==='update_kill_switch'){
-        const keyName=text(input.key,40);if(!['maintenance','bookingCreation','bidAcceptance','payments','supportCopy'].includes(keyName))fail(400,'Unknown setting.');
-        const {data:current}=await admin.from('configuration').select('value').eq('key','operations').maybeSingle();const value=current?.value??{switches:{},supportCopy:''};
-        if(keyName==='supportCopy')value.supportCopy=text(input.value,2000);else value.switches={...(value.switches??{}),[keyName]:input.value===true};
-        await admin.from('configuration').upsert({key:'operations',value,updatedby:actor,updatedat:new Date().toISOString()});
+        const keyName=text(input.key,40);if(!['maintenance','bookingCreation','bidAcceptance','payments','supportCopy','bookingLaunch'].includes(keyName))fail(400,'Unknown setting.');
+        if(keyName==='bookingLaunch'){
+          const {data:current,error:readError}=await admin.from('configuration').select('value').eq('key','beta').maybeSingle();if(readError)throw readError;
+          const value={...(current?.value??{}),bookingEnabled:input.value===true};
+          const {error:updateError}=await admin.from('configuration').upsert({key:'beta',value,updatedby:actor,updatedat:now});if(updateError)throw updateError;
+        }else{
+          const {data:current,error:readError}=await admin.from('configuration').select('value').eq('key','operations').maybeSingle();if(readError)throw readError;
+          const value=current?.value??{switches:{},supportCopy:''};
+          if(keyName==='supportCopy')value.supportCopy=text(input.value,2000);else value.switches={...(value.switches??{}),[keyName]:input.value===true};
+          const {error:updateError}=await admin.from('configuration').upsert({key:'operations',value,updatedby:actor,updatedat:now});if(updateError)throw updateError;
+        }
       } else if(action==='deactivate_cleaner' || action==='suspend_cleaner' || action==='change_account_state') {
         const userId=targetId;
         const state=input.state==='ACTIVE'?'ACTIVE':'SUSPENDED';
