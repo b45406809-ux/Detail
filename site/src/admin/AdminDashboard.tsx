@@ -61,6 +61,6 @@ export function AdminDashboard() {
       <nav>{routes.map(([id, label, Icon]) => <button key={id} className={route === id ? 'active' : ''} onClick={() => go(id)}><Icon size={17}/>{label}</button>)}</nav>
       <footer><span>Verified admin · {claims.elevated ? 'Elevated' : 'Standard'}</span><button onClick={() => supabase.auth.signOut()}><LogOut size={14}/> Sign out</button></footer>
     </aside>
-    <div className="admin-content"><button className="menu-button" onClick={() => setMenu(!menu)}>{menu ? <X/> : <Menu/>}</button>{route === 'overview' ? <Overview navigate={go}/> : route === 'settings' ? <Settings/> : route === 'waitlist' ? <Waitlist/> : route === 'admins' ? <Admins/> : route === 'blog' ? <BlogManager/> : <DataModule kind={route} focusId={focus}/>}</div>
+    <div className="admin-content"><button className="menu-button" onClick={() => setMenu(!menu)}>{menu ? <X/> : <Menu/>}</button>{route === 'overview' ? <Overview navigate={go}/> : route === 'settings' ? <Settings/> : route === 'waitlist' ? <Waitlist/> : route === 'admins' ? <Admins/> : route === 'blog' ? <BlogManager/> : <DataModule key={`${route}:${focus ?? ''}`} kind={route} focusId={focus} navigate={go}/>}</div>
   </main>;
 }
