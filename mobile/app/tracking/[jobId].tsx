@@ -189,7 +189,11 @@ export default function TrackingScreen() {
           setJob(data);
           setJobLoadState('READY');
           if (data.status === JobStatus.COMPLETED && step === 'TRACKING') {
-            setStep(isCustomer ? 'PAYMENT' : 'RATING');
+            const completionResponse = data.data?.customerCompletionResponse?.status;
+            if (isCustomer && data.completionSubmittedAt && !data.customerResponseAt) return;
+            if (!isCustomer) setStep('SUCCESS');
+            else if (completionResponse === 'DISPUTED' || data.rating != null) setStep('SUCCESS');
+            else setStep('PAYMENT');
           }
         } else {
           setJob(null);
@@ -477,7 +481,12 @@ export default function TrackingScreen() {
         </View>
         <Text className="text-3xl font-display font-black text-ink text-center mb-2">All done!</Text>
         <Text className="font-sans text-base text-ink/50 font-medium text-center mb-10">
-          Thanks for using Detail. We hope your space is sparkling clean.
+          {isCleaner ? (job?.data?.customerCompletionResponse?.status === 'DISPUTED'
+            ? 'The customer reported an issue with this completion. Detail support will review the case before earnings are released.'
+            : 'Your work is marked complete. The customer has been asked to review it. Earnings will appear in your wallet after payment settles.')
+            : job?.data?.customerCompletionResponse?.status === 'DISPUTED'
+              ? 'Your report is recorded. Detail support will review the issue and update you in Support.'
+              : 'Thanks for using Detail. We hope your space is sparkling clean.'}
         </Text>
         <TouchableOpacity
           onPress={() => router.replace('/home')}

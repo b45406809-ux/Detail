@@ -688,7 +688,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Source:** [mobile/app/tracking/[jobId].tsx:183](<../mobile/app/tracking/[jobId].tsx#L183>); [mobile/app/tracking/[jobId].tsx:660](<../mobile/app/tracking/[jobId].tsx#L660>); [supabase/functions/marketplace-api/index.ts:563](<../supabase/functions/marketplace-api/index.ts#L563>)
 
-**Problem and impact.** When the job becomes COMPLETED, the listener immediately moves the customer to PAYMENT and the cleaner to RATING. The completion-confirm/report-issue controls exist only in the TRACKING render, which is bypassed. The cleaner sees 'Rate your cleaner', but the rating RPC only accepts the customer. Reopening an already paid/rated completed booking also restarts PAYMENT rather than showing its receipt.
+**Current implementation and remaining gap.** A customer with submitted completion evidence and no response now remains on the tracking view where confirm/dispute controls are available. Cleaners go to a completion result screen rather than a customer-only rating form; customers with a dispute or existing rating are not prompted to rate again. Receipt detail and integrated support-case navigation still need a fuller completed-booking screen and native journey tests.
 
 **Proposed fix.** Derive a role-specific next action from authoritative completion response/payment/rating state. Keep evidence review and dispute reachable before settlement; provide a cleaner earnings/receipt view and an idempotent completed-booking detail screen.
 

@@ -181,6 +181,7 @@ export interface Job {
   scheduledDateTime?: any;
   reminderSent?: boolean;
   estimatedDuration?: number;
+  data?: { customerCompletionResponse?: { status?: string } };
   cleanerLocation?: { lat: number; lng: number };
   paidAt?: any;
   paymentMethod?: string;
