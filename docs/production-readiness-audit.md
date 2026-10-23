@@ -758,9 +758,9 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Source:** [supabase/migrations/20261020010000_marketplace_hardening.sql:542](<../supabase/migrations/20261020010000_marketplace_hardening.sql#L542>); [supabase/migrations/20261020002000_marketplace_transactions.sql:215](<../supabase/migrations/20261020002000_marketplace_transactions.sql#L215>)
 
-**Problem and impact.** The final replacement drops the earlier status-rank and DISPUTED terminal protection. A delayed Awaiting Delivery callback can move DELIVERED or DISPUTED back to ESCROWED. A dispute may then look funded/usable again. Signed callbacks prove provider origin, not that an older event is the newest authoritative state.
+**Current implementation and remaining gap.** The current `apply_paynow_status` migration preserves DELIVERED against a delayed ESCROWED callback, keeps PAID and DISPUTED terminal against stale non-refund events, and keeps REFUNDED terminal. Regression coverage now exercises those transitions. The webhook still has no append-only provider-event inbox, event-level deduplication, or scheduled authoritative provider poll, so missed and ambiguous event histories need operational reconciliation.
 
-**Proposed fix.** Persist an append-only provider event inbox, deduplicate events, apply a documented transition graph and reconcile ambiguous/out-of-order changes with a fresh signed provider poll. Keep refunds/disputes as explicit holds, not simple ranks.
+**Proposed fix.** Persist an append-only provider event inbox, deduplicate provider event IDs, and reconcile ambiguous/out-of-order histories with an authoritative signed provider poll. Keep refunds/disputes as explicit holds, not simple ranks.
 
 **Acceptance check.** Replay duplicate and out-of-order signed callbacks across ESCROWED/DELIVERED/PAID/DISPUTED/REFUNDED; no invalid regression, duplicate release or cleared dispute occurs.
 
@@ -828,7 +828,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Source:** [supabase/functions/marketplace-api/index.ts:801](<../supabase/functions/marketplace-api/index.ts#L801>); [supabase/functions/marketplace-api/index.ts:808](<../supabase/functions/marketplace-api/index.ts#L808>); [supabase/functions/marketplace-api/index.ts:145](<../supabase/functions/marketplace-api/index.ts#L145>)
 
-**Problem and impact.** Refund actions write metadata/support cases for manual provider action; they do not send money. Partial requests are permitted, but apply_paynow_status insists callback amount matches the original full payment, and refund metadata is marked completed on any REFUNDED status without a refund-specific amount/reference ledger. Cumulative/refund-after-release liability and operator completion are not fully represented. The dashboard's Refunded value uses requested amount before confirmation.
+**Current implementation and remaining gap.** Refunds are explicitly labeled as manual Paynow portal work. A dedicated ledger tracks requested, submitted, confirmed, failed and reconciliation-required attempts; it caps cumulative confirmations at captured value, requires a provider reference, and counts only confirmed amounts in dashboard totals. A generic REFUNDED callback without refund-specific amount/reference evidence opens an urgent reconciliation case. Actual disbursement still depends on an operator completing the provider action, and refund-after-earnings-release recovery remains an operational liability workflow.
 
 **Proposed fix.** Expose REQUESTED/APPROVED/SUBMITTED/CONFIRMED/FAILED states clearly, support the provider's actual partial-refund contract, record refund transactions and cumulative limits, and reconcile cleaner/platform/customer balances. Label manual portal work explicitly.
 
@@ -1072,7 +1072,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Source:** [site/src/main.tsx:57](<../site/src/main.tsx#L57>); [supabase/functions/marketplace-api/index.ts:11](<../supabase/functions/marketplace-api/index.ts#L11>)
 
-**Problem and impact.** The frontend routes blog.detail.co.zw and blog.detailapp.co.zw to Blog, but neither host is in allowedOrigins. Blog calls to marketplace-api receive 403 before dispatch, even after fixing F01. The deployment workflow copies site and dashboard artifacts but has no explicit blog deployment/host check. Blog rendering/meta is entirely client-side, with static homepage OG/sitemap metadata, which weakens article previews/indexing and does not return a real article 404.
+**Current implementation and remaining gap.** Both blog hosts are now in the API CORS allowlist and `blogPublicList` is an unauthenticated public action. The deployment still lacks a dedicated blog host check, and article rendering remains client-side with homepage metadata rather than per-article canonical/OG metadata and server-side 404 behavior.
 
 **Proposed fix.** Add the approved blog origins, explicitly provision/deploy its host and use prerender/SSR/static generation for published articles, canonical/OG metadata, sitemap and real HTTP status codes.
 
@@ -1181,6 +1181,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 **Proposed fix.** Turn the QA matrices into executable isolated tests: direct REST/RPC permissions, transactional money/state tests, mocked-provider contracts, browser journeys and native device smoke flows. Repair selectors/data fixtures and make critical journey failures release-blocking.
 
 **Acceptance check.** CI detects F01/F02/F03/F36/F41/F53-type regressions and a real staging/device release matrix passes without production data or money.
+
+**Implementation status (2026-10-23).** CI now runs 22 pgTAP files covering account deletion, admin RLS, booking idempotency, completion evidence/review, payment/refund ledgers, push routing/device lifecycle, rate limits and waitlist privacy. Mobile/site type checks, lint/build, Mapbox config canary, and migration/schema/Edge checks are also in the workflow. Browser and native device journeys plus provider sandbox/release gates are still required before launch.
 
 <a id="F71"></a>
 
