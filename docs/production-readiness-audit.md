@@ -284,6 +284,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** A marketing-only admin with no MFA cannot read financial/customer/KYC data through REST; a finance admin at aal2 sees only the columns their operation needs.
 
+**Implementation status (2026-10-23).** RLS no longer grants broad admin-role access to sensitive base tables; administrator reads and writes flow through the permission-checked API. The dashboard still needs to read its own permission snapshot, so a new migration restores SELECT on `adminRoles` under the own-row RLS policy only, with a regression test for own-versus-other account access. The new ACL test awaits CI; production project grants and MFA journeys still need live verification.
+
 <a id="F09"></a>
 
 ### F09 — Admin invitation write policy can permit privilege escalation under default grants
