@@ -263,6 +263,7 @@ async function fetchRows(ref: QueryRef) {
   const table = ref.collection.table;
   let builder: any = supabase.from(physicalTable(table)).select('*');
   builder = applyConstraints(builder, ref.constraints);
+  if (!ref.constraints.some(constraint => constraint.type === 'limit')) builder = builder.limit(500);
   const { data, error } = await builder;
   if (error) throw error;
   const rows = (data ?? []) as Record<string, any>[];
@@ -330,19 +331,39 @@ export function onSnapshot(ref: DocumentRef, next: (snapshot: DocumentSnapshot) 
 export function onSnapshot(ref: QueryRef, next: (snapshot: QuerySnapshot) => void, error?: (error: Error) => void): () => void;
 export function onSnapshot(ref: DocumentRef | QueryRef, next: (snapshot: any) => void, error?: (error: Error) => void) {
   let stopped = false;
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  let refreshing = false;
+  let refreshQueued = false;
   const table = tableOf(ref);
   const refresh = async () => {
+    if (refreshing) { refreshQueued = true; return; }
+    refreshing = true;
     try {
       if (stopped) return;
-      if (ref.kind === 'document') next(await getDoc(ref));
-      else next(querySnapshot(table, await fetchRows(ref)));
+      const snapshot = ref.kind === 'document' ? await getDoc(ref) : querySnapshot(table, await fetchRows(ref));
+      if (!stopped) next(snapshot);
     } catch (err) { if (!stopped) error?.(err as Error); }
+    finally {
+      refreshing = false;
+      if (!stopped && refreshQueued) { refreshQueued = false; void refresh(); }
+    }
   };
+  const scheduleRefresh = () => {
+    if (stopped) return;
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => { refreshTimer = undefined; void refresh(); }, 120);
+  };
+  const equality = ref.kind === 'document'
+    ? { field: keyOf(ref.table), value: ref.id }
+    : ref.constraints.find((constraint): constraint is Filter => constraint.type === 'where' && constraint.operator === '==');
+  const channelFilter = equality && /^[A-Za-z0-9_-]{1,120}$/.test(String(equality.value))
+    ? `${physicalColumn(equality.field)}=eq.${equality.value}`
+    : undefined;
   const channel = supabase.channel(`watch:${table}:${Math.random().toString(36).slice(2)}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: physicalTable(table) }, refresh)
+    .on('postgres_changes', { event: '*', schema: 'public', table: physicalTable(table), ...(channelFilter ? { filter: channelFilter } : {}) }, scheduleRefresh)
     .subscribe();
   void refresh();
-  return () => { stopped = true; void supabase.removeChannel(channel); };
+  return () => { stopped = true; if (refreshTimer) clearTimeout(refreshTimer); void supabase.removeChannel(channel); };
 }
 
 export function writeBatch(_db: SupabaseClient) {

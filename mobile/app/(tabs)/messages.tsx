@@ -24,6 +24,7 @@ import {
   where,
   onSnapshot,
   orderBy,
+  limit,
   supabase,
 } from '../../services/supabase';
 import { uploadChatPhoto } from '../../services/storage';
@@ -93,10 +94,11 @@ export default function MessagesScreen() {
     const q = query(
       collection(db, 'messages'),
       where('jobId', '==', activeJobId),
-      orderBy('createdAt', 'asc')
+      orderBy('createdAt', 'desc'),
+      limit(100)
     );
     return onSnapshot(q, (snap) => {
-      setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChatMessage)));
+      setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChatMessage)).reverse());
       // Scroll to bottom on new messages
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     });
@@ -195,6 +197,7 @@ export default function MessagesScreen() {
           </View>
 
           {/* Messages */}
+          {messages.length >= 100 && <Text className="px-4 pt-2 text-center text-xs text-slate-500">Showing the 100 most recent messages.</Text>}
           <FlatList
             ref={flatListRef}
             data={messages}
