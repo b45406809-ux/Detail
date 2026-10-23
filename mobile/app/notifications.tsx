@@ -59,7 +59,7 @@ export default function NotificationsScreen() {
 
   const openNotification = (n: AppNotification) => {
     if (!n.read) updateDoc(doc(db, 'notifications', n.id), { read: true }).catch(() => {});
-    if(n.data?.supportCaseId){router.push('/support');return;}
+    if(n.data?.supportCaseId){router.push({pathname:'/support',params:{caseId:n.data.supportCaseId}});return;}
     if(n.type==='INSTANT_BOOKING_OFFER'){router.push('/instant-offers');return;}
     if(n.type==='INSTANT_BOOKING_ACCEPTED'){router.push({pathname:'/booking/offers',params:{jobId:n.jobId}});return;}
     if(n.type==='NEW_SCHEDULED_JOB'){if(n.jobId)router.push({pathname:'/job/[jobId]',params:{jobId:n.jobId}});return;}

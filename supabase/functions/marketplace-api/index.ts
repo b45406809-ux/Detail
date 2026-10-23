@@ -775,8 +775,12 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       return {success:true,caseId:id};
     }
     case 'listMySupportCases': {
-      const actor=authed();const {data,error}=await admin.from('supportcases').select('id,jobid,reason,status,createdat,data,ownerid').or(`customerid.eq.${actor},cleanerid.eq.${actor}`).order('createdat',{ascending:false}).limit(50);if(error)throw error;
-      return {cases:(data??[]).map((item:Json)=>({id:item.id,jobId:item.jobid,subject:item.reason,status:item.status,createdAt:item.createdat,description:item.data?.description??item.data?.resolution??'',resolution:item.data?.resolution??null}))};
+      const actor=authed();const ownership=`customerid.eq.${actor},cleanerid.eq.${actor}`;const {data,error}=await admin.from('supportcases').select('id,jobid,reason,status,createdat,data,ownerid').or(ownership).order('createdat',{ascending:false}).limit(50);if(error)throw error;
+      const cases=[...(data??[])];const requestedCaseId=text(input.caseId,80);
+      if(requestedCaseId&&!cases.some((item:Json)=>item.id===requestedCaseId)){
+        const {data:requested,error:requestedError}=await admin.from('supportcases').select('id,jobid,reason,status,createdat,data,ownerid').eq('id',requestedCaseId).or(ownership).maybeSingle();if(requestedError)throw requestedError;if(requested)cases.unshift(requested);
+      }
+      return {cases:cases.map((item:Json)=>({id:item.id,jobId:item.jobid,subject:item.reason,status:item.status,createdAt:item.createdat,description:item.data?.description??item.data?.resolution??'',resolution:item.data?.resolution??null}))};
     }
     case 'searchVerifiedCleaners': {
       const actor=authed();

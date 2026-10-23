@@ -890,7 +890,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** Tap quote, instant offer, acceptance, payment, emergency and support notifications with the app foregrounded, backgrounded, signed out and cold-started; each reaches the correct authorized screen.
 
-**Implementation status (2026-10-23).** Push payloads now include the notification `type`, job ID and support-case ID, and the push-device lifecycle test asserts that type survives outbox creation. The native cold-start and in-app list routers still need a unified, real-device journey test and authorized destination resolver.
+**Implementation status (2026-10-23).** Push payloads now include the notification `type`, job ID and support-case ID, and the push-device lifecycle test asserts that type survives outbox creation. In-app and push support notifications now pass the case ID to the support screen; the authenticated API fetches an older requested case only when it belongs to the caller, and the screen prioritizes/highlights it. A unified notification resolver, cold-start auth hydration and real-device journey testing remain open.
 
 <a id="F51"></a>
 
