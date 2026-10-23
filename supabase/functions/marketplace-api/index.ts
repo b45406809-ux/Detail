@@ -897,13 +897,39 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     }
     case 'adminSendMarketingCampaign': {
       const actor=authed();await requireAdmin(actor,'marketing.send');
+      await enforceRateLimit(request,actor,'marketing_campaign_send',3,3600);
       const subject=text(input.subject,140), message=text(input.message,5000), apiKey=secret('RESEND_API_KEY','EXPO_RESEND_API_KEY');
       if(!subject||!message||!apiKey)fail(503,'Campaign email is not configured.');
-      const {data:recipients,error}=await admin.from('betawaitlist').select('*').eq('marketingemailpermission','YES').limit(100);
-      if(error)throw error;
-      const emails=(recipients??[]).map((r:Json)=>({from:'Detail <hello@detailapp.co.zw>',to:[r.email],subject,html:`<p>Hi ${String(r.fullname||'there').replace(/[<>&"']/g,'')},</p><p>${message.replace(/[<>&"']/g,'')}</p><hr><p><a href="${url}/functions/v1/marketing-unsubscribe?token=${encodeURIComponent(r.unsubscribetoken)}">Unsubscribe</a></p>`}));
-      if(emails.length) { const result=await fetch('https://api.resend.com/emails/batch',{method:'POST',headers:{authorization:`Bearer ${apiKey}`,'content-type':'application/json'},body:JSON.stringify(emails)});if(!result.ok)fail(502,'Email provider rejected the campaign.'); }
-      const id=requireKey(input.idempotencyKey); await admin.from('marketingcampaigns').upsert({id,subject,message,status:'SENT',recipientcount:emails.length,createdby:actor,createdat:new Date().toISOString()});
+      const id=requireKey(input.idempotencyKey);
+      const {data:existing,error:existingError}=await admin.from('marketingcampaigns').select('createdby,subject,message,status,recipientcount').eq('id',id).maybeSingle();
+      if(existingError)throw existingError;
+      if(existing){
+        if(existing.createdby!==actor||existing.subject!==subject||existing.message!==message)fail(409,'This campaign key is already in use.');
+        if(existing.status==='SENT')return {recipientCount:Number(existing.recipientcount??0),alreadySent:true};
+        fail(409,'This campaign attempt is already recorded and requires operator review before retrying.');
+      }
+      const filters=input.filters&&typeof input.filters==='object'?input.filters as Json:{};
+      const filterCountry=text(filters.country,80),filterCity=text(filters.city,100),filterService=text(filters.serviceInterest,30).toUpperCase(),filterLanguage=text(filters.preferredLanguage,40);
+      const {error:claimError}=await admin.from('marketingcampaigns').insert({id,subject,message,status:'SENDING',recipientcount:0,createdby:actor,data:{filters:{country:filterCountry,city:filterCity,serviceInterest:filterService,preferredLanguage:filterLanguage}}});
+      if(claimError?.code==='23505')fail(409,'This campaign was already submitted. Refresh campaign history before retrying.');
+      if(claimError)throw claimError;
+      let recipientQuery=admin.from('betawaitlist').select('*').eq('marketingemailpermission','YES').limit(100);
+      if(filterCountry)recipientQuery=recipientQuery.eq('country',filterCountry);
+      if(filterCity)recipientQuery=recipientQuery.eq('city',filterCity);
+      if(['HOUSE','CAR','BOTH'].includes(filterService))recipientQuery=recipientQuery.eq('serviceinterest',filterService);
+      if(filterLanguage)recipientQuery=recipientQuery.eq('preferredlanguage',filterLanguage);
+      const {data:recipients,error}=await recipientQuery;
+      if(error){await admin.from('marketingcampaigns').update({status:'FAILED'}).eq('id',id).eq('status','SENDING');throw error;}
+      const escapeHtml=(value:string)=>value.replace(/[<>&"']/g,char=>{
+        const entities:Record<string,string>={'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'};
+        return entities[char]??char;
+      });
+      const emails=(recipients??[]).map((r:Json)=>({from:'Detail <hello@detailapp.co.zw>',to:[r.email],subject,html:`<p>Hi ${escapeHtml(String(r.fullname||'there'))},</p><p>${escapeHtml(message).replace(/\r?\n/g,'<br>')}</p><hr><p><a href="${url}/functions/v1/marketing-unsubscribe?token=${encodeURIComponent(r.unsubscribetoken)}">Unsubscribe</a></p>`}));
+      if(emails.length) {
+        const result=await fetch('https://api.resend.com/emails/batch',{method:'POST',headers:{authorization:`Bearer ${apiKey}`,'content-type':'application/json'},body:JSON.stringify(emails)});
+        if(!result.ok){await admin.from('marketingcampaigns').update({status:'FAILED'}).eq('id',id).eq('status','SENDING');fail(502,'Email provider rejected the campaign.');}
+      }
+      const {error:sentError}=await admin.from('marketingcampaigns').update({status:'SENT',recipientcount:emails.length}).eq('id',id).eq('status','SENDING');if(sentError)throw sentError;
       await admin.from('adminauditevents').upsert({id:`campaign_${id}`,action:'marketing_campaign_sent',actorid:actor,targetid:id,reason:`Campaign: ${subject}`,data:{recipientCount:emails.length},immutable:true});
       return {recipientCount:emails.length};
     }
