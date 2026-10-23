@@ -2,7 +2,7 @@ type Json = Record<string, unknown>;
 
 const safeText = (value: unknown, max = 60): string => typeof value === 'string' ? value.trim().slice(0, max) : '';
 const safeStrings = (value: unknown, allowed: readonly string[]): string[] => Array.isArray(value)
-  ? [...new Set(value.filter((item): item is string => typeof item === 'string' && allowed.includes(item))].slice(0, 12))
+  ? [...new Set(value.filter((item): item is string => typeof item === 'string' && allowed.includes(item)))].slice(0, 12)
   : [];
 const HOUSE_AREAS = ['Living room', 'Bedrooms', 'Kitchen', 'Dining room', 'Bathrooms', 'Hallways', 'Garage', 'Office', 'Balcony', 'Patio', 'Laundry room', 'Storage room', 'Bedroom', 'Bathroom', 'Other'];
 const HOUSE_PARTS = ['Windows', 'Floors', 'Walls', 'Carpets', 'Upholstery', 'Cupboards', 'Appliances', 'Garage', 'Other'];
