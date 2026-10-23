@@ -1,6 +1,6 @@
 begin;
 
-select plan(5);
+select plan(11);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values(
@@ -43,6 +43,35 @@ select is(
   (select balance from public.users where id='7a0ce2d7-43a1-4fe4-b771-5ccf20e68020'),
   5::numeric,
   'the retry debits the overall wallet exactly once'
+);
+
+select public.request_cleaner_payout_idempotent(
+  '7a0ce2d7-43a1-4fe4-b771-5ccf20e68020',5,'BANK','Test Cleaner',repeat('y',40),'5678','payout-pending-reject-1',repeat('b',64)
+);
+select is(
+  (public.reject_pending_cleaner_payout((select id from public.payoutRequests where operationKey='payout-pending-reject-1'),'7a0ce2d7-43a1-4fe4-b771-5ccf20e68020','Invalid destination details','pending-reject-key-1')).status,
+  'REJECTED'::text,
+  'pending payout can be reasonedly rejected without approval'
+);
+select is(
+  (select status from public.walletTransactions where idempotencyKey='payout_hold_'||(select id from public.payoutRequests where operationKey='payout-pending-reject-1')),
+  'REVERSED',
+  'rejecting a pending payout reverses its reservation'
+);
+select is(
+  (select earningsBalance from public.users where id='7a0ce2d7-43a1-4fe4-b771-5ccf20e68020'),
+  10::numeric,
+  'rejecting a pending payout restores the reserved earnings once'
+);
+select is(
+  (public.reject_pending_cleaner_payout((select id from public.payoutRequests where operationKey='payout-pending-reject-1'),'7a0ce2d7-43a1-4fe4-b771-5ccf20e68020','Retry rejection','pending-reject-key-1')).status,
+  'REJECTED'::text,
+  'retrying the same rejection is idempotent'
+);
+select is(
+  (select count(*)::integer from public.walletTransactions where idempotencyKey='payout_reversal_'||(select id from public.payoutRequests where operationKey='payout-pending-reject-1')),
+  1,
+  'idempotent rejection creates only one wallet credit'
 );
 
 select * from finish();

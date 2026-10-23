@@ -706,6 +706,8 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const decision=text(input.decision,20).toUpperCase();
       const {error}=decision==='APPROVED'
         ?await admin.rpc('approve_cleaner_payout',{p_payout_id:input.payoutRequestId,p_actor_id:actor})
+        :decision==='REJECT_PENDING'
+          ?await admin.rpc('reject_pending_cleaner_payout',{p_payout_id:input.payoutRequestId,p_actor_id:actor,p_reason:text(input.reason,500),p_idempotency_key:requireKey(input.idempotencyKey)})
         :await admin.rpc('settle_cleaner_payout',{p_payout_id:input.payoutRequestId,p_actor_id:actor,p_decision:decision,p_transfer_reference:text(input.transferReference,120)});
       if(error)throw error; return {success:true,status:input.decision};
     }
