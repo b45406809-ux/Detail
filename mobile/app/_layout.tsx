@@ -1,5 +1,5 @@
 import '../global.css';
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Stack, router, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -45,8 +45,40 @@ function AuthGuard() {
   return null;
 }
 
+function NotificationRouter({ response, onConsumed }: { response: Notifications.NotificationResponse | null; onConsumed: () => void }) {
+  const { user, profile, isLoading, profileError } = useAuth();
+
+  useEffect(() => {
+    if (!response || !user || !profile || isLoading || profileError) return;
+    // Keep a cold-start destination pending while the normal auth guard walks
+    // the user through required account setup.
+    if (!profile.hasAgreedToTerms || !profile.hasCompletedProfile || !profile.hasSetupPermissions) return;
+    if (profile.role === 'CLEANER' && profile.verificationStatus === 'VERIFIED' && profile.cleanerOnboardingComplete && !profile.cleanerAgreementAccepted) return;
+
+    const data = response.notification.request.content.data as { jobId?: string; supportCaseId?: string; type?: string };
+    if (data.supportCaseId) router.push({ pathname: '/support', params: { caseId: data.supportCaseId } });
+    else if (data.type === 'INSTANT_BOOKING_OFFER') router.push('/instant-offers');
+    else if (data.type === 'NEW_SCHEDULED_JOB' && data.jobId) router.push({ pathname: '/job/[jobId]', params: { jobId: data.jobId } });
+    else if (data.type === 'INSTANT_BOOKING_ACCEPTED' && data.jobId) router.push({ pathname: '/booking/offers', params: { jobId: data.jobId } });
+    else if (data.jobId) {
+      const offerTypes = ['BOOKING_CREATED', 'NEW_BID'];
+      router.push({ pathname: offerTypes.includes(data.type ?? '') ? '/booking/offers' : '/tracking/[jobId]', params: { jobId: data.jobId } });
+    }
+    onConsumed();
+  }, [response, user, profile, isLoading, profileError, onConsumed]);
+
+  return null;
+}
+
 export default function RootLayout() {
   const [fontsLoaded, setFontsLoaded] = React.useState(false);
+  const [pendingNotification, setPendingNotification] = useState<Notifications.NotificationResponse | null>(null);
+  const notificationKey = useRef('');
+  const consumeNotification = useCallback(() => {
+    notificationKey.current = '';
+    setPendingNotification(null);
+    void Notifications.clearLastNotificationResponseAsync();
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -62,18 +94,14 @@ export default function RootLayout() {
       if (event === 'PASSWORD_RECOVERY' && active) router.replace('/(auth)/reset-password');
     });
     configureNotificationChannels().catch(() => undefined);
-    const routeNotification = (response: Notifications.NotificationResponse) => {
-      const data = response.notification.request.content.data as { jobId?: string; supportCaseId?: string; type?: string };
-      if(data.supportCaseId){router.push({pathname:'/support',params:{caseId:data.supportCaseId}});return;}
-      if(data.type==='INSTANT_BOOKING_OFFER'){router.push('/instant-offers');return;}
-      if(data.type==='NEW_SCHEDULED_JOB'&&data.jobId){router.push({pathname:'/job/[jobId]',params:{jobId:data.jobId}});return;}
-      if(data.type==='INSTANT_BOOKING_ACCEPTED'&&data.jobId){router.push({pathname:'/booking/offers',params:{jobId:data.jobId}});return;}
-      if (!data.jobId) return;
-      const offerTypes = ['BOOKING_CREATED', 'NEW_BID'];
-      router.push({ pathname: offerTypes.includes(data.type ?? '') ? '/booking/offers' : '/tracking/[jobId]', params: { jobId: data.jobId } });
+    const queueNotification = (response: Notifications.NotificationResponse) => {
+      const key = `${response.notification.request.identifier}:${response.actionIdentifier}`;
+      if (notificationKey.current === key) return;
+      notificationKey.current = key;
+      setPendingNotification(response);
     };
-    const subscription = Notifications.addNotificationResponseReceivedListener(routeNotification);
-    Notifications.getLastNotificationResponseAsync().then(response => response && routeNotification(response));
+    const subscription = Notifications.addNotificationResponseReceivedListener(queueNotification);
+    Notifications.getLastNotificationResponseAsync().then(response => response && queueNotification(response));
     return () => {
       active = false;
       subscription.remove();
@@ -106,6 +134,7 @@ export default function RootLayout() {
       <ErrorBoundary>
         <AuthProvider>
           <AuthGuard />
+          <NotificationRouter response={pendingNotification} onConsumed={consumeNotification} />
           <StatusBar style="auto" />
           <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
             <Stack.Screen name="(auth)" options={{ animation: 'none' }} />
