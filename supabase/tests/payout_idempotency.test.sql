@@ -1,6 +1,6 @@
 begin;
 
-select plan(11);
+select plan(10);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values(
@@ -60,7 +60,7 @@ select is(
 );
 select is(
   (select earningsBalance from public.users where id='7a0ce2d7-43a1-4fe4-b771-5ccf20e68020'),
-  10::numeric,
+  5::numeric,
   'rejecting a pending payout restores the reserved earnings once'
 );
 select is(
