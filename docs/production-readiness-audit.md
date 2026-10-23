@@ -702,7 +702,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Source:** [supabase/migrations/20261020010000_marketplace_hardening.sql:635](<../supabase/migrations/20261020010000_marketplace_hardening.sql#L635>); [supabase/migrations/20261020002000_marketplace_transactions.sql:185](<../supabase/migrations/20261020002000_marketplace_transactions.sql#L185>); [supabase/migrations/20261020008000_paynow_completion_ledger.sql:1](<../supabase/migrations/20261020008000_paynow_completion_ledger.sql#L1>)
 
-**Problem and impact.** Dispute records a support case and JSON response, but settle_job_payment does not check that response or an open dispute. release_paynow_earnings checks only job COMPLETED, provider PAID and releasedAt. completeBooking calls release before the customer reviews. Auto-confirm only writes a response/event; it does not drive an integrated settlement policy. The app's protected-until-review promise is not enforced by a unified state machine.
+**Current implementation and remaining gap.** Paynow earnings release now requires a customer confirmation, 24-hour auto-confirmation, or an explicit support-case decision to release; a dispute without that decision holds earnings. Non-Paynow settlement now applies the same completion response and dispute-resolution gate. A new pgTAP case covers unpaid review, dispute hold and operator-authorized release. Provider refund coordination and recovery of funds after a settlement is later reversed remain open under F45/F46.
 
 **Proposed fix.** Separate work submitted, customer accepted, disputed, auto-accepted and financially settled states. Place explicit financial holds and release only through the documented resolution/timeout policy, coordinated with provider authority.
 
