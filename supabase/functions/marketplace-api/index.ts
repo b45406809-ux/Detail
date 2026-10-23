@@ -83,7 +83,9 @@ async function requireAdmin(uid: string, permission?: string, elevated = false) 
 async function notify(userId: string, payload: Json) {
   const supportCaseId=text(payload.supportCaseId,100);
   const storedData={...(payload.data&&typeof payload.data==='object'?payload.data:{}),...(supportCaseId?{supportCaseId}:{})};
-  const { data: notification,error } = await admin.from('notifications').insert({ userId, title:text(payload.title,160), body:text(payload.body,1000), type:text(payload.type,50)||'SYSTEM', jobId:text(payload.jobId,80)||null, data:storedData, createdAt: new Date().toISOString() }).select('id').single();
+  // PostgreSQL folds the unquoted camelCase schema identifiers to lowercase.
+  // PostgREST JSON keys are case-sensitive, so send the physical column names.
+  const { data: notification,error } = await admin.from('notifications').insert({ userid:userId, title:text(payload.title,160), body:text(payload.body,1000), type:text(payload.type,50)||'SYSTEM', jobid:text(payload.jobId,80)||null, data:storedData, createdat:new Date().toISOString() }).select('id').single();
   if(error){console.error('notification insert failed',error.message);return;}
   const {data:profile}=await admin.from('users').select('expopushtoken,phone').eq('id',userId).maybeSingle();
   if(!profile)return;
@@ -831,9 +833,10 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       return {admins,invites:(invites??[]).map(i=>({id:i.id,email:i.email,status:i.status,permissions:i.permissions,createdAt:i.createdat,expiresAt:i.expiresat}))};
     }
     case 'createAdminInvite': {
-      const actor=authed(); await requireAdmin(actor,'admins.manage');
+      const actor=authed(); const actorRole=await requireAdmin(actor,'admins.manage'); requireRecentMfa(request);
       const email=text(input.email,254).toLowerCase();const permissions=Array.isArray(input.permissions)?input.permissions.filter((p:unknown)=>typeof p==='string'&&['marketing.read','marketing.send','finance.read','finance.write','bookings.manage','users.manage','support.manage','audit.read','admins.manage'].includes(p)):[];
       if(!email.includes('@'))fail(400,'Enter a valid email address.');
+      if(actorRole.elevated!==true&&permissions.some((permission:string)=>!(actorRole.permissions??[]).includes(permission)))fail(403,'You cannot grant permissions you do not hold.');
       const token=crypto.randomUUID()+crypto.randomUUID(); const {error}=await admin.from('admininvites').insert({email,tokenhash:await hash(token),permissions,elevated:false,status:'PENDING',createdby:actor,expiresat:new Date(Date.now()+7*86400000).toISOString()});
       if(error)throw error;
       return {inviteUrl:`https://dashboard.detail.co.zw/admin/accept-invite?token=${encodeURIComponent(token)}`};
@@ -854,7 +857,18 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
 Deno.serve(async request => {
   const origin=request.headers.get('origin');
   if(origin && !allowedOrigins.has(origin) && !/^http:\/\/localhost(:\d+)?$/.test(origin)) return reply({error:'Origin not allowed.'},403,null);
-  if(request.method==='OPTIONS')return reply({},204,origin);
+  // A 204 response must not carry a body. Returning JSON here makes the Fetch
+  // Response constructor throw, which prevents browsers from completing CORS
+  // preflight for every cross-origin API request.
+  if(request.method==='OPTIONS')return new Response(null,{
+    status:204,
+    headers:{
+      'access-control-allow-origin':origin??'*',
+      'access-control-allow-headers':'authorization, x-client-info, apikey, content-type',
+      'access-control-allow-methods':'POST, OPTIONS',
+      'vary':'Origin',
+    },
+  });
   if(request.method!=='POST')return reply({error:'POST required.'},405,origin);
   try {
     const payload=await request.json() as {name?:string;data?:Json};
