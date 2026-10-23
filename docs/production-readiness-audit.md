@@ -1060,6 +1060,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** Submit another person's email and replay signup after unsubscribe: existing consent/contact details remain protected until that mailbox confirms the change.
 
+**Implementation status (2026-10-23).** Public signup now uses a serialized database registration function: an existing normalized address is left unchanged, including contact fields, marketing consent and unsubscribe token. A pgTAP regression test covers case-insensitive duplicate registration and preservation of those fields. The product still has no mailbox-verified change-consent flow or append-only consent history.
+
 <a id="F65"></a>
 
 ### F65 — Campaign targeting is ignored and sends are not idempotent
