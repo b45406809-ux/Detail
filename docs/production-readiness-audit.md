@@ -578,7 +578,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Severity:** P1 · **Evidence:** Code-confirmed · **Area:** Booking and dispatch
 
-**Source:** [mobile/app/booking/create.tsx:201](<../mobile/app/booking/create.tsx#L201>); [mobile/app/booking/create.tsx:54](<../mobile/app/booking/create.tsx#L54>); [supabase/functions/marketplace-api/index.ts:313](<../supabase/functions/marketplace-api/index.ts#L313>)
+**Source:** [mobile/app/booking/create.tsx:51](<../mobile/app/booking/create.tsx#L51>); [mobile/app/booking/create.tsx:455](<../mobile/app/booking/create.tsx#L455>); [supabase/functions/marketplace-api/index.ts:420](<../supabase/functions/marketplace-api/index.ts#L420>); [supabase/functions/marketplace-api/index.ts:430](<../supabase/functions/marketplace-api/index.ts#L430>)
 
 **Problem and impact.** Address edits now clear the selected coordinates, submission geocodes the edited address, and both client and server reject missing, invalid and (0,0) pins. Custom times also have a 30-minute minimum and a 180-day maximum. The remaining gaps were that the server only checked CUSTOM timestamps, TOMORROW used a fixed 24-hour increment that can shift the local calendar date across daylight-saving changes, and there is no service-zone check, map pin correction, saved address or explicit local service window.
 
@@ -608,13 +608,15 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Severity:** P1 · **Evidence:** Code-confirmed · **Area:** Booking and dispatch
 
-**Source:** [supabase/migrations/20261020010000_marketplace_hardening.sql:274](<../supabase/migrations/20261020010000_marketplace_hardening.sql#L274>); [supabase/migrations/20261020010000_marketplace_hardening.sql:288](<../supabase/migrations/20261020010000_marketplace_hardening.sql#L288>)
+**Source:** [supabase/migrations/20261023028000_reserve_instant_cleaner_confirmation.sql:10](<../supabase/migrations/20261023028000_reserve_instant_cleaner_confirmation.sql#L10>); [supabase/migrations/20261023028000_reserve_instant_cleaner_confirmation.sql:50](<../supabase/migrations/20261023028000_reserve_instant_cleaner_confirmation.sql#L50>)
 
-**Problem and impact.** An accepted instant offer inserts a PENDING bid and leaves the job PENDING without reserving cleaner availability. The same cleaner can accept other instant requests while waiting for customer payment. The check for an already ACCEPTED bid does not match the PENDING bid just created. Assignment constraints eventually stop overlapping final assignments, but customers can pay/accept against promises that cannot all be fulfilled.
+**Problem and impact.** This described the instant acceptance path before `20261023028000_reserve_instant_cleaner_confirmation.sql`. Acceptance now creates a real temporary availability hold and rejects competing reservations; see implementation status below.
 
 **Proposed fix.** Use a short exclusive cleaner reservation linked to the offer and customer-confirmation deadline; lock/revalidate offers, payment intent and availability together. Release or advance to another candidate on timeout.
 
 **Acceptance check.** Two customers confirm competing instant requests at the same time; exactly one gets that cleaner and the other receives a clear alternative without a stranded charge.
+
+**Implementation status (2026-10-23).** `respond_instant_offer` locks the offer and job, rechecks cleaner eligibility/availability, and inserts a `CONFIRMATION` availability block before returning customer action required. The assignment trigger replaces that hold with the booking block, while customer rejection and F26 expiry release it. pgTAP verifies that a competing instant request cannot reserve the same cleaner and that reject/expiry release the hold. True concurrent-client and payment-provider race testing is still needed before launch.
 
 <a id="F31"></a>
 
@@ -622,13 +624,15 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Severity:** P1 · **Evidence:** Code-confirmed · **Area:** Booking and dispatch
 
-**Source:** [supabase/functions/marketplace-api/index.ts:431](<../supabase/functions/marketplace-api/index.ts#L431>); [supabase/functions/marketplace-api/index.ts:447](<../supabase/functions/marketplace-api/index.ts#L447>); [supabase/migrations/20261020000000_initial_schema.sql:53](<../supabase/migrations/20261020000000_initial_schema.sql#L53>)
+**Source:** [supabase/functions/marketplace-api/index.ts:569](<../supabase/functions/marketplace-api/index.ts#L569>); [supabase/functions/marketplace-api/index.ts:577](<../supabase/functions/marketplace-api/index.ts#L577>); [supabase/migrations/20261023024000_serialize_quote_lifecycle.sql:8](<../supabase/migrations/20261023024000_serialize_quote_lifecycle.sql#L8>)
 
-**Problem and impact.** The API checks job eligibility then inserts/updates in separate requests with no locked job state, and the schema has no unique active quote per cleaner/job. The UI's alreadyBid check is bypassable. A request started before assignment can insert a new pending bid after assignment, and rejectBid can race an acceptance without a coherent outcome.
+**Problem and impact.** This described the quote path before `20261023024000_serialize_quote_lifecycle.sql` and `20261023040000_authorize_bid_acceptance_replays.sql`. The API now sends quote creation, rejection and acceptance through transactional RPCs that lock the job, and the database has a unique active-quote index. See implementation status for what remains.
 
 **Proposed fix.** Move quote issuance/withdrawal/rejection into transactional RPCs locking the job, enforce one active quote per cleaner/job and compare versions/status. Return a stable result for retries and distinguish expiry from rejection.
 
 **Acceptance check.** Concurrent duplicate quote submissions and accept/reject/expire races preserve one consistent accepted quote and never leave a new open quote on a closed job.
+
+**Implementation status (2026-10-23).** `submit_bid_secure` locks and rechecks the booking, returns the existing bid for an identical retry, and rejects changed terms while another active quote exists. A partial unique index backs the invariant. `reject_bid_secure` and `accept_bid_secure` lock the same booking before changing bid/job state. pgTAP covers duplicate retry, changed terms, rejection, revised quote and closed-booking rejection. The test suite does not yet exercise true concurrent sessions, and notification delivery on retried quote submissions still needs end-to-end idempotency verification.
 
 <a id="F32"></a>
 
@@ -636,13 +640,15 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Severity:** P1 · **Evidence:** Code-confirmed · **Area:** Booking and dispatch
 
-**Source:** [supabase/migrations/20261020010000_marketplace_hardening.sql:332](<../supabase/migrations/20261020010000_marketplace_hardening.sql#L332>); [supabase/migrations/20261020010000_marketplace_hardening.sql:64](<../supabase/migrations/20261020010000_marketplace_hardening.sql#L64>)
+**Source:** [supabase/migrations/20261023029000_reschedule_own_availability_blocks.sql:4](<../supabase/migrations/20261023029000_reschedule_own_availability_blocks.sql#L4>); [supabase/tests/reschedule_availability.test.sql:21](<../supabase/tests/reschedule_availability.test.sql#L21>)
 
-**Problem and impact.** The exclusion constraint is immediate, and the reschedule trigger updates BOOKING and BUFFER rows in separate statements. Moving a two-hour booking 30 minutes later makes its new booking row overlap its old buffer before that buffer is moved, causing a false availability rejection even if no other booking exists.
+**Problem and impact.** The immediate exclusion constraint used to reject moves into a booking’s own previous buffer. The trigger now removes that booking’s old BOOKING/BUFFER rows before inserting the new pair in the same transaction, while conflicts with other jobs still abort the change.
 
 **Proposed fix.** Replace that booking's blocks together atomically, or use a correctly deferred exclusion strategy within a transactional reschedule RPC. Keep the final exclusion check against other jobs/manual blocks.
 
 **Acceptance check.** Move one assigned booking forward/backward by 30 minutes and across another booking: self-only moves succeed; genuine cleaner overlaps fail and preserve the original blocks.
+
+**Implementation status (2026-10-23).** The reschedule trigger replaces the booking's own blocks before inserting its new slot. pgTAP verifies a self-buffer overlap succeeds, a real manual-block overlap fails, and rejected moves preserve the original slot.
 
 <a id="F33"></a>
 
@@ -650,13 +656,15 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Severity:** P1 · **Evidence:** Code-confirmed · **Area:** Booking and dispatch
 
-**Source:** [supabase/migrations/20261020010000_marketplace_hardening.sql:374](<../supabase/migrations/20261020010000_marketplace_hardening.sql#L374>); [supabase/functions/marketplace-api/index.ts:410](<../supabase/functions/marketplace-api/index.ts#L410>)
+**Source:** [supabase/migrations/20261023016000_mutual_reschedule_approval.sql:1](<../supabase/migrations/20261023016000_mutual_reschedule_approval.sql#L1>); [supabase/functions/marketplace-api/index.ts:532](<../supabase/functions/marketplace-api/index.ts#L532>); [mobile/app/tracking/[jobId].tsx:745](<../mobile/app/tracking/[jobId].tsx#L745>)
 
-**Problem and impact.** A customer or cleaner can immediately change scheduledDateTime, including a previously instant request, without the other participant accepting material changes. The update does not consistently refresh scheduledTime/timePreference/openjobs summary or reminders. An accepted cleaner can be committed to an inconvenient time with only a best-effort notification.
+**Problem and impact.** This described the path before mutual reschedule proposals were added. The UI and API now keep the current time until the other participant responds. Schedule projections and reminders still require end-to-end review for all booking modes.
 
 **Proposed fix.** Make rescheduling a proposal/acceptance workflow after assignment, with expiry, quote/fee impact and a no-penalty decline policy. Update all schedule projections/reminders and preserve the prior agreement until acceptance.
 
 **Acceptance check.** Both actors propose, accept, decline and ignore a time change; nobody is silently committed, and all screens show the same accepted schedule.
+
+**Implementation status (2026-10-23).** Both participants can propose a time; the recipient can accept or decline, and proposals expire after 24 hours. Acceptance updates the job inside the same transaction that checks/replaces availability blocks, while decline leaves the existing time. pgTAP now covers proposal, acceptance and decline with availability assertions. It does not yet cover expiry, notification delivery, or reminder refresh across every client screen.
 
 <a id="F34"></a>
 
@@ -664,13 +672,15 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Severity:** P1 · **Evidence:** Code-confirmed · **Area:** Booking and dispatch
 
-**Source:** [supabase/seed.sql:3](<../supabase/seed.sql#L3>); [supabase/functions/marketplace-api/index.ts:301](<../supabase/functions/marketplace-api/index.ts#L301>); [site/src/supabase.ts:10](<../site/src/supabase.ts#L10>); [supabase/functions/marketplace-api/index.ts:193](<../supabase/functions/marketplace-api/index.ts#L193>)
+**Source:** [supabase/seed.sql:3](<../supabase/seed.sql#L3>); [supabase/functions/marketplace-api/index.ts:249](<../supabase/functions/marketplace-api/index.ts#L249>); [supabase/functions/marketplace-api/index.ts:411](<../supabase/functions/marketplace-api/index.ts#L411>); [supabase/functions/marketplace-api/index.ts:645](<../supabase/functions/marketplace-api/index.ts#L645>); [supabase/functions/marketplace-api/index.ts:902](<../supabase/functions/marketplace-api/index.ts#L902>)
 
-**Problem and impact.** The seeded/site beta flag bookingEnabled=false says bookings are closed, but createBooking ignores that flag and checks different disableNewBookings/maintenance properties. waitlistEnabled is enforced in the UI but not joinWaitlist. getBetaConfig does not incorporate operations switches, and several retry/settlement actions bypass payment pause checks. Opening/pausing the business has inconsistent meanings.
+**Problem and impact.** The original booking and waitlist controls were inconsistent. They now use the beta and operations settings, but new Paynow booking retries previously bypassed the payment pause and payment actions treated missing configuration as open. Existing-checkout polling and resume are recovery operations and intentionally remain available during a pause.
 
 **Proposed fix.** Define one documented configuration contract and explicit launch/capability gates in the API/database. Fail safely on unavailable configuration and distinguish blocking new work from allowing necessary settlement/recovery.
 
 **Acceptance check.** Toggle each gate while clients are open and call endpoints directly; public copy, mobile controls and server behavior agree without preventing safe closure/refunds.
+
+**Implementation status (2026-10-23).** `getBetaConfig` combines launch, maintenance and booking-creation switches; `createBooking` and `joinWaitlist` enforce their respective server flags. New bid acceptance, wallet top-up and booking-payment retry now share a fail-closed payment gate that requires both configuration rows and honors maintenance/payment switches. Polling or resuming an existing checkout remains enabled so users can resolve an in-flight payment. Automated tests cover the payment-gate decisions; live toggle testing and a documented operator procedure for safe closure/reconciliation remain open.
 
 <a id="F35"></a>
 
@@ -1364,9 +1374,9 @@ Rudo uses an inexpensive Android phone, has patchy connectivity, prefers SMS and
 | Set up account | create-profile → users update; permission setup | Location denial blocks all progress, even though she knows her address. No verified contact-editing flow exists (F19/F22). | Manual address and optional notification onboarding work; contact changes require ownership. |
 | Compare cleaners | searchVerifiedCleaners → sanitized profile DTO; favorites | Cards cannot open a complete profile/rebook flow, and favorites chat passes an unsupported cleanerId (F61). | Inspect named verification checks/reviews and send a request to an eligible chosen cleaner, or deliberately choose open bidding. |
 | Describe the clean | booking/create → service catalog/checklist/photos | Native photo Blob uploads can fail; the cleaner feed later loses most scope and photos (F04/F06). | Rudo's agreed scope is retained, safely summarized and visible to the quoting cleaner. |
-| Set address/time | current GPS → edit address → geocoder/date presets | Text can refer to one address while stored pin stays at the old GPS position. Past/out-of-zone times/locations are weakly enforced (F28). | Confirm one address/pin/time/zone object before submission. |
+| Set address/time | current GPS → edit address → geocoder/date presets | Editing clears the previous pin and schedules are checked server-side (F28); service-zone validation, map correction and explicit local time windows remain missing. | Confirm one address/pin/time/zone object before submission. |
 | Post and leave app | createBooking → create_booking → jobs/openjobs/jobevents | A lost response/new timestamp creates duplicates. No Activity route restores the pending request (F24/F25). | Retry/relaunch resolves to the same request with all pending offers visible. |
-| Receive and accept quote | submitBid → bids → notify; offers → accept_bid | Alerts fail column mapping; cleaner IDs/scope fail upstream; concurrent quotes can race. Wallet is captured at acceptance (F02/F03/F31). | A quote arrives once with total/supplies/method, and one authoritative accepted agreement is stored. |
+| Receive and accept quote | submitBid → transactional bid RPC → notify; offers → accept_bid | Quote mutations are serialized and active quotes are unique; concurrent stress and quote-notification idempotency still need verification. Payment authorization and recovery remain open (F02/F03). | A quote arrives once with total/supplies/method, and one authoritative accepted agreement is stored. |
 | Follow arrival and work | tracking → cleaner position → Mapbox route → arrival/start/completion RPCs | Stale tracking is not explicit, arrival lacks reliable evidence and fake photo paths can satisfy completion (F12/F35). | Freshness is visible and valid service evidence/check-in is recorded. |
 | Inspect result or dispute | COMPLETED listener → PAYMENT instead of review; respondToCompletion | Review/dispute controls become unreachable and a dispute does not enforce a financial hold (F36/F37). | Rudo can inspect before/after evidence, confirm or open a real held dispute, and receives the outcome. |
 | Pay, rate, retain receipt | settle_job_payment → ledger → submit_booking_rating → history | Paid bookings reopen the payment step; cancelled retained funds lack full accounting; receipts are incomplete (F36/F40/G10). | One settlement, correct receipt/fee breakdown, one eligible rating and a stable read-only history view. |
@@ -1381,7 +1391,7 @@ Tariro needs Book Now, adds supplies, closes the payment browser by mistake and 
 | Start an instant car booking | Home Car shortcut → booking/create category preselection | Shortcut retains Car and shows the booking-mode choice after the F27 fix; device-flow verification remains. | Book Now is clearly reachable and distinct from quote scheduling. |
 | Confirm service/price | DEEP_DETAIL + vehicle choices + supplies → server fixed-price map | Condition, size, add-ons and duration do not affect price/capacity (F29). | Immutable supported-scope quote, supplies total and accurate expected duration are disclosed. |
 | Find a nearby cleaner | create_booking → search_instant_cleaners/PostGIS → instantoffers | Dispatch needs fresh location, valid coverage and server eligibility; no-candidate/expired states leave stale requests (F26/F35). | A truthful matching state with deadline, fallback, cancellation and safe rematching. |
-| Cleaner accepts | respond_instant_offer → pending bid; customer notification | Alerts fail; routing lacks type. The cleaner has no exclusive confirmation reservation (F02/F30/F50). | Exactly one temporarily reserved eligible cleaner, clear customer confirmation deadline and no misleading acceptance. |
+| Cleaner accepts | respond_instant_offer → pending bid and confirmation hold; customer notification | Shared notification routing and the 15-minute cleaner reservation are implemented (F30); payment-provider race/recovery and device-level parallel testing remain (F02/F50). | Exactly one temporarily reserved eligible cleaner, clear customer confirmation deadline and no misleading acceptance. |
 | Choose Paynow | acceptBid → accept_bid capture/assignment → standard SDK checkout | BuySafe integration semantics need staging proof; replay can reinitialize payments and first init is not a durable external transaction (F42/F47). | One recoverable intent/attempt with verified provider protection and no replay side effect. |
 | Close browser / lose network | browser dismissal → app kill/restart → payment-return | No native return route and no useful pending checkout-resume control; retry can remain INITIATING (F43/F44). | Tariro finds the same payment-required job in Activity and resumes/reconciles its original attempt. |
 | Receive provider update | signed webhook/inbox → apply_paynow_status | Signed body and amount checks, monotonic status transitions, callback inbox and idempotent notifications exist. No scheduled provider poll repairs callbacks that never arrive (F41/F45). | Duplicate/out-of-order callbacks converge safely, and a missed callback is repaired. |
@@ -1402,7 +1412,7 @@ Nyasha has never used Supabase, denies a permission once and expects identity ve
 | Add proof/portfolio | local photo → storage → cleanerportfolio | Shared Blob upload path is unsupported on RN; raw/signed paths and ownership/retention need clear lifecycle (F06/F15). | Valid authorized media appears, can be removed and cannot masquerade as a trust document. |
 | Go online | updateCleanerPresence → foreground/background permission → TaskManager/locationPoint | UI/server/task state can diverge; logout/role switch does not reliably stop sharing (F35). | Opt-in online lease, fresh position, visible permission failure and explicit stop/restart behavior. |
 | Assess a nearby scheduled request | openjobs subscription → normalization → job detail | ID becomes undefined; sanitized summary lacks the very scope/distance needed to quote (F03/F04). | Correct stable job ID, safe scope summary/distance and an honest ETA. |
-| Quote / accept an instant offer | submitBid/respond_instant_offer → bids/offers/availability | Duplicate/racing quotes and unreserved customer confirmation allow contradictory commitments (F30/F31). | One active quote per intent and no overlapping confirmed/reserved commitments. |
+| Quote / accept an instant offer | submitBid/respond_instant_offer → bids/offers/availability | Scheduled quote mutations are serialized; instant customer confirmation still depends on its temporary cleaner reservation and payment recovery (F30). | One active quote per intent and no overlapping confirmed/reserved commitments. |
 | Travel, arrive, clean | job status RPCs → background location → evidence | Role switch can break assigned-job actions, arrival is not verified and completion evidence can be fake (F11/F12/F35). | Role-independent assignment capabilities, safe check-in, visible job checklist and valid evidence. |
 | Mark complete | completeBooking → customer response/payment/ledger | Cleaner is routed to 'Rate your cleaner', whose server call rejects her role (F36). | Cleaner sees submitted/accepted/disputed/paid earnings states and support access, not the customer's rating form. |
 | Request payout | earnings balance → secure encrypted request → two-admin queue | UI/DB availability disagree; role-dependent wallet buckets are inconsistent; pending rejection/transfer recovery is incomplete (F38/F39/F48). | One server-calculated available amount, protected destination and exactly-once reserved/paid/rejected history. |
@@ -1435,7 +1445,7 @@ Chipo starts at a support case link, handles a cleaner replacement, coordinates 
 | Read the incident | adminQuery support → generic table | Description, evidence, reporter, ownership and linked financial timeline are unavailable or rendered as dashes (F58). | Chipo can understand and assign/triage the case with an SLA and contact history. |
 | Find affected booking/cleaner | filters/search/paging → REST queries | UUID ilike/incorrect filters and unstable timestamp cursors miss or reject records (F56). | Correct typed search/paging at production-sized datasets. |
 | Replace a cleaner | adminMutation reassign_booking → direct jobs update | Completed jobs can reopen; old reserve/payment/contact identity is not moved safely (F55). | Stage-aware transactional replacement with correct financial ownership and notices to both cleaners/customer. |
-| Reschedule | trigger updates booking+buffer | A modest time shift can hit its own old buffer; participant changes have no acceptance flow (F32/F33). | Correct calendar check and an accepted schedule change. |
+| Reschedule | propose_booking_reschedule → mutual response → availability trigger | Self-buffer moves and participant consent are implemented (F32/F33); proposal expiry, reminder refresh and device-level notification flow need verification. | Correct calendar check and an accepted schedule change. |
 | Refund/resolve | request_refund → support metadata → merchant portal; resolve_case | Request can look refunded before payment, and resolving the case does not execute its financial outcome (F46/F58). | Chipo records a truthful provider-confirmed outcome with reconciliation and customer communication. |
 | Pay a cleaner | finance MFA → encrypted payout → approve/reveal/settle | First approver can reveal/pay despite being forbidden to settle; pending rejection and amount models disagree (F39/F48). | The separate finance administrator sees the correct amount and executes/records exactly one authorized transfer. |
 | Review revenue/alerts | admin_marketplace_metrics → Overview | Series dollars are displayed as cents; support attention links go toward bookings; retry is ineffective (F57). | Revenue units reconcile and urgent items open the case needing action. |

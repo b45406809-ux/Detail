@@ -3,6 +3,7 @@ import { Paynow } from 'npm:paynow@2.2.2';
 import { hasRecentSupabaseAuthentication } from '../_shared/session_auth.ts';
 import { trustedEdgeIp } from '../_shared/trusted_edge_ip.ts';
 import { isValidScheduledBookingTime } from '../_shared/booking_schedule.ts';
+import { isPaymentGateClosed } from '../_shared/payment_gate.ts';
 
 const url = Deno.env.get('SUPABASE_URL') ?? '';
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
@@ -30,6 +31,16 @@ const secret = (primary: string, alias: string) => Deno.env.get(primary) || Deno
 const round2 = (value: number) => Math.round(value * 100) / 100;
 const hash = async (value: string) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))).map(v => v.toString(16).padStart(2, '0')).join('');
 const requireKey = (value: unknown) => { const key = text(value, 160); if (!/^[A-Za-z0-9_-]{8,160}$/.test(key)) fail(400, 'A valid idempotency key is required.'); return key; };
+async function assertPaymentsAvailable() {
+  const [{ data: beta, error: betaError }, { data: operations, error: operationsError }] = await Promise.all([
+    admin.from('configuration').select('value').eq('key', 'beta').maybeSingle(),
+    admin.from('configuration').select('value').eq('key', 'operations').maybeSingle(),
+  ]);
+  if (betaError) throw betaError;
+  if (operationsError) throw operationsError;
+  if (isPaymentGateClosed(beta?.value, operations?.value)) fail(503, 'PAYMENTS_DISABLED');
+  return operations?.value ?? {};
+}
 const MAX_REQUEST_BYTES=1024*1024;
 async function readBoundedJson(request:Request):Promise<unknown>{
   const declared=request.headers.get('content-length');
@@ -595,8 +606,8 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const {data:booking,error:bookingError}=await admin.from('jobs').select('customerid').eq('id',jobId).maybeSingle();
       if(bookingError)throw bookingError;
       if(!booking||booking.customerid!==actor)fail(403,'Only the customer can accept a quote.');
-      const [{data:config},{data:operations}]=await Promise.all([admin.from('configuration').select('value').eq('key','beta').maybeSingle(),admin.from('configuration').select('value').eq('key','operations').maybeSingle()]);
-      if(config?.value?.maintenanceMode||config?.value?.disablePayments||operations?.value?.switches?.maintenance===true||operations?.value?.switches?.payments===true||operations?.value?.switches?.bidAcceptance===true)fail(503,'PAYMENTS_DISABLED');
+      const operations=await assertPaymentsAvailable();
+      if(operations?.switches?.bidAcceptance===true)fail(503,'PAYMENTS_DISABLED');
       const {data,error}=await admin.rpc('accept_bid',{p_actor_id:actor,p_job_id:jobId,p_bid_id:bidId,p_payment_method:method,p_idempotency_key:key});
       if(error)throw error;
       let redirectUrl: string | null=data.redirectUrl??null;
@@ -634,6 +645,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'retryPaynowBookingPayment': {
       const actor=authed(), jobId=text(input.jobId,80),idempotencyKey=requireKey(input.idempotencyKey);
       await enforceRateLimit(request,actor,'paynow_booking_retry',5,3600);
+      await assertPaymentsAvailable();
       const [{data:job},{data:payment},{data:profile}] = await Promise.all([admin.from('jobs').select('*').eq('id',jobId).maybeSingle(),admin.from('payments').select('*').eq('id',`${jobId}_booking`).maybeSingle(),admin.from('users').select('email').eq('id',actor).maybeSingle()]);
       if(!job||!payment||job.customerid!==actor||job.paymentmethod!=='PAYNOW')fail(409,'This Paynow payment cannot be retried.');
       const email=user?.email??profile?.email; if(!email)fail(409,'Add an email address before paying with Paynow.');
@@ -665,8 +677,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'createPaynowWalletTopup': {
       const actor=authed(); const amount=round2(Number(input.amount)),idempotencyKey=requireKey(input.idempotencyKey);
       await enforceRateLimit(request, actor, 'wallet_topup', 6, 3600);
-      const [{data:beta},{data:operations}]=await Promise.all([admin.from('configuration').select('value').eq('key','beta').maybeSingle(),admin.from('configuration').select('value').eq('key','operations').maybeSingle()]);
-      if(beta?.value?.maintenanceMode||beta?.value?.disablePayments||operations?.value?.switches?.maintenance===true||operations?.value?.switches?.payments===true)fail(503,'PAYMENTS_DISABLED');
+      await assertPaymentsAvailable();
       if(!Number.isFinite(amount)||amount<1||amount>1000||String(input.currency??'USD').toUpperCase()!=='USD')fail(400,'Wallet top-ups must be between $1 and $1,000 USD.');
       const {data:profile}=await admin.from('users').select('email').eq('id',actor).single();
       const email=user?.email??profile?.email; if(!email)fail(409,'Add an email address to your account before paying with Paynow.');

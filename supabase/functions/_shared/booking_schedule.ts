@@ -8,13 +8,18 @@ export function isValidScheduledBookingTime(
   value: unknown,
   now = Date.now(),
 ): value is string {
-  if (typeof preference !== 'string' || !['ASAP', 'TODAY', 'TOMORROW', 'CUSTOM'].includes(preference)) return false;
-  if (typeof value !== 'string' || !value.trim()) return false;
+  if (
+    typeof preference !== "string" ||
+    !["ASAP", "TODAY", "TOMORROW", "CUSTOM"].includes(preference)
+  ) return false;
+  if (typeof value !== "string" || !value.trim()) return false;
   const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp) || timestamp > now + MAX_HORIZON) return false;
+  if (!Number.isFinite(timestamp) || timestamp > now + MAX_HORIZON) {
+    return false;
+  }
 
-  if (preference === 'CUSTOM') return timestamp >= now + 30 * MINUTE;
-  if (preference === 'TOMORROW') {
+  if (preference === "CUSTOM") return timestamp >= now + 30 * MINUTE;
+  if (preference === "TOMORROW") {
     // The client adds one local calendar day, which can be 23 or 25 hours over
     // daylight-saving transitions. The broad bound also tolerates clock skew.
     const hoursAhead = (timestamp - now) / (60 * MINUTE);
