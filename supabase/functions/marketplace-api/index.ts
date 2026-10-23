@@ -404,8 +404,9 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       return data;
     }
     case 'markBookingArrived': {
-      const actor=authed(),jobId=text(input.jobId,80),key=requireKey(input.idempotencyKey);
-      const {data,error}=await admin.rpc('mark_booking_arrived',{p_job_id:jobId,p_actor_id:actor,p_idempotency_key:key});
+      const actor=authed(),jobId=text(input.jobId,80),key=requireKey(input.idempotencyKey),latitude=Number(input.latitude),longitude=Number(input.longitude);
+      if(!Number.isFinite(latitude)||!Number.isFinite(longitude)||Math.abs(latitude)>90||Math.abs(longitude)>180)fail(400,'A current location is required to record arrival.');
+      const {data,error}=await admin.rpc('mark_booking_arrived',{p_job_id:jobId,p_actor_id:actor,p_idempotency_key:key,p_latitude:latitude,p_longitude:longitude});
       if(error)throw error;
       const {data:job}=await admin.from('jobs').select('customerid').eq('id',jobId).maybeSingle();
       if(job?.customerid)await notify(job.customerid,{type:'CLEANER_ARRIVED',title:'Your cleaner has arrived',body:'Your cleaner recorded arrival at the booking location.',jobId});

@@ -343,7 +343,10 @@ export default function TrackingScreen() {
     if (!next) return;
     setIsSubmitting(true);
     try {
-      if(job?.status===JobStatus.EN_ROUTE&&!job.arrivalAt)await callFunction('markBookingArrived',{jobId,idempotencyKey:`arrival-${jobId}`});
+      if(job?.status===JobStatus.EN_ROUTE&&!job.arrivalAt){
+        const location=await Location.getCurrentPositionAsync({accuracy:Location.Accuracy.Balanced});
+        await callFunction('markBookingArrived',{jobId,idempotencyKey:`arrival-${jobId}`,latitude:location.coords.latitude,longitude:location.coords.longitude});
+      }
       else await callFunction(next.status === JobStatus.COMPLETED ? 'completeBooking' : 'transitionBooking', { jobId, newState: next.status, idempotencyKey: `status-${jobId}-${next.status}` });
     } catch(error:any) {
       Alert.alert('Could not update booking', error?.message||'Please try again.');
