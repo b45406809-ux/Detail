@@ -384,7 +384,9 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const prices: Record<string,number> = { BASIC_HOUSE:10,SPECIFIC_ROOM:15,STANDARD_HOUSE:35,DEEP_HOUSE:80,EXTERIOR_WASH:3,FULL_CAR:12,DEEP_DETAIL:65 };
       const basePrice=prices[text(booking.serviceId,40)];
       if(bookingMode==='INSTANT'&&!basePrice)fail(400,'Choose a supported fixed-price service for Book Now.');
-      if(bookingMode==='INSTANT'&&(!Number.isFinite(Number(booking.location?.lat))||!Number.isFinite(Number(booking.location?.lng))||Math.abs(Number(booking.location.lat))>90||Math.abs(Number(booking.location.lng))>180||(Number(booking.location.lat)===0&&Number(booking.location.lng)===0)))fail(400,'Book Now needs a verified map location. Use the location button or enter a mappable address.');
+      const latitude=Number(booking.location?.lat),longitude=Number(booking.location?.lng);
+      if(!Number.isFinite(latitude)||!Number.isFinite(longitude)||Math.abs(latitude)>90||Math.abs(longitude)>180||(latitude===0&&longitude===0))
+        fail(400,'A mappable job location is required. Use the location button or enter a more specific address.');
       const { data: jobId, error } = await admin.rpc('create_booking', { p_actor_id: actor, p_idempotency_key: key, p_booking: { ...booking, bookingMode, suppliesRequired, suppliesFee, price:bookingMode==='INSTANT'?basePrice+suppliesFee:null, budget:bookingMode==='INSTANT'?basePrice+suppliesFee:booking.budget, photos } });
       if (error) throw error;
       if (bookingMode === 'INSTANT') {

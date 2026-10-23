@@ -213,8 +213,15 @@ export default function CreateBookingScreen() {
           const [match] = await Location.geocodeAsync(address.trim());
           if (match) resolvedCoordinates = { lat: match.latitude, lng: match.longitude };
         } catch {
-          // Keep address-only bookings available when the device geocoder cannot resolve the address.
+          // The server requires a map pin so matching and dispatch never use a
+          // fabricated 0,0 coordinate. Ask the customer to resolve the address.
         }
+      }
+      if (!resolvedCoordinates || !Number.isFinite(resolvedCoordinates.lat) || !Number.isFinite(resolvedCoordinates.lng)
+        || Math.abs(resolvedCoordinates.lat) > 90 || Math.abs(resolvedCoordinates.lng) > 180
+        || (resolvedCoordinates.lat === 0 && resolvedCoordinates.lng === 0)) {
+        Alert.alert('Confirm the job location', 'We could not map that address. Use your current location or enter a more specific address before continuing.');
+        return;
       }
 
       const result = await callFunction<any, { jobId: string }>('createBooking', { idempotencyKey: `booking-${user.uid}-${now}`, booking: {
@@ -228,7 +235,7 @@ export default function CreateBookingScreen() {
         serviceType: serviceLabel(),
         checklist,
         description,
-        location: { lat: resolvedCoordinates?.lat ?? 0, lng: resolvedCoordinates?.lng ?? 0, address },
+        location: { lat: resolvedCoordinates.lat, lng: resolvedCoordinates.lng, address },
         scheduledTime: timePreference,
         timePreference,
         scheduledDateTime: scheduledDateTime ? Timestamp.fromDate(scheduledDateTime) : null,
