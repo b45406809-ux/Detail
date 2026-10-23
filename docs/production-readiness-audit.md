@@ -1182,7 +1182,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** CI detects F01/F02/F03/F36/F41/F53-type regressions and a real staging/device release matrix passes without production data or money.
 
-**Implementation status (2026-10-23).** CI now runs 22 pgTAP files covering account deletion, admin RLS, booking idempotency, completion evidence/review, payment/refund ledgers, push routing/device lifecycle, rate limits and waitlist privacy. Mobile/site type checks, lint/build, Mapbox config canary, and migration/schema/Edge checks are also in the workflow. Browser and native device journeys plus provider sandbox/release gates are still required before launch.
+**Implementation status (2026-10-23).** CI now runs 24 pgTAP files covering account deletion, admin RLS, booking idempotency, completion evidence/review, Paynow callback/poll inboxes and status transitions, payment/refund ledgers, push routing/device lifecycle, rate limits and waitlist privacy. Mobile/site type checks, lint/build, Mapbox config canary, and migration/schema/Edge checks are also in the workflow. Browser and native device journeys plus provider sandbox/release gates are still required before launch.
 
 <a id="F71"></a>
 
