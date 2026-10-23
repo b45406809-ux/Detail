@@ -284,6 +284,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** Inspect has_table_privilege for anon/authenticated and attempt direct invitation insert/update/delete as a low-privilege admin; all writes must fail.
 
+**Implementation status (2026-10-23).** A migration explicitly revokes all direct table privileges on admin roles, invitations and audit events from anon/authenticated. The database security suite now checks INSERT/UPDATE/DELETE privileges for both roles. Production ACL verification is still required because project-level grants are environment-specific.
+
 <a id="F10"></a>
 
 ### F10 — User field restrictions depend on grants that are not reset

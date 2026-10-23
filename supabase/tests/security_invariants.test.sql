@@ -1,6 +1,6 @@
 begin;
 
-select plan(42);
+select plan(48);
 
 select ok(
   not has_function_privilege('anon', 'public.accept_customer_agreement(uuid)', 'execute'),
@@ -53,6 +53,12 @@ select ok(not has_column_privilege('authenticated','public.users','organizationi
 select ok(not has_column_privilege('authenticated','public.users','email','UPDATE'),'users cannot desynchronize profile email from auth');
 select ok(not has_column_privilege('authenticated','public.users','phone','UPDATE'),'users cannot desynchronize profile phone from auth');
 select ok(not has_column_privilege('authenticated','public.users','expopushtoken','UPDATE'),'users cannot bypass device-scoped push token registration');
+select ok(not has_table_privilege('anon','public.admininvites','INSERT'),'anonymous users cannot create administrator invitations');
+select ok(not has_table_privilege('anon','public.admininvites','UPDATE'),'anonymous users cannot modify administrator invitations');
+select ok(not has_table_privilege('anon','public.admininvites','DELETE'),'anonymous users cannot delete administrator invitations');
+select ok(not has_table_privilege('authenticated','public.admininvites','INSERT'),'authenticated users cannot create administrator invitations through REST');
+select ok(not has_table_privilege('authenticated','public.admininvites','UPDATE'),'authenticated users cannot modify administrator invitations through REST');
+select ok(not has_table_privilege('authenticated','public.admininvites','DELETE'),'authenticated users cannot delete administrator invitations through REST');
 select ok(
   not has_table_privilege('authenticated', 'public.legalDocumentAcceptances', 'SELECT'),
   'legal acceptance records are not directly readable by app users'
