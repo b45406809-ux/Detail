@@ -1,6 +1,6 @@
 begin;
 
-select plan(12);
+select plan(16);
 
 select ok(
   not has_function_privilege('anon', 'public.accept_customer_agreement(uuid)', 'execute'),
@@ -50,6 +50,10 @@ select ok(
   has_function_privilege('service_role', 'public.request_cleaner_payout_idempotent(uuid,numeric,text,text,text,text,text,text)', 'execute'),
   'the trusted service can create idempotent payout requests'
 );
+select ok(has_column('public','jobs','lastmessage'), 'job message previews have a persisted column');
+select ok(has_column('public','jobs','lastmessageat'), 'job message previews have a persisted timestamp');
+select ok(has_column('public','jobs','cleanerunread'), 'cleaner unread counts have a persisted column');
+select ok(has_column('public','jobs','customerunread'), 'customer unread counts have a persisted column');
 
 select * from finish();
 rollback;
