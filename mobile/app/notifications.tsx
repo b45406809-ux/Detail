@@ -13,6 +13,7 @@ const TYPE_ICON: Partial<Record<NotificationType, any>> = {
   BOOKING_CREATED: Zap,
   INSTANT_BOOKING_OFFER: Zap,
   INSTANT_BOOKING_ACCEPTED: Zap,
+  INSTANT_MATCH_EXPIRED: Info,
   JOB_UPDATE: Info,
   ASSIGNED: Info,
   EN_ROUTE: Info,

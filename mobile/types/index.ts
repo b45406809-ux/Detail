@@ -157,6 +157,7 @@ export interface Job {
   completionSubmittedAt?: any;
   customerResponseAt?: any;
   matchExpiresAt?: any;
+  instantMatchingExpired?: boolean;
   createdAt?: any;
   /** When the job stops accepting new bids — 30 min from creation, extended
    * by another 30 min each time the customer raises the budget. */
@@ -261,6 +262,7 @@ export type NotificationType =
   | 'BOOKING_CREATED'
   | 'INSTANT_BOOKING_OFFER'
   | 'INSTANT_BOOKING_ACCEPTED'
+  | 'INSTANT_MATCH_EXPIRED'
   | 'ASSIGNED'
   | 'EN_ROUTE'
   | 'CLEANER_ARRIVED'
