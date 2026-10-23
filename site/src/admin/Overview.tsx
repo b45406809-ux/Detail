@@ -7,12 +7,13 @@ const money = (value: number, currency: string) => new Intl.NumberFormat('en-ZW'
 
 export function Overview({ navigate }: { navigate: (route: string, id?: string) => void }) {
   const [period, setPeriod] = useState<'7d' | '30d' | '12m'>('30d');
+  const [retryKey, setRetryKey] = useState(0);
   const [data, setData] = useState<OverviewData>();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  useEffect(() => { setLoading(true); setError(''); getOverview(period).then(setData).catch(e => setError(e.message)).finally(() => setLoading(false)); }, [period]);
+  useEffect(() => { setLoading(true); setError(''); getOverview(period).then(setData).catch(e => setError(e.message)).finally(() => setLoading(false)); }, [period, retryKey]);
   if (loading) return <div className="admin-state">Loading timestamped operational metrics…</div>;
-  if (error || !data) return <div className="admin-state error">Metrics unavailable: {error}<button onClick={() => setPeriod(p => p)}>Retry</button></div>;
+  if (error || !data) return <div className="admin-state error">Metrics unavailable: {error}<button onClick={() => setRetryKey(key => key + 1)}>Retry</button></div>;
   const max = Math.max(...data.revenue.map(p => p.amount), 1);
   return <section>
     <header className="module-header"><div><h1>Overview</h1><p>Operational day: <b>{data.timezone}</b> · Currency: <b>{data.currency}</b> · Updated {new Date(data.asOf).toLocaleString()}</p></div><RefreshCw size={18}/></header>

@@ -900,7 +900,9 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const start=new Date(Date.now()-(period==='7d'?7:period==='12m'?365:30)*86400000).toISOString();
       const {data,error}=await admin.rpc('admin_marketplace_metrics',{p_start:start});if(error)throw error;
       const metrics=[{label:'Bookings today',value:Number(data.bookingsToday??0)},{label:'Upcoming bookings',value:Number(data.upcomingBookings??0)},{label:'Completed jobs',value:Number(data.completedJobs??0)},{label:'Cancelled jobs',value:Number(data.cancelledJobs??0)},{label:'Revenue',value:Math.round(Number(data.revenue??0)*100),format:'money'},{label:'Active cleaners',value:Number(data.activeCleaners??0)},{label:'Pending payments',value:Number(data.pendingPayments??0)}];
-      return {asOf:new Date().toISOString(),timezone:'Africa/Harare',currency:'USD',metrics,revenue:data.revenueSeries??[],attention:data.attention??[]};
+      const revenue=(Array.isArray(data.revenueSeries)?data.revenueSeries:[]).map((point:Json)=>({...point,amount:Math.round(Number(point.amount??0)*100)}));
+      const attention=(Array.isArray(data.attention)?data.attention:[]).map((item:Json)=>({...item,caseId:item.caseId??item.id}));
+      return {asOf:new Date().toISOString(),timezone:'Africa/Harare',currency:'USD',metrics,revenue,attention};
     }
     case 'adminQuery': {
       const module=text(input.module,40);
