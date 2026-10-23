@@ -67,7 +67,9 @@ export default function CreateBookingScreen() {
   const { category: preselectedCategory } = useLocalSearchParams<{ category?: ServiceCategory }>();
   const { user, profile } = useAuth();
 
-  const [stepIndex, setStepIndex] = useState(preselectedCategory ? 1 : 0);
+  // Keep shortcut-selected categories, but show the category/mode step so
+  // House and Car shortcuts still expose the Book Now choice.
+  const [stepIndex, setStepIndex] = useState(0);
   const [category, setCategory] = useState<ServiceCategory | null>(preselectedCategory ?? null);
 
   const [serviceId, setServiceId] = useState('');
