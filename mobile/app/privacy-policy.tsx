@@ -50,7 +50,7 @@ export default function PrivacyPolicyScreen() {
 
       <ScrollView contentContainerClassName="px-5 pt-6 pb-16" showsVerticalScrollIndicator={false}>
         <Text className="font-sans text-xs text-slate-400 font-medium mb-6">
-          Last updated: January 2025
+          Last updated: October 2026
         </Text>
         {SECTIONS.map(({ title, body }) => (
           <View key={title} className="mb-6">

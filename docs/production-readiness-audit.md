@@ -478,7 +478,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Source:** [mobile/app/_layout.tsx:27](<../mobile/app/_layout.tsx#L27>); [mobile/app/(auth)/sign-in.tsx:53](<../mobile/app/(auth)/sign-in.tsx#L53>); [mobile/app/(auth)/create-profile.tsx:90](<../mobile/app/(auth)/create-profile.tsx#L90>)
 
-**Problem and impact.** The unauthenticated guard redirects every non-auth route to splash, including the legal documents linked from sign-in. Conversely, logged-in users are forced through onboarding only while inside the auth group, so direct links to non-auth screens can bypass it. Terms are represented by mutable booleans with no server-side document version or timestamp record.
+**Current implementation and remaining gap.** Signed-out users can open the customer agreement and privacy policy, and logged-in users now bypass onboarding redirects while reading those legal routes. Authenticated non-legal routes remain gated by agreement, profile and permission state. Agreement acceptance is recorded server-side with document version and timestamp. The privacy policy's wording and dates still require a legal review against current provider and retention practices.
 
 **Proposed fix.** Allow public legal/recovery routes, gate authenticated routes by capability and onboarding state consistently, and record versioned terms acceptance on the server.
 
@@ -494,7 +494,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Problem and impact.** The permission screen initializes grants as empty instead of querying the OS, and refuses to continue without foreground location even though manual address entry exists. A denied-permanently user gets an OK-only alert without a settings link. Customers can be locked out of booking/history unnecessarily.
 
-**Proposed fix.** Read existing OS permission state, support manual-address customer usage, provide settings/retry controls, and request background location only in the cleaner online flow.
+**Current implementation and remaining gap.** The permission screen now reads existing foreground-location and notification grants, allows customers to continue without location for manual address entry, and reserves background-location requests for cleaner availability. Permanently denied location and notification requests now offer a device Settings shortcut. Device-level testing across fresh, pre-granted and permanently denied states remains outstanding.
 
 **Acceptance check.** Fresh, already-granted, denied and permanently-denied installs each have a clear usable path; customer booking works with a manually confirmed location.
 
@@ -520,7 +520,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Source:** [mobile/app/(tabs)/_layout.tsx:50](<../mobile/app/(tabs)/_layout.tsx#L50>); [mobile/app/(tabs)/home.tsx:127](<../mobile/app/(tabs)/home.tsx#L127>); [mobile/app/history.tsx:66](<../mobile/app/history.tsx#L66>)
 
-**Problem and impact.** The tab layout names activity, but no activity route exists. Home shows at most one assigned/en-route/in-progress job and completed recents; history shows only completed/cancelled jobs. Pending quote requests, unaccepted instant requests and multiple/future assignments lack a complete list. Leaving or killing the app can strand a request and encourage duplicate creation.
+**Current implementation and remaining gap.** The Activity tab now lists pending, active and terminal jobs for both customer and cleaner participant IDs, including bookings created under the other role. It routes scheduled pending requests to their offer list and other jobs back to tracking, and displays retryable load errors. The first version caps each participant query at 100 records and does not provide cursor pagination or a dedicated payment-resume action; those remain necessary for a complete history and recovery flow.
 
 **Proposed fix.** Implement an Activity screen with pending, upcoming, active, needs-action and past bookings, server pagination and a clear next action based on payment/lifecycle state. Open each booking by participant identity, independent of current view role.
 

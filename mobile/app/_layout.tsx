@@ -31,7 +31,7 @@ function AuthGuard() {
 
     if (!user && !inAuthGroup && !isPublicLegal) {
       router.replace('/(auth)/splash');
-    } else if (user && !isPasswordRecovery) {
+    } else if (user && !isPasswordRecovery && !isPublicLegal) {
       if (!profile?.hasAgreedToTerms && currentScreen !== 'customer-agreement') router.replace('/customer-agreement');
       else if (!profile?.hasCompletedProfile && currentScreen !== 'create-profile') router.replace('/(auth)/create-profile');
       else if (!profile?.hasSetupPermissions && currentScreen !== 'permissions') router.replace('/(auth)/permissions');

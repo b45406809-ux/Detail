@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MapPin, Bell, Shield } from 'lucide-react-native';
@@ -44,20 +44,26 @@ export default function PermissionsScreen() {
   }, [updateProfile]);
 
   const requestLocation = async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    setGranted((prev) => ({ ...prev, location: status === 'granted' }));
-    if (status !== 'granted') {
+    const permission = await Location.requestForegroundPermissionsAsync();
+    setGranted((prev) => ({ ...prev, location: permission.granted }));
+    if (!permission.granted) {
       Alert.alert('Location not enabled', 'You can still search by area. Enable location later if you want nearby results and live tracking.', [
-        { text: 'OK' },
+        { text: 'Continue without location', style: 'cancel' },
+        ...(!permission.canAskAgain ? [{ text: 'Open Settings', onPress: () => void Linking.openSettings() }] : []),
       ]);
     }
   };
 
   const requestNotifications = async () => {
-    const { status } = await Notifications.requestPermissionsAsync();
-    setGranted((prev) => ({ ...prev, notifications: status === 'granted' }));
-    if (status === 'granted') {
+    const permission = await Notifications.requestPermissionsAsync();
+    setGranted((prev) => ({ ...prev, notifications: permission.granted }));
+    if (permission.granted) {
       await registerCurrentPushDevice();
+    } else if (!permission.canAskAgain) {
+      Alert.alert('Notifications are off', 'You can still use Detail. Open device settings whenever you want booking alerts.', [
+        { text: 'Later', style: 'cancel' },
+        { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+      ]);
     }
   };
 
