@@ -20,8 +20,6 @@ import { db, doc, collection, onSnapshot, query, where, getDocs, limit } from '.
 import { callFunction } from '../../services/functions';
 import { Job, JobStatus, HouseChecklist, CarChecklist } from '../../types';
 import { IS_MOCK } from '../../utils/env';
-import { haversineDistanceKm } from '../../services/matching';
-import * as Location from 'expo-location';
 
 export default function CleanerJobDetailScreen() {
   const { jobId } = useLocalSearchParams<{ jobId: string }>();
@@ -35,14 +33,6 @@ export default function CleanerJobDetailScreen() {
   const [bidPrice, setBidPrice] = useState('');
   const [estimatedArrival, setEstimatedArrival] = useState('');
   const [message, setMessage] = useState('');
-
-  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
-
-  useEffect(() => {
-    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-      .then(({ coords }) => setCurrentLocation({ lat: coords.latitude, lng: coords.longitude }))
-      .catch(() => {});
-  }, []);
 
   useEffect(() => {
     if (!jobId) return;
@@ -128,11 +118,7 @@ export default function CleanerJobDetailScreen() {
   }
 
   const isTaken = job.status !== JobStatus.PENDING;
-  const distance = IS_MOCK
-    ? '2.3 km away'
-    : currentLocation && job.location?.lat && job.location?.lng
-    ? `${haversineDistanceKm(currentLocation, { lat: job.location.lat, lng: job.location.lng }).toFixed(1)} km away`
-    : null;
+  const distance = IS_MOCK ? '2.3 km away' : 'Approximate area only';
 
   const budgetLabel = job.budget ? `$${job.budget}` : 'Open — send your best price';
 
