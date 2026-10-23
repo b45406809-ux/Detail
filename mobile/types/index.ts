@@ -157,6 +157,10 @@ export interface Job {
   completionSubmittedAt?: any;
   customerResponseAt?: any;
   matchExpiresAt?: any;
+  lastMessage?: string;
+  lastMessageAt?: any;
+  cleanerUnread?: number;
+  customerUnread?: number;
   instantMatchingExpired?: boolean;
   rescheduleProposal?: {
     id: string;
