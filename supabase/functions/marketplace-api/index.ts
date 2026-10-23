@@ -444,6 +444,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(operations?.value?.switches?.maintenance===true||operations?.value?.switches?.bidAcceptance===true)fail(503,'Cleaner bidding is temporarily paused.');
       if (job.status!=='PENDING' || job.bookingmode==='INSTANT' || (job.biddingexpiresat && new Date(job.biddingexpiresat).getTime()<Date.now())) fail(409,'This booking is not accepting cleaner bids.');
       const { data, error } = await admin.from('bids').insert({jobid:jobId,cleanerid:actor,cleanername:profile.displayname,cleanerphoto:profile.photourl,cleanerrating:profile.ratingaverage,cleanerjobscompleted:profile.jobscompleted,bidprice:bidPrice,estimatedarrival:eta,message:text(input.message,500)||null,status:'PENDING',history:[{by:'CLEANER',price:bidPrice,message:text(input.message,500)||null,createdAt:new Date().toISOString()}]}).select('id').single();
+      if (error?.code === '23505') fail(409,'You already have an active quote for this booking.');
       if (error) throw error;
       await notify(job.customerid,{type:'NEW_BID',title:'New cleaner quote',body:`${profile.displayname || 'A cleaner'} sent a quote for your booking.`,jobId});
       return {success:true,bidId:data.id};
