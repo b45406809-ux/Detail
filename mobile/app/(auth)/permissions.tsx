@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,8 +14,8 @@ const PERMISSIONS = [
     id: 'location',
     icon: MapPin,
     title: 'Location Access',
-    sub: 'Required to find cleaners near you and track jobs in real-time',
-    required: true,
+    sub: 'Find nearby cleaners and share your location during an active booking. You can search by area without it.',
+    required: false,
   },
   {
     id: 'notifications',
@@ -31,11 +31,24 @@ export default function PermissionsScreen() {
   const [granted, setGranted] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
 
+  useEffect(() => {
+    let active = true;
+    Promise.all([Location.getForegroundPermissionsAsync(), Notifications.getPermissionsAsync()]).then(async ([location, notifications]) => {
+      if (!active) return;
+      setGranted({ location: location.granted, notifications: notifications.granted });
+      if (notifications.granted) {
+        const token = await getExpoPushToken();
+        if (active && token) await updateProfile({ expoPushToken: token }).catch((error) => console.warn('Could not save push token:', error));
+      }
+    }).catch((error) => console.warn('Could not read device permissions:', error));
+    return () => { active = false; };
+  }, [updateProfile]);
+
   const requestLocation = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     setGranted((prev) => ({ ...prev, location: status === 'granted' }));
     if (status !== 'granted') {
-      Alert.alert('Location Required', 'Detail needs location access to work properly. Enable it in Settings.', [
+      Alert.alert('Location not enabled', 'You can still search by area. Enable location later if you want nearby results and live tracking.', [
         { text: 'OK' },
       ]);
     }
@@ -51,15 +64,15 @@ export default function PermissionsScreen() {
   };
 
   const handlePermissionRequest = async (id: string) => {
-    if (id === 'location') await requestLocation();
-    else if (id === 'notifications') await requestNotifications();
+    try {
+      if (id === 'location') await requestLocation();
+      else if (id === 'notifications') await requestNotifications();
+    } catch {
+      Alert.alert('Permission unavailable', 'You can change this permission later in your device settings.');
+    }
   };
 
   const handleContinue = async () => {
-    if (!granted.location) {
-      Alert.alert('Location Required', 'Please grant location permission to continue.', [{ text: 'OK' }]);
-      return;
-    }
     setIsLoading(true);
     try {
       await updateProfile({ hasSetupPermissions: true });
