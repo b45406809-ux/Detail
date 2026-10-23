@@ -19,6 +19,7 @@ async function notifyOnce(userId:string,reference:string,status:string,payload:{
 
 Deno.serve(async request => {
   if (request.method !== 'POST') return new Response('POST required', { status: 405 });
+  let eventId:string|null=null;
   try {
     // Paynow result URLs are form-encoded status updates. The official SDK
     // validates the integration hash before the reference can touch the ledger.
@@ -27,6 +28,21 @@ Deno.serve(async request => {
     try{update=paynow.parseStatusUpdate(raw);}catch{return new Response('Invalid Paynow callback', { status: 400 });}
     if (!update.reference || !update.status || !update.amount) return new Response('Invalid status update', { status: 400 });
     const reference=String(update.reference);
+    const eventDigest=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw)));
+    eventId=Array.from(eventDigest).map(value=>value.toString(16).padStart(2,'0')).join('');
+    const {error:inboxError}=await admin.from('paynowproviderevents').upsert({
+      eventid:eventId,reference,providerstatus:String(update.status),amount:Number(update.amount),
+      data:{source:'verified_webhook'},
+    },{onConflict:'eventid',ignoreDuplicates:true});
+    if(inboxError)throw inboxError;
+    const {data:event,error:eventError}=await admin.from('paynowproviderevents')
+      .select('processingstatus,attemptcount').eq('eventid',eventId).single();
+    if(eventError)throw eventError;
+    if(event.processingstatus==='APPLIED')return new Response('OK', { status: 200 });
+    const {error:attemptError}=await admin.from('paynowproviderevents').update({
+      processingstatus:'RECEIVED',attemptcount:event.attemptcount+1,lastError:null,
+    }).eq('eventid',eventId);
+    if(attemptError)throw attemptError;
     let canonicalReference=reference;
     let {data:before,error:lookupError}=await admin.from('payments').select('id,reference,customerid,cleanerid,jobid,status,data').eq('reference',reference).maybeSingle();if(lookupError)throw lookupError;
     if(!before){
@@ -69,8 +85,17 @@ Deno.serve(async request => {
       const message=messages[data.status];if(message){for(const userId of new Set([before.customerid,before.cleanerid].filter(Boolean)))await notifyOnce(String(userId),reference,String(data.status),{...message,jobId:before.jobid});}
       if(data.status==='DISPUTED'){const {data:admins}=await admin.from('adminroles').select('userid');for(const row of admins??[])await notifyOnce(row.userid,reference,'DISPUTED',{title:'Paynow dispute needs review',body:'A Paynow BuySafe dispute was opened. Review the support queue.',type:'PAYMENT_DISPUTED',jobId:before.jobid});}
     }
+    const {error:processedError}=await admin.from('paynowproviderevents').update({
+      processingstatus:'APPLIED',processedat:new Date().toISOString(),lasterror:null,
+    }).eq('eventid',eventId);
+    if(processedError)throw processedError;
     return new Response('OK', { status: 200 });
   } catch (error) {
+    if(eventId){
+      const message=String(error).slice(0,1000);
+      const {error:recordError}=await admin.from('paynowproviderevents').update({processingstatus:'FAILED',lasterror:message}).eq('eventid',eventId);
+      if(recordError)console.error('Could not record Paynow callback failure',String(recordError));
+    }
     console.error('Paynow callback rejected or failed', String(error));
     return new Response('Paynow callback processing failed', { status: 500 });
   }
