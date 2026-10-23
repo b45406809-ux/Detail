@@ -41,6 +41,8 @@ import * as Catalog from '../../constants/services';
 // the countdown UI and the increase-budget/cancel actions available while
 // it's running.
 const BIDDING_WINDOW_MS = 30 * 60 * 1000;
+const MIN_CUSTOM_BOOKING_LEAD_MS = 30 * 60 * 1000;
+const MAX_CUSTOM_BOOKING_HORIZON_MS = 180 * 24 * 60 * 60 * 1000;
 
 /** Derive a concrete Date for every schedule preset so every job — not just
  * CUSTOM ones — has one queryable scheduledDateTime for the reminder system. */
@@ -174,7 +176,7 @@ export default function CreateBookingScreen() {
       case 'LOCATION':
         return !!address || !!coordinates;
       case 'SCHEDULE':
-        return bookingMode==='INSTANT' || (!!timePreference && (timePreference !== 'CUSTOM' || !!customDateTime));
+        return bookingMode==='INSTANT' || (!!timePreference && (timePreference !== 'CUSTOM' || (!!customDateTime && customDateTime.getTime() >= Date.now() + MIN_CUSTOM_BOOKING_LEAD_MS && customDateTime.getTime() <= Date.now() + MAX_CUSTOM_BOOKING_HORIZON_MS)));
       case 'BUDGET':
         return bookingMode==='INSTANT' || budgetOption === 'NOT_SURE' || (!!budget && Number(budget) > 0);
       default:
@@ -196,6 +198,11 @@ export default function CreateBookingScreen() {
         : { category: 'CAR', packageId: serviceId, selections, choices, vehicleType: choices.vehicleType, cleaningTypes: [serviceId], condition: choices.condition as CarChecklist['condition'], exteriorServices: selections.exterior ?? [], interiorServices: selections.interior ?? [], deepServices: selections.deep ?? [] };
 
       const scheduledDateTime = bookingMode==='INSTANT' ? null : resolveScheduledDate(timePreference, customDateTime);
+      if (bookingMode==='SCHEDULED' && timePreference==='CUSTOM' && (!customDateTime || customDateTime.getTime() < Date.now()+MIN_CUSTOM_BOOKING_LEAD_MS || customDateTime.getTime() > Date.now()+MAX_CUSTOM_BOOKING_HORIZON_MS)) {
+        Alert.alert('Choose a valid time', 'Custom bookings must be at least 30 minutes from now and within the next 180 days.');
+        setIsSubmitting(false);
+        return;
+      }
       const now = Date.now();
       const finalBudget = budgetOption === 'NOT_SURE' ? 0 : Number(budget);
       let resolvedCoordinates = coordinates;
@@ -411,7 +418,7 @@ export default function CreateBookingScreen() {
                     placeholder="Enter an address…"
                     placeholderTextColor="#9C94C4"
                     value={address}
-                    onChangeText={setAddress}
+                    onChangeText={(value) => { setAddress(value); setCoordinates(null); }}
                   />
                 </View>
               </View>
@@ -477,7 +484,8 @@ export default function CreateBookingScreen() {
                 <DateTimePicker
                   value={customDateTime ?? new Date()}
                   mode={pickerMode}
-                  minimumDate={new Date()}
+                  minimumDate={new Date(Date.now() + MIN_CUSTOM_BOOKING_LEAD_MS)}
+                  maximumDate={new Date(Date.now() + MAX_CUSTOM_BOOKING_HORIZON_MS)}
                   onChange={(event, selected) => {
                     setPickerMode(null);
                     if (event.type === 'dismissed' || !selected) return;
@@ -503,7 +511,8 @@ export default function CreateBookingScreen() {
                     value={customDateTime ?? new Date()}
                     mode="date"
                     display="compact"
-                    minimumDate={new Date()}
+                    minimumDate={new Date(Date.now() + MIN_CUSTOM_BOOKING_LEAD_MS)}
+                    maximumDate={new Date(Date.now() + MAX_CUSTOM_BOOKING_HORIZON_MS)}
                     onChange={(_, selected) => {
                       if (!selected) return;
                       const base = customDateTime ?? new Date();
