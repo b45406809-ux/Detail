@@ -708,9 +708,21 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(input.confirmation!=='DELETE')fail(400,'Type DELETE to confirm.');
       const lastSignInAt=Date.parse(String(user?.last_sign_in_at??'')),signInAge=Date.now()-lastSignInAt;
       if(!Number.isFinite(lastSignInAt)||signInAge<0||signInAge>5*60*1000)fail(409,'RECENT_LOGIN_REQUIRED');
-      const [{data:profile},{data:pendingPayout}]=await Promise.all([admin.from('users').select('balance').eq('id',actor).single(),admin.from('payoutrequests').select('id').eq('cleanerid',actor).eq('status','PENDING').limit(1).maybeSingle()]);
-      if(Number(profile?.balance??0)>0||pendingPayout)fail(409,'Settle your wallet balance and pending payout before deleting the account.');
+      const [profileResult,payoutResult,bookingResult]=await Promise.all([admin.from('users').select('balance,earningsbalance,commissionbalance,commissionowed,walletrestricted').eq('id',actor).single(),admin.from('payoutrequests').select('id').eq('cleanerid',actor).eq('status','PENDING').limit(1).maybeSingle(),admin.from('jobs').select('id').or(`customerid.eq.${actor},cleanerid.eq.${actor}`)]);
+      if(profileResult.error)throw profileResult.error;if(payoutResult.error)throw payoutResult.error;if(bookingResult.error)throw bookingResult.error;
+      const profile=profileResult.data,pendingPayout=payoutResult.data,bookings=bookingResult.data;
+      if(Number(profile?.balance??0)>0||Number(profile?.earningsbalance??0)>0||Number(profile?.commissionbalance??0)>0||Number(profile?.commissionowed??0)>0||profile?.walletrestricted||pendingPayout)fail(409,'Settle all wallet balances, commission and pending payouts before deleting the account.');
       const {error}=await admin.rpc('close_account',{p_user_id:actor}); if(error)throw error;
+      const prefixes=[`profile-photos/${actor}`,`verification/${actor}`,`job-photos/${actor}`,`cleaner-portfolio/${actor}`,...(bookings??[]).flatMap((booking:Json)=>[`job-completion/${booking.id}/${actor}`,`chat-photos/${booking.id}/${actor}`])];
+      const storage=admin.storage.from('detail-media');
+      for(const prefix of prefixes){
+        const paths:string[]=[];
+        for(let offset=0;offset<10000;offset+=1000){
+          const {data:objects,error:listError}=await storage.list(prefix,{limit:1000,offset});if(listError)throw new ApiError(503,'Could not remove private media. Retry account deletion.');
+          const files=(objects??[]).filter(item=>item.id).map(item=>`${prefix}/${item.name}`);paths.push(...files);if((objects??[]).length<1000)break;
+        }
+        for(let index=0;index<paths.length;index+=100){const {error:removeError}=await storage.remove(paths.slice(index,index+100));if(removeError)throw new ApiError(503,'Could not remove private media. Retry account deletion.');}
+      }
       const {error:deleteError}=await admin.auth.admin.deleteUser(actor); if(deleteError)throw deleteError;
       return {success:true};
     }
