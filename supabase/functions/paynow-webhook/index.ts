@@ -13,9 +13,8 @@ async function notifyOnce(userId:string,reference:string,status:string,payload:{
   const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(`${userId}:${reference}:${status}`)));
   const bytes=Array.from(digest.slice(0,16));bytes[6]=(bytes[6]&0x0f)|0x50;bytes[8]=(bytes[8]&0x3f)|0x80;
   const hex=bytes.map(v=>v.toString(16).padStart(2,'0')).join('');const notificationId=`${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
-  await admin.from('notifications').upsert({id:notificationId,userid:userId,title:payload.title,body:payload.body,type:payload.type,jobid:payload.jobId??null,data:{paymentStatus:status},createdat:new Date().toISOString()},{onConflict:'id',ignoreDuplicates:true});
-  const {data:profile}=await admin.from('users').select('expopushtoken').eq('id',userId).maybeSingle();
-  if(profile?.expopushtoken){try{const response=await fetch('https://exp.host/--/api/v2/push/send',{method:'POST',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify({to:profile.expopushtoken,title:payload.title,body:payload.body,sound:'urgent.wav',channelId:'urgent',data:{jobId:payload.jobId,paymentStatus:status}})});const result=await response.json().catch(()=>null);if(result?.data?.details?.error==='DeviceNotRegistered')await admin.from('users').update({expopushtoken:null}).eq('id',userId).eq('expopushtoken',profile.expopushtoken);if(!response.ok)console.error('Paynow status push failed',response.status);}catch(error){console.error('Paynow status push failed',String(error));}}
+  const {error}=await admin.rpc('create_notification_outbox_with_id',{p_notification_id:notificationId,p_user_id:userId,p_title:payload.title,p_body:payload.body,p_type:payload.type,p_job_id:payload.jobId??null,p_data:{paymentStatus:status}});
+  if(error)throw error;
 }
 
 Deno.serve(async request => {
@@ -24,7 +23,8 @@ Deno.serve(async request => {
     // Paynow result URLs are form-encoded status updates. The official SDK
     // validates the integration hash before the reference can touch the ledger.
     const raw = await request.text();
-    const update = paynow.parseStatusUpdate(raw);
+    let update:any;
+    try{update=paynow.parseStatusUpdate(raw);}catch{return new Response('Invalid Paynow callback', { status: 400 });}
     if (!update.reference || !update.status || !update.amount) return new Response('Invalid status update', { status: 400 });
     const reference=String(update.reference);
     let canonicalReference=reference;
@@ -57,7 +57,7 @@ Deno.serve(async request => {
         if(before?.jobid){await admin.from('supportcases').upsert({id:`paynow_refund_reconcile_${payment.id}`,jobid:before.jobid,customerid:before.customerid,cleanerid:before.cleanerid,reason:'Paynow reported REFUNDED without refund-specific amount/reference evidence. Reconcile the provider transaction before confirming the refund ledger.',status:'URGENT',data:{type:'PAYNOW_REFUND_RECONCILIATION',paymentId:payment.id,providerStatus:'REFUNDED'}},{onConflict:'id'});}
       }
     }
-    if(before&&data?.status&&before.status!==data.status){
+    if(before&&data?.status){
       const booking=!!before.jobid;
       const messages:Record<string,{title:string;body:string;type:string}>={
         ESCROWED:{title:'Payment protected with BuySafe',body:'Paynow is holding the booking payment. Open Detail to follow the service.',type:'PAYMENT_ESCROWED'},
@@ -72,6 +72,6 @@ Deno.serve(async request => {
     return new Response('OK', { status: 200 });
   } catch (error) {
     console.error('Paynow callback rejected or failed', String(error));
-    return new Response('Invalid Paynow callback', { status: 400 });
+    return new Response('Paynow callback processing failed', { status: 500 });
   }
 });

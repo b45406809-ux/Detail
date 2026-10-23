@@ -814,7 +814,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Source:** [supabase/functions/paynow-webhook/index.ts:39](<../supabase/functions/paynow-webhook/index.ts#L39>); [supabase/functions/marketplace-api/index.ts:427](<../supabase/functions/marketplace-api/index.ts#L427>); [supabase/functions/delivery-worker/index.ts:54](<../supabase/functions/delivery-worker/index.ts#L54>)
 
-**Problem and impact.** The Paynow callback commits status then sends push directly; if notification fails after the DB update, a replay sees the status unchanged and skips notification. completeBooking ignores the RPC result/error from earnings release. There is no scheduled payment poller, provider-event journal, orphan-attempt repair or ledger-vs-provider reconciliation job; the delivery worker only handles notifications/expiry. Missed callbacks or partial failure can remain unresolved indefinitely.
+**Current implementation and remaining gap.** Paynow status callbacks now ensure a deterministic, per-user notification and per-device delivery row through an idempotent outbox, even when the payment status was already committed before a callback retry. Transient callback processing failures return a server error so the provider can retry. Earnings release is gated and idempotent in database transactions. The system still lacks a scheduled provider poller, full orphan-attempt repair and provider-vs-ledger reconciliation; unresolved records still need operational review.
 
 **Proposed fix.** Persist provider inbox/outbox and business effects transactionally, retry through workers, expose stuck records to operations and reconcile provider/payment/ledger totals on a schedule.
 
