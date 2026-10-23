@@ -370,6 +370,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** Seed every media folder, precise coordinate column and pending/approved/captured obligation; deletion either blocks clearly or fully executes the documented redaction with a retryable audit trail.
 
+**Implementation status (2026-10-23).** The latest `close_account` migration clears precise location fields and booking address/scope/media references, blocks pending or approved payouts and unresolved provider-payment states, and the API removes the account's private media before soft-deleting Auth. A database regression test now covers approved-payout and authorized-payment blocking plus location and retained-booking redaction. Media removal failure recovery, all provider/payment states and residual support/evidence retention still require broader verification.
+
 <a id="F15"></a>
 
 ### F15 — Media access is long-lived and some assigned-party avatars are unreadable
@@ -873,6 +875,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 **Proposed fix.** Define a versioned notification deep-link contract including event type, safe target and actor/role context; route both in-app/push through one resolver after session hydration. Deduplicate last-response navigation and verify access on destination load.
 
 **Acceptance check.** Tap quote, instant offer, acceptance, payment, emergency and support notifications with the app foregrounded, backgrounded, signed out and cold-started; each reaches the correct authorized screen.
+
+**Implementation status (2026-10-23).** Push payloads now include the notification `type`, job ID and support-case ID, and the push-device lifecycle test asserts that type survives outbox creation. The native cold-start and in-app list routers still need a unified, real-device journey test and authorized destination resolver.
 
 <a id="F51"></a>
 

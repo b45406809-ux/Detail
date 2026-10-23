@@ -1,5 +1,5 @@
 begin;
-select plan(8);
+select plan(9);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values
@@ -22,6 +22,11 @@ select is(
   (select count(*)::integer from public.notificationDeliveries where userId='65e2589a-ddb1-4ffb-b4cb-63d8a0bc669a' and provider='EXPO'),
   2,
   'one notification creates a delivery for each registered device'
+);
+select is(
+  (select payload->'data'->>'type' from public.notificationDeliveries where userId='65e2589a-ddb1-4ffb-b4cb-63d8a0bc669a' and provider='EXPO' limit 1),
+  'BOOKING_CREATED',
+  'push delivery data preserves the notification type for app routing'
 );
 select ok(public.unregister_push_device('65e2589a-ddb1-4ffb-b4cb-63d8a0bc669a','ExponentPushToken[deviceOneToken]'),
   'logout can revoke only the current device token');
