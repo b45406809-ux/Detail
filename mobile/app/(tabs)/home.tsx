@@ -46,7 +46,7 @@ import {
 } from '../../services/supabase';
 import { Job, JobStatus, Favorite } from '../../types';
 import { Logo } from '../../components/Logo';
-import { haversineDistanceKm, rankJobsByProximity } from '../../services/matching';
+import { rankJobsByProximity } from '../../services/matching';
 import { GlassCard, GlassSheet, GlassIconButton, RoleToggle } from '../../components/glass';
 import { MapPlaceholder } from '../../components/MapPlaceholder';
 import { IS_DEMO } from '../../utils/env';
@@ -168,16 +168,27 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (isCustomer) return;
-    // Fetch a wider candidate pool than we display — CleanerPanel re-sorts
-    // this by distance (nearest first, Uber-style), so a larger pool means
-    // a genuinely-nearby job doesn't get missed just because it wasn't one
-    // of the 10 most recently posted.
+    // Keep the open-job listener realtime, then hydrate one sanitized scope
+    // batch so cleaners can assess work without reading the private job row.
     const q = query(collection(db, 'openJobs'), where('status', '==', JobStatus.PENDING), orderBy('createdAt', 'desc'), limit(30));
-    return onSnapshot(
+    let active = true;
+    let revision = 0;
+    const unsubscribe = onSnapshot(
       q,
-      (snap) => setAvailableJobs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Job))),
-      (err) => console.warn('[home] availableJobs listener error:', err.message)
+      (snap) => {
+        const currentRevision = ++revision;
+        const jobIds = snap.docs.map((item) => item.id);
+        if (!jobIds.length) { setAvailableJobs([]); return; }
+        callFunction<{ jobIds: string[] }, { jobs: Job[] }>('getCleanerBookingPreviews', { jobIds })
+          .then(({ jobs }) => { if (active && currentRevision === revision) setAvailableJobs(jobs); })
+          .catch((err) => {
+            console.warn('[home] availableJobs preview failed:', err instanceof Error ? err.message : String(err));
+            if (active && currentRevision === revision) setAvailableJobs([]);
+          });
+      },
+      (err) => { console.warn('[home] availableJobs listener error:', err.message); setAvailableJobs([]); }
     );
+    return () => { active = false; revision++; unsubscribe(); };
   }, [isCustomer, refreshNonce]);
 
   useEffect(() => {
@@ -560,10 +571,11 @@ function CleanerPanel({
             <View className="gap-2">
               {displayJobs.map((job) => {
                 const thumbUrl = Array.isArray(job.photos) && job.photos.length > 0 ? job.photos[0] : null;
-                const regNum = (job.checklist as any)?.registrationNumber;
-                const dist = currentLocation && job.location?.lat && job.location?.lng
-                  ? `${haversineDistanceKm(currentLocation, { lat: job.location.lat, lng: job.location.lng }).toFixed(1)} km`
-                  : null;
+                const scope = (job.checklist && typeof job.checklist === 'object' ? job.checklist : {}) as Record<string, unknown>;
+                const scopeValues = job.category === 'CAR'
+                  ? [scope.vehicleType, scope.vehicleSize, scope.seats ? `${scope.seats} seats` : null, ...(Array.isArray(scope.cleaningTypes) ? scope.cleaningTypes : []), ...(Array.isArray(scope.exteriorServices) ? scope.exteriorServices : []), ...(Array.isArray(scope.interiorServices) ? scope.interiorServices : []), ...(Array.isArray(scope.deepServices) ? scope.deepServices : [])]
+                  : [scope.propertyType, scope.propertySize, scope.areaSize, ...(Array.isArray(scope.areas) ? scope.areas : []), ...(Array.isArray(scope.cleaningTypes) ? scope.cleaningTypes : []), ...(Array.isArray(scope.addOns) ? scope.addOns : []), scope.roomsCount ? `${scope.roomsCount} rooms` : null, scope.bathroomsCount ? `${scope.bathroomsCount} bathrooms` : null, scope.bedrooms ? `${scope.bedrooms} bedrooms` : null];
+                const scopeLabel = scopeValues.filter((value): value is string | number => typeof value === 'string' || typeof value === 'number').slice(0, 4).join(' · ');
                 const estimatedMinutes = Number(job.estimatedDuration);
                 const durationLabel = Number.isFinite(estimatedMinutes) && estimatedMinutes > 0
                   ? estimatedMinutes < 60 ? `${estimatedMinutes} min`
@@ -603,25 +615,23 @@ function CleanerPanel({
                       <Text className="font-sans text-xs text-slate-400 font-medium mb-1.5" numberOfLines={1}>
                         {job.location?.address}
                       </Text>
+                      {!!scopeLabel && (
+                        <Text className="font-sans text-[11px] text-slate-600 font-medium mb-1.5" numberOfLines={2}>
+                          Scope: {scopeLabel}
+                        </Text>
+                      )}
 
                       <View className="flex-row items-center gap-3">
-                        {dist && (
-                          <View className="flex-row items-center gap-1">
-                            <MapPin size={11} color="#3906D2" />
-                            <Text className="font-sans text-[11px] font-bold text-slate-500">{dist}</Text>
-                          </View>
-                        )}
+                        <View className="flex-row items-center gap-1">
+                          <MapPin size={11} color="#3906D2" />
+                          <Text className="font-sans text-[11px] font-bold text-slate-500">Approximate area</Text>
+                        </View>
                         <View className="flex-row items-center gap-1">
                           <Clock size={11} color="#94a3b8" />
                           <Text className="font-sans text-[11px] font-bold text-slate-400">
                             {durationLabel}
                           </Text>
                         </View>
-                        {regNum && (
-                          <View className="bg-slate-100 px-2 py-0.5 rounded-md">
-                            <Text className="text-[10px] font-display font-black text-slate-600 tracking-wider">{regNum}</Text>
-                          </View>
-                        )}
                         {Array.isArray(job.photos) && job.photos.length > 0 && (
                           <Text className="font-sans text-[10px] font-bold text-slate-400">📷 {job.photos.length}</Text>
                         )}

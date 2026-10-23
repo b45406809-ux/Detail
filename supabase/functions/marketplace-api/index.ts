@@ -5,6 +5,7 @@ import { trustedEdgeIp } from '../_shared/trusted_edge_ip.ts';
 import { isValidScheduledBookingTime } from '../_shared/booking_schedule.ts';
 import { isPaymentGateClosed } from '../_shared/payment_gate.ts';
 import { cleanerLocationIsFresh } from '../_shared/cleaner_location.ts';
+import { toCleanerBookingSummary } from '../_shared/cleaner_booking_summary.ts';
 
 const url = Deno.env.get('SUPABASE_URL') ?? '';
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
@@ -846,18 +847,21 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(openError)throw openError;if(!openJob)fail(404,'This booking is no longer accepting quotes.');
       const {data:job,error}=await admin.from('jobs').select('id,category,servicetype,checklist,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status').eq('id',openJob.jobid).maybeSingle();
       if(error)throw error;if(!job||job.status!=='PENDING')fail(404,'This booking is no longer accepting quotes.');
-      const source=(job.checklist&&typeof job.checklist==='object'?job.checklist:{}) as Json;
-      const strings=(value:unknown,max=12)=>Array.isArray(value)?value.filter((item):item is string=>typeof item==='string').slice(0,max).map(item=>text(item,60)):[];
-      const count=(value:unknown)=>Number.isFinite(Number(value))&&Number(value)>0?Math.min(10000,Number(value)):undefined;
-      const category=job.category==='CAR'?'CAR':'HOUSE';
-      const checklist:Json=category==='HOUSE'?{
-        category:'HOUSE',packageId:text(source.packageId,80),areas:strings(source.areas),cleaningTypes:strings(source.cleaningTypes),condition:['LIGHT','MODERATE','HEAVY'].includes(String(source.condition))?source.condition:undefined,addOns:strings(source.addOns),propertySizeSqm:count(source.propertySizeSqm),storiesCount:count(source.storiesCount),roomsCount:count(source.roomsCount),bathroomsCount:count(source.bathroomsCount),
-      }:{
-        category:'CAR',packageId:text(source.packageId,80),vehicleType:text(source.vehicleType,40),cleaningTypes:strings(source.cleaningTypes),condition:['CLEAN','AVERAGE','VERY_DIRTY'].includes(String(source.condition))?source.condition:undefined,exteriorServices:strings(source.exteriorServices),interiorServices:strings(source.interiorServices),deepServices:strings(source.deepServices),
-      };
-      const location=(job.location&&typeof job.location==='object'?job.location:{}) as Json;
-      const lat=Number(location.lat),lng=Number(location.lng);
-      return {id:job.id,customerId:'',category,serviceType:text(job.servicetype,120),checklist,description:'',location:{lat:Number.isFinite(lat)?Math.round(lat*100)/100:0,lng:Number.isFinite(lng)?Math.round(lng*100)/100:0,address:'Approximate area'},scheduledTime:job.scheduledtime,timePreference:job.timepreference,scheduledDateTime:job.scheduleddatetime,bookingMode:job.bookingmode,budget:job.budget,biddingExpiresAt:job.biddingexpiresat,estimatedDuration:job.estimatedduration,suppliesRequired:job.suppliesrequired,suppliesFee:job.suppliesfee,createdAt:job.createdat,status:job.status,photos:[],completionPhotos:[]};
+      return toCleanerBookingSummary(job as Json);
+    }
+    case 'getCleanerBookingPreviews': {
+      const actor=authed(),profile=await userRow(actor);
+      if(profile.role!=='CLEANER'||profile.verificationstatus!=='VERIFIED'||!profile.cleaneragreementaccepted||!profile.cleaneronboardingcomplete||profile.issuspended||profile.isbanned)fail(403,'Only active, verified cleaners can review open bookings.');
+      const jobIds=Array.isArray(input.jobIds)?Array.from(new Set(input.jobIds.slice(0,30).map((id:unknown)=>text(id,80)).filter((id:string)=>/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)))):[];
+      if(!jobIds.length)return {jobs:[]};
+      const {data:openJobs,error:openError}=await admin.from('openjobs').select('jobid').in('jobid',jobIds).eq('status','PENDING');
+      if(openError)throw openError;
+      const openIds=(openJobs??[]).map((row:Json)=>row.jobid).filter((id:unknown):id is string=>typeof id==='string');
+      if(!openIds.length)return {jobs:[]};
+      const {data:jobs,error}=await admin.from('jobs').select('id,category,servicetype,checklist,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status').in('id',openIds).eq('status','PENDING');
+      if(error)throw error;
+      const byId=new Map<string,Json>((jobs??[]).map((job:Json):[string,Json]=>[String(job.id),job]));
+      return {jobs:openIds.map(id=>byId.get(id)).filter((job):job is Json=>!!job).map(job=>toCleanerBookingSummary(job))};
     }
     case 'addCleanerPortfolioPhoto': {
       const actor=authed(), path=text(input.imagePath,500);const profile=await userRow(actor);
