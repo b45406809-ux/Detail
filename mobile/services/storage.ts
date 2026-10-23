@@ -1,13 +1,26 @@
 import { supabase, auth } from './supabase';
 
 const BUCKET = 'detail-media';
-function filename() { return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.jpg`; }
-async function uploadUri(uri: string, path: string, onProgress?: (pct: number) => void) {
+const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+function filename() { return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
+function mimeTypeFromUri(uri: string) {
+  const extension = uri.split(/[?#]/, 1)[0].split('.').pop()?.toLowerCase();
+  const types: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic' };
+  return extension ? types[extension] : undefined;
+}
+async function uploadUri(uri: string, path: string, onProgress?: (pct: number) => void, upsert = false) {
   if (!auth.currentUser) throw new Error('Sign in before uploading a photo.');
   const response = await fetch(uri);
-  const blob = await response.blob();
+  if (!response.ok) throw new Error('Could not read the selected photo. Please choose it again.');
+  const bytes = await response.arrayBuffer();
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_UPLOAD_BYTES) throw new Error('Choose a photo smaller than 15 MB.');
+  const responseType = response.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase();
+  const contentType = responseType?.startsWith('image/') ? responseType : mimeTypeFromUri(uri);
+  if (!contentType || !['image/jpeg', 'image/png', 'image/webp', 'image/heic'].includes(contentType)) {
+    throw new Error('Choose a JPEG, PNG, WebP, or HEIC image.');
+  }
   onProgress?.(0.1);
-  const { error } = await supabase.storage.from(BUCKET).upload(path, blob, { upsert: true, contentType: blob.type || 'image/jpeg' });
+  const { error } = await supabase.storage.from(BUCKET).upload(path, bytes, { upsert, contentType });
   if (error) throw error;
   onProgress?.(1);
   return `${BUCKET}/${path}`;
@@ -30,7 +43,7 @@ export function uploadChatPhoto(uri: string, jobId: string) {
 export function uploadProfilePhoto(uri: string) {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error('Sign in before uploading a photo.');
-  return uploadUri(uri, `profile-photos/${uid}/avatar.jpg`);
+  return uploadUri(uri, `profile-photos/${uid}/avatar.jpg`, undefined, true);
 }
 export function uploadCleanerPortfolioPhoto(uri: string) {
   const uid = auth.currentUser?.uid;
@@ -40,15 +53,15 @@ export function uploadCleanerPortfolioPhoto(uri: string) {
 export function uploadProofOfResidence(uri: string) {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error('Sign in before uploading a photo.');
-  return uploadUri(uri, `verification/${uid}/proof-of-residence.jpg`);
+  return uploadUri(uri, `verification/${uid}/proof-of-residence.jpg`, undefined, true);
 }
 
 /** Media remains in a private bucket; signed links are generated on reads. */
 export async function signMediaValue(value: unknown): Promise<unknown> {
   if (typeof value === 'string' && value.startsWith(`${BUCKET}/`)) {
     const path = value.slice(BUCKET.length + 1);
-    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 60 * 24 * 7);
-    if (error) return '';
+    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 60);
+    if (error) throw error;
     return data.signedUrl;
   }
   if (Array.isArray(value)) return Promise.all(value.map(signMediaValue));
