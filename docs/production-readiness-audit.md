@@ -220,7 +220,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** An eligible unassigned cleaner can price the work without seeing exact address/contact details; an unrelated customer cannot fetch that summary.
 
-**Implementation status (2026-10-23).** The cleaner preview endpoint verifies the caller is an active, verified cleaner, checks that the booking is still open, returns normalized service scope and an approximate location, and withholds the address, customer identity, description and photos. Scheduled-nearby notifications were added for eligible cleaners. End-to-end scope rendering, distance ranking and the policy for safely shareable reference photos still require validation.
+**Implementation status (2026-10-23).** The cleaner preview endpoint verifies the caller is an active, verified cleaner, checks that the booking is still open, returns normalized service scope and an approximate location, and withholds the address, customer identity, description and photos. Scheduled-nearby notifications were added for eligible cleaners, and the cleaner feed now formats the stored estimate as minutes/hours instead of mislabeling minutes as hours. End-to-end scope rendering, distance ranking and the policy for safely shareable reference photos still require validation.
 
 <a id="F05"></a>
 

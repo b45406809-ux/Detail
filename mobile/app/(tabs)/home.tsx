@@ -513,6 +513,11 @@ function CleanerPanel({
                 const dist = currentLocation && job.location?.lat && job.location?.lng
                   ? `${haversineDistanceKm(currentLocation, { lat: job.location.lat, lng: job.location.lng }).toFixed(1)} km`
                   : null;
+                const estimatedMinutes = Number(job.estimatedDuration);
+                const durationLabel = Number.isFinite(estimatedMinutes) && estimatedMinutes > 0
+                  ? estimatedMinutes < 60 ? `${estimatedMinutes} min`
+                    : `${Math.floor(estimatedMinutes / 60)} hr${estimatedMinutes % 60 ? ` ${estimatedMinutes % 60} min` : ''}`
+                  : 'Review scope';
                 return (
                   <TouchableOpacity
                     key={job.id}
@@ -558,7 +563,7 @@ function CleanerPanel({
                         <View className="flex-row items-center gap-1">
                           <Clock size={11} color="#94a3b8" />
                           <Text className="font-sans text-[11px] font-bold text-slate-400">
-                            {job.estimatedDuration ? `${job.estimatedDuration}h` : '2–3h'}
+                            {durationLabel}
                           </Text>
                         </View>
                         {regNum && (
