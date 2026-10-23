@@ -258,6 +258,24 @@ export interface Favorite {
 export type NotificationType =
   | 'NEW_BID'
   | 'BID_ACCEPTED'
+  | 'BOOKING_CREATED'
+  | 'INSTANT_BOOKING_OFFER'
+  | 'INSTANT_BOOKING_ACCEPTED'
+  | 'ASSIGNED'
+  | 'EN_ROUTE'
+  | 'CLEANER_ARRIVED'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'RESCHEDULED'
+  | 'PAYMENT_ESCROWED'
+  | 'PAYMENT_DELIVERED'
+  | 'PAYMENT_DISPUTED'
+  | 'COMPLETION_DISPUTED'
+  | 'COMPLETION_CONFIRMED'
+  | 'CANCELLATION_REVIEW'
+  | 'SUPPORT_CASE'
+  | 'EMERGENCY'
   | 'JOB_UPDATE'
   | 'MESSAGE'
   | 'PAYMENT'
@@ -271,7 +289,7 @@ export interface AppNotification {
   title: string;
   body: string;
   jobId?: string;
-  data?: { supportCaseId?: string; [key:string]: unknown };
+  data?: { type?: NotificationType; supportCaseId?: string; [key:string]: unknown };
   read: boolean;
   createdAt?: any;
 }

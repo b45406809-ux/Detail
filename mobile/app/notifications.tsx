@@ -7,12 +7,30 @@ import { useAuth } from '../context/AuthContext';
 import { db, collection, query, where, onSnapshot, doc, updateDoc, orderBy, limit } from '../services/supabase';
 import { AppNotification, NotificationType } from '../types';
 
-const TYPE_ICON: Record<NotificationType, any> = {
+const TYPE_ICON: Partial<Record<NotificationType, any>> = {
   NEW_BID: Zap,
   BID_ACCEPTED: Zap,
+  BOOKING_CREATED: Zap,
+  INSTANT_BOOKING_OFFER: Zap,
+  INSTANT_BOOKING_ACCEPTED: Zap,
   JOB_UPDATE: Info,
+  ASSIGNED: Info,
+  EN_ROUTE: Info,
+  CLEANER_ARRIVED: Info,
+  IN_PROGRESS: Info,
+  COMPLETED: Info,
+  CANCELLED: Info,
+  RESCHEDULED: Info,
   MESSAGE: MessageSquare,
   PAYMENT: DollarSign,
+  PAYMENT_ESCROWED: DollarSign,
+  PAYMENT_DELIVERED: DollarSign,
+  PAYMENT_DISPUTED: DollarSign,
+  COMPLETION_DISPUTED: Info,
+  COMPLETION_CONFIRMED: Info,
+  CANCELLATION_REVIEW: Info,
+  SUPPORT_CASE: MessageSquare,
+  EMERGENCY: Info,
   RATING: Star,
   SYSTEM: Bell,
 };
@@ -38,6 +56,9 @@ export default function NotificationsScreen() {
   const openNotification = (n: AppNotification) => {
     if (!n.read) updateDoc(doc(db, 'notifications', n.id), { read: true }).catch(() => {});
     if(n.data?.supportCaseId){router.push('/support');return;}
+    if(n.type==='INSTANT_BOOKING_OFFER'){router.push('/instant-offers');return;}
+    if(n.type==='INSTANT_BOOKING_ACCEPTED'){router.push({pathname:'/booking/offers',params:{jobId:n.jobId}});return;}
+    if(['NEW_BID','BOOKING_CREATED'].includes(n.type)){if(n.jobId)router.push({pathname:'/booking/offers',params:{jobId:n.jobId}});return;}
     if (n.jobId) router.push({ pathname: '/tracking/[jobId]', params: { jobId: n.jobId } });
   };
 
