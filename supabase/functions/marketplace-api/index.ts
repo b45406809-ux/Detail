@@ -828,7 +828,10 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'adminMutation': {
       const actor=authed(); const action=text(input.action,80); const key=requireKey(input.idempotencyKey); const reason=text(input.reason,500); const targetId=text(input.targetId,120);
       requireRecentMfa(request);
-      const {data:alreadyApplied}=await admin.from('adminauditevents').select('id').eq('id',key).maybeSingle();if(alreadyApplied)return {ok:true,auditId:key};
+      const supportedActions=new Set(['update_kill_switch','deactivate_cleaner','suspend_cleaner','change_account_state','resolve_case','assign_support_case','reschedule_booking','reassign_booking','assign_cleaner','cancel_booking','request_refund','full_refund','partial_refund']);
+      if(!supportedActions.has(action))fail(400,`Admin action "${action}" is not supported.`);
+      const {data:alreadyApplied}=await admin.from('adminauditevents').select('id,action,targetid').eq('id',key).maybeSingle();
+      if(alreadyApplied){if(alreadyApplied.action!==action||alreadyApplied.targetid!==(targetId||null))fail(409,'This idempotency key was already used for a different admin action.');return {ok:true,auditId:key};}
       const permission = action.includes('refund') ? 'finance.write' : action.includes('booking') || action.includes('reschedule') || action.includes('assign') ? 'bookings.manage' : action.includes('cleaner') || action.includes('account') ? 'users.manage' : action.includes('support') || action.includes('case') ? 'support.manage' : undefined;
       await requireAdmin(actor,permission,action==='update_kill_switch');
       if(reason.length<4)fail(400,'A meaningful reason is required.');
@@ -860,12 +863,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         if(job.cleanerid)await notify(job.cleanerid,{type:'RESCHEDULED',title:'Booking rescheduled',body:'Your booking time has changed. Open Detail to review the new schedule.',jobId:targetId});
       } else if(action==='reassign_booking' || action==='assign_cleaner') {
         const cleanerId=text(input.cleanerId,80);if(!cleanerId)fail(400,'Enter the cleaner account ID to assign.');
-        const [{data:job,error:jobError},{data:cleaner,error:cleanerError}]=await Promise.all([admin.from('jobs').select('*').eq('id',targetId).maybeSingle(),admin.from('users').select('*').eq('id',cleanerId).maybeSingle()]);
-        if(jobError)throw jobError;if(cleanerError)throw cleanerError;
-        if(!job||!cleaner||cleaner.role!=='CLEANER'||cleaner.verificationstatus!=='VERIFIED'||cleaner.issuspended||cleaner.isbanned||cleaner.status!=='AVAILABLE')fail(409,'Choose an available, verified cleaner.');
-        const {error:updateError}=await admin.from('jobs').update({cleanerid:cleanerId,cleanername:cleaner.displayname,cleanerphoto:cleaner.photourl,status:'ASSIGNED',updatedat:now}).eq('id',targetId);if(updateError)throw updateError;
-        await admin.from('openjobs').delete().eq('jobid',targetId);
-        await admin.from('jobevents').upsert({jobid:targetId,actorid:actor,actorrole:'ADMIN',type:'REASSIGNED',previousstate:job.status,newstate:'ASSIGNED',idempotencykey:key,reason,data:{previousCleanerId:job.cleanerid,newCleanerId:cleanerId}},{onConflict:'jobid,idempotencykey',ignoreDuplicates:true});
+        const {error}=await admin.rpc('admin_reassign_booking',{p_job_id:targetId,p_actor_id:actor,p_cleaner_id:cleanerId,p_reason:reason,p_idempotency_key:key});if(error)throw error;
         await notify(cleanerId,{type:'ASSIGNED',title:'New booking assigned',body:'A booking has been assigned to you. Open Detail to review the details.',jobId:targetId});
       } else if(action==='cancel_booking') {
         const {data:job,error}=await admin.from('jobs').select('*').eq('id',targetId).maybeSingle();if(error)throw error;if(!job)fail(404,'Booking not found.');
