@@ -599,7 +599,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         try { redirectUrl=await startPaynowCheckout(jobId,email,{reference:data.payment.reference,amount:data.payment.amount,cleanerName:data.cleanerName}); }
         catch(error){const {data:current}=await admin.from('payments').select('data').eq('id',`${jobId}_booking`).maybeSingle();await admin.from('payments').update({status:'FAILED',data:{...(current?.data??{}),failureReason:'INITIATION_FAILED'}}).eq('id',`${jobId}_booking`);await admin.from('jobs').update({paymentstatus:'FAILED'}).eq('id',jobId);throw error;}
       }
-      if(data.cleanerId && method!=='PAYNOW') await notify(data.cleanerId,{type:'BID_ACCEPTED',title:'Quote accepted',body:'The customer accepted your quote.',jobId});
+      if(data.cleanerId && data.paymentMethod!=='PAYNOW'&&!data.replayed) await notify(data.cleanerId,{type:'BID_ACCEPTED',title:'Quote accepted',body:'The customer accepted your quote.',jobId});
       return {...data,redirectUrl};
     }
     case 'refreshPaynowBookingPayment': {
