@@ -63,6 +63,7 @@ export default function RootLayout() {
       const data = response.notification.request.content.data as { jobId?: string; supportCaseId?: string; type?: string };
       if(data.supportCaseId){router.push('/support');return;}
       if(data.type==='INSTANT_BOOKING_OFFER'){router.push('/instant-offers');return;}
+      if(data.type==='NEW_SCHEDULED_JOB'&&data.jobId){router.push({pathname:'/job/[jobId]',params:{jobId:data.jobId}});return;}
       if(data.type==='INSTANT_BOOKING_ACCEPTED'&&data.jobId){router.push({pathname:'/booking/offers',params:{jobId:data.jobId}});return;}
       if (!data.jobId) return;
       const offerTypes = ['BOOKING_CREATED', 'NEW_BID'];

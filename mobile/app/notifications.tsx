@@ -11,6 +11,7 @@ const TYPE_ICON: Partial<Record<NotificationType, any>> = {
   NEW_BID: Zap,
   BID_ACCEPTED: Zap,
   BOOKING_CREATED: Zap,
+  NEW_SCHEDULED_JOB: Zap,
   INSTANT_BOOKING_OFFER: Zap,
   INSTANT_BOOKING_ACCEPTED: Zap,
   INSTANT_MATCH_EXPIRED: Info,
@@ -61,6 +62,7 @@ export default function NotificationsScreen() {
     if(n.data?.supportCaseId){router.push('/support');return;}
     if(n.type==='INSTANT_BOOKING_OFFER'){router.push('/instant-offers');return;}
     if(n.type==='INSTANT_BOOKING_ACCEPTED'){router.push({pathname:'/booking/offers',params:{jobId:n.jobId}});return;}
+    if(n.type==='NEW_SCHEDULED_JOB'){if(n.jobId)router.push({pathname:'/job/[jobId]',params:{jobId:n.jobId}});return;}
     if(['NEW_BID','BOOKING_CREATED'].includes(n.type)){if(n.jobId)router.push({pathname:'/booking/offers',params:{jobId:n.jobId}});return;}
     if (n.jobId) router.push({ pathname: '/tracking/[jobId]', params: { jobId: n.jobId } });
   };

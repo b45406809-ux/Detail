@@ -388,7 +388,9 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         await Promise.all(cleanerIds.map((cleanerId: string) => notify(cleanerId, { type:'INSTANT_BOOKING_OFFER', title:'Nearby cleaning request', body:`A ${booking.serviceType || 'cleaning'} request is available nearby. Open Detail to respond.`, jobId })));
         return { success:true, jobId, matchedCleaners:cleanerIds.length };
       }
-      return { success: true, jobId };
+      const {data:scheduledNotices,error:noticeError}=await admin.rpc('notify_scheduled_job_cleaners',{p_job_id:jobId,p_customer_id:actor,p_limit:20});
+      if(noticeError)throw noticeError;
+      return { success: true, jobId, notifiedCleaners:Number(scheduledNotices??0) };
     }
     case 'refreshInstantMatching': {
       const actor=authed(),jobId=text(input.jobId,80);await requireActiveMarketplaceAccount(actor);await enforceRateLimit(request,actor,'instant_match_refresh',12,300);
