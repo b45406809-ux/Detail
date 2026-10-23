@@ -19,16 +19,12 @@ import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
 import {
   db,
-  doc,
   collection,
   query,
   where,
   onSnapshot,
-  updateDoc,
   orderBy,
-  serverTimestamp,
-  writeBatch,
-  increment,
+  supabase,
 } from '../../services/supabase';
 import { uploadChatPhoto } from '../../services/storage';
 import { ChatMessage } from '../../types';
@@ -89,8 +85,10 @@ export default function MessagesScreen() {
   useEffect(() => {
     if (!activeJobId || !user) return;
 
-    // Reset this user's unread count when opening a conversation
-    updateDoc(doc(db, 'jobs', activeJobId), { [unreadField]: 0 }).catch(() => {});
+    // Read-state writes are authorized and serialized with message writes.
+    supabase.rpc('mark_job_messages_read', { p_job_id: activeJobId }).then(({ error }) => {
+      if (error) console.warn('Could not mark conversation as read:', error.message);
+    });
 
     const q = query(
       collection(db, 'messages'),
@@ -102,35 +100,19 @@ export default function MessagesScreen() {
       // Scroll to bottom on new messages
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     });
-  }, [activeJobId, user, unreadField]);
+  }, [activeJobId, user]);
 
   const sendMessage = async (override?: string) => {
     const text = (override ?? inputText).trim();
     if (!text || !activeJobId || !user) return;
-    if (!override) setInputText('');
-
-    // Use a batch to atomically write the message and update the job's lastMessage + increment other party's unread
-    const batch = writeBatch(db);
-    const messageRef = doc(collection(db, 'messages'));
-    batch.set(messageRef, {
-      jobId: activeJobId,
-      senderId: user.uid,
-      senderName: profile?.displayName,
-      text,
-      createdAt: serverTimestamp(),
-    });
-
-    const otherUnreadField = isCustomer ? 'cleanerUnread' : 'customerUnread';
-    const jobRef = doc(db, 'jobs', activeJobId);
-    batch.update(jobRef, {
-      lastMessage: text,
-      lastMessageAt: serverTimestamp(),
-      // Atomically increment the OTHER user's unread count, reset our own
-      [otherUnreadField]: increment(1),
-      [unreadField]: 0,
-    });
-
-    await batch.commit().catch(() => {});
+    try {
+      const { error } = await supabase.rpc('send_job_message', { p_job_id: activeJobId, p_text: text, p_image_path: null });
+      if (error) throw error;
+      if (!override) setInputText('');
+    } catch (error) {
+      console.error('Could not send message:', error);
+      Alert.alert('Message not sent', 'Check your connection and try again.');
+    }
   };
 
   const [isSendingPhoto, setIsSendingPhoto] = useState(false);
@@ -140,26 +122,11 @@ export default function MessagesScreen() {
     setIsSendingPhoto(true);
     try {
       const imageUrl = await uploadChatPhoto(uri, activeJobId);
-      const batch = writeBatch(db);
-      const messageRef = doc(collection(db, 'messages'));
-      batch.set(messageRef, {
-        jobId: activeJobId,
-        senderId: user.uid,
-        senderName: profile?.displayName,
-        text: '',
-        imageUrl,
-        createdAt: serverTimestamp(),
-      });
-      const otherUnreadField = isCustomer ? 'cleanerUnread' : 'customerUnread';
-      batch.update(doc(db, 'jobs', activeJobId), {
-        lastMessage: '📷 Photo',
-        lastMessageAt: serverTimestamp(),
-        [otherUnreadField]: increment(1),
-        [unreadField]: 0,
-      });
-      await batch.commit();
-    } catch {
-      // Best-effort — chat stays usable even if a photo upload fails
+      const { error } = await supabase.rpc('send_job_message', { p_job_id: activeJobId, p_text: '', p_image_path: imageUrl });
+      if (error) throw error;
+    } catch (error) {
+      console.error('Could not send chat photo:', error);
+      Alert.alert('Photo not sent', 'Check your connection and try again.');
     } finally {
       setIsSendingPhoto(false);
     }
