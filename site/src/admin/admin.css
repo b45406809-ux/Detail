@@ -6,3 +6,4 @@
 .payout-row{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:12px 0;border-top:1px solid #292936;font-size:12px;color:#bcbccc}.payout-row span{flex:1;line-height:1.7}.payout-row b{color:#fff}.payout-row button{background:#292838;color:white;border:1px solid #3c3b4b;border-radius:8px;padding:8px 11px}
 .row-action{margin:2px 4px 2px 0;background:#292838;color:#fff;border:1px solid #3c3b4b;border-radius:8px;padding:6px 9px;font-size:10px;white-space:nowrap}.row-action:hover{background:#403b5c;border-color:#7c5cff}
 .support-evidence-grid{display:flex;flex-wrap:wrap;gap:12px}.support-evidence-grid a{display:grid;gap:6px;color:inherit;font-size:12px;font-weight:700}.support-evidence-grid img{width:160px;height:120px;object-fit:cover;border-radius:12px;border:1px solid #d7d1e8}
+.campaign-preview{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.campaign-preview p{margin:0;color:#A7A7B8;font-size:12px}

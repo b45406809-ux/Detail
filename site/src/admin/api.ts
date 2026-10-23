@@ -25,7 +25,7 @@ export async function waitlistAdminCall<T>(path: string, options: { method?: str
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Sign in with an administrator account.');
   await verifiedAdminClaims();
-  const name = path.startsWith('/api/admin/waitlist') ? 'adminWaitlistQuery' : 'adminSendMarketingCampaign';
+  const name = path.startsWith('/api/admin/waitlist') ? 'adminWaitlistQuery' : path.startsWith('/api/admin/campaign-preview') ? 'adminPreviewMarketingCampaign' : 'adminSendMarketingCampaign';
   const payload = name === 'adminWaitlistQuery' ? { ...options.body, cursor: new URL(path, location.origin).searchParams.get('cursor') } : options.body;
   const { data, error } = await supabase.functions.invoke('marketplace-api', { body: { name, data: payload } });
   if (error) throw new Error(await functionErrorMessage(error, data));

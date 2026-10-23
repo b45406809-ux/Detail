@@ -1077,6 +1077,16 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const {error}=await admin.from('adminauditevents').upsert({id:key,action,actorid:actor,targetid:targetId||null,reason,data:input,createdat:now},{onConflict:'id',ignoreDuplicates:true});if(error)throw error;
       return {ok:true,auditId:key};
     }
+    case 'adminPreviewMarketingCampaign': {
+      const actor=authed();await requireAdmin(actor,'marketing.send');
+      const filters=input.filters&&typeof input.filters==='object'?input.filters as Json:{};
+      const country=text(filters.country,80),city=text(filters.city,100),service=text(filters.serviceInterest,30).toUpperCase(),language=text(filters.preferredLanguage,40);
+      let query=admin.from('betawaitlist').select('id',{count:'exact',head:true}).eq('marketingemailpermission','YES');
+      if(country)query=query.eq('country',country);if(city)query=query.eq('city',city);
+      if(['HOUSE','CAR','BOTH'].includes(service))query=query.eq('serviceinterest',service);if(language)query=query.eq('preferredlanguage',language);
+      const {count,error}=await query;if(error)throw error;
+      return {recipientCount:count??0,filters:{country,city,serviceInterest:service,preferredLanguage:language},asOf:new Date().toISOString()};
+    }
     case 'adminSendMarketingCampaign': {
       const actor=authed();await requireAdmin(actor,'marketing.send');
       await enforceRateLimit(request,actor,'marketing_campaign_send',3,3600);
