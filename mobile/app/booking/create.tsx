@@ -18,6 +18,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {
   ArrowLeft,
@@ -232,7 +234,16 @@ export default function CreateBookingScreen() {
         return;
       }
 
-      const result = await callFunction<any, { jobId: string }>('createBooking', { idempotencyKey: `booking-${user.uid}-${now}`, booking: {
+      const intent = { category, serviceId, bookingMode, suppliesRequired, selections, choices, description, photoUris, address: address.trim(), coordinates: resolvedCoordinates, timePreference, scheduledDateTime: timePreference === 'CUSTOM' ? scheduledDateTime?.toISOString() ?? null : timePreference, finalBudget };
+      const signature = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, JSON.stringify(intent));
+      const storageKey = `detail:booking-intent:${user.uid}:${signature}`;
+      let idempotencyKey = '';
+      try { idempotencyKey = (await AsyncStorage.getItem(storageKey)) ?? ''; } catch { /* create a fresh operation key */ }
+      if (!idempotencyKey) {
+        idempotencyKey = Crypto.randomUUID();
+        await AsyncStorage.setItem(storageKey, idempotencyKey);
+      }
+      const result = await callFunction<any, { jobId: string }>('createBooking', { idempotencyKey, booking: {
         customerId: user.uid,
         customerName: profile?.displayName,
         customerPhoto: profile?.photoURL ?? '',
@@ -260,6 +271,7 @@ export default function CreateBookingScreen() {
         photos: photoUris,
         createdAt: serverTimestamp(),
       } });
+      await AsyncStorage.removeItem(storageKey);
       if(bookingMode==='INSTANT')router.replace({pathname:'/tracking/[jobId]',params:{jobId:result.jobId}});
       else router.replace({ pathname: '/booking/offers', params: { jobId: result.jobId } });
     } catch (err) {
