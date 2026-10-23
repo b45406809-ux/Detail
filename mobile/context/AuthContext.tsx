@@ -14,6 +14,7 @@ import {
 } from '../services/supabase';
 import { UserProfile } from '../types';
 import { registerCurrentPushDevice } from '../services/pushRegistration';
+import { stopCleanerLocationUpdates } from '../services/locationTracking';
 
 interface AuthContextValue {
   user: SupabaseCompatUser | null;
@@ -40,6 +41,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [listenerRevision, setListenerRevision] = useState(0);
   const userId = user?.uid;
+
+  useEffect(() => {
+    if (!isLoading && !userId) {
+      stopCleanerLocationUpdates().catch((error) => console.warn('Could not stop cleaner location after sign out:', error));
+      return;
+    }
+    if (profile?.role === 'CUSTOMER') {
+      stopCleanerLocationUpdates().catch((error) => console.warn('Could not stop cleaner location after role change:', error));
+    }
+  }, [isLoading, userId, profile?.role]);
 
   useEffect(() => {
     if (!userId) return;

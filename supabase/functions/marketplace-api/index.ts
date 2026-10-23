@@ -355,7 +355,14 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         if (error) throw error;
         if ((count ?? 0) > 0) fail(409, 'Finish or contact support about your active cleaner booking before changing roles.');
       }
-      const { error } = await admin.from('users').update({ role, updatedat: new Date().toISOString() }).eq('id', actor);
+      const patch: Json = { role, updatedat: new Date().toISOString() };
+      if (role === 'CUSTOMER' && profile.role === 'CLEANER') {
+        patch.status = 'OFFLINE';
+        patch.location = {};
+        patch.locationpoint = null;
+        patch.locationupdatedat = null;
+      }
+      const { error } = await admin.from('users').update(patch).eq('id', actor);
       if (error) throw error;
       return { ok: true };
     }
@@ -374,7 +381,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         if((count??0)>0)fail(409,'You have an active booking and cannot take new requests yet.');
       }
       const patch: Json = { status: input.status, updatedat: new Date().toISOString() };
-      if (input.status === 'OFFLINE') { patch.locationpoint = null; patch.locationupdatedat = null; }
+      if (input.status === 'OFFLINE') { patch.location = {}; patch.locationpoint = null; patch.locationupdatedat = null; }
       const { error } = await admin.from('users').update(patch).eq('id', actor);
       if (error) throw error;
       return { ok: true };
@@ -384,8 +391,13 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat)>90 || Math.abs(lng)>180) fail(400,'Invalid coordinates.');
       if (profile.role !== 'CLEANER' || profile.verificationstatus !== 'VERIFIED' || !profile.cleaneragreementaccepted || profile.status !== 'AVAILABLE' || profile.issuspended || profile.isbanned) fail(403,'Only an approved online cleaner can share availability location.');
       const point = `SRID=4326;POINT(${lng} ${lat})`;
-      const { error } = await admin.from('users').update({ location: { lat, lng }, locationpoint: point, locationupdatedat: new Date().toISOString(), updatedat: new Date().toISOString() }).eq('id', actor);
+      const updatedAt = new Date().toISOString();
+      const { data: stillEligible, error } = await admin.from('users').update({ location: { lat, lng }, locationpoint: point, locationupdatedat: updatedAt, updatedat: updatedAt })
+        .eq('id', actor).eq('role', 'CLEANER').eq('status', 'AVAILABLE').eq('verificationstatus', 'VERIFIED')
+        .eq('cleaneragreementaccepted', true).eq('issuspended', false).eq('isbanned', false).is('accountdeletedat', null)
+        .select('id').maybeSingle();
       if (error) throw error;
+      if (!stillEligible) fail(409,'Your cleaner account is no longer online. Location sharing has stopped.');
       await admin.from('jobs').update({cleanerlocation:{lat,lng},cleanerlocationupdatedat:new Date().toISOString()}).eq('cleanerid',actor).in('status',['ASSIGNED','EN_ROUTE','IN_PROGRESS']);
       return { ok: true };
     }

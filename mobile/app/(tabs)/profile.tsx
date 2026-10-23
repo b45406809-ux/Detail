@@ -34,6 +34,7 @@ import { Linking } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { auth, clearLocalSession, signOut } from '../../services/supabase';
 import { callFunction } from '../../services/functions';
+import { stopCleanerLocationUpdates } from '../../services/locationTracking';
 import { uploadProfilePhoto } from '../../services/storage';
 import { hasCurrentPushDevice, registerCurrentPushDevice, unregisterCurrentPushDevice } from '../../services/pushRegistration';
 import { StarRating } from '../../components/StarRating';
@@ -134,7 +135,9 @@ export default function ProfileScreen() {
         router.push('/register-cleaner');
       }
     } else if (profile?.role === 'CLEANER') {
-      callFunction('setActiveRole', { role: 'CUSTOMER' }).catch((e:any) => Alert.alert('Could not switch role', e.message ?? 'Try again.'));
+      callFunction('setActiveRole', { role: 'CUSTOMER' }).then(() => {
+        stopCleanerLocationUpdates().catch((error) => console.warn('[location] could not stop after role switch:', error));
+      }).catch((e:any) => Alert.alert('Could not switch role', e.message ?? 'Try again.'));
     }
   };
 
@@ -144,6 +147,7 @@ export default function ProfileScreen() {
       { text: 'Delete permanently', style: 'destructive', onPress: async () => {
         try {
           await callFunction('deleteAccount', { confirmation: 'DELETE' });
+          await stopCleanerLocationUpdates().catch(() => {});
           await clearLocalSession();
           router.replace('/(auth)/welcome');
         }
@@ -166,6 +170,17 @@ export default function ProfileScreen() {
         text: 'Sign Out',
         style: 'destructive',
         onPress: async () => {
+          await stopCleanerLocationUpdates().catch((error) => console.warn('[location] could not stop before sign out:', error));
+          if (profile?.role === 'CLEANER') {
+            let timeout: ReturnType<typeof setTimeout> | undefined;
+            await Promise.race([
+              callFunction('updateCleanerPresence', { status: 'OFFLINE' }).catch((error) => {
+                console.warn('[location] could not confirm offline before sign out:', error);
+              }),
+              new Promise<void>((resolve) => { timeout = setTimeout(resolve, 2_000); }),
+            ]);
+            if (timeout) clearTimeout(timeout);
+          }
           await signOut(auth);
           router.replace('/(auth)/welcome');
         },

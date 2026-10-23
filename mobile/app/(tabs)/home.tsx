@@ -82,6 +82,14 @@ export default function HomeScreen() {
     }
   }, [profile?.role]);
 
+  useEffect(() => {
+    if (profile?.role === 'CLEANER') {
+      setCleanerStatus(profile.status === 'AVAILABLE' || profile.status === 'BUSY' ? profile.status : 'OFFLINE');
+    } else if (profile?.role === 'CUSTOMER') {
+      setCleanerStatus('OFFLINE');
+    }
+  }, [profile?.role, profile?.status]);
+
   const handleRoleToggle = (newRole: 'CUSTOMER' | 'CLEANER') => {
     if (newRole === 'CLEANER') {
       const isRegistered = profile?.cleanerOnboardingComplete
@@ -105,7 +113,11 @@ export default function HomeScreen() {
       }
       callFunction('setActiveRole', { role: 'CLEANER' }).then(() => setViewRole('CLEANER')).catch((e:any) => Alert.alert('Could not switch role', e.message ?? 'Try again.'));
     } else {
-      callFunction('setActiveRole', { role: 'CUSTOMER' }).then(() => setViewRole('CUSTOMER')).catch((e:any) => Alert.alert('Could not switch role', e.message ?? 'Try again.'));
+      callFunction('setActiveRole', { role: 'CUSTOMER' }).then(async () => {
+        setViewRole('CUSTOMER');
+        setCleanerStatus('OFFLINE');
+        await stopCleanerLocationUpdates().catch((error) => console.warn('[location] could not stop after role switch:', error));
+      }).catch((e:any) => Alert.alert('Could not switch role', e.message ?? 'Try again.'));
     }
   };
 
