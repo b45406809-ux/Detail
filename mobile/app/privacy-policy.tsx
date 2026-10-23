@@ -15,7 +15,7 @@ const SECTIONS = [
   },
   {
     title: '3. Location Data',
-    body: 'Location data is used to match you with nearby cleaners and to track active jobs in real time. Location is only tracked during active cleaning sessions and with your explicit consent.',
+    body: 'If you choose to go online as a cleaner, your current location is shared with matching services so nearby requests can be found. During an assigned job, location may also be shared with the customer for job tracking. You can go offline or change device permissions to stop availability sharing; required job features may then be unavailable.',
   },
   {
     title: '4. Sharing of Information',
@@ -27,11 +27,11 @@ const SECTIONS = [
   },
   {
     title: '6. Your Rights',
-    body: 'You have the right to access, update, or delete your account information. Contact us at privacy@detail to exercise these rights.',
+    body: 'You have the right to access, update, or delete your account information. Contact support@detailapp.co.zw to exercise these rights or ask a privacy question.',
   },
   {
     title: '7. Contact',
-    body: 'If you have any questions about this Privacy Policy, please contact us at privacy@detail.',
+    body: 'If you have any questions about this Privacy Policy, please contact support@detailapp.co.zw.',
   },
 ];
 

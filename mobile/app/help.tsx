@@ -163,7 +163,7 @@ export default function HelpScreen() {
             Response Times
           </Text>
           <Text className="font-sans text-sm text-slate-600 font-medium leading-relaxed">
-            Email: within 24 hours{'\n'}Live chat: Mon–Fri 09:00 AM – 4:30 PM CAT (typically under 5 minutes)
+            Email: support@detailapp.co.zw{'\n'}WhatsApp: +263 71 488 5936{'\n'}We do not offer live chat. Response times vary.
           </Text>
         </View>
       </ScrollView>

@@ -11,9 +11,9 @@ const { width } = Dimensions.get('window');
 const SLIDES = [
   {
     icon: ShieldCheck,
-    badge: 'Elite Verified',
-    title: 'Trusted\nProfessionals',
-    sub: 'Every cleaner on Detail undergoes a rigorous identity and background verification process.',
+    badge: 'Identity status',
+    title: 'Know who\nyou are booking',
+    sub: 'Some cleaner accounts complete identity verification through Didit. A verified badge reflects identity status; it is not a background check or a guarantee.',
   },
   {
     icon: Zap,
@@ -23,9 +23,9 @@ const SLIDES = [
   },
   {
     icon: MapPinned,
-    badge: 'Payment protected',
-    title: 'Live Tracking,\nSecure Pay',
-    sub: 'Watch your cleaner arrive in real time and only release payment once you confirm the job.',
+    badge: 'Payment choices',
+    title: 'Job updates,\nclear terms',
+    sub: 'Share location while online or working, and review the available payment method and booking terms before you confirm.',
   },
 ];
 
