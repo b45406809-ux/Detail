@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft, Star } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
+import { formatDate } from '../utils/date';
 import {
   db,
   collection,
@@ -138,7 +139,7 @@ export default function ReviewsScreen() {
                     {item.customerName || 'Customer'}
                   </Text>
                   <Text className="font-sans text-xs text-slate-400 font-medium mt-0.5">
-                    {item.createdAt?.toDate?.()?.toLocaleDateString() ?? 'Recent'}
+                    {formatDate(item.createdAt)}
                   </Text>
                 </View>
                 {/* Star rating */}
