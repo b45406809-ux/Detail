@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient, type User } from 'npm:@supabase/supabase-js@2.80.0';
 import { Paynow } from 'npm:paynow@2.2.2';
 import { hasRecentSupabaseAuthentication } from '../_shared/session_auth.ts';
+import { trustedEdgeIp } from '../_shared/trusted_edge_ip.ts';
 
 const url = Deno.env.get('SUPABASE_URL') ?? '';
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
@@ -49,7 +50,7 @@ async function enforceRateLimit(request: Request, actor: string, action: string,
   // Never trust x-real-ip or x-forwarded-for: callers can supply both. The
   // Cloudflare edge overwrites cf-connecting-ip; actor limits remain primary.
   const identities = [`actor:${actor}`];
-  const trustedIp = text(request.headers.get('cf-connecting-ip'), 80);
+  const trustedIp = trustedEdgeIp(request);
   if (trustedIp) identities.push(`edge-ip:${trustedIp}`);
   for (const identity of identities) {
     const key = await hash(`${action}:${identity}`);

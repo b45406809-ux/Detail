@@ -55,6 +55,8 @@ async function pollExpoReceipts(){
 Deno.serve(async request=>{
   if(request.method!=='POST')return json({error:'POST required.'},405);
   if(request.headers.get('x-scheduler-secret')!==schedulerSecret)return json({error:'Unauthorized.'},401);
+  const {data:expiredRateLimits,error:rateLimitCleanupError}=await admin.rpc('cleanup_expired_rate_limits',{p_limit:1000});
+  if(rateLimitCleanupError)console.error('Expired rate-limit cleanup failed',rateLimitCleanupError.message);
   const {data:autoConfirmed,error:completionError}=await admin.rpc('expire_unanswered_completions',{p_limit:200});
   if(completionError)console.error('Completion expiry failed',completionError.message);
   const {data:expiredMatches,error:matchExpiryError}=await admin.rpc('expire_unmatched_instant_bookings',{p_limit:200});
@@ -64,5 +66,5 @@ Deno.serve(async request=>{
   const {data,error}=await admin.rpc('claim_notification_deliveries',{p_limit:100});if(error)return json({error:'Could not claim deliveries.'},503);
   await Promise.all((data??[]).map(deliver));
   await pollExpoReceipts().catch(error=>console.error('Expo receipt polling failed',String(error)));
-  return json({claimed:data?.length??0,processed:data?.length??0,autoConfirmed:autoConfirmed??0,expiredInstantBookings:expiredMatches??0});
+  return json({claimed:data?.length??0,processed:data?.length??0,expiredRateLimits:expiredRateLimits??0,autoConfirmed:autoConfirmed??0,expiredInstantBookings:expiredMatches??0});
 });
