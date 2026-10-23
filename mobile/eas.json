@@ -5,6 +5,7 @@
   },
   "build": {
     "development": {
+      "env": { "EXPO_PUBLIC_APP_BUILD_PROFILE": "development" },
       "developmentClient": true,
       "distribution": "internal",
       "android": {
@@ -12,6 +13,7 @@
       }
     },
     "preview": {
+      "env": { "EXPO_PUBLIC_APP_BUILD_PROFILE": "preview" },
       "distribution": "internal",
       "android": {
         "buildType": "apk"
@@ -21,6 +23,7 @@
       }
     },
     "production": {
+      "env": { "EXPO_PUBLIC_APP_BUILD_PROFILE": "production" },
       "android": {
         "buildType": "app-bundle"
       },

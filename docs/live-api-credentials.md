@@ -22,7 +22,9 @@ The current clients and backend use Supabase for authentication, database, priva
 
 Supabase supplies `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` to Edge Functions. Set provider secrets through the CLI or dashboard, for example:
 
-For mobile development (`__DEV__`) and `EXPO_PUBLIC_DEMO_MODE=true`, the app ignores the production Supabase URL/key and Mapbox token. Configure `EXPO_PUBLIC_MOCK_SUPABASE_URL` and `EXPO_PUBLIC_MOCK_SUPABASE_ANON_KEY` only for a dedicated isolated backend; otherwise the app targets local Supabase at `http://127.0.0.1:54321`. Do not point these mock variables at production. Production/preview builds with demo mode off use the standard public client variables above.
+For normal Metro development and `EXPO_PUBLIC_DEMO_MODE=true`, the app uses mock behavior and ignores production Supabase credentials. Without an isolated mock backend it targets local Supabase at `http://127.0.0.1:54321`. Mock mode refuses a URL that exactly matches the configured production URL. Never point mock variables at production.
+
+To exercise real email/SMS/OAuth authentication during Metro development, set `EXPO_PUBLIC_USE_STAGING_AUTH=true` and provide `EXPO_PUBLIC_STAGING_SUPABASE_URL` plus `EXPO_PUBLIC_STAGING_SUPABASE_ANON_KEY` for a separate staging project. Demo mode takes precedence, and the app refuses to start staging auth when those values are missing or the staging URL matches the production URL. Configure staging Edge Functions with sandbox provider credentials and test recipients; the app displays a LOCAL MOCK, DEMO or STAGING badge. EAS preview/production builds with demo mode off continue to use the standard public client variables above.
 
 ```sh
 supabase secrets set PAYNOW_INTEGRATION_ID=... PAYNOW_INTEGRATION_KEY=... DIDIT_API_KEY=... DIDIT_WORKFLOW_ID=... TURNSTILE_SECRET=... RESEND_API_KEY=... TWILIO_ACCOUNT_SID=... TWILIO_AUTH_TOKEN=... TWILIO_MESSAGING_SERVICE_SID=... PAYOUT_ENCRYPTION_KEY=... CRON_SECRET=...

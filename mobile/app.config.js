@@ -1,6 +1,10 @@
 const appJson = require('./app.json');
 const { generateNotificationSounds } = require('./scripts/generate-notification-sounds');
 
+if (process.env.EAS_BUILD_PROFILE === 'production' && process.env.EXPO_PUBLIC_DEMO_MODE === 'true') {
+  throw new Error('Demo mode is prohibited in the EAS production build profile.');
+}
+
 // This runs before Expo/EAS resolves plugin assets, ensuring the ignored WAV
 // artifacts exist for expo-notifications without committing binary files.
 generateNotificationSounds();

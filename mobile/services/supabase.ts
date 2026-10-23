@@ -2,16 +2,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, type SupabaseClient, type User as SupabaseUser } from '@supabase/supabase-js';
 import { signMediaValue } from './storage';
 import { unregisterCurrentPushDevice } from './pushRegistration';
-import { IS_MOCK } from '../utils/env';
+import { IS_MOCK, IS_STAGING_AUTH } from '../utils/env';
 
-// Development and demo builds must never inherit production credentials. Use
-// an explicitly configured isolated backend, or fail closed against local Supabase.
+// Mock and staging modes must never use the configured production URL. Use an
+// explicit isolated project, or fail closed against local Supabase.
 const supabaseUrl = IS_MOCK
   ? process.env.EXPO_PUBLIC_MOCK_SUPABASE_URL ?? 'http://127.0.0.1:54321'
-  : process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+  : IS_STAGING_AUTH ? process.env.EXPO_PUBLIC_STAGING_SUPABASE_URL ?? '' : process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = IS_MOCK
   ? process.env.EXPO_PUBLIC_MOCK_SUPABASE_ANON_KEY ?? 'local-anon-key'
-  : process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+  : IS_STAGING_AUTH ? process.env.EXPO_PUBLIC_STAGING_SUPABASE_ANON_KEY ?? '' : process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+const normalizedUrl=(value:string)=>value.trim().replace(/\/+$/,'').toLowerCase();
+if(IS_STAGING_AUTH&&(!supabaseUrl||!supabaseAnonKey))throw new Error('Staging auth requires EXPO_PUBLIC_STAGING_SUPABASE_URL and EXPO_PUBLIC_STAGING_SUPABASE_ANON_KEY.');
+if(IS_STAGING_AUTH&&normalizedUrl(supabaseUrl)===normalizedUrl(process.env.EXPO_PUBLIC_SUPABASE_URL??''))throw new Error('Staging auth cannot use the configured production Supabase URL.');
+if(IS_MOCK&&normalizedUrl(supabaseUrl)===normalizedUrl(process.env.EXPO_PUBLIC_SUPABASE_URL??''))throw new Error('Mock mode cannot use the configured production Supabase URL.');
 if (!supabaseUrl || !supabaseAnonKey) console.warn('Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.');
 
 export const supabase = createClient(supabaseUrl || 'http://127.0.0.1:54321', supabaseAnonKey || 'local-anon-key', {

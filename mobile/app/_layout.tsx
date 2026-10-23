@@ -14,6 +14,7 @@ import { Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrop
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { handleAuthCallback, supabase } from '../services/supabase';
+import { APP_ENVIRONMENT } from '../utils/env';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -62,6 +63,12 @@ function NotificationRouter({ response, onConsumed }: { response: Notifications.
   }, [response, user, profile, isLoading, profileError, onConsumed]);
 
   return null;
+}
+
+function EnvironmentIndicator() {
+  if (APP_ENVIRONMENT === 'PRODUCTION') return null;
+  const isDemo = APP_ENVIRONMENT === 'DEMO' || APP_ENVIRONMENT === 'LOCAL MOCK';
+  return <View pointerEvents="none" style={{position:'absolute',top:54,right:12,zIndex:1000,backgroundColor:isDemo?'#991b1b':'#92400e',borderRadius:12,paddingHorizontal:10,paddingVertical:5}}><Text style={{color:'#fff',fontSize:10,fontWeight:'800',letterSpacing:1}}>{APP_ENVIRONMENT}</Text></View>;
 }
 
 export default function RootLayout() {
@@ -129,6 +136,7 @@ export default function RootLayout() {
         <AuthProvider>
           <AuthGuard />
           <NotificationRouter response={pendingNotification} onConsumed={consumeNotification} />
+          <EnvironmentIndicator />
           <StatusBar style="auto" />
           <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
             <Stack.Screen name="(auth)" options={{ animation: 'none' }} />

@@ -1,6 +1,6 @@
 # Detail production readiness audit
 
-**Snapshot:** `codex/separate-dashboard-into-routed-modules-fl7jlh` at `dae9b3b` (`Fix live test summary output`). **Audit date:** 23 October 2026. The `work` merge is excluded. This report proposes repairs; it does not apply changes to the application or deploy anything.
+**Snapshot:** `codex/separate-dashboard-into-routed-modules-fl7jlh` at `dae9b3b` (`Fix live test summary output`). **Audit date:** 23 October 2026. The `work` merge is excluded. This report records the original audited snapshot. Dated implementation-status notes track follow-up source changes and remaining verification; they do not mean every finding or capability gap is closed.
 
 ## Readiness decision
 
@@ -1018,7 +1018,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Problem and impact.** All navigation modules are displayed regardless of permissions. The MFA gate runs on user.id changes only; password reauthentication can replace the token with aal1 while the gate remains ready, causing confusing later API failures. There is no implemented admin revoke/disable/change-permissions/revoke-invite/session-management UI, recovery-code/lost-factor process or visible audit-log viewer despite the audit.read permission. Settings also stores a supportCopy save into local switches state, which can incorrectly show a maintenance banner until reload.
 
-**Implementation status (2026-10-23).** The dashboard now hides modules outside the signed-in admin's read permission set and redirects unauthorized deep links to Overview; the operational settings panel is restricted to elevated administrators. Server-side permission checks remain authoritative. The MFA gate now rechecks assurance after auth token/user changes and when a browser tab regains focus, returns to factor verification if the session is at aal1, and offers a retry after transient gate errors. Role/session administration, audit-log viewing and lost-factor recovery remain open.
+**Implementation status (2026-10-23).** The dashboard now hides modules outside the signed-in admin's read permission set and redirects unauthorized deep links to Overview; the operational settings panel is restricted to elevated administrators. Server-side permission checks remain authoritative. Saving support fallback copy now updates the copy field without adding it to the kill-switch map. The MFA gate rechecks assurance after auth token/user changes and when a browser tab regains focus, returns to factor verification if the session is at aal1, and offers a retry after transient gate errors. Role/session administration, audit-log viewing and lost-factor recovery remain open.
 
 **Proposed fix.** Make assurance and permissions reactive to session events, show only allowed tools, require MFA again after downgrade and implement audited role/invite/session revocation plus secure lost-factor recovery.
 
@@ -1267,6 +1267,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 **Problem and impact.** Comments describe safe mocked/backend-free demo builds, but IS_MOCK only changes selected authentication/UI paths. callFunction, KYC, bookings and payments still use the configured Supabase backend. Mock authentication itself calls signInAnonymously against that backend. A demo build with a usable real session can perform real actions, while normal Metro development cannot exercise genuine SMS/email OTP because __DEV__ always forces mock behavior.
 
 **Proposed fix.** Use explicit dev/staging/production environments with backend-enforced separation, fake provider adapters/test fixtures and a visible environment indicator for nonproduction builds. Make real staging auth testable deliberately and prohibit demo credentials/endpoints in production release configuration.
+
+**Implementation status (2026-10-23).** Metro now defaults to isolated mock behavior but can explicitly use a separate Supabase staging URL/key for real OTP/auth testing. Demo mode overrides staging, mock/staging startup rejects an exact match with the configured production URL, EAS production profile builds fail if demo mode is enabled, and demo/staging sessions show an environment badge. Provider sandbox configuration and backend-enforced project isolation still need deployment/device verification.
 
 **Acceptance check.** Attempt booking/KYC/top-up/payout from a demo build configured incorrectly: production rejects it, while isolated demo/staging flows remain testable without real provider side effects.
 

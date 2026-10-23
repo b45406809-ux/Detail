@@ -53,6 +53,16 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
       - run: npm ci --prefix mobile --no-audit --no-fund
+      - name: Ensure production EAS profile rejects demo mode
+        working-directory: mobile
+        run: |
+          node -e '
+            const { spawnSync } = require("node:child_process");
+            const config = require("./eas.json");
+            if (config.build.production.env.EXPO_PUBLIC_APP_BUILD_PROFILE !== "production") throw new Error("Production EAS profile marker is missing");
+            const result = spawnSync(process.execPath, ["app.config.js"], { env: { ...process.env, EAS_BUILD_PROFILE: "production", EXPO_PUBLIC_DEMO_MODE: "true" }, encoding: "utf8" });
+            if (result.status === 0 || !result.stderr.includes("Demo mode is prohibited")) throw new Error("Production EAS profile accepted demo mode");
+          '
       - name: Ensure Mapbox download secret stays out of public Expo config
         working-directory: mobile
         env:
