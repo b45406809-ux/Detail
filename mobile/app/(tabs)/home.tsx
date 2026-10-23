@@ -66,6 +66,7 @@ export default function HomeScreen() {
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshNonce, setRefreshNonce] = useState(0);
   const [viewRole, setViewRole] = useState<'CUSTOMER' | 'CLEANER'>(
     (profile?.role as 'CUSTOMER' | 'CLEANER') ?? 'CUSTOMER'
   );
@@ -134,7 +135,7 @@ export default function HomeScreen() {
       },
       (err) => console.warn('[home] activeJob listener error:', err.message)
     );
-  }, [user, isCustomer]);
+  }, [user, isCustomer, refreshNonce]);
 
   useEffect(() => {
     if (!user) return;
@@ -151,7 +152,7 @@ export default function HomeScreen() {
       (snap) => setRecentJobs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Job))),
       (err) => console.warn('[home] recentJobs listener error:', err.message)
     );
-  }, [user, isCustomer]);
+  }, [user, isCustomer, refreshNonce]);
 
   useEffect(() => {
     if (isCustomer) return;
@@ -165,7 +166,7 @@ export default function HomeScreen() {
       (snap) => setAvailableJobs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Job))),
       (err) => console.warn('[home] availableJobs listener error:', err.message)
     );
-  }, [isCustomer]);
+  }, [isCustomer, refreshNonce]);
 
   useEffect(() => {
     if (!user || !isCustomer) return;
@@ -175,7 +176,7 @@ export default function HomeScreen() {
       (snap) => setFavorites(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Favorite))),
       (err) => console.warn('[home] favorites listener error:', err.message)
     );
-  }, [user, isCustomer]);
+  }, [user, isCustomer, refreshNonce]);
 
   const toggleCleanerStatus = async () => {
     const next = cleanerStatus === 'AVAILABLE' ? 'OFFLINE' : 'AVAILABLE';
@@ -202,8 +203,8 @@ export default function HomeScreen() {
 
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setIsRefreshing(false);
+    setRefreshNonce(value => value + 1);
+    setTimeout(() => setIsRefreshing(false), 900);
   }, []);
 
   if (!profile) {
