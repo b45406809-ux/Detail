@@ -13,7 +13,7 @@ if (process.env.EAS_BUILD_PROFILE && (!mapboxAccessToken || !mapboxDownloadsToke
 }
 expo.plugins = [
   ...(expo.plugins || []),
-  ['@rnmapbox/maps', { ...(mapboxDownloadsToken ? { RNMapboxMapsDownloadToken: mapboxDownloadsToken } : {}) }],
+  './plugins/withMapboxDownloadToken',
 ];
 expo.extra = {
   ...(expo.extra || {}),
