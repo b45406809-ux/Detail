@@ -904,6 +904,8 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Proposed fix.** Add scoped subscriptions, bounded keyset pagination, stable DTO/media caches, request cancellation/version checks and explicit loading/empty/offline/error states. Implement real focus/reconnect/manual refresh behavior and backpressure.
 
+**Implementation status (2026-10-23).** Realtime callbacks now coalesce changes with a debounce, apply a server equality filter when available, report channel errors/timeouts and refetch after reconnect. Chat loads a bounded latest page with older-page loading; tracking distinguishes loading, missing and failed records with retry; Home refresh reattaches its queries. Signed media URLs now use a per-account bounded cache and concurrent signing requests share one in-flight request. Full-row query DTOs, consistent offline states across screens and high-volume/device network testing remain open.
+
 **Acceptance check.** Run large chat/history feeds and frequent location updates under poor network; network/signing volume remains bounded, stale replies are ignored and every screen recovers from denied/missing records.
 
 <a id="F52"></a>

@@ -2,6 +2,10 @@ import { supabase, auth } from './supabase';
 
 const BUCKET = 'detail-media';
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+const SIGNED_URL_TTL_MS = 55 * 60 * 1000;
+const SIGNED_URL_CACHE_LIMIT = 2000;
+const signedUrlCache = new Map<string, { url: string; expiresAt: number }>();
+const signedUrlRequests = new Map<string, Promise<string>>();
 function filename() { return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
 function mimeTypeFromUri(uri: string) {
   const extension = uri.split(/[?#]/, 1)[0].split('.').pop()?.toLowerCase();
@@ -72,9 +76,29 @@ export function uploadProofOfResidence(uri: string) {
 export async function signMediaValue(value: unknown): Promise<unknown> {
   if (typeof value === 'string' && value.startsWith(`${BUCKET}/`)) {
     const path = value.slice(BUCKET.length + 1);
-    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 60);
-    if (error) throw error;
-    return data.signedUrl;
+    const cacheKey = `${auth.currentUser?.uid ?? 'anonymous'}:${path}`;
+    const now = Date.now();
+    const cached = signedUrlCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      signedUrlCache.delete(cacheKey);
+      signedUrlCache.set(cacheKey, cached);
+      return cached.url;
+    }
+    if (cached) signedUrlCache.delete(cacheKey);
+    const pending = signedUrlRequests.get(cacheKey);
+    if (pending) return pending;
+    const request = supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 60).then(({ data, error }) => {
+      if (error) throw error;
+      signedUrlCache.set(cacheKey, { url: data.signedUrl, expiresAt: Date.now() + SIGNED_URL_TTL_MS });
+      while (signedUrlCache.size > SIGNED_URL_CACHE_LIMIT) {
+        const oldest = signedUrlCache.keys().next().value;
+        if (oldest === undefined) break;
+        signedUrlCache.delete(oldest);
+      }
+      return data.signedUrl;
+    }).finally(() => signedUrlRequests.delete(cacheKey));
+    signedUrlRequests.set(cacheKey, request);
+    return request;
   }
   if (Array.isArray(value)) return Promise.all(value.map(signMediaValue));
   if (value && typeof value === 'object') {

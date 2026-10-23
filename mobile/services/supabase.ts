@@ -377,9 +377,18 @@ export function onSnapshot(ref: DocumentRef | QueryRef, next: (snapshot: any) =>
   const channelFilter = equality && /^[A-Za-z0-9_-]{1,120}$/.test(String(equality.value))
     ? `${physicalColumn(equality.field)}=eq.${equality.value}`
     : undefined;
+  let connected = false;
   const channel = supabase.channel(`watch:${table}:${Math.random().toString(36).slice(2)}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: physicalTable(table), ...(channelFilter ? { filter: channelFilter } : {}) }, scheduleRefresh)
-    .subscribe();
+    .subscribe((status, channelError) => {
+      if (stopped) return;
+      if (status === 'SUBSCRIBED') {
+        if (connected) scheduleRefresh();
+        connected = true;
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        error?.(channelError instanceof Error ? channelError : new Error(`Realtime ${status.toLowerCase()} for ${table}.`));
+      }
+    });
   void refresh();
   return () => { stopped = true; if (refreshTimer) clearTimeout(refreshTimer); void supabase.removeChannel(channel); };
 }

@@ -147,6 +147,7 @@ export default function MessagesScreen() {
     setChatError('');
     reachedHistoryStartRef.current = false;
     return onSnapshot(q, (snap) => {
+      setChatError('');
       const page = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChatMessage)).reverse();
       setHasOlderMessages(snap.size >= 100 && !reachedHistoryStartRef.current);
       setMessages(current => {
