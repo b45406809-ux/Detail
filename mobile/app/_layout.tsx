@@ -6,11 +6,13 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
 import * as Notifications from 'expo-notifications';
+import * as Linking from 'expo-linking';
 import { configureNotificationChannels } from '../services/notifications';
 import { DMSans_400Regular, DMSans_500Medium, DMSans_600SemiBold, DMSans_700Bold } from '@expo-google-fonts/dm-sans';
 import { Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrope';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { handleAuthCallback, supabase } from '../services/supabase';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -23,10 +25,11 @@ function AuthGuard() {
 
     const inAuthGroup = segments[0] === '(auth)';
     const currentScreen = String((segments as string[])[1] || '');
+    const isPasswordRecovery = inAuthGroup && currentScreen === 'reset-password';
 
     if (!user && !inAuthGroup) {
       router.replace('/(auth)/splash');
-    } else if (user && inAuthGroup) {
+    } else if (user && inAuthGroup && !isPasswordRecovery) {
       if (!profile?.hasCompletedProfile) {
         if (currentScreen !== 'create-profile') {
           router.replace('/(auth)/create-profile');
@@ -48,6 +51,18 @@ export default function RootLayout() {
   const [fontsLoaded, setFontsLoaded] = React.useState(false);
 
   useEffect(() => {
+    let active = true;
+    const consumeAuthUrl = (url: string | null) => {
+      if (!url || !url.startsWith('detail://')) return;
+      void handleAuthCallback(url).catch(error => {
+        console.warn('Could not complete the authentication link:', error instanceof Error ? error.message : 'unknown error');
+      });
+    };
+    Linking.getInitialURL().then(consumeAuthUrl).catch(() => undefined);
+    const linkSubscription = Linking.addEventListener('url', event => consumeAuthUrl(event.url));
+    const { data: authSubscription } = supabase.auth.onAuthStateChange(event => {
+      if (event === 'PASSWORD_RECOVERY' && active) router.replace('/(auth)/reset-password');
+    });
     configureNotificationChannels().catch(() => undefined);
     const routeNotification = (response: Notifications.NotificationResponse) => {
       const data = response.notification.request.content.data as { jobId?: string; supportCaseId?: string; type?: string };
@@ -60,7 +75,12 @@ export default function RootLayout() {
     };
     const subscription = Notifications.addNotificationResponseReceivedListener(routeNotification);
     Notifications.getLastNotificationResponseAsync().then(response => response && routeNotification(response));
-    return () => subscription.remove();
+    return () => {
+      active = false;
+      subscription.remove();
+      linkSubscription.remove();
+      authSubscription.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {

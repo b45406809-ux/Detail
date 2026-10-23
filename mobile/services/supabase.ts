@@ -98,6 +98,34 @@ export async function sendPasswordResetEmail(_auth: typeof auth, email: string) 
   if (error) throw error;
 }
 
+/** Exchanges Supabase recovery links whether the app is cold-started or already open. */
+export async function handleAuthCallback(url: string) {
+  const parsed = new URL(url);
+  const query = parsed.searchParams;
+  const hash = new URLSearchParams(parsed.hash.replace(/^#/, ''));
+  const code = query.get('code');
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) throw error;
+    return;
+  }
+  const tokenHash = query.get('token_hash') ?? hash.get('token_hash');
+  const type = query.get('type') ?? hash.get('type');
+  if (tokenHash && type) {
+    const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: type as 'recovery' | 'signup' | 'email' | 'magiclink' | 'invite' | 'email_change' });
+    if (error) throw error;
+    return;
+  }
+  const accessToken = hash.get('access_token');
+  const refreshToken = hash.get('refresh_token');
+  if (accessToken && refreshToken) {
+    const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+    if (error) throw error;
+    return;
+  }
+  throw new Error('This authentication link is invalid or expired. Request a new link and try again.');
+}
+
 export const firebaseConfig = {
   apiKey: '', authDomain: '', projectId: '', storageBucket: '', messagingSenderId: '', appId: '',
 };
