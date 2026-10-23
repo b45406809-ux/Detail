@@ -7,6 +7,7 @@ import * as AuthSession from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '../services/supabase';
+import { IS_MOCK } from '../utils/env';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -44,6 +45,16 @@ export function SocialSignInButtons() {
       setIsAppleLoading(false);
     }
   };
+
+  if (IS_MOCK) {
+    return (
+      <View className="rounded-2xl border border-ink/10 bg-ink/[0.03] p-4">
+        <Text className="text-center font-sans text-xs leading-5 text-ink/55">
+          Social sign-in is disabled in isolated development and demo builds.
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View className="gap-3">

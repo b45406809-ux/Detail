@@ -8,6 +8,7 @@
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
+import { IS_MOCK } from '../utils/env';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -21,6 +22,7 @@ Notifications.setNotificationHandler({
 
 export async function getExpoPushToken(): Promise<string | null> {
   try {
+    if (IS_MOCK) return null; // mock builds must not register a live Expo push endpoint
     if (!Device.isDevice) return null; // simulators can't receive push
 
     const projectId =
