@@ -530,15 +530,26 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       return {success:true,status:applied.status};
     }
     case 'createPaynowWalletTopup': {
-      const actor=authed(); const amount=round2(Number(input.amount));
+      const actor=authed(); const amount=round2(Number(input.amount)),idempotencyKey=requireKey(input.idempotencyKey);
       await enforceRateLimit(request, actor, 'wallet_topup', 6, 3600);
       const [{data:beta},{data:operations}]=await Promise.all([admin.from('configuration').select('value').eq('key','beta').maybeSingle(),admin.from('configuration').select('value').eq('key','operations').maybeSingle()]);
       if(beta?.value?.maintenanceMode||beta?.value?.disablePayments||operations?.value?.switches?.maintenance===true||operations?.value?.switches?.payments===true)fail(503,'PAYMENTS_DISABLED');
       if(!Number.isFinite(amount)||amount<1||amount>1000||String(input.currency??'USD').toUpperCase()!=='USD')fail(400,'Wallet top-ups must be between $1 and $1,000 USD.');
       const {data:profile}=await admin.from('users').select('email').eq('id',actor).single();
       const email=user?.email??profile?.email; if(!email)fail(409,'Add an email address to your account before paying with Paynow.');
-      const id=crypto.randomUUID(),reference=`wallet-${id}`;
-      const {error}=await admin.from('payments').insert({id,customerid:actor,provider:'PAYNOW',reference,amount,currency:'USD',status:'INITIATING',idempotencykey:`topup_${id}`,data:{type:'wallet_topup'}});
+      const stableId=(await hash(`${actor}:wallet_topup:${idempotencyKey}`)).slice(0,32),id=`topup_${stableId}`,reference=`wallet-${stableId}`,paymentKey=`wallet_topup_${stableId}`;
+      const {data:existing,error:existingError}=await admin.from('payments').select('customerid,reference,status,redirecturl,pollurl').eq('idempotencykey',paymentKey).maybeSingle();
+      if(existingError)throw existingError;
+      if(existing){
+        if(existing.customerid!==actor)fail(409,'This checkout key is already in use.');
+        if(existing.status==='PENDING'&&existing.redirecturl)return {redirectUrl:existing.redirecturl,referenceNumber:existing.reference};
+        fail(409,'This top-up attempt already exists. Start a new checkout from your wallet.');
+      }
+      const {error}=await admin.from('payments').insert({id,customerid:actor,provider:'PAYNOW',reference,amount,currency:'USD',status:'INITIATING',idempotencykey:paymentKey,data:{type:'wallet_topup'}});
+      if(error?.code==='23505'){
+        const {data:retry}=await admin.from('payments').select('customerid,reference,status,redirecturl').eq('idempotencykey',paymentKey).maybeSingle();
+        if(retry?.customerid===actor&&retry.status==='PENDING'&&retry.redirecturl)return {redirectUrl:retry.redirecturl,referenceNumber:retry.reference};
+      }
       if(error)throw error;
       const client=paynowClient(), checkout=client.createPayment(reference,email); checkout.add('Detail wallet top-up',amount);
       const result=await client.send(checkout);

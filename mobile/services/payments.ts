@@ -21,11 +21,12 @@ export interface PaymentResult {
 export async function addFundsToWallet(amountUSD: number): Promise<PaymentResult> {
   const user = auth.currentUser;
   if (!user) throw new Error('Not authenticated');
+  const idempotencyKey = `topup-${user.uid}-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
 
   const data = await callFunction<
-    { amount: number; currency: string },
+    { amount: number; currency: string; idempotencyKey: string },
     { redirectUrl: string; referenceNumber: string }
-  >('createPaynowWalletTopup', { amount: amountUSD, currency: 'USD' });
+  >('createPaynowWalletTopup', { amount: amountUSD, currency: 'USD', idempotencyKey });
 
   await WebBrowser.openBrowserAsync(data.redirectUrl, {
     presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET,
