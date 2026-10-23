@@ -935,6 +935,8 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(input.search){const clean=text(input.search,100).replace(/[%,()]/g,' ').replace(/\s+/g,' ').trim();const term=`%${clean}%`;if(module==='waitlist')q=q.or(`email.ilike.${term},fullname.ilike.${term},phone.ilike.${term}`);else if(module==='customers'||module==='cleaners')q=q.or(`email.ilike.${term},displayname.ilike.${term},phone.ilike.${term}`);else if(module==='bookings')q=q.or(`id.ilike.${term},customername.ilike.${term},cleanername.ilike.${term}`);else if(module==='support')q=q.or(`id.ilike.${term},reason.ilike.${term}`);else if(module==='payments')q=q.or(`id.ilike.${term},reference.ilike.${term}`);}
       const {data,error}=await q; if(error)throw error;
       const page=(data??[]).slice(0,pageSize);
+      const paymentRefunds=new Map<string,{confirmed:number;latest?:Json}>();
+      if(module==='payments'&&page.length){const ids=page.map((row:Json)=>row.id);const {data:refundRows,error:refundError}=await admin.from('paynowrefundtransactions').select('paymentid,amount,status,providerreference,createdat').in('paymentid',ids).order('createdat',{ascending:false});if(refundError)throw refundError;for(const refund of refundRows??[]){const entry=paymentRefunds.get(refund.paymentid)??{confirmed:0};if(refund.status==='CONFIRMED')entry.confirmed+=Number(refund.amount)||0;if(!entry.latest)entry.latest=refund;paymentRefunds.set(refund.paymentid,entry);}}
       const supportContext=new Map<string,Json>();
       if(module==='support'&&page.length){
         const profileIds=[...new Set(page.flatMap((row:Json)=>[row.customerid,row.cleanerid,row.data?.reporterId]).filter((id:unknown):id is string=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id)))];
@@ -952,7 +954,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         if(module==='waitlist')return {id:row.id,participantType:row.participanttype,fullName:row.fullname,email:row.email,phone:row.phone,country:row.country,city:row.city,area:row.area,preferredLanguage:row.preferredlanguage,serviceInterest:row.serviceinterest,marketingEmailPermission:row.marketingemailpermission,status:row.status,createdAt:row.createdat};
         if(module==='customers')return {id:row.id,createdAt:row.createdat,Customer:row.displayname??'Customer',Contact:[row.email,row.phone].filter(Boolean).join(' · '),State:row.isbanned?'SUSPENDED':row.issuspended?'SUSPENDED':'ACTIVE',Bookings:row.jobscompleted??0,'Total spend':'—',Upcoming:'—'};
         if(module==='cleaners')return {id:row.id,createdAt:row.createdat,Cleaner:row.displayname??'Cleaner',Verification:row.verificationstatus??'PENDING',Coverage:row.servicearea??'—',Availability:row.status??'OFFLINE',Assignments:row.jobscompleted??0,Rating:row.ratingaverage??0,Earnings:'Restricted'};
-        if(module==='payments')return {id:row.id,createdAt:row.createdat,Payment:row.reference??row.id,Booking:row.jobid??'—',Customer:row.customerid??'—',Captured:row.status==='PAID'?row.amount:0,Refunded:row.data?.refundRequest?.amount??0,'Processor ref':row.reference??'—',Status:row.status};
+        if(module==='payments'){const refund=paymentRefunds.get(row.id);return {id:row.id,createdAt:row.createdat,Payment:row.reference??row.id,Booking:row.jobid??'—',Customer:row.customerid??'—',Captured:['ESCROWED','DELIVERED','PAID','DISPUTED','REFUNDED'].includes(row.status)?row.amount:0,Refunded:refund?refund.confirmed:Number(row.data?.refundSummary?.confirmedAmount??0),'Refund request':refund?.latest?`${Number(refund.latest.amount).toFixed(2)} ${refund.latest.status}`:'—','Processor ref':row.reference??'—',Status:row.status};}
         if(module==='bookings')return {id:row.id,createdAt:row.createdat,Booking:row.id,Customer:row.customername??row.customerid??'—',Cleaner:row.cleanername??row.cleanerid??'—',Service:row.servicetype??row.category??'—',Scheduled:row.scheduleddatetime??row.scheduledtime??'—',Status:row.status,Payment:row.paymentstatus??row.paymentmethod??'—'};
         if(module==='support'){
           const context=supportContext.get(row.id)??{},customer=context.customer??{},cleanerProfile=context.cleaner??{},reporter=context.reporter??{},job=context.job??{};
@@ -980,7 +982,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'adminMutation': {
       const actor=authed(); const action=text(input.action,80); const key=requireKey(input.idempotencyKey); const reason=text(input.reason,500); const targetId=text(input.targetId,120);
       requireRecentMfa(request);
-      const supportedActions=new Set(['update_kill_switch','deactivate_cleaner','suspend_cleaner','change_account_state','resolve_case','assign_support_case','reschedule_booking','reassign_booking','assign_cleaner','cancel_booking','request_refund','full_refund','partial_refund']);
+      const supportedActions=new Set(['update_kill_switch','deactivate_cleaner','suspend_cleaner','change_account_state','resolve_case','assign_support_case','reschedule_booking','reassign_booking','assign_cleaner','cancel_booking','request_refund','record_refund_update','full_refund','partial_refund']);
       if(!supportedActions.has(action))fail(400,`Admin action "${action}" is not supported.`);
       const {data:alreadyApplied}=await admin.from('adminauditevents').select('id,action,targetid').eq('id',key).maybeSingle();
       if(alreadyApplied){if(alreadyApplied.action!==action||alreadyApplied.targetid!==(targetId||null))fail(409,'This idempotency key was already used for a different admin action.');return {ok:true,auditId:key};}
@@ -1046,11 +1048,11 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         const amount=round2(Number(input.amount));if(!Number.isFinite(amount)||amount<=0)fail(400,'Enter a positive refund amount.');
         const {data:payment,error}=await admin.from('payments').select('*').eq('id',targetId).maybeSingle();if(error)throw error;if(!payment)fail(404,'Payment not found.');
         if(payment.provider!=='PAYNOW')fail(409,'This workflow records Paynow refund requests. Wallet and direct-payment adjustments must use their matching settlement process.');
-        if(!['ESCROWED','DELIVERED','PAID','DISPUTED'].includes(payment.status))fail(409,'Only a captured Paynow payment can be refunded.');
-        if(amount>Number(payment.amount))fail(400,'Refund cannot exceed the original payment.');
-        const existing=payment.data?.refundRequest;if(existing?.status==='PENDING')fail(409,'A refund request is already pending for this payment.');
-        const {error:updateError}=await admin.from('payments').update({data:{...(payment.data??{}),refundRequest:{amount,reason,status:'PENDING',requestedBy:actor,requestedAt:now,reference:text(input.refundReference,120)||null}}}).eq('id',targetId);if(updateError)throw updateError;
-        if(payment.jobid) await admin.from('supportcases').insert({id:`refund_${key}`,jobid:payment.jobid,customerid:payment.customerid,cleanerid:payment.cleanerid,reason:`Manual Paynow refund of $${amount.toFixed(2)} requested: ${reason}`,status:'OPEN',data:{paymentId:payment.id,refundAmount:amount,refundStatus:'PENDING_PROVIDER_ACTION',createdBy:actor}});
+        const {error:refundError}=await admin.rpc('request_paynow_refund',{p_payment_id:targetId,p_actor_id:actor,p_amount:amount,p_reason:reason,p_idempotency_key:key});if(refundError)throw refundError;
+        if(payment.jobid){const {error:caseError}=await admin.from('supportcases').upsert({id:`refund_${key}`,jobid:payment.jobid,customerid:payment.customerid,cleanerid:payment.cleanerid,reason:`Manual Paynow refund of $${amount.toFixed(2)} requested: ${reason}`,status:'OPEN',data:{paymentId:payment.id,refundAmount:amount,refundStatus:'REQUESTED',createdBy:actor}},{onConflict:'id'});if(caseError)throw caseError;}
+      } else if(action==='record_refund_update') {
+        const status=text(input.refundStatus,40).toUpperCase();
+        const {error:updateError}=await admin.rpc('record_paynow_refund_update',{p_payment_id:targetId,p_actor_id:actor,p_status:status,p_amount:Number(input.amount)||0,p_provider_reference:text(input.providerReference,120),p_reason:reason,p_idempotency_key:key});if(updateError)throw updateError;
       }
       const {error}=await admin.from('adminauditevents').upsert({id:key,action,actorid:actor,targetid:targetId||null,reason,data:input,createdat:now},{onConflict:'id',ignoreDuplicates:true});if(error)throw error;
       return {ok:true,auditId:key};

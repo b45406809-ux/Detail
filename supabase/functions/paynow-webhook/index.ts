@@ -50,7 +50,12 @@ Deno.serve(async request => {
     }
     if(data?.status==='REFUNDED'){
       const {data:payment}=await admin.from('payments').select('id,data').eq('id',before?.id??'').maybeSingle();
-      if(payment?.data?.refundRequest?.status==='PENDING')await admin.from('payments').update({data:{...payment.data,refundRequest:{...payment.data.refundRequest,status:'COMPLETED',completedAt:new Date().toISOString()}}}).eq('id',payment.id);
+      if(payment){
+        const updatedAt=new Date().toISOString();
+        await admin.from('paynowrefundtransactions').update({status:'RECONCILIATION_REQUIRED',updatedat:updatedAt,data:{providerStatus:'REFUNDED',providerStatusAt:updatedAt}}).eq('paymentid',payment.id).in('status',['REQUESTED','SUBMITTED']);
+        await admin.from('payments').update({data:{...payment.data,refundRequest:payment.data?.refundRequest?{...payment.data.refundRequest,status:'RECONCILIATION_REQUIRED',providerStatusAt:updatedAt}:undefined,refundSummary:{...(payment.data?.refundSummary??{}),latestStatus:'RECONCILIATION_REQUIRED',providerStatus:'REFUNDED',updatedAt}}}).eq('id',payment.id);
+        if(before?.jobid){await admin.from('supportcases').upsert({id:`paynow_refund_reconcile_${payment.id}`,jobid:before.jobid,customerid:before.customerid,cleanerid:before.cleanerid,reason:'Paynow reported REFUNDED without refund-specific amount/reference evidence. Reconcile the provider transaction before confirming the refund ledger.',status:'URGENT',data:{type:'PAYNOW_REFUND_RECONCILIATION',paymentId:payment.id,providerStatus:'REFUNDED'}},{onConflict:'id'});}
+      }
     }
     if(before&&data?.status&&before.status!==data.status){
       const booking=!!before.jobid;
@@ -59,7 +64,7 @@ Deno.serve(async request => {
         DELIVERED:{title:'Delivery confirmed in Paynow',body:'The 24-hour dispute period has started.',type:'PAYMENT_DELIVERED'},
         PAID:{title:booking?'Paynow released the payment':'Wallet top-up completed',body:booking?'Paynow has released the payment to Detail.':'Your Detail wallet balance has been updated.',type:'PAYMENT_PAID'},
         DISPUTED:{title:'Paynow dispute opened',body:'Paynow reported a dispute. Detail support will review the booking.',type:'PAYMENT_DISPUTED'},
-        REFUNDED:{title:'Paynow refund confirmed',body:'Paynow confirmed the refund for this payment.',type:'PAYMENT_REFUNDED'},
+        REFUNDED:{title:'Paynow refund reported',body:'Paynow reported a refunded payment. Detail support is reconciling the refund amount and transaction reference.',type:'PAYMENT_REFUNDED'},
       };
       const message=messages[data.status];if(message){for(const userId of new Set([before.customerid,before.cleanerid].filter(Boolean)))await notifyOnce(String(userId),reference,String(data.status),{...message,jobId:before.jobid});}
       if(data.status==='DISPUTED'){const {data:admins}=await admin.from('adminroles').select('userid');for(const row of admins??[])await notifyOnce(row.userid,reference,'DISPUTED',{title:'Paynow dispute needs review',body:'A Paynow BuySafe dispute was opened. Review the support queue.',type:'PAYMENT_DISPUTED',jobId:before.jobid});}
