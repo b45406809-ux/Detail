@@ -23,10 +23,10 @@ jobs:
       PAYNOW_INTEGRATION_ID: ${{ secrets.PAYNOW_INTEGRATION_ID }}
       PAYNOW_INTEGRATION_KEY: ${{ secrets.PAYNOW_INTEGRATION_KEY }}
       PAYNOW_RETURN_URL: ${{ vars.PAYNOW_RETURN_URL }}
-      DIDIT_API_KEY: ${{ secrets.DIDIT_API_KEY }}
+      DIDIT_API_KEY: ${{ secrets.DIDIT_API_KEY || secrets.DIDIT_KYC_SECRET_KEY }}
       DIDIT_WORKFLOW_ID: ${{ secrets.DIDIT_WORKFLOW_ID }}
       TURNSTILE_SECRET: ${{ secrets.TURNSTILE_SECRET }}
-      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY || secrets.EXPO_RESEND_API_KEY }}
       APP_RETURN_URL: ${{ vars.APP_RETURN_URL }}
       PAYOUT_ENCRYPTION_KEY: ${{ secrets.PAYOUT_ENCRYPTION_KEY }}
       TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
@@ -39,6 +39,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Validate migrations and Edge Functions locally
+        run: |
+          supabase start
+          supabase db reset --local
+          supabase db lint --local --schema public --fail-on error
+          deno check --config supabase/functions/deno.json supabase/functions/*/index.ts
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
       - name: Validate deployment credentials
         run: |
           test -n "$SUPABASE_ACCESS_TOKEN" || { echo 'Missing production secret SUPABASE_ACCESS_TOKEN'; exit 1; }
