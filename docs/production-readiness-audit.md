@@ -1084,7 +1084,7 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Acceptance check.** Run concurrent signup, expired CAPTCHA, provider failure and spreadsheet-formula payloads; retries work, one record exists and exported cells remain data rather than formulas.
 
-**Implementation status (2026-10-23).** Concurrent normalized-email signup is serialized by a database advisory lock; repeated signups preserve the original consent/contact record, and CSV export neutralizes formula-leading cells. The API now returns confirmation-email delivery status and the public success message reflects it. Explicit Turnstile widget reset/expiry handling and concurrent-signup/provider-failure integration tests remain outstanding.
+**Implementation status (2026-10-23).** Concurrent normalized-email signup is serialized by a database advisory lock; repeated signups preserve the original consent/contact record, and CSV export neutralizes formula-leading cells. The API now returns confirmation-email delivery status and the public success message reflects it. Retry and add-another-person controls reset the Turnstile widget; explicit expiry-state messaging and concurrent-signup/provider-failure integration tests remain outstanding.
 
 <a id="F67"></a>
 
