@@ -856,9 +856,9 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Source:** [supabase/migrations/20261020010000_marketplace_hardening.sql:525](<../supabase/migrations/20261020010000_marketplace_hardening.sql#L525>); [site/src/admin/Modules.tsx:31](<../site/src/admin/Modules.tsx#L31>); [supabase/functions/marketplace-api/index.ts:547](<../supabase/functions/marketplace-api/index.ts#L547>)
 
-**Problem and impact.** PENDING payouts can only be approved in the UI; rejection is allowed only after approval by a different admin. Invalid requests can keep funds reserved unnecessarily. The approving admin can reveal a destination and send a manual transfer even though they cannot mark it paid, increasing duplicate/manual-payment risk. The mobile app lacks a complete payout status/history/reason/destination-management journey.
+**Current implementation and remaining gap.** Admins can reject a PENDING payout directly with a required reason; the database verifies the original earnings hold, returns the funds idempotently and records an audit event. Approval and destination reveal/settlement require separate administrators. The actual transfer is still manual, and mobile payout history, account recovery and end-to-end interruption reconciliation remain incomplete.
 
-**Proposed fix.** Support reasoned rejection/cancellation of pending requests, enforce distinct initiator/approver/settler responsibilities before revealing/payment, add transfer idempotency and show clear cleaner payout history/recovery.
+**Proposed fix.** Keep the two-person control before revealing the destination, add transfer idempotency and recoverable manual settlement evidence, and show clear cleaner payout history, rejection reasons and account recovery.
 
 **Acceptance check.** Reject invalid pending requests without unnecessary approval, prevent the first approver from initiating the transfer, and reconcile interrupted manual transfers exactly once.
 
@@ -1002,9 +1002,9 @@ No production database/provider writes, messages, payments, identity sessions, E
 
 **Source:** [site/src/admin/Modules.tsx:13](<../site/src/admin/Modules.tsx#L13>); [supabase/functions/marketplace-api/index.ts:742](<../supabase/functions/marketplace-api/index.ts#L742>); [supabase/functions/marketplace-api/index.ts:775](<../supabase/functions/marketplace-api/index.ts#L775>)
 
-**Problem and impact.** The table expects Case/Booking/Opened/Owner but receives raw id/jobid/createdat/ownerid; several cells render dashes. Ticket descriptions, evidence, reporter and payment context live in data and have no case-detail interface. Resolve case marks a record resolved with notes but does not notify participants, settle/refund a related booking, enforce response SLAs or maintain an operator conversation. Several issue reporters do not notify support at all.
+**Current implementation and remaining gap.** The support queue maps case IDs, booking, reason, opened time, owner and status into its table, and the detail panel shows reporter/participant contact, booking/payment context, signed evidence previews and assignment history. Operators can assign cases and resolve them with notes; participants receive a status notification. There is still no customer-visible conversation, response SLA/escalation workflow or complete evidence retention/financial-resolution process, and related refunds/settlement remain separate audited actions.
 
-**Proposed fix.** Build a support case workspace with authorized evidence, booking/payment timeline, assignment/severity/SLA, customer-visible replies and links to audited financial actions. Separate resolving a case from merely adding a note.
+**Proposed fix.** Extend the workspace with assignment/severity/SLA, customer-visible replies and evidence retention, with links to audited financial actions. Keep resolving a case separate from merely adding a note.
 
 **Acceptance check.** Handle a damaged-property report, no-show and disputed completion from intake through communication, financial action and closure; every participant/operator sees the correct status and evidence.
 
