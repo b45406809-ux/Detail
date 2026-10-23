@@ -6,7 +6,7 @@ import { MapPin, Bell, Shield } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { useAuth } from '../../context/AuthContext';
-import { getExpoPushToken } from '../../services/notifications';
+import { registerCurrentPushDevice } from '../../services/pushRegistration';
 import { GlassCard } from '../../components/glass';
 
 const PERMISSIONS = [
@@ -37,8 +37,7 @@ export default function PermissionsScreen() {
       if (!active) return;
       setGranted({ location: location.granted, notifications: notifications.granted });
       if (notifications.granted) {
-        const token = await getExpoPushToken();
-        if (active && token) await updateProfile({ expoPushToken: token }).catch((error) => console.warn('Could not save push token:', error));
+        if (active) await registerCurrentPushDevice().catch((error) => console.warn('Could not save this device notification registration:', error));
       }
     }).catch((error) => console.warn('Could not read device permissions:', error));
     return () => { active = false; };
@@ -58,8 +57,7 @@ export default function PermissionsScreen() {
     const { status } = await Notifications.requestPermissionsAsync();
     setGranted((prev) => ({ ...prev, notifications: status === 'granted' }));
     if (status === 'granted') {
-      const token = await getExpoPushToken();
-      if (token) await updateProfile({ expoPushToken: token });
+      await registerCurrentPushDevice();
     }
   };
 

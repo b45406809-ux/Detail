@@ -35,26 +35,27 @@ import { useAuth } from '../../context/AuthContext';
 import { auth, clearLocalSession, signOut } from '../../services/supabase';
 import { callFunction } from '../../services/functions';
 import { uploadProfilePhoto } from '../../services/storage';
-import { getExpoPushToken } from '../../services/notifications';
+import { hasCurrentPushDevice, registerCurrentPushDevice, unregisterCurrentPushDevice } from '../../services/pushRegistration';
 import { StarRating } from '../../components/StarRating';
 
 export default function ProfileScreen() {
   const { user, profile, updateProfile } = useAuth();
-  const [notificationsOn, setNotificationsOn] = useState(true);
+  const [notificationsOn, setNotificationsOn] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
-  useEffect(() => { setNotificationsOn(!!profile?.expoPushToken); }, [profile?.expoPushToken]);
+  useEffect(() => { hasCurrentPushDevice().then(setNotificationsOn).catch(() => setNotificationsOn(false)); }, [user?.uid]);
 
   const setPushNotifications = async (enabled: boolean) => {
     if (!enabled) {
-      try { await updateProfile({ expoPushToken: '' }); setNotificationsOn(false); }
+      try { await unregisterCurrentPushDevice(); setNotificationsOn(false); }
       catch { Alert.alert('Could not update notification settings', 'Please try again.'); }
       return;
     }
     const permission = await Notifications.requestPermissionsAsync();
     if (!permission.granted) { Alert.alert('Allow notifications', 'Enable notifications in your device settings to receive booking and payment updates.'); return; }
-    const token = await getExpoPushToken();
-    if (!token) { Alert.alert('Notifications unavailable', 'This device could not register for push notifications right now.'); return; }
-    try { await updateProfile({ expoPushToken: token }); setNotificationsOn(true); }
+    try {
+      if (!await registerCurrentPushDevice()) { Alert.alert('Notifications unavailable', 'This device could not register for push notifications right now.'); return; }
+      setNotificationsOn(true);
+    }
     catch { Alert.alert('Could not enable notifications', 'Please try again.'); }
   };
 

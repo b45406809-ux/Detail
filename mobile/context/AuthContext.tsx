@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { AppState } from 'react-native';
 import {
   auth,
   db,
@@ -12,6 +13,7 @@ import {
   SupabaseCompatUser,
 } from '../services/supabase';
 import { UserProfile } from '../types';
+import { registerCurrentPushDevice } from '../services/pushRegistration';
 
 interface AuthContextValue {
   user: SupabaseCompatUser | null;
@@ -33,6 +35,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SupabaseCompatUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const userId = user?.uid;
+
+  useEffect(() => {
+    if (!userId) return;
+    let active = true;
+    const sync = () => { registerCurrentPushDevice().catch((error) => console.warn('Could not refresh this device notification registration:', error)); };
+    sync();
+    const subscription = AppState.addEventListener('change', (state) => { if (state === 'active' && active) sync(); });
+    return () => { active = false; subscription.remove(); };
+  }, [userId]);
 
   useEffect(() => {
     let unsubProfile: (() => void) | null = null;

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, type SupabaseClient, type User as SupabaseUser } from '@supabase/supabase-js';
 import { signMediaValue } from './storage';
+import { unregisterCurrentPushDevice } from './pushRegistration';
 import { IS_MOCK } from '../utils/env';
 
 // Development and demo builds must never inherit production credentials. Use
@@ -88,18 +89,12 @@ export async function createUserWithEmailAndPassword(_auth: typeof auth, email: 
   return { user: compatUser(data.user)! };
 }
 export async function signOut(_auth: typeof auth) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (user) {
-    const { error: tokenError } = await supabase
-      .from('users')
-      .update({ expoPushToken: null })
-      .eq('id', user.id);
-    if (tokenError) console.warn('Could not revoke the signed-in device push token:', tokenError.message);
-  }
+  await unregisterCurrentPushDevice().catch((error) => console.warn('Could not revoke this device notification registration:', error));
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
 }
 export async function clearLocalSession() {
+  await unregisterCurrentPushDevice().catch((error) => console.warn('Could not revoke this device notification registration:', error));
   const { error } = await supabase.auth.signOut({ scope: 'local' });
   if (error) throw error;
 }
@@ -166,7 +161,7 @@ const newId = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, char
   return (char === 'x' ? value : (value & 0x3) | 0x8).toString(16);
 });
 const camelColumns: Record<string, string[]> = {
-  users: ['email','displayName','photoURL','role','accountType','organizationId','balance','earningsBalance','commissionBalance','commissionOwed','status','hasAgreedToTerms','cleanerAgreementAccepted','cleanerOnboardingComplete','hasCompletedProfile','hasSetupPermissions','isSuspended','isBanned','verificationStatus','verificationLevel','serviceCategories','serviceRadiusKm','experienceYears','address','serviceArea','phone','location','jobsCompleted','ratingAverage','ratingCount','responseTimeAverage','expoPushToken','createdAt','updatedAt','metadata'],
+  users: ['email','displayName','photoURL','role','accountType','organizationId','balance','earningsBalance','commissionBalance','commissionOwed','status','hasAgreedToTerms','cleanerAgreementAccepted','cleanerOnboardingComplete','hasCompletedProfile','hasSetupPermissions','isSuspended','isBanned','verificationStatus','verificationLevel','serviceCategories','serviceRadiusKm','experienceYears','address','serviceArea','phone','location','jobsCompleted','ratingAverage','ratingCount','responseTimeAverage','createdAt','updatedAt','metadata'],
   jobs: ['customerId','cleanerId','customerName','customerPhoto','customerPhone','cleanerName','cleanerPhoto','cleanerPhone','cleanerRating','category','serviceType','checklist','description','location','scheduledTime','scheduledDateTime','timePreference','status','pricingStrategy','budget','price','photos','completionPhotos','biddingExpiresAt','reminderSent','estimatedDuration','cleanerLocation','cleanerLocationUpdatedAt','paidAt','paymentMethod','paymentStatus','earnings','rating','ratedAt','isFavoriteRebook','createdAt','updatedAt','data','bookingMode','suppliesRequired','suppliesFee','arrivalAt','serviceStartedAt','completionSubmittedAt','customerResponseAt','matchExpiresAt','lastMessage','lastMessageAt','cleanerUnread','customerUnread'],
   openJobs: ['jobId','status','category','serviceType','budget','biddingExpiresAt','customerId','createdAt','data'],
   bids: ['jobId','cleanerId','cleanerName','cleanerPhoto','cleanerRating','cleanerReviewCount','cleanerJobsCompleted','cleanerEliteVerified','bidPrice','estimatedArrival','status','message','history','createdAt','updatedAt'],

@@ -242,6 +242,19 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         disablePayments:settings.disablePayments===true||switches.payments===true,
       };
     }
+    case 'registerPushDevice': {
+      const actor=authed(),token=text(input.token,200);await requireActiveMarketplaceAccount(actor);
+      if(!/^(Exponent|Expo)PushToken\[[A-Za-z0-9_-]+\]$/.test(token))fail(400,'Invalid device notification token.');
+      await enforceRateLimit(request,actor,'push_device_register',30,3600);
+      const {error}=await admin.rpc('register_push_device',{p_user_id:actor,p_expo_push_token:token});if(error)throw error;
+      return {success:true};
+    }
+    case 'unregisterPushDevice': {
+      const actor=authed(),token=text(input.token,200);
+      if(!/^(Exponent|Expo)PushToken\[[A-Za-z0-9_-]+\]$/.test(token))fail(400,'Invalid device notification token.');
+      const {error}=await admin.rpc('unregister_push_device',{p_user_id:actor,p_expo_push_token:token});if(error)throw error;
+      return {success:true};
+    }
     case 'startCleanerIdentityVerification': {
       const actor = authed();
       await enforceRateLimit(request, actor, 'didit_session', 5, 3600);

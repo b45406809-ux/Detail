@@ -14,7 +14,7 @@ async function deliver(row:Record<string,any>){
       const result=await response.json().catch(()=>null);const ticket=Array.isArray(result?.data)?result.data[0]:result?.data;
       if(!response.ok||ticket?.status==='error'){
         const message=String(ticket?.message??result?.errors?.[0]?.message??`Expo returned ${response.status}`);
-        if(ticket?.details?.error==='DeviceNotRegistered')await admin.from('users').update({expopushtoken:null}).eq('id',row.userid).eq('expopushtoken',row.destination);
+        if(ticket?.details?.error==='DeviceNotRegistered')await admin.from('userpushdevices').delete().eq('userid',row.userid).eq('expopushtoken',row.destination);
         await admin.rpc('finish_notification_delivery',{p_id:row.id,p_success:false,p_error:message,p_receipt_id:null});return;
       }
       await admin.rpc('finish_notification_delivery',{p_id:row.id,p_success:true,p_error:null,p_receipt_id:ticket?.id??null});return;
@@ -46,7 +46,7 @@ async function pollExpoReceipts(){
       const receipt=receipts[item.providerreceiptid];if(!receipt)continue;
       const receiptError=receipt.status==='error'?String(receipt.message??receipt.details?.error??'Expo push receipt error'):null;
       await admin.from('notificationdeliveries').update({receiptcheckedat:new Date().toISOString(),lastError:receiptError}).eq('id',item.id);
-      if(receipt.details?.error==='DeviceNotRegistered')await admin.from('users').update({expopushtoken:null}).eq('id',item.userid).eq('expopushtoken',item.destination);
+      if(receipt.details?.error==='DeviceNotRegistered')await admin.from('userpushdevices').delete().eq('userid',item.userid).eq('expopushtoken',item.destination);
     }
   }
 }
