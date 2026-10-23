@@ -755,7 +755,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(input.confirmation!=='DELETE')fail(400,'Type DELETE to confirm.');
       const lastSignInAt=Date.parse(String(user?.last_sign_in_at??'')),signInAge=Date.now()-lastSignInAt;
       if(!Number.isFinite(lastSignInAt)||signInAge<0||signInAge>5*60*1000)fail(409,'RECENT_LOGIN_REQUIRED');
-      const [profileResult,payoutResult,bookingResult]=await Promise.all([admin.from('users').select('balance,earningsbalance,commissionbalance,commissionowed,walletrestricted').eq('id',actor).single(),admin.from('payoutrequests').select('id').eq('cleanerid',actor).eq('status','PENDING').limit(1).maybeSingle(),admin.from('jobs').select('id').or(`customerid.eq.${actor},cleanerid.eq.${actor}`)]);
+      const [profileResult,payoutResult,bookingResult]=await Promise.all([admin.from('users').select('balance,earningsbalance,commissionbalance,commissionowed,walletrestricted').eq('id',actor).single(),admin.from('payoutrequests').select('id').eq('cleanerid',actor).in('status',['PENDING','APPROVED']).limit(1).maybeSingle(),admin.from('jobs').select('id').or(`customerid.eq.${actor},cleanerid.eq.${actor}`)]);
       if(profileResult.error)throw profileResult.error;if(payoutResult.error)throw payoutResult.error;if(bookingResult.error)throw bookingResult.error;
       const profile=profileResult.data,pendingPayout=payoutResult.data,bookings=bookingResult.data;
       if(Number(profile?.balance??0)>0||Number(profile?.earningsbalance??0)>0||Number(profile?.commissionbalance??0)>0||Number(profile?.commissionowed??0)>0||profile?.walletrestricted||pendingPayout)fail(409,'Settle all wallet balances, commission and pending payouts before deleting the account.');
@@ -770,7 +770,9 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         }
         for(let index=0;index<paths.length;index+=100){const {error:removeError}=await storage.remove(paths.slice(index,index+100));if(removeError)throw new ApiError(503,'Could not remove private media. Retry account deletion.');}
       }
-      const {error:deleteError}=await admin.auth.admin.deleteUser(actor); if(deleteError)throw deleteError;
+      // Soft deletion anonymizes Auth while preserving UUID references held by
+      // retained bookings, support cases, payouts and accounting records.
+      const {error:deleteError}=await admin.auth.admin.deleteUser(actor,true); if(deleteError)throw deleteError;
       return {success:true};
     }
     case 'joinWaitlist': {

@@ -31,7 +31,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
 import { Linking } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { auth, signOut } from '../../services/supabase';
+import { auth, clearLocalSession, signOut } from '../../services/supabase';
 import { callFunction } from '../../services/functions';
 import { uploadProfilePhoto } from '../../services/storage';
 import { getExpoPushToken } from '../../services/notifications';
@@ -140,7 +140,11 @@ export default function ProfileScreen() {
     Alert.alert('Delete account?', 'You must have signed in recently. Active bookings or unresolved payments must be completed first. This cannot be undone.', [
       { text: 'Keep account', style: 'cancel' },
       { text: 'Delete permanently', style: 'destructive', onPress: async () => {
-        try { await callFunction('deleteAccount', { confirmation: 'DELETE' }); }
+        try {
+          await callFunction('deleteAccount', { confirmation: 'DELETE' });
+          await clearLocalSession();
+          router.replace('/(auth)/welcome');
+        }
         catch (error: any) {
           if (error?.message === 'RECENT_LOGIN_REQUIRED') {
             Alert.alert('Sign in again to continue', 'Account deletion requires a recent sign-in. Sign out, sign in again, then retry deletion.', [

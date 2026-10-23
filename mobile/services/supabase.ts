@@ -88,6 +88,10 @@ export async function signOut(_auth: typeof auth) {
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
 }
+export async function clearLocalSession() {
+  const { error } = await supabase.auth.signOut({ scope: 'local' });
+  if (error) throw error;
+}
 export async function sendEmailVerification(user: SupabaseCompatUser) {
   if (!user.email) throw new Error('Your account has no email address.');
   const { error } = await supabase.auth.resend({ type: 'signup', email: user.email });
