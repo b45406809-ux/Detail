@@ -27,7 +27,7 @@ insert into public.payments(id,jobId,customerId,amount,status,reference)
 values
  ('paynow-disputed-test','7cdd0c69-f6d0-41bd-b2fb-a8e8e1c09215','0b44ed65-1f77-4a20-a513-a5baad558cb4',25,'DISPUTED','paynow-disputed-test-ref'),
  ('paynow-paid-test','7cdd0c69-f6d0-41bd-b2fb-a8e8e1c09216','0b44ed65-1f77-4a20-a513-a5baad558cb4',25,'PAID','paynow-paid-test-ref'),
- ('paynow-refunded-test','7cdd0c69-f6d0-41bd-b2fb-a8e8e1c09217','0b44ed65-f6d0-41bd-b2fb-a8e8e1c09214',25,'REFUNDED','paynow-refunded-test-ref');
+ ('paynow-refunded-test','7cdd0c69-f6d0-41bd-b2fb-a8e8e1c09217','0b44ed65-1f77-4a20-a513-a5baad558cb4',25,'REFUNDED','paynow-refunded-test-ref');
 
 select is(
   public.apply_paynow_status('paynow-status-test-ref','Awaiting Delivery',25)->>'status',
