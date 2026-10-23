@@ -408,7 +408,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const {data:job,error:jobError}=await admin.from('jobs').select('id,category,bookingmode,status,matchexpiresat').eq('id',jobId).eq('customerid',actor).maybeSingle();
       if(jobError)throw jobError;if(!job||job.bookingmode!=='INSTANT'||job.status!=='PENDING')fail(409,'This instant request is no longer matching.');
       if(job.matchexpiresat&&Date.parse(job.matchexpiresat)<=Date.now())return {matchedCleaners:0,expired:true};
-      const {data:existingBids,error:bidError}=await admin.from('bids').select('id').eq('jobid',jobId).limit(1);if(bidError)throw bidError;
+      const {data:existingBids,error:bidError}=await admin.from('bids').select('id').eq('jobid',jobId).in('status',['PENDING','COUNTERED','ACCEPTED']).limit(1);if(bidError)throw bidError;
       if(existingBids?.length)return {matchedCleaners:0,customerActionRequired:true};
       const {data:candidates,error}=await admin.rpc('search_instant_cleaners',{p_job_id:jobId,p_actor_id:actor,p_limit:20});if(error)throw error;
       const candidateIds=(candidates??[]).map((candidate:Json)=>candidate.cleaner_id);
