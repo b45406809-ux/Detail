@@ -18,6 +18,10 @@ jobs:
     steps:
       - name: Report expected configuration names only
         env:
+          CHECK_SECRET_EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          CHECK_SECRET_MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
+          CHECK_SECRET_EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID }}
+          CHECK_VARIABLE_EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: ${{ vars.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID }}
           CHECK_SECRET_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CHECK_SECRET_CLOUDFLARE_D1_READ_TOKEN: ${{ secrets.CLOUDFLARE_D1_READ_TOKEN }}
           CHECK_SECRET_CRON_SECRET: ${{ secrets.CRON_SECRET }}
