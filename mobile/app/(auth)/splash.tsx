@@ -4,8 +4,8 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { router } from 'expo-router';
 
 // This is the actual Detail intro video (brand swoosh → D. mark → wordmark),
-// played back verbatim rather than re-animated, per the reference asset from
-// Drive. Falls through to welcome automatically when it finishes, with a
+// trimmed to end on the Detail wordmark before the production credit.
+// Falls through to welcome automatically when it finishes, with a
 // safety timeout in case playback stalls on a given device.
 const INTRO_SOURCE = require('../../assets/intro.mp4');
 
