@@ -1,0 +1,49 @@
+name: Build Detail Android on EAS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eas-android-production
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Configure production tokens and build Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN || secrets.EAS_BOT_ACCESS_TOKEN || secrets.EXPO_EAS_BOT_ACCESS_TOKEN }}
+      MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN || secrets.MAPBOX_ACCESS_TOKEN }}
+      EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || secrets.MAPBOX_PUBLIC_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Validate build credentials are configured
+        run: |
+          set -euo pipefail
+          test -n "$EXPO_TOKEN"
+          test -n "$MAPBOX_DOWNLOADS_TOKEN"
+          test -n "$EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN"
+
+      - run: npm ci --prefix mobile --no-audit --no-fund
+
+      - name: Set Mapbox tokens in EAS production environment
+        working-directory: mobile
+        run: |
+          set -euo pipefail
+          npx eas-cli@latest env:set production --scope project --name MAPBOX_DOWNLOADS_TOKEN --value "$MAPBOX_DOWNLOADS_TOKEN" --visibility secret --non-interactive
+          npx eas-cli@latest env:set production --scope project --name EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN --value "$EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN" --visibility plaintext --non-interactive
+
+      - name: Build Android production app on EAS
+        working-directory: mobile
+        run: npx eas-cli@latest build --platform android --profile production --non-interactive --wait
