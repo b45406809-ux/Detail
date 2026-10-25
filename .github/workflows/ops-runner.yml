@@ -364,6 +364,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_PUBLIC_ANON || secrets.SUPABASE_ANON_KEY || secrets.SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_LEGACY_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: node scripts/live_provider_checks.mjs supabase
 
       - name: Check Twilio account credentials

@@ -66,6 +66,19 @@ async function supabaseChecks() {
         if (bearerSafeDetails.length) console.log(`SUPABASE_REST_BEARER_ERROR: ${bearerSafeDetails.join(' | ')}`);
       }
       if (bearerResponse?.ok) return true;
+      const legacyAnon = process.env.SUPABASE_LEGACY_ANON_KEY?.trim();
+      if (legacyAnon && legacyAnon !== anon) {
+        const legacyResponse = await requestStatus(`${base}/rest/v1/`, { headers: { apikey: legacyAnon } });
+        console.log(`SUPABASE_REST_LEGACY_ANON_HTTP: ${legacyResponse?.status ?? 'NETWORK'}`);
+        if (legacyResponse && !legacyResponse.ok) {
+          const legacyDetails = await legacyResponse.clone().json().catch(() => ({}));
+          const legacySafeDetails = [legacyDetails.code, legacyDetails.error, legacyDetails.message]
+            .filter((value) => typeof value === 'string')
+            .map((value) => value.replaceAll(legacyAnon, '[redacted]').replace(/[\r\n]+/g, ' ').slice(0, 160));
+          if (legacySafeDetails.length) console.log(`SUPABASE_REST_LEGACY_ANON_ERROR: ${legacySafeDetails.join(' | ')}`);
+        }
+        if (legacyResponse?.ok) return true;
+      }
     }
     return Boolean(response?.ok);
   });
