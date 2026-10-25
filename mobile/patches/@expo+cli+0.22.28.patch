@@ -1,0 +1,14 @@
+diff --git a/node_modules/@expo/cli/build/src/utils/npm.js b/node_modules/@expo/cli/build/src/utils/npm.js
+index b861322..c1116bc 100644
+--- a/node_modules/@expo/cli/build/src/utils/npm.js
++++ b/node_modules/@expo/cli/build/src/utils/npm.js
+@@ -170,7 +170,8 @@ async function extractNpmTarballAsync(stream, props) {
+     transformStream.on("data", (chunk)=>{
+         hash.update(chunk);
+     });
+-    await pipeline(stream, transformStream, _tar().default.extract({
++    const tar = _tar().default ?? _tar();
++    await pipeline(stream, transformStream, tar.extract({
+         cwd,
+         filter,
+         onentry: (0, _createFileTransform.createEntryResolver)(name),

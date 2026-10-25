@@ -4,6 +4,7 @@
   "main": "expo-router/entry",
   "scripts": {
     "generate:notification-sounds": "node scripts/generate-notification-sounds.js",
+    "postinstall": "patch-package",
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
@@ -59,6 +60,7 @@
     "@types/react": "~18.3.12",
     "eslint": "^8.57.0",
     "eslint-config-expo": "~8.0.1",
+    "patch-package": "^8.0.1",
     "typescript": "^5.3.3"
   },
   "overrides": {
