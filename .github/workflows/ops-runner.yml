@@ -336,6 +336,27 @@ jobs:
         continue-on-error: true
         run: npm ci --prefix functions --silent --no-audit --no-fund > "$RUNNER_TEMP/live-test-install.log" 2>&1
 
+      - name: Verify Supabase public key injection (no value output)
+        if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-readiness' || inputs.task == 'live-core-readiness' || inputs.task == 'live-provider-e2e')
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_PUBLIC_ANON: ${{ secrets.SUPABASE_PUBLIC_ANON }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_PUBLIC_ANON || secrets.SUPABASE_ANON_KEY || secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          node <<'NODE'
+          const key = process.env.SUPABASE_PUBLIC_ANON;
+          const alias = process.env.SUPABASE_ANON_KEY;
+          console.log(`SUPABASE_PUBLIC_ANON_DEFINED: ${key === undefined ? 'NO' : 'YES'}`);
+          console.log(`SUPABASE_PUBLIC_ANON_NONEMPTY: ${key?.trim() ? 'YES' : 'NO'}`);
+          console.log(`SUPABASE_PUBLIC_ANON_PREFIX_VALID: ${key?.trim().startsWith('sb_publishable_') ? 'YES' : 'NO'}`);
+          console.log(`SUPABASE_ANON_ALIAS_MATCHES_PUBLIC: ${key && alias === key ? 'YES' : 'NO'}`);
+          try {
+            console.log(`SUPABASE_URL_PROJECT_REF_MATCH: ${new URL(process.env.SUPABASE_URL).hostname === 'yiyhmueospjwbaywzusp.supabase.co' ? 'YES' : 'NO'}`);
+          } catch {
+            console.log('SUPABASE_URL_PROJECT_REF_MATCH: NO');
+          }
+          NODE
+
       - name: Check Supabase auth, REST, and deployed marketplace read route
         id: supabase
         if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-readiness' || inputs.task == 'live-core-readiness' || inputs.task == 'live-provider-e2e')
