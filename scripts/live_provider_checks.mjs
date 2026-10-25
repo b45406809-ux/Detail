@@ -42,6 +42,7 @@ async function supabaseChecks() {
   const restPassed = await check('SUPABASE_REST', async () => {
     if (!configured('SUPABASE_URL', 'SUPABASE_ANON_KEY')) return false;
     const response = await requestStatus(`${base}/rest/v1/`, { headers: { apikey: anon } });
+    console.log(`SUPABASE_REST_HTTP: ${response?.status ?? 'NETWORK'}`);
     return Boolean(response?.ok);
   });
   const functionPassed = await check('MARKETPLACE_READ_SMOKE', async () => {
@@ -51,6 +52,7 @@ async function supabaseChecks() {
       headers: { apikey: anon, authorization: `Bearer ${anon}`, 'content-type': 'application/json' },
       body: JSON.stringify({ name: 'getBetaConfig', data: {} }),
     });
+    console.log(`MARKETPLACE_READ_HTTP: ${response?.status ?? 'NETWORK'}`);
     return Boolean(response?.ok);
   });
   return authPassed && restPassed && functionPassed;
@@ -76,9 +78,12 @@ async function resendAccountCheck() {
     const response = await requestStatus('https://api.resend.com/domains', {
       headers: { authorization: `Bearer ${key}` },
     });
+    console.log(`RESEND_DOMAINS_HTTP: ${response?.status ?? 'NETWORK'}`);
     if (!response?.ok) return false;
     const result = await response.json().catch(() => ({}));
-    return Array.isArray(result?.data) && result.data.some((domain) => domain.name === 'detailapp.co.zw');
+    const domainReady = Array.isArray(result?.data) && result.data.some((domain) => domain.name === 'detailapp.co.zw');
+    console.log(`RESEND_SENDER_DOMAIN: ${domainReady ? 'FOUND' : 'MISSING'}`);
+    return domainReady;
   });
 }
 
@@ -89,6 +94,7 @@ async function mapboxCheck() {
     const url = new URL('https://api.mapbox.com/styles/v1/mapbox/streets-v12');
     url.searchParams.set('access_token', token);
     const response = await requestStatus(url);
+    console.log(`MAPBOX_STYLE_HTTP: ${response?.status ?? 'NETWORK'}`);
     return Boolean(response?.ok);
   });
 }
