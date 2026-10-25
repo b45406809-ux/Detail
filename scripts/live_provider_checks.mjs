@@ -34,6 +34,7 @@ function secretValue(name) {
 async function supabaseChecks() {
   const base = process.env.SUPABASE_URL?.replace(/\/$/, '');
   const anon = process.env.SUPABASE_ANON_KEY;
+  const usersProbeUrl = `${base}/rest/v1/users?select=id&limit=0`;
   const authPassed = await check('SUPABASE_AUTH', async () => {
     if (!configured('SUPABASE_URL', 'SUPABASE_ANON_KEY')) return false;
     const response = await requestStatus(`${base}/auth/v1/health`, { headers: { apikey: anon } });
@@ -44,7 +45,10 @@ async function supabaseChecks() {
     // Supabase publishable keys (sb_publishable_...) are API keys, not JWTs.
     // Send them as `apikey`; placing one in Authorization makes PostgREST
     // reject it as an invalid bearer token.
-    const response = await requestStatus(`${base}/rest/v1/`, { headers: { apikey: anon } });
+    // Probe a real PostgREST table with zero returned rows. The bare
+    // /rest/v1/ root is not an API health endpoint and returns 401 even when
+    // valid keys work for SDK queries and deployed functions.
+    const response = await requestStatus(usersProbeUrl, { headers: { apikey: anon } });
     console.log(`SUPABASE_REST_HTTP: ${response?.status ?? 'NETWORK'}`);
     if (response && !response.ok) {
       const details = await response.clone().json().catch(() => ({}));
@@ -54,7 +58,7 @@ async function supabaseChecks() {
       if (safeDetails.length) console.log(`SUPABASE_REST_ERROR: ${safeDetails.join(' | ')}`);
       // Compare the legacy JWT bearer form without exposing the key. This is
       // diagnostic only; publishable keys should ordinarily be sent as apikey.
-      const bearerResponse = await requestStatus(`${base}/rest/v1/`, {
+      const bearerResponse = await requestStatus(usersProbeUrl, {
         headers: { apikey: anon, authorization: `Bearer ${anon}` },
       });
       console.log(`SUPABASE_REST_BEARER_HTTP: ${bearerResponse?.status ?? 'NETWORK'}`);
@@ -68,7 +72,7 @@ async function supabaseChecks() {
       if (bearerResponse?.ok) return true;
       const legacyAnon = process.env.SUPABASE_LEGACY_ANON_KEY?.trim();
       if (legacyAnon && legacyAnon !== anon) {
-        const legacyResponse = await requestStatus(`${base}/rest/v1/`, { headers: { apikey: legacyAnon } });
+        const legacyResponse = await requestStatus(usersProbeUrl, { headers: { apikey: legacyAnon } });
         console.log(`SUPABASE_REST_LEGACY_ANON_HTTP: ${legacyResponse?.status ?? 'NETWORK'}`);
         if (legacyResponse && !legacyResponse.ok) {
           const legacyDetails = await legacyResponse.clone().json().catch(() => ({}));
