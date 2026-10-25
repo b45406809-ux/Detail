@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Stack, router, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, Text, View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
 import * as Notifications from 'expo-notifications';
@@ -95,18 +95,21 @@ export default function RootLayout() {
     const { data: authSubscription } = supabase.auth.onAuthStateChange(event => {
       if (event === 'PASSWORD_RECOVERY' && active) router.replace('/(auth)/reset-password');
     });
-    configureNotificationChannels().catch(() => undefined);
     const queueNotification = (response: Notifications.NotificationResponse) => {
       const key = `${response.notification.request.identifier}:${response.actionIdentifier}`;
       if (notificationKey.current === key) return;
       notificationKey.current = key;
       setPendingNotification(response);
     };
-    const subscription = Notifications.addNotificationResponseReceivedListener(queueNotification);
-    Notifications.getLastNotificationResponseAsync().then(response => response && queueNotification(response));
+    let notificationSubscription: Notifications.Subscription | undefined;
+    if (Platform.OS !== 'web') {
+      configureNotificationChannels().catch(() => undefined);
+      notificationSubscription = Notifications.addNotificationResponseReceivedListener(queueNotification);
+      Notifications.getLastNotificationResponseAsync().then(response => response && queueNotification(response));
+    }
     return () => {
       active = false;
-      subscription.remove();
+      notificationSubscription?.remove();
       linkSubscription.remove();
       authSubscription.subscription.unsubscribe();
     };

@@ -41,7 +41,9 @@ export default function WelcomeScreen() {
 
   const goNext = () => {
     if (isLast) return router.push('/(auth)/sign-in');
-    scrollRef.current?.scrollTo({ x: (index + 1) * width, animated: true });
+    const nextIndex = index + 1;
+    setIndex(nextIndex);
+    scrollRef.current?.scrollTo({ x: nextIndex * width, animated: true });
   };
 
   return (
@@ -50,7 +52,7 @@ export default function WelcomeScreen() {
       <View className="flex-row items-center justify-between px-6 pt-2">
         <Wordmark size={20} color="#150256" />
         {!isLast && (
-          <TouchableOpacity onPress={() => router.push('/(auth)/sign-in')}>
+          <TouchableOpacity testID="welcome-skip" accessibilityRole="button" accessibilityLabel="Skip onboarding" onPress={() => router.push('/(auth)/sign-in')}>
             <Text className="font-sans text-ink/40 text-sm font-bold">Skip</Text>
           </TouchableOpacity>
         )}
@@ -96,6 +98,9 @@ export default function WelcomeScreen() {
         </View>
 
         <TouchableOpacity
+          testID="welcome-next"
+          accessibilityRole="button"
+          accessibilityLabel={isLast ? 'Get Started' : 'Continue'}
           onPress={goNext}
           activeOpacity={0.88}
           className="w-full bg-accent py-5 rounded-[28px] items-center flex-row justify-center gap-2 shadow-lg shadow-accent/30"

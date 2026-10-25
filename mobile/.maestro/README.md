@@ -7,7 +7,7 @@ These flows are intentionally separate from load tests. Maestro drives one insta
 - Install Maestro from the official installer: <https://docs.maestro.dev/getting-started/installing-maestro>
 - Start the Expo app in a development build or install an EAS development/preview build.
 - Use the package identifier from the installed build. The current app identifier is `com.detail.app`.
-- Create a dedicated Firebase email/password test user. Do not use a personal or production account.
+- Create a dedicated Supabase email/password test user. Do not use a personal or production account.
 
 ## Run
 

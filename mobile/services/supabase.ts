@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, type SupabaseClient, type User as SupabaseUser } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 import { signMediaValue } from './storage';
 import { unregisterCurrentPushDevice } from './pushRegistration';
 import { IS_MOCK, IS_STAGING_AUTH } from '../utils/env';
@@ -18,8 +19,18 @@ if(IS_STAGING_AUTH&&normalizedUrl(supabaseUrl)===normalizedUrl(process.env.EXPO_
 if(IS_MOCK&&normalizedUrl(supabaseUrl)===normalizedUrl(process.env.EXPO_PUBLIC_SUPABASE_URL??''))throw new Error('Mock mode cannot use the configured production Supabase URL.');
 if (!supabaseUrl || !supabaseAnonKey) console.warn('Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.');
 
+const webStorage = {
+  getItem: async (key: string) => typeof window === 'undefined' ? null : window.localStorage.getItem(key),
+  setItem: async (key: string, value: string) => {
+    if (typeof window !== 'undefined') window.localStorage.setItem(key, value);
+  },
+  removeItem: async (key: string) => {
+    if (typeof window !== 'undefined') window.localStorage.removeItem(key);
+  },
+};
+
 export const supabase = createClient(supabaseUrl || 'http://127.0.0.1:54321', supabaseAnonKey || 'local-anon-key', {
-  auth: { storage: AsyncStorage, autoRefreshToken: true, persistSession: true, detectSessionInUrl: false, flowType: 'pkce' },
+  auth: { storage: Platform.OS === 'web' ? webStorage : AsyncStorage, autoRefreshToken: true, persistSession: true, detectSessionInUrl: false, flowType: 'pkce' },
 });
 
 export interface SupabaseCompatUser {
