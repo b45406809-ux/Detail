@@ -46,6 +46,13 @@ async function supabaseChecks() {
     // reject it as an invalid bearer token.
     const response = await requestStatus(`${base}/rest/v1/`, { headers: { apikey: anon } });
     console.log(`SUPABASE_REST_HTTP: ${response?.status ?? 'NETWORK'}`);
+    if (response && !response.ok) {
+      const details = await response.clone().json().catch(() => ({}));
+      const safeDetails = [details.code, details.error, details.message]
+        .filter((value) => typeof value === 'string')
+        .map((value) => value.replaceAll(anon, '[redacted]').replace(/[\r\n]+/g, ' ').slice(0, 160));
+      if (safeDetails.length) console.log(`SUPABASE_REST_ERROR: ${safeDetails.join(' | ')}`);
+    }
     return Boolean(response?.ok);
   });
   const functionPassed = await check('MARKETPLACE_READ_SMOKE', async () => {
