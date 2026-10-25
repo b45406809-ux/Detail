@@ -40,6 +40,9 @@ Create a GitHub environment named `production`, enable required reviewers if des
 | `CLOUDFLARE_D1_READ_TOKEN` | Cloudflare API token scoped as narrowly as possible to query the legacy D1 database. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-side key used by the manual legacy data migration workflow; never expose it to frontend builds. |
 | `MAPBOX_PUBLIC_TOKEN` | Public Mapbox token used by the manual live style-access check. |
+| `EXPO_TOKEN` or `EAS_BOT_ACCESS_TOKEN` | Expo EAS bot token used by the manual Android production build workflow. |
+| `MAPBOX_DOWNLOADS_TOKEN` | Mapbox secret token with `DOWNLOADS:READ` scope, required to fetch the native Android Mapbox SDK. The build workflow verifies access before starting EAS. |
+| `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` or `MAPBOX_PUBLIC_TOKEN` | Public Mapbox styles token embedded in the app; keep it separate from the downloads token. |
 | `LIVE_E2E_EMAIL_TO` | Dedicated test mailbox for the manual Resend delivery test. |
 | `LIVE_E2E_SMS_TO` | Dedicated E.164 test phone for the manual Twilio delivery test. |
 

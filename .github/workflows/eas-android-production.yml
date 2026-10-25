@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 60
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN || secrets.EAS_BOT_ACCESS_TOKEN || secrets.EXPO_EAS_BOT_ACCESS_TOKEN }}
-      MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN || secrets.MAPBOX_ACCESS_TOKEN }}
+      MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
       EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || secrets.MAPBOX_PUBLIC_TOKEN }}
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +36,15 @@ jobs:
           test -n "$EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN"
 
       - run: npm ci --prefix mobile --no-audit --no-fund
+
+      - name: Verify Mapbox SDK download access
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --output /dev/null --write-out '%{http_code}' --user "mapbox:$MAPBOX_DOWNLOADS_TOKEN" 'https://api.mapbox.com/downloads/v2/releases/maven/com/mapbox/maps/android/10.18.4/android-10.18.4.pom')"
+          if [[ "$status" != '200' ]]; then
+            echo "Mapbox rejected the downloads token (HTTP $status). Configure MAPBOX_DOWNLOADS_TOKEN with DOWNLOADS:READ scope."
+            exit 1
+          fi
 
       - name: Set Mapbox tokens in EAS production environment
         working-directory: mobile
