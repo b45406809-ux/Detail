@@ -25,8 +25,9 @@ async function probe(label, key) {
     global: { fetch: sdkFetch },
   });
 
-  // This is a read-only schema check. The zero-row limit prevents data access.
-  const { error } = await client.from('configuration').select('key').limit(0);
+  // This is a read-only schema check against the core migrated table. The
+  // zero-row limit prevents profile data from being returned.
+  const { error } = await client.from('users').select('id').limit(0);
   console.log(`SDK_${label}_HTTP: ${status}`);
   if (!error) {
     console.log(`SDK_${label}_RESULT: PASS`);
