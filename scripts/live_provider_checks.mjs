@@ -41,7 +41,9 @@ async function supabaseChecks() {
   });
   const restPassed = await check('SUPABASE_REST', async () => {
     if (!configured('SUPABASE_URL', 'SUPABASE_ANON_KEY')) return false;
-    const response = await requestStatus(`${base}/rest/v1/`, { headers: { apikey: anon } });
+    const response = await requestStatus(`${base}/rest/v1/`, {
+      headers: { apikey: anon, authorization: `Bearer ${anon}` },
+    });
     console.log(`SUPABASE_REST_HTTP: ${response?.status ?? 'NETWORK'}`);
     return Boolean(response?.ok);
   });
@@ -237,7 +239,9 @@ const selected = task === 'readiness'
   ? ['supabase', 'twilio', 'resend', 'mapbox']
   : task === 'all-e2e'
     ? Object.keys(tests)
-    : ({ 'paynow-e2e': ['paynow'], 'didit-e2e': ['didit'], 'email-e2e': ['email'], 'sms-e2e': ['sms'] })[task];
+    : (tests[task]
+      ? [task]
+      : ({ 'paynow-e2e': ['paynow'], 'didit-e2e': ['didit'], 'email-e2e': ['email'], 'sms-e2e': ['sms'] })[task]);
 
 if (!selected) {
   console.log('LIVE_CHECK: FAIL');
