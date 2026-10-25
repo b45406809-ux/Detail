@@ -52,6 +52,20 @@ async function supabaseChecks() {
         .filter((value) => typeof value === 'string')
         .map((value) => value.replaceAll(anon, '[redacted]').replace(/[\r\n]+/g, ' ').slice(0, 160));
       if (safeDetails.length) console.log(`SUPABASE_REST_ERROR: ${safeDetails.join(' | ')}`);
+      // Compare the legacy JWT bearer form without exposing the key. This is
+      // diagnostic only; publishable keys should ordinarily be sent as apikey.
+      const bearerResponse = await requestStatus(`${base}/rest/v1/`, {
+        headers: { apikey: anon, authorization: `Bearer ${anon}` },
+      });
+      console.log(`SUPABASE_REST_BEARER_HTTP: ${bearerResponse?.status ?? 'NETWORK'}`);
+      if (bearerResponse && !bearerResponse.ok) {
+        const bearerDetails = await bearerResponse.clone().json().catch(() => ({}));
+        const bearerSafeDetails = [bearerDetails.code, bearerDetails.error, bearerDetails.message]
+          .filter((value) => typeof value === 'string')
+          .map((value) => value.replaceAll(anon, '[redacted]').replace(/[\r\n]+/g, ' ').slice(0, 160));
+        if (bearerSafeDetails.length) console.log(`SUPABASE_REST_BEARER_ERROR: ${bearerSafeDetails.join(' | ')}`);
+      }
+      if (bearerResponse?.ok) return true;
     }
     return Boolean(response?.ok);
   });
