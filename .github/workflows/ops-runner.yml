@@ -357,6 +357,21 @@ jobs:
           }
           NODE
 
+      - name: Install Supabase SDK for read-only live check
+        if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-readiness' || inputs.task == 'live-core-readiness' || inputs.task == 'live-provider-e2e')
+        continue-on-error: true
+        run: npm ci --prefix functions --silent --no-audit --no-fund > "$RUNNER_TEMP/supabase-sdk-install.log" 2>&1
+
+      - name: Test public and secret keys through Supabase SDK
+        id: supabaseSdk
+        if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-readiness' || inputs.task == 'live-core-readiness' || inputs.task == 'live-provider-e2e')
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_PUBLIC_ANON: ${{ secrets.SUPABASE_PUBLIC_ANON }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE }}
+        run: node scripts/live_supabase_sdk_check.mjs
+
       - name: Check Supabase auth, REST, and deployed marketplace read route
         id: supabase
         if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-readiness' || inputs.task == 'live-core-readiness' || inputs.task == 'live-provider-e2e')
@@ -441,6 +456,7 @@ jobs:
           TASK: ${{ inputs.task }}
           PREFLIGHT_RESULT: ${{ steps.preflight.outcome }}
           SUPABASE_RESULT: ${{ steps.supabase.outcome }}
+          SUPABASE_SDK_RESULT: ${{ steps.supabaseSdk.outcome }}
           TWILIO_RESULT: ${{ steps.twilio.outcome }}
           RESEND_RESULT: ${{ steps.resend.outcome }}
           MAPBOX_RESULT: ${{ steps.mapbox.outcome }}
@@ -457,7 +473,7 @@ jobs:
             echo
             printf -- '- Suite: %s\n' "$TASK"
           } >> "$GITHUB_STEP_SUMMARY"
-          for item in "Supabase:$SUPABASE_RESULT" "Twilio account:$TWILIO_RESULT" "Resend account:$RESEND_RESULT" "Mapbox:$MAPBOX_RESULT" "Paynow:$PAYNOW_RESULT" "Didit:$DIDIT_RESULT" "Email delivery:$EMAIL_RESULT" "SMS delivery:$SMS_RESULT"; do
+          for item in "Supabase REST:$SUPABASE_RESULT" "Supabase SDK:$SUPABASE_SDK_RESULT" "Twilio account:$TWILIO_RESULT" "Resend account:$RESEND_RESULT" "Mapbox:$MAPBOX_RESULT" "Paynow:$PAYNOW_RESULT" "Didit:$DIDIT_RESULT" "Email delivery:$EMAIL_RESULT" "SMS delivery:$SMS_RESULT"; do
             name="${item%%:*}"; result="${item#*:}"
             [[ "$result" == 'skipped' ]] && continue
             if [[ "$result" == 'success' ]]; then status='PASS'; else status='FAIL'; failed=1; fi
