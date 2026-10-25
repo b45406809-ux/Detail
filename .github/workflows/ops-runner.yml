@@ -24,6 +24,7 @@ on:
           - supabase-migration-dry-run
           - waitlist-migration-dry-run
           - live-readiness
+          - live-core-readiness
           - live-paynow-e2e
           - live-didit-e2e
           - live-email-e2e
@@ -296,7 +297,7 @@ jobs:
           retention-days: 3
 
   live-provider-e2e:
-    if: github.event_name == 'workflow_dispatch' && (inputs.task == 'live-readiness' || inputs.task == 'live-paynow-e2e' || inputs.task == 'live-didit-e2e' || inputs.task == 'live-email-e2e' || inputs.task == 'live-sms-e2e' || inputs.task == 'live-provider-e2e')
+    if: github.event_name == 'workflow_dispatch' && (inputs.task == 'live-readiness' || inputs.task == 'live-core-readiness' || inputs.task == 'live-paynow-e2e' || inputs.task == 'live-didit-e2e' || inputs.task == 'live-email-e2e' || inputs.task == 'live-sms-e2e' || inputs.task == 'live-provider-e2e')
     name: Live provider checks (status only)
     runs-on: ubuntu-latest
     environment: production
@@ -325,7 +326,7 @@ jobs:
             live-paynow-e2e|live-didit-e2e|live-email-e2e|live-sms-e2e|live-provider-e2e)
               [[ "$CONFIRM_SIDE_EFFECTS" == 'true' ]] || { echo 'LIVE_SUITE: FAIL'; exit 1; }
               ;;
-            live-readiness) ;;
+            live-readiness|live-core-readiness) ;;
             *) echo 'LIVE_SUITE: FAIL'; exit 1 ;;
           esac
           echo 'authorized=true' >> "$GITHUB_OUTPUT"
@@ -337,7 +338,7 @@ jobs:
 
       - name: Check Supabase auth, REST, and deployed marketplace read route
         id: supabase
-        if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-readiness' || inputs.task == 'live-provider-e2e')
+        if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-readiness' || inputs.task == 'live-core-readiness' || inputs.task == 'live-provider-e2e')
         continue-on-error: true
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
@@ -355,7 +356,7 @@ jobs:
 
       - name: Check Resend account and sender domain
         id: resend
-        if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-readiness' || inputs.task == 'live-provider-e2e')
+        if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-readiness' || inputs.task == 'live-core-readiness' || inputs.task == 'live-provider-e2e')
         continue-on-error: true
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -363,7 +364,7 @@ jobs:
 
       - name: Check Mapbox style access
         id: mapbox
-        if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-readiness' || inputs.task == 'live-provider-e2e')
+        if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-readiness' || inputs.task == 'live-core-readiness' || inputs.task == 'live-provider-e2e')
         continue-on-error: true
         env:
           MAPBOX_PUBLIC_TOKEN: ${{ secrets.MAPBOX_PUBLIC_TOKEN }}
