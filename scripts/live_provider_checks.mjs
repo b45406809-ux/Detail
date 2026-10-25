@@ -41,9 +41,10 @@ async function supabaseChecks() {
   });
   const restPassed = await check('SUPABASE_REST', async () => {
     if (!configured('SUPABASE_URL', 'SUPABASE_ANON_KEY')) return false;
-    const response = await requestStatus(`${base}/rest/v1/`, {
-      headers: { apikey: anon, authorization: `Bearer ${anon}` },
-    });
+    // Supabase publishable keys (sb_publishable_...) are API keys, not JWTs.
+    // Send them as `apikey`; placing one in Authorization makes PostgREST
+    // reject it as an invalid bearer token.
+    const response = await requestStatus(`${base}/rest/v1/`, { headers: { apikey: anon } });
     console.log(`SUPABASE_REST_HTTP: ${response?.status ?? 'NETWORK'}`);
     return Boolean(response?.ok);
   });
