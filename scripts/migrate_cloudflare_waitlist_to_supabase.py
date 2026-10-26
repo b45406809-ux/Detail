@@ -31,7 +31,17 @@ def request_json(url, method='GET', headers=None, payload=None):
             return json.loads(raw) if raw else None
     except urllib.error.HTTPError as error:
         # Do not print response bodies: waitlist and dashboard data contain personal information.
-        raise RuntimeError(f'Request failed ({error.code}) for {method} {url.split("?")[0]}') from None
+        raw_error = error.read()
+        detail = ''
+        if 'api.cloudflare.com' in url:
+            try:
+                payload = json.loads(raw_error or b'{}')
+                messages = [str(item.get('message', '')) for item in payload.get('errors', []) if isinstance(item, dict)]
+                detail = '; '.join(message for message in messages if message)[:300]
+            except (ValueError, TypeError):
+                detail = ''
+        suffix = f': {detail}' if detail else ''
+        raise RuntimeError(f'Request failed ({error.code}) for {method} {url.split("?")[0]}{suffix}') from None
 
 
 def d1_query(sql, params=None):
@@ -52,7 +62,9 @@ def d1_query(sql, params=None):
         'Authorization': f'Bearer {CF_TOKEN}', 'Content-Type': 'application/json'
     }, {'sql': sql, 'params': params or []})
     if not result or not result.get('success'):
-        raise RuntimeError('Cloudflare D1 query failed.')
+        messages = [str(item.get('message', '')) for item in (result or {}).get('errors', []) if isinstance(item, dict)]
+        detail = '; '.join(message for message in messages if message)[:300]
+        raise RuntimeError(f'Cloudflare D1 query failed{f": {detail}" if detail else "."}')
     return result['result'][0].get('results', [])
 
 
