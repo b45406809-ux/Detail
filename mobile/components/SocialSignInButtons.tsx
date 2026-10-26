@@ -93,14 +93,13 @@ function GoogleSignInButton() {
   // expo-auth-session validates that ID during render, before a button press.
   if (!configured) {
     return (
-      <TouchableOpacity
-        onPress={() => Alert.alert('Not configured', 'Google sign-in needs a client ID set up first.')}
-        activeOpacity={0.85}
-        className="w-full bg-white flex-row items-center justify-center gap-3 py-4 rounded-[24px] border-2 border-ink/10"
-      >
-        <GoogleLogo size={18} />
-        <Text className="font-display font-black text-sm text-ink">Continue with Google</Text>
-      </TouchableOpacity>
+      <View className="gap-2">
+        <View testID="google-sign-in-unconfigured" accessibilityRole="text" className="w-full bg-ink/[0.03] flex-row items-center justify-center gap-3 py-4 rounded-[24px] border border-ink/10">
+          <GoogleLogo size={18} />
+          <Text className="font-display font-black text-sm text-ink/50">Google sign-in unavailable</Text>
+        </View>
+        <Text className="font-sans text-xs text-center text-ink/40">Use email or SMS while Google sign-in is being configured.</Text>
+      </View>
     );
   }
   return <ConfiguredGoogleSignInButton webClientId={webClientId} androidClientId={androidClientId} iosClientId={iosClientId} />;
@@ -138,6 +137,7 @@ function ConfiguredGoogleSignInButton({ webClientId, androidClientId, iosClientI
 
   return (
     <TouchableOpacity
+      testID="google-sign-in-button"
       onPress={handleGoogleSignIn}
       disabled={isLoading}
       activeOpacity={0.85}

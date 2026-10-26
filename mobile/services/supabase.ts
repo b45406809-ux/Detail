@@ -134,7 +134,10 @@ export function authErrorMessage(error: unknown, fallback = 'Authentication fail
   if (code.includes('rate_limit') || message.includes('too many requests')) return 'Too many attempts. Wait a few minutes and try again.';
   if (code === 'weak_password' || message.includes('password should be')) return 'Choose a stronger password and try again.';
   if (code === 'email_address_invalid' || message.includes('email address is invalid')) return 'Enter a valid email address.';
-  return fallback;
+  if (message.includes('invalid api key') || message.includes('api key is invalid')) return 'This app build is missing a valid Supabase public key. Install a newly configured build or contact support.';
+  if (message.includes('failed to fetch') || message.includes('network request failed')) return 'Could not reach the authentication service. Check your connection and try again.';
+  if (code === 'database_error' || message.includes('database error saving new user')) return 'The account service could not finish creating your account. Please try again later.';
+  return code ? `${fallback} (${code})` : fallback;
 }
 
 /** Exchanges Supabase recovery links whether the app is cold-started or already open. */

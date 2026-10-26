@@ -142,7 +142,7 @@ export default function SignInScreen() {
         router.replace('/home');
       }
     } catch (err: any) {
-      Alert.alert('Sign In Error', authErrorMessage(err));
+      Alert.alert(isNewAccount ? 'Account Creation Failed' : 'Sign In Failed', authErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
@@ -159,8 +159,24 @@ export default function SignInScreen() {
             <ArrowLeft size={20} color="#150256" />
           </TouchableOpacity>
 
-          <Text className="text-3xl font-display font-black text-ink tracking-tight mb-2">Welcome back</Text>
-          <Text className="font-sans text-base text-ink/50 font-medium mb-8">Sign in to your Detail account</Text>
+          <Text className="text-3xl font-display font-black text-ink tracking-tight mb-2">{isNewAccount ? 'Join Detail' : 'Welcome back'}</Text>
+          <Text className="font-sans text-base text-ink/50 font-medium mb-3">{isNewAccount ? 'Create an account to book or provide cleaning services' : 'Sign in to your Detail account'}</Text>
+          <View className="flex-row items-center mb-6">
+            <Text className="font-sans text-sm text-ink/55">{isNewAccount ? 'Already have an account? ' : 'New to Detail? '}</Text>
+            <TouchableOpacity
+              testID="auth-account-mode-toggle"
+              onPress={() => {
+                setIsNewAccount(!isNewAccount);
+                setHasAcceptedTerms(false);
+                if (!isNewAccount) {
+                  setTab('email');
+                  setEmailAuthMode('PASSWORD');
+                }
+              }}
+            >
+              <Text className="font-display font-black text-sm text-accent">{isNewAccount ? 'Sign in' : 'Create account'}</Text>
+            </TouchableOpacity>
+          </View>
 
           <GlassCard style={{ padding: 20 }}>
                 {/* Tab switcher */}

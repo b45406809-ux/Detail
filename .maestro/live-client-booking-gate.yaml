@@ -7,6 +7,13 @@ appId: com.detail.app
     timeout: 20000
 - tapOn:
     id: welcome-skip
+- assertVisible:
+    id: auth-account-mode-toggle
+- tapOn:
+    id: auth-account-mode-toggle
+- assertVisible: "Join Detail"
+- tapOn:
+    id: auth-account-mode-toggle
 - tapOn:
     id: auth-email-tab
 - tapOn:
