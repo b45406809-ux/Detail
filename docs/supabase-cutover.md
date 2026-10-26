@@ -1,6 +1,6 @@
 # Firebase to Supabase cutover
 
-The current dashboard and marketing waitlist use Supabase. Legacy Cloudflare D1 may still hold earlier waitlist entries and administrator accounts until a deliberate migration and account re-invitation are completed. Firebase remains a separate legacy source for marketplace users and records; do not disable any legacy source before its data is reconciled.
+The current dashboard and marketing waitlist use Supabase. Legacy Cloudflare D1 waitlist and blog records were copied to Supabase on 2026-10-26, with D1 preserved unchanged. Cloudflare administrator accounts still need fresh Supabase Auth accounts and roles. Firebase remains a separate legacy source for marketplace users and records; do not disable it before those records are reconciled.
 
 ## Create and configure Supabase
 
