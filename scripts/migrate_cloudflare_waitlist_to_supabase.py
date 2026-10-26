@@ -69,12 +69,18 @@ def d1_query(sql, params=None):
 
 
 def table_inventory():
-    names = {row['name'] for row in d1_query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
+    # Cloudflare D1 denies sqlite_master/sqlite_schema introspection through
+    # its API (SQLITE_AUTH). Probe only the known legacy tables instead.
+    names = set()
     counts = {}
-    for table in sorted(names):
-        # Names are taken only from sqlite_master and quoted as identifiers.
-        safe_name = table.replace('"', '""')
-        counts[table] = int(d1_query(f'SELECT COUNT(*) AS count FROM "{safe_name}"')[0]['count'])
+    for table in sorted(set(SUPPORTED_TABLES + LEGACY_CORE_TABLES + LEGACY_AUTH_TABLES)):
+        try:
+            counts[table] = int(d1_query(f'SELECT COUNT(*) AS count FROM "{table}"')[0]['count'])
+            names.add(table)
+        except RuntimeError as error:
+            if 'no such table' in str(error).lower():
+                continue
+            raise
     return names, counts
 
 
