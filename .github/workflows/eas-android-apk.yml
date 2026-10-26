@@ -1,0 +1,73 @@
+name: Build Detail Android APK on EAS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eas-android-apk
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build installable production-configured APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN || secrets.EAS_BOT_ACCESS_TOKEN || secrets.EXPO_EAS_BOT_ACCESS_TOKEN }}
+      MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
+      EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || secrets.MAPBOX_PUBLIC_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Validate build credentials are configured
+        run: |
+          set -euo pipefail
+          test -n "$EXPO_TOKEN"
+          test -n "$MAPBOX_DOWNLOADS_TOKEN"
+          test -n "$EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN"
+
+      - run: npm ci --prefix mobile --no-audit --no-fund
+
+      - name: Verify Mapbox SDK download access
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --output /dev/null --write-out '%{http_code}' --user "mapbox:$MAPBOX_DOWNLOADS_TOKEN" 'https://api.mapbox.com/downloads/v2/releases/maven/com/mapbox/maps/android/10.18.4/android-10.18.4.pom')"
+          if [[ "$status" != '200' ]]; then
+            echo "Mapbox rejected the downloads token (HTTP $status). Configure MAPBOX_DOWNLOADS_TOKEN with DOWNLOADS:READ scope."
+            exit 1
+          fi
+
+      - name: Set Mapbox tokens in EAS production environment
+        working-directory: mobile
+        run: |
+          set -euo pipefail
+          npx eas-cli@latest env:set production --scope project --name MAPBOX_DOWNLOADS_TOKEN --value "$MAPBOX_DOWNLOADS_TOKEN" --visibility secret --non-interactive
+          npx eas-cli@latest env:set production --scope project --name EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN --value "$EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN" --visibility plaintext --non-interactive
+
+      - name: Build installable Android APK on EAS
+        working-directory: mobile
+        run: |
+          set -euo pipefail
+          npx eas-cli@latest build --platform android --profile production-apk --non-interactive --wait --json > "$RUNNER_TEMP/eas-apk-build.json"
+          node <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const fs = require('node:fs');
+          const parsed = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/eas-apk-build.json', 'utf8'));
+          const build = Array.isArray(parsed) ? parsed.at(-1) : parsed;
+          const id = build?.id;
+          const artifact = build?.artifacts?.buildUrl ?? build?.artifacts?.applicationArchiveUrl;
+          console.log('## Android APK build');
+          console.log('');
+          console.log('- Profile: `production-apk` (APK, signed with the app’s EAS Android credentials)');
+          if (artifact) console.log(`- [Download APK](${artifact})`);
+          if (id) console.log(`- [EAS build details](https://expo.dev/accounts/detail-test/projects/detail/builds/${id})`);
+          if (!artifact && !id) throw new Error('EAS completed without returning a build ID or APK download URL.');
+          NODE

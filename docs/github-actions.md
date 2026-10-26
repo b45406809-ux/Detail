@@ -50,6 +50,8 @@ The Supabase deployment workflow sends configured provider values to Supabase Ed
 
 EAS CLI authentication uses `EXPO_TOKEN` in the shell or protected CI environment. It is separate from `MAPBOX_DOWNLOADS_TOKEN`, which is only a native SDK build credential. No client bundle should contain either secret.
 
+To create an APK that installs directly on Android, run **Build Detail Android APK on EAS** from GitHub Actions. It uses the `production-apk` profile: the same production EAS environment and Android signing credentials as the store build, packaged as an internal APK. Download the APK from the workflow run summary when it finishes. The existing **Build Detail Android on EAS** workflow creates the Play Store AAB.
+
 ## Deployment boundaries
 
 - `deploy.yml` builds the site and dashboard, then publishes them to the configured FTPS host after a push to `main` or manual dispatch from `main`.
