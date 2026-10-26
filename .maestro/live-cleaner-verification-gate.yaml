@@ -1,0 +1,61 @@
+appId: com.detail.app
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Skip onboarding"
+    timeout: 20000
+- tapOn:
+    id: welcome-skip
+- tapOn:
+    id: auth-email-tab
+- tapOn:
+    id: auth-email-mode-password
+- tapOn:
+    id: auth-email-input
+- inputText: ${CLEANER_EMAIL}
+- tapOn:
+    id: auth-password-input
+- inputText: ${CLEANER_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: auth-email-submit
+- extendedWaitUntil:
+    visible: "Customer Agreement"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "I have read and accept"
+    direction: DOWN
+- tapOn: "I have read and accept"
+- extendedWaitUntil:
+    visible: "Set up your profile"
+    timeout: 20000
+- tapOn: "Your full name"
+- inputText: "E2E Live Cleaner"
+- hideKeyboard
+- tapOn: "Offer Cleaning Services"
+- tapOn: "Continue"
+- extendedWaitUntil:
+    visible: "Allow permissions"
+    timeout: 20000
+- tapOn: "Continue to App"
+- extendedWaitUntil:
+    visible: "Cleaner"
+    timeout: 20000
+- tapOn: "Cleaner"
+- assertVisible: "Cleaner Registration Required"
+- tapOn: "Register Now"
+- extendedWaitUntil:
+    visible: "Become a Cleaner"
+    timeout: 20000
+- assertVisible: "Email verified"
+- assertVisible: "Verify with Didit"
+- scrollUntilVisible:
+    element:
+      text: "Continue to Agreement"
+    direction: DOWN
+- tapOn: "Continue to Agreement"
+- assertVisible: "Identity check required"
+- tapOn: "OK"
+- assertVisible: "Verify with Didit"

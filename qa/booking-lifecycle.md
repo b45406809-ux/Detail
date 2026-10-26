@@ -1,5 +1,11 @@
 # Booking lifecycle release QA
 
+## Live Android UI smoke test
+
+Run the `Live Android APK UI test` GitHub Actions workflow on a branch to build its production-configured APK and exercise the customer and cleaner screens on an Android emulator against the live Supabase project. The test creates confirmed, run-specific accounts without sending email, checks customer agreement/profile/permission writes, and verifies that closed bookings and unfinished cleaner identity checks block submission. It stops before booking creation, Didit, Paynow, SMS, and cleaner notifications, then anonymizes and removes the temporary accounts.
+
+The workflow fails its safety preflight if the live beta config says bookings are enabled. This smoke test does not replace the full booking lifecycle matrix below; a verified cleaner, enabled booking area, and provider sandbox are still required to test quotes, acceptance, job progression, and settlement end to end.
+
 Use an isolated Supabase staging project and two verified test accounts (customer and cleaner). Exercise Android and iOS on real devices with push notifications, location, and photo permissions enabled and denied.
 
 | Case | Procedure | Expected |

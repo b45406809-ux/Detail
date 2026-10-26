@@ -1,0 +1,73 @@
+appId: com.detail.app
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Skip onboarding"
+    timeout: 20000
+- tapOn:
+    id: welcome-skip
+- tapOn:
+    id: auth-email-tab
+- tapOn:
+    id: auth-email-mode-password
+- tapOn:
+    id: auth-email-input
+- inputText: ${CUSTOMER_EMAIL}
+- tapOn:
+    id: auth-password-input
+- inputText: ${CUSTOMER_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: auth-email-submit
+- extendedWaitUntil:
+    visible: "Customer Agreement"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "I have read and accept"
+    direction: DOWN
+- tapOn: "I have read and accept"
+- extendedWaitUntil:
+    visible: "Set up your profile"
+    timeout: 20000
+- tapOn: "Your full name"
+- inputText: "E2E Live Client"
+- hideKeyboard
+- tapOn: "Continue"
+- extendedWaitUntil:
+    visible: "Allow permissions"
+    timeout: 20000
+- tapOn: "Continue to App"
+- extendedWaitUntil:
+    visible: "Request Cleaning"
+    timeout: 20000
+- tapOn: "Request Cleaning"
+- tapOn: "House Cleaning"
+- tapOn: "Next"
+- scrollUntilVisible:
+    element:
+      text: "Specific Room / Part"
+    direction: DOWN
+- tapOn: "Specific Room / Part"
+- scrollUntilVisible:
+    element:
+      text: "Kitchen"
+    direction: DOWN
+- tapOn: "Kitchen"
+- scrollUntilVisible:
+    element:
+      text: "Under 10 m²"
+    direction: DOWN
+- tapOn: "Under 10 m²"
+- tapOn: "Next"
+- tapOn: "Next"
+- tapOn: "Enter an address…"
+- inputText: "E2E test address, Harare"
+- hideKeyboard
+- tapOn: "Next"
+- tapOn: "Next"
+- assertVisible: "Set your budget"
+- tapOn: "Submit Request"
+- assertVisible: "Bookings are not open yet"
+- tapOn: "OK"
