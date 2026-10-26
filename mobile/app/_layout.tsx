@@ -33,11 +33,20 @@ function AuthGuard() {
     if (!user && !inAuthGroup && !isPublicLegal) {
       router.replace('/(auth)/splash');
     } else if (user && !isPasswordRecovery && !isPublicLegal) {
-      if (!profile?.hasAgreedToTerms && currentScreen !== 'customer-agreement') router.replace('/customer-agreement');
-      else if (!profile?.hasCompletedProfile && currentScreen !== 'create-profile') router.replace('/(auth)/create-profile');
-      else if (!profile?.hasSetupPermissions && currentScreen !== 'permissions') router.replace('/(auth)/permissions');
-      else if (profile?.role === 'CLEANER' && profile.verificationStatus === 'VERIFIED' && profile.cleanerOnboardingComplete && !profile.cleanerAgreementAccepted) router.replace('/cleaner-agreement');
-      else if (inAuthGroup && currentScreen !== 'customer-agreement') router.replace('/home');
+      // Keep each onboarding gate active until it is complete. Checking the
+      // next gate when the user is already on the current screen causes a
+      // create-profile <-> permissions redirect loop for grouped web routes.
+      if (!profile?.hasAgreedToTerms) {
+        if (currentScreen !== 'customer-agreement') router.replace('/customer-agreement');
+      } else if (!profile?.hasCompletedProfile) {
+        if (currentScreen !== 'create-profile') router.replace('/(auth)/create-profile');
+      } else if (!profile?.hasSetupPermissions) {
+        if (currentScreen !== 'permissions') router.replace('/(auth)/permissions');
+      } else if (profile?.role === 'CLEANER' && profile.verificationStatus === 'VERIFIED' && profile.cleanerOnboardingComplete && !profile.cleanerAgreementAccepted) {
+        router.replace('/cleaner-agreement');
+      } else if (inAuthGroup && currentScreen !== 'customer-agreement') {
+        router.replace('/home');
+      }
     }
   }, [user, profile, isLoading, profileError, segments]);
 
