@@ -10,6 +10,7 @@ import uuid
 
 CF_ACCOUNT = os.environ.get('CLOUDFLARE_ACCOUNT_ID', '').strip()
 CF_DATABASE = os.environ.get('CLOUDFLARE_D1_DATABASE_ID', '').strip()
+CF_DATABASE_NAME = os.environ.get('CLOUDFLARE_D1_DATABASE', 'detail-waitlist').strip()
 CF_TOKEN = os.environ.get('CLOUDFLARE_API_TOKEN', '').strip()
 SUPABASE_URL = os.environ.get('SUPABASE_URL', '').rstrip('/')
 SUPABASE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '').strip()
@@ -34,6 +35,18 @@ def request_json(url, method='GET', headers=None, payload=None):
 
 
 def d1_query(sql, params=None):
+    global CF_DATABASE
+    if not CF_DATABASE:
+        response = request_json(
+            f'https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT}/d1/database?per_page=100',
+            headers={'Authorization': f'Bearer {CF_TOKEN}'},
+        ) or {}
+        databases = response.get('result', [])
+        database = next((item for item in databases if item.get('name') == CF_DATABASE_NAME), None)
+        if not database or not database.get('uuid'):
+            raise RuntimeError(f'Cloudflare D1 database {CF_DATABASE_NAME!r} was not found in this account.')
+        CF_DATABASE = database['uuid']
+        print(f'Reading legacy D1 database: {CF_DATABASE_NAME}')
     url = f'https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT}/d1/database/{CF_DATABASE}/query'
     result = request_json(url, 'POST', {
         'Authorization': f'Bearer {CF_TOKEN}', 'Content-Type': 'application/json'
@@ -153,8 +166,8 @@ def post_rows(table, rows):
 
 
 def main():
-    if not all((CF_ACCOUNT, CF_DATABASE, CF_TOKEN, SUPABASE_URL, SUPABASE_KEY)):
-        raise SystemExit('Configure Cloudflare D1 query credentials and Supabase service-role credentials in the production GitHub environment.')
+    if not all((CF_ACCOUNT, CF_TOKEN, SUPABASE_URL, SUPABASE_KEY)):
+        raise SystemExit('Configure Cloudflare account/token and Supabase server-key credentials in the production GitHub environment.')
     tables, counts = table_inventory()
     print('Cloudflare D1 table row counts (no personal data):')
     for table, count in counts.items():

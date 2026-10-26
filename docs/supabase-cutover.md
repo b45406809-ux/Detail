@@ -1,6 +1,6 @@
 # Firebase to Supabase cutover
 
-The application clients and the new privileged API target Supabase. Firebase remains the source system until a deliberate data migration and release cutover; do not disable the old project before the new project is configured and verified.
+The current dashboard and marketing waitlist use Supabase. Legacy Cloudflare D1 may still hold earlier waitlist entries and administrator accounts until a deliberate migration and account re-invitation are completed. Firebase remains a separate legacy source for marketplace users and records; do not disable any legacy source before its data is reconciled.
 
 ## Create and configure Supabase
 
@@ -25,6 +25,8 @@ npm run migrate:supabase
 The importer is restartable and never deletes from Firebase. It creates replacement Supabase auth accounts with random passwords and records the old-to-new UID mapping in `legacyAuthMappings`; current Firebase password hashes cannot be reused by Supabase Auth. Every migrated account therefore needs a secure password reset or a fresh OAuth/SMS sign-in before launch. Accounts without a verified email or reachable phone need a support recovery path. Existing auth sessions will end at cutover.
 
 The import remaps user and booking references to new IDs, imports supported top-level collections, and copies Firebase Storage objects to the private `detail-media` bucket. Review importer output and compare per-table counts, wallet balances, payout holds, booking statuses, review counts, KYC status, and representative media URLs. Resolve invalid or rejected records before proceeding. Do not import raw KYC document images or reusable identity-provider sessions; cleaners must complete Didit verification again if the provider session cannot be safely resumed.
+
+Cloudflare D1 waitlist/blog/campaign/settings records use the separate dry-run-first workflow documented in [GitHub Actions setup](github-actions.md#one-time-cloudflare-d1-migration). Cloudflare administrator passwords, invites, and sessions are not portable to Supabase Auth. Create/verify a Supabase Auth user, grant the initial owner role through the protected bootstrap procedure, then invite each administrator again from the Supabase dashboard. Cloudflare KV promotional assets remain on Cloudflare because they are a separate static download library, not dashboard records.
 
 ## Cutover sequence
 
