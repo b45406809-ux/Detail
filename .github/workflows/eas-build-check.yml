@@ -32,8 +32,9 @@ jobs:
           const build = builds.find(b => b.id === '31783694-ce9b-46e4-9459-166387b3f940' && b.status === 'FINISHED' && b.gitCommitHash === '4f493436ca6316dcf9cffd031d45f9404ad73a0f');
           const url = build?.artifacts?.buildUrl || build?.artifacts?.applicationArchiveUrl;
           if (!url) throw new Error('The expected Google-fix APK is not available.');
-          fs.appendFileSync(process.env.GITHUB_ENV, `APK_URL=${url}\n`);
+          fs.writeFileSync(`${process.env.RUNNER_TEMP}/detail-apk-url`, url);
           NODE
+          APK_URL=$(cat "$RUNNER_TEMP/detail-apk-url")
           curl --fail --location --silent --show-error "$APK_URL" --output "$RUNNER_TEMP/detail-google-fix.apk"
       - name: Upload Google-fix APK to Appetize
         id: upload
