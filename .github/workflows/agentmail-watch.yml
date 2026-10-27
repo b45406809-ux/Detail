@@ -4,6 +4,11 @@ on:
     branches: [codex/separate-dashboard-into-routed-modules-fl7jlh]
     paths: [.github/workflows/agentmail-watch.yml]
   workflow_dispatch:
+    inputs:
+      attempts:
+        description: Number of inbox checks (15 seconds apart, maximum 40)
+        default: '40'
+        type: string
 permissions:
   contents: read
 jobs:
@@ -14,6 +19,7 @@ jobs:
       - name: Wait for first inbox message
         env:
           AGENTMAIL_API_KEY: ${{ secrets.AGENTMAIL_API_KEY }}
+          WATCH_ATTEMPTS: ${{ inputs.attempts || '1' }}
         run: |
           node <<'NODE'
           const inbox = 'pixel-studio-f7f3df@agentmail.to';
@@ -26,7 +32,8 @@ jobs:
             return response.json();
           }
           (async () => {
-            for (let i = 0; i < 40; i++) {
+            const attempts = Math.max(1, Math.min(40, Number.parseInt(process.env.WATCH_ATTEMPTS, 10) || 1));
+            for (let i = 0; i < attempts; i++) {
               const result = await get(`${endpoint}?ascending=true&limit=1&labels=received`);
               const first = result.messages?.[0];
               if (first) {
@@ -38,9 +45,9 @@ jobs:
                 console.log('INBOX_MESSAGE_TEXT:', clean(message.extracted_text || message.text || message.snippet || '(No plain-text body available)'));
                 return;
               }
-              console.log(`No message yet (check ${i + 1}/40).`);
-              await new Promise(resolve => setTimeout(resolve, 15000));
+              console.log(`No message yet (check ${i + 1}/${attempts}).`);
+              if (i + 1 < attempts) await new Promise(resolve => setTimeout(resolve, 15000));
             }
-            console.log('INBOX_WATCH_TIMEOUT: No message arrived within 10 minutes.');
+            console.log('INBOX_WATCH_TIMEOUT: No message arrived during this check.');
           })().catch(error => { console.error(error.message); process.exitCode = 1; });
           NODE
