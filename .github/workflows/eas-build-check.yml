@@ -23,3 +23,30 @@ jobs:
           set -euo pipefail
           npx eas-cli@latest build:list --platform android --limit 10 --non-interactive --json > "$RUNNER_TEMP/eas-build-list.json"
           node -e 'const d=require(process.env.RUNNER_TEMP+"/eas-build-list.json");for(const b of d) console.log(JSON.stringify({id:b.id,status:b.status,commit:b.gitCommitHash,profile:b.buildProfile,created:b.createdAt,hasArtifact:!!(b.artifacts?.buildUrl||b.artifacts?.applicationArchiveUrl)}))'
+      - name: Download Google-fix APK from EAS
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const builds = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/eas-build-list.json`, 'utf8'));
+          const build = builds.find(b => b.id === '31783694-ce9b-46e4-9459-166387b3f940' && b.status === 'FINISHED' && b.gitCommitHash === '4f493436ca6316dcf9cffd031d45f9404ad73a0f');
+          const url = build?.artifacts?.buildUrl || build?.artifacts?.applicationArchiveUrl;
+          if (!url) throw new Error('The expected Google-fix APK is not available.');
+          fs.appendFileSync(process.env.GITHUB_ENV, `APK_URL=${url}\n`);
+          NODE
+          curl --fail --location --silent --show-error "$APK_URL" --output "$RUNNER_TEMP/detail-google-fix.apk"
+      - name: Upload Google-fix APK to Appetize
+        id: upload
+        uses: appetizeio/github-action-appetize@v1.1.0
+        with:
+          apiToken: ${{ secrets.APPETIZE_API_TOKEN }}
+          platform: android
+          appFile: ${{ runner.temp }}/detail-google-fix.apk
+          note: Google OAuth fix, commit 4f49343
+      - name: Record Appetize build link
+        env:
+          APP_KEY: ${{ steps.upload.outputs.publicKey }}
+        run: |
+          test -n "$APP_KEY"
+          echo "APPETIZE_BUILD_URL=https://appetize.io/app/$APP_KEY"
+          echo "Appetize build: https://appetize.io/app/$APP_KEY" >> "$GITHUB_STEP_SUMMARY"
