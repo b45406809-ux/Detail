@@ -34,6 +34,29 @@ jobs:
           VITE_SUPABASE_URL: https://example.supabase.co
           VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
           VITE_TURNSTILE_SITE_KEY: ci-placeholder-turnstile-key
+      - name: Install Playwright for read-only production UI checks
+        run: npm install --prefix site --no-save --package-lock=false --no-audit --no-fund playwright
+      - name: Install Chromium for Playwright
+        working-directory: site
+        run: npx playwright install --with-deps chromium
+      - name: Smoke-test public site, blog, and every dashboard module
+        working-directory: site
+        env:
+          E2E_ADMIN_EMAIL: ${{ secrets.INITIAL_ADMIN_EMAIL }}
+          E2E_ADMIN_PASSWORD: ${{ secrets.INITIAL_ADMIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$E2E_ADMIN_EMAIL"
+          test -n "$E2E_ADMIN_PASSWORD"
+          node scripts/live_dashboard_smoke.mjs
+      - name: Upload dashboard failure screenshot
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-playwright-failure-${{ github.run_id }}
+          path: site/test-results/dashboard-failure.png
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Verify link preview and routing artifacts
         run: |
           test -f site/dist/index.html
