@@ -28,7 +28,7 @@ jobs:
           export TEST_STARTED_MS=$(date +%s%3N)
           finish() {
             appetize inspect appetize-results/final.json --json --quiet || true
-            node -e 'const d=require("./appetize-results/final.json");function w(x){if(!x||typeof x!=="object")return;const a=x.attributes||{};const t=a.text||a.contentDescription||"";if(/error|failed|email|account|sign|code/i.test(t))console.log("SCREEN_TEXT:",t.replace(/\b[0-9]{6}\b/g,"[redacted]").slice(0,250));Object.values(x).forEach(w)}w(d)' || true
+            node -e 'const d=require("./appetize-results/final.json");function w(x){if(!x||typeof x!=="object")return;const a=x.attributes||{};const t=a.text||a.contentDescription||"";if(t)console.log("SCREEN_TEXT:",t.replace(/\b[0-9]{6}\b/g,"[redacted]").replace(/[^\s]+@[^\s]+/g,"[email]").slice(0,250));Object.values(x).forEach(w)}w(d)' || true
             appetize screenshot appetize-results/final.png --json --quiet || true
             appetize session stop --json --quiet || true
             rm -f "$RUNNER_TEMP/detail-email-code"
