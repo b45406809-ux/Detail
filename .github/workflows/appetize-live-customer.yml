@@ -65,6 +65,15 @@ jobs:
           appetize inspect --select-text 'Specific Room / Part' --timeout 15000 --json --quiet
           appetize screenshot appetize-results/service-selection.png --json --quiet
           echo 'LIVE_CUSTOMER_SERVICE_SELECTION_REACHED'
+          appetize open 'detail:///activity' --json --quiet
+          appetize inspect --select-text 'Your bookings' --timeout 15000 --json --quiet
+          appetize open 'detail:///messages' --json --quiet
+          appetize inspect --select-text 'Messages' --timeout 15000 --json --quiet
+          appetize open 'detail:///wallet' --json --quiet
+          appetize inspect --select-text 'Wallet' --timeout 15000 --json --quiet
+          appetize open 'detail:///profile' --json --quiet
+          appetize inspect --select-text 'Profile' --timeout 15000 --json --quiet
+          echo 'LIVE_CUSTOMER_TABS_RENDERED'
       - name: Clean up disposable accounts
         if: always()
         run: node scripts/live_mobile_ui_e2e.mjs cleanup
