@@ -33,7 +33,7 @@ jobs:
             return response.json();
           }
           (async () => {
-            const keys = ['mailer_templates_confirmation_content', 'mailer_templates_magic_link_content'];
+            const keys = ['mailer_templates_confirmation_content', 'mailer_templates_magic_link_content', 'mailer_otp_length'];
             const before = await request('GET');
             fs.writeFileSync(`${process.env.RUNNER_TEMP}/prior-auth-email-templates.json`, JSON.stringify(Object.fromEntries(keys.map(k => [k, before[k]])), null, 2));
             if (before.smtp_host && before.smtp_host !== 'smtp.resend.com') throw new Error('A different custom SMTP provider is configured; stopping without replacing it.');
@@ -44,6 +44,7 @@ jobs:
               console.log('RESEND_SMTP_CONFIGURED');
             }
             const desired = {
+              mailer_otp_length: 6,
               mailer_templates_confirmation_content: fs.readFileSync('supabase/templates/confirmation.html', 'utf8'),
               mailer_templates_magic_link_content: fs.readFileSync('supabase/templates/magic_link.html', 'utf8'),
             };
