@@ -30,7 +30,14 @@ jobs:
           password="DetailA1!$(openssl rand -hex 18)"
           echo "::add-mask::$password"
           export TEST_STARTED_MS=$(date +%s%3N)
-          trap 'appetize inspect appetize-results/final.json --json --quiet || true; node -e '''const d=require("./appetize-results/final.json");function w(x){if(!x||typeof x!=="object")return;const a=x.attributes||{};const t=a.text||a.contentDescription||"";if(/error|failed|agree|terms|email|account|create|sign/i.test(t))console.log("SCREEN_TEXT:",t.replace(/\\b[0-9]{6}\\b/g,"[redacted]").slice(0,250));Object.values(x).forEach(w)}w(d)''' || true; appetize screenshot appetize-results/final.png --json --quiet || true; appetize session stop --json --quiet || true; rm -f "$RUNNER_TEMP/detail-email-code"' EXIT
+          finish() {
+            appetize inspect appetize-results/final.json --json --quiet || true
+            node -e 'const d=require("./appetize-results/final.json");function w(x){if(!x||typeof x!=="object")return;const a=x.attributes||{};const t=a.text||a.contentDescription||"";if(/error|failed|agree|terms|email|account|create|sign/i.test(t))console.log("SCREEN_TEXT:",t.replace(/\b[0-9]{6}\b/g,"[redacted]").slice(0,250));Object.values(x).forEach(w)}w(d)' || true
+            appetize screenshot appetize-results/final.png --json --quiet || true
+            appetize session stop --json --quiet || true
+            rm -f "$RUNNER_TEMP/detail-email-code"
+          }
+          trap finish EXIT
           appetize session start pixel7 --target 4c6fwy7cgb4ac7pn67nsu2fb4i --json --quiet >/dev/null
           appetize inspect --select-test-id welcome-skip --timeout 25000 --json --quiet
           appetize tap --select-test-id welcome-skip --json --quiet
