@@ -84,36 +84,38 @@ async function cleanupAccounts() {
   try { users = JSON.parse(await readFile(usersPath, 'utf8')); } catch { return; }
   let failed = false;
   for (const user of users) {
+    let phase = 'privacy close';
     try {
-      await request('/rest/v1/rpc/close_account', {
+      const closed = await request('/rest/v1/rpc/close_account', {
         method: 'POST',
         body: JSON.stringify({ p_user_id: user.id }),
       });
-      await request(`/auth/v1/admin/users/${encodeURIComponent(user.id)}`, { method: 'DELETE' });
+      if (closed !== true) throw new Error('Account privacy close did not confirm.');
+      phase = 'legal acceptance removal';
       await request(`/rest/v1/legaldocumentacceptances?userid=eq.${encodeURIComponent(user.id)}`, {
         method: 'DELETE',
         headers: { Prefer: 'return=minimal' },
       });
-      await request(`/rest/v1/users?id=eq.${encodeURIComponent(user.id)}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ hascompletedprofile: false, hassetupperpermissions: false, status: 'OFFLINE' }),
-        headers: { Prefer: 'return=minimal' },
-      });
+      phase = 'auth user removal';
+      await request(`/auth/v1/admin/users/${encodeURIComponent(user.id)}`, { method: 'DELETE' });
+      phase = 'privacy cleanup verification';
       const [profile, legal, jobs, bids] = await Promise.all([
-        request(`/rest/v1/users?select=email,displayname,accountdeletedat&id=eq.${encodeURIComponent(user.id)}`),
+        request(`/rest/v1/users?select=id,email,displayname,accountdeletedat&id=eq.${encodeURIComponent(user.id)}`),
         request(`/rest/v1/legaldocumentacceptances?select=userid&userid=eq.${encodeURIComponent(user.id)}`),
         request(`/rest/v1/jobs?select=id&customerid=eq.${encodeURIComponent(user.id)}`),
         request(`/rest/v1/bids?select=id&cleanerid=eq.${encodeURIComponent(user.id)}`),
       ]);
-      if (profile?.[0]?.email !== '' || profile?.[0]?.displayname !== 'Deleted user' || !profile?.[0]?.accountdeletedat
+      const profileIsSanitized = profile.length === 0 || (profile[0].email === '' && profile[0].displayname === 'Deleted user' && !!profile[0].accountdeletedat);
+      if (!profileIsSanitized
         || legal?.length || jobs?.length || bids?.length) throw new Error('Test account cleanup verification failed.');
       const authResponse = await fetch(`${baseUrl}/auth/v1/admin/users/${encodeURIComponent(user.id)}`, {
         headers: { apikey: serviceKey }, signal: AbortSignal.timeout(20000),
       });
+      phase = 'login removal verification';
       if (authResponse.status !== 404) throw new Error('Deleted test login is still present.');
-    } catch {
+    } catch (error) {
       failed = true;
-      console.error(`LIVE_UI_TEST_CLEANUP_FAILED: ${user.role}`);
+      console.error(`LIVE_UI_TEST_CLEANUP_FAILED: ${user.role} at ${phase} (${error instanceof Error ? error.message : 'unknown error'})`);
     }
   }
   if (failed) throw new Error('Temporary live UI test data was not fully cleaned up.');

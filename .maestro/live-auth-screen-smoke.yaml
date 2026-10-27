@@ -1,0 +1,26 @@
+appId: com.detail.app
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Skip onboarding"
+    timeout: 20000
+- tapOn:
+    id: welcome-skip
+- assertVisible:
+    id: auth-account-mode-toggle
+- openLink:
+    link: "detail:///forgot-password"
+- assertVisible: "Forgot password?"
+- openLink:
+    link: "detail:///verify-email?email=ui-smoke%40example.com&intent=REGISTER"
+- assertVisible: "Check your email"
+- openLink:
+    link: "detail:///create-profile"
+- assertVisible: "Set up your profile"
+- openLink:
+    link: "detail:///permissions"
+- assertVisible: "Allow permissions"
+- openLink:
+    link: "detail:///reset-password"
+- assertVisible: "Choose a new password"

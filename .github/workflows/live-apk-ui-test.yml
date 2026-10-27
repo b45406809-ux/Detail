@@ -1,6 +1,13 @@
 name: Live Android APK UI test
 
 on:
+  push:
+    branches:
+      - codex/separate-dashboard-into-routed-modules-fl7jlh
+    paths:
+      - '.github/workflows/live-apk-ui-test.yml'
+      - '.maestro/**'
+      - 'scripts/live_mobile_ui_e2e.mjs'
   workflow_dispatch:
 
 permissions:
@@ -102,7 +109,10 @@ jobs:
           api-level: 35
           target: google_apis
           arch: x86_64
-          profile: pixel_6
+          profile: pixel_2
+          # Keep the AVD's userdata partition below the available runner disk.
+          disk-size: 4096M
+          emulator-boot-timeout: 900
           disable-animations: true
           script: |
             set +e
@@ -113,7 +123,11 @@ jobs:
             client_status=$?
             maestro test --env CLEANER_EMAIL="$E2E_CLEANER_EMAIL" --env CLEANER_PASSWORD="$E2E_CLEANER_PASSWORD" .maestro/live-cleaner-verification-gate.yaml
             cleaner_status=$?
-            if [[ $client_status -ne 0 || $cleaner_status -ne 0 ]]; then exit 1; fi
+            maestro test --env CUSTOMER_EMAIL="$E2E_CUSTOMER_EMAIL" --env CUSTOMER_PASSWORD="$E2E_CUSTOMER_PASSWORD" .maestro/live-screen-route-smoke.yaml
+            screens_status=$?
+            maestro test .maestro/live-auth-screen-smoke.yaml
+            auth_screens_status=$?
+            if [[ $client_status -ne 0 || $cleaner_status -ne 0 || $screens_status -ne 0 || $auth_screens_status -ne 0 ]]; then exit 1; fi
 
       - name: Clean up live Supabase test accounts
         if: always()

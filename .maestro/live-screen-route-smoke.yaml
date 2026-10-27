@@ -1,0 +1,116 @@
+appId: com.detail.app
+---
+# This is a route-level rendering pass after authentication. It deliberately
+# avoids actions that create bookings, charge money, upload identity documents,
+# send support messages, or change cleaner availability.
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Skip onboarding"
+    timeout: 20000
+- tapOn:
+    id: welcome-skip
+- tapOn:
+    id: auth-email-tab
+- tapOn:
+    id: auth-email-mode-password
+- tapOn:
+    id: auth-email-input
+- inputText: ${CUSTOMER_EMAIL}
+- tapOn:
+    id: auth-password-input
+- inputText: ${CUSTOMER_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: auth-email-submit
+- extendedWaitUntil:
+    visible: "Request Cleaning"
+    timeout: 30000
+
+# Main navigation tabs
+- openLink:
+    link: "detail:///home"
+- assertVisible: "Request Cleaning"
+- openLink:
+    link: "detail:///activity"
+- assertVisible: "Your bookings"
+- openLink:
+    link: "detail:///messages"
+- assertVisible: "Messages"
+- openLink:
+    link: "detail:///wallet"
+- assertVisible: "Wallet"
+- openLink:
+    link: "detail:///profile"
+- assertVisible: "Profile"
+
+# Customer account and marketplace screens
+- openLink:
+    link: "detail:///history"
+- assertVisible: "Service History"
+- openLink:
+    link: "detail:///favorites"
+- assertVisible: "Favorites"
+- openLink:
+    link: "detail:///cleaners"
+- assertVisible: "Find Cleaners"
+- openLink:
+    link: "detail:///notifications"
+- assertVisible: "Notifications"
+- openLink:
+    link: "detail:///reviews"
+- assertVisible: "My Reviews"
+- openLink:
+    link: "detail:///help"
+- assertVisible: "Help & Support"
+- openLink:
+    link: "detail:///support"
+- assertVisible: "Support requests"
+- openLink:
+    link: "detail:///organization"
+- assertVisible: "Organization"
+- openLink:
+    link: "detail:///account/email"
+- assertVisible: "Email address"
+
+# Onboarding, legal, and cleaner screens
+- openLink:
+    link: "detail:///register-cleaner"
+- assertVisible: "Become a Cleaner"
+- openLink:
+    link: "detail:///portfolio"
+- assertVisible: "My portfolio"
+- openLink:
+    link: "detail:///instant-offers"
+- assertVisible: "Instant offers"
+- openLink:
+    link: "detail:///customer-agreement"
+- assertVisible: "Customer Agreement"
+- openLink:
+    link: "detail:///cleaner-agreement"
+- assertVisible: "Cleaner Agreement"
+- openLink:
+    link: "detail:///privacy-policy"
+- assertVisible: "Privacy Policy"
+
+# Booking creation is inspected only up to its first step. Submission is kept
+# behind the separate closed-booking safety gate in the client journey.
+- openLink:
+    link: "detail:///booking/create"
+- assertVisible: "What do you need cleaned?"
+- openLink:
+    link: "detail:///booking/offers?jobId=00000000-0000-4000-8000-000000000001"
+- assertVisible: "Bids Received"
+- openLink:
+    link: "detail:///booking/confirmation?jobId=00000000-0000-4000-8000-000000000001"
+- assertVisible: "Booking accepted"
+- openLink:
+    link: "detail:///job/00000000-0000-4000-8000-000000000001"
+- extendedWaitUntil:
+    visible: "Job not found"
+    timeout: 15000
+- openLink:
+    link: "detail:///tracking/00000000-0000-4000-8000-000000000001"
+- extendedWaitUntil:
+    visible: "Booking unavailable"
+    timeout: 15000
