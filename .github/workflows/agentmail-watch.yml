@@ -27,7 +27,7 @@ jobs:
           }
           (async () => {
             for (let i = 0; i < 40; i++) {
-              const result = await get(`${endpoint}?ascending=true&limit=1`);
+              const result = await get(`${endpoint}?ascending=true&limit=1&labels=received`);
               const first = result.messages?.[0];
               if (first) {
                 const message = await get(`${endpoint}/${encodeURIComponent(first.message_id)}`);
