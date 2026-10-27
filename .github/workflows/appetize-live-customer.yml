@@ -29,7 +29,7 @@ jobs:
           set -euo pipefail
           mkdir -p appetize-results
           target=$(appetize build list --app com.detail.app --json --quiet | jq -er '.builds[0].id')
-          trap 'appetize session stop --json --quiet || true' EXIT
+          trap 'appetize inspect appetize-results/final.json --json --quiet || true; appetize screenshot appetize-results/final.png --json --quiet || true; cat appetize-results/final.json || true; appetize session stop --json --quiet || true' EXIT
           appetize session start pixel7 --target "$target" --json --quiet >/dev/null
           appetize inspect --select-test-id welcome-skip --timeout 25000 --json --quiet
           appetize tap --select-test-id welcome-skip --json --quiet
