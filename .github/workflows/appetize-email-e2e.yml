@@ -1,0 +1,61 @@
+name: Appetize real email registration
+on:
+  push:
+    branches: [codex/separate-dashboard-into-routed-modules-fl7jlh]
+    paths: [.github/workflows/appetize-email-e2e.yml, scripts/agentmail_e2e.mjs]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  registration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+      AGENTMAIL_API_KEY: ${{ secrets.AGENTMAIL_API_KEY }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Ensure inbox does not already have a user
+        run: node scripts/agentmail_e2e.mjs check
+      - run: npm install --global @appetize/cli@0.25.1 --no-audit --no-fund
+      - name: Register and confirm using a real email
+        run: |
+          set -euo pipefail
+          mkdir -p appetize-results
+          password="DetailA1!$(openssl rand -hex 18)"
+          echo "::add-mask::$password"
+          export TEST_STARTED_MS=$(date +%s%3N)
+          trap 'appetize screenshot appetize-results/final.png --json --quiet || true; appetize session stop --json --quiet || true; rm -f "$RUNNER_TEMP/detail-email-code"' EXIT
+          appetize session start pixel7 --target 4c6fwy7cgb4ac7pn67nsu2fb4i --json --quiet >/dev/null
+          appetize inspect --select-test-id welcome-skip --timeout 25000 --json --quiet
+          appetize tap --select-test-id welcome-skip --json --quiet
+          appetize tap --select-test-id auth-account-mode-toggle --timeout 15000 --json --quiet
+          appetize tap --select-test-id auth-email-input --json --quiet
+          appetize type 'pixel-studio-f7f3df@agentmail.to' --json --quiet
+          appetize tap --select-test-id auth-password-input --json --quiet
+          appetize type "$password" --json --quiet
+          appetize press back --json --quiet
+          appetize tap --select-test-id auth-email-submit --json --quiet
+          appetize tap --select-text 'I Agree' --timeout 10000 --json --quiet
+          appetize inspect --select-text 'Check your email' --timeout 25000 --json --quiet
+          node scripts/agentmail_e2e.mjs code
+          code=$(cat "$RUNNER_TEMP/detail-email-code")
+          appetize tap --select-text '000000' --timeout 10000 --json --quiet
+          appetize type "$code" --json --quiet
+          appetize press back --json --quiet
+          appetize tap --select-text '/^Verify & Continue$/i' --json --quiet
+          appetize inspect --select-text 'Customer Agreement' --timeout 25000 --json --quiet
+          echo 'LIVE_EMAIL_REGISTRATION_VERIFIED'
+      - name: Save screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appetize-email-e2e-${{ github.run_id }}
+          path: appetize-results/final.png
+          if-no-files-found: ignore
+          retention-days: 7
