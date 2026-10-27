@@ -62,6 +62,17 @@ jobs:
           appetize inspect --select-text 'Cleaner Registration Required' --timeout 15000 --json --quiet
           appetize tap --select-text '/^Register Now$/i' --json --quiet
           appetize inspect --select-text 'Become a Cleaner' --timeout 20000 --json --quiet
+          appetize tap --select-text '+263 7X XXX XXXX' --timeout 10000 --json --quiet
+          appetize type '0712345678' --json --quiet
+          appetize press back --json --quiet
+          appetize tap --select-text 'Street, suburb, city' --timeout 10000 --json --quiet
+          appetize type 'Test address Harare' --json --quiet
+          appetize press back --json --quiet
+          for attempt in $(seq 1 5); do
+            if appetize inspect --select-text 'House Cleaning' --timeout 500 --json --quiet >/dev/null 2>&1; then break; fi
+            appetize swipe --direction up --json --quiet
+          done
+          appetize tap --select-text 'House Cleaning' --timeout 10000 --json --quiet
           for attempt in $(seq 1 8); do
             if appetize inspect --select-text 'Verify with Didit' --timeout 500 --json --quiet >/dev/null 2>&1; then break; fi
             appetize swipe --direction up --json --quiet
