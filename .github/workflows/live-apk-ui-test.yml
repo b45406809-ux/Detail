@@ -93,6 +93,17 @@ jobs:
       - name: Download the EAS APK
         run: curl --fail --location --silent --show-error "$DETAIL_LIVE_APK_URL" --output "$RUNNER_TEMP/detail-live-test.apk"
 
+      - name: Publish EAS APK for Appetize and manual testing
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: detail-live-tested-apk-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/detail-live-test.apk
+            ${{ runner.temp }}/detail-live-apk-build.json
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Create disposable live Supabase test accounts
         id: test-users
         run: node scripts/live_mobile_ui_e2e.mjs create
@@ -132,14 +143,3 @@ jobs:
       - name: Clean up live Supabase test accounts
         if: always()
         run: node scripts/live_mobile_ui_e2e.mjs cleanup
-
-      - name: Upload tested APK and EAS build record
-        if: always() && steps.build.outcome == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: detail-live-tested-apk-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/detail-live-test.apk
-            ${{ runner.temp }}/detail-live-apk-build.json
-          if-no-files-found: warn
-          retention-days: 7
