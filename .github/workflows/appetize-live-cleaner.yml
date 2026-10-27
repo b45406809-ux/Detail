@@ -62,6 +62,10 @@ jobs:
           appetize inspect --select-text 'Cleaner Registration Required' --timeout 15000 --json --quiet
           appetize tap --select-text '/^Register Now$/i' --json --quiet
           appetize inspect --select-text 'Become a Cleaner' --timeout 20000 --json --quiet
+          for attempt in $(seq 1 8); do
+            if appetize inspect --select-text 'Verify with Didit' --timeout 500 --json --quiet >/dev/null 2>&1; then break; fi
+            appetize swipe --direction up --json --quiet
+          done
           appetize inspect --select-text 'Verify with Didit' --timeout 10000 --json --quiet
           appetize screenshot appetize-results/cleaner-registration.png --json --quiet
           echo 'LIVE_CLEANER_DIDIT_GATE_REACHED'
