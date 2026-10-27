@@ -28,7 +28,7 @@ jobs:
           const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
           async function request(method, body) {
             const response = await fetch(url, { method, headers, body: body && JSON.stringify(body), signal: AbortSignal.timeout(30000) });
-            if (!response.ok) throw new Error(`Supabase Management API ${method} failed (HTTP ${response.status}).`);
+            if (!response.ok) { const detail = await response.json().catch(() => ({})); throw new Error(`Supabase Management API ${method} failed (HTTP ${response.status}): ${String(detail.message || detail.error || 'unknown').slice(0, 300)}`); }
             return response.json();
           }
           (async () => {
