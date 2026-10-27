@@ -1,9 +1,11 @@
 name: Upload Android APK to Appetize
 on:
-  push:
-    branches: [codex/separate-dashboard-into-routed-modules-fl7jlh]
-    paths: [.github/workflows/appetize-upload.yml]
   workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: GitHub run containing the EAS APK artifact
+        required: true
+        type: string
 permissions:
   actions: read
   contents: read
@@ -14,9 +16,9 @@ jobs:
       - name: Download existing EAS APK artifact
         uses: actions/download-artifact@v4
         with:
-          name: detail-live-tested-apk-40434201942
+          name: detail-live-tested-apk-${{ inputs.source_run_id }}
           path: apk-artifact
-          run-id: 40434201942
+          run-id: ${{ inputs.source_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Find APK
         id: apk
@@ -32,10 +34,31 @@ jobs:
           apiToken: ${{ secrets.APPETIZE_API_TOKEN }}
           platform: android
           appFile: ${{ steps.apk.outputs.path }}
-          note: Detail EAS APK from GitHub run 40434201942
+          note: Detail EAS APK from GitHub run ${{ inputs.source_run_id }}
       - name: Record Appetize link
         env:
           APP_KEY: ${{ steps.upload.outputs.publicKey }}
         run: |
           test -n "$APP_KEY"
           echo "Appetize build: https://appetize.io/app/$APP_KEY" >> "$GITHUB_STEP_SUMMARY"
+      - name: Install Appetize agent CLI
+        run: npm install --global @appetize/cli@0.25.1 --no-audit --no-fund
+      - name: Inspect the app on an Android device
+        env:
+          APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+          APP_TARGET: ${{ steps.upload.outputs.publicKey }}
+        run: |
+          set -euo pipefail
+          mkdir -p appetize-results
+          trap 'appetize session stop --json --quiet || true' EXIT
+          appetize session start pixel7 --target "$APP_TARGET" --json --quiet > appetize-results/session.json
+          appetize inspect --json --quiet > appetize-results/inspect-result.json
+          appetize screenshot appetize-results/launch --json --quiet > appetize-results/screenshot-result.json
+      - name: Save Appetize inspection evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appetize-inspection-${{ github.run_id }}
+          path: appetize-results/
+          if-no-files-found: ignore
+          retention-days: 7
