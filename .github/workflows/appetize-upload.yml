@@ -1,0 +1,41 @@
+name: Upload Android APK to Appetize
+on:
+  push:
+    branches: [codex/separate-dashboard-into-routed-modules-fl7jlh]
+    paths: [.github/workflows/appetize-upload.yml]
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: read
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download existing EAS APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: detail-live-tested-apk-40434201942
+          path: apk-artifact
+          run-id: 40434201942
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Find APK
+        id: apk
+        run: |
+          set -euo pipefail
+          mapfile -t apks < <(find apk-artifact -type f -name '*.apk')
+          test "${#apks[@]}" -eq 1
+          echo "path=${apks[0]}" >> "$GITHUB_OUTPUT"
+      - name: Upload APK to Appetize
+        id: upload
+        uses: appetizeio/github-action-appetize@v1.1.0
+        with:
+          apiToken: ${{ secrets.APPETIZE_API_TOKEN }}
+          platform: android
+          appFile: ${{ steps.apk.outputs.path }}
+          note: Detail EAS APK from GitHub run 40434201942
+      - name: Record Appetize link
+        env:
+          APP_KEY: ${{ steps.upload.outputs.publicKey }}
+        run: |
+          test -n "$APP_KEY"
+          echo "Appetize build: https://appetize.io/app/$APP_KEY" >> "$GITHUB_STEP_SUMMARY"
