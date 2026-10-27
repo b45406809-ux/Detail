@@ -82,8 +82,10 @@ function tokenClaims(request:Request):Json{
   const token=(request.headers.get('authorization')??'').replace(/^Bearer /,'');
   try{const part=token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');return JSON.parse(atob(part.padEnd(Math.ceil(part.length/4)*4,'=')));}catch{return {};}
 }
-function requireRecentAdminAuth(request:Request){
-  const failure=adminStepUpFailure(tokenClaims(request));
+async function requireRecentAdminAuth(uid:string){
+  const {data,error}=await admin.auth.admin.getUserById(uid);
+  if(error)throw error;
+  const failure=adminStepUpFailure(data.user?.last_sign_in_at);
   if(failure==='recent_auth_required')fail(403,'Sign in again before this sensitive administrator action.');
 }
 function payoutKey(){
@@ -747,12 +749,12 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(error)throw error; return {success:true,payoutRequestId:data,status:'PENDING'};
     }
     case 'listPayoutRequests': {
-      const actor=authed(); requireRecentAdminAuth(request); await requireAdmin(actor,'finance.read');
+      const actor=authed(); await requireAdmin(actor,'finance.read'); await requireRecentAdminAuth(actor);
       const {data,error}=await admin.from('payoutrequests').select('id,cleanerid,amount,method,accountnumberlast4,status,approvedby,createdat').in('status',['PENDING','APPROVED']).order('createdat',{ascending:true}).limit(100);
       if(error)throw error; return {requests:(data??[]).map(item=>({...item,accountNumberMasked:item.accountnumberlast4?`••••${item.accountnumberlast4}`:'Legacy destination — update required'}))};
     }
     case 'revealPayoutDestination': {
-      const actor=authed();requireRecentAdminAuth(request);await requireAdmin(actor,'finance.write');
+      const actor=authed();await requireAdmin(actor,'finance.write');await requireRecentAdminAuth(actor);
       const payoutId=text(input.payoutRequestId,80);const {data,error}=await admin.from('payoutrequests').select('accountname,accountnumberciphertext,accountnumberlast4,status,approvedby').eq('id',payoutId).maybeSingle();
       if(error)throw error;if(!data||data.status!=='APPROVED')fail(404,'Approved payout destination not found.');
       if(!data.accountnumberciphertext)fail(409,'This legacy payout has no encrypted destination. Ask the cleaner to submit updated payout details.');
@@ -760,7 +762,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       return {accountName:data.accountname,accountNumber:await decryptPayoutAccount(data.accountnumberciphertext),last4:data.accountnumberlast4};
     }
     case 'settlePayoutRequest': {
-      const actor=authed();requireRecentAdminAuth(request); await requireAdmin(actor,'finance.write');
+      const actor=authed();await requireAdmin(actor,'finance.write'); await requireRecentAdminAuth(actor);
       const decision=text(input.decision,20).toUpperCase();
       const {error}=decision==='APPROVED'
         ?await admin.rpc('approve_cleaner_payout',{p_payout_id:input.payoutRequestId,p_actor_id:actor})
@@ -1068,13 +1070,13 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     }
     case 'adminMutation': {
       const actor=authed(); const action=text(input.action,80); const key=requireKey(input.idempotencyKey); const reason=text(input.reason,500); const targetId=text(input.targetId,120);
-      requireRecentAdminAuth(request);
       const supportedActions=new Set(['update_kill_switch','deactivate_cleaner','suspend_cleaner','change_account_state','resolve_case','assign_support_case','reschedule_booking','reassign_booking','assign_cleaner','cancel_booking','request_refund','record_refund_update','full_refund','partial_refund']);
       if(!supportedActions.has(action))fail(400,`Admin action "${action}" is not supported.`);
       const {data:alreadyApplied}=await admin.from('adminauditevents').select('id,action,targetid').eq('id',key).maybeSingle();
       if(alreadyApplied){if(alreadyApplied.action!==action||alreadyApplied.targetid!==(targetId||null))fail(409,'This idempotency key was already used for a different admin action.');return {ok:true,auditId:key};}
       const permission = action.includes('refund') ? 'finance.write' : action.includes('booking') || action.includes('reschedule') || action.includes('assign') ? 'bookings.manage' : action.includes('cleaner') || action.includes('account') ? 'users.manage' : action.includes('support') || action.includes('case') ? 'support.manage' : undefined;
       await requireAdmin(actor,permission,action==='update_kill_switch');
+      await requireRecentAdminAuth(actor);
       if(reason.length<4)fail(400,'A meaningful reason is required.');
       if(!targetId && action!=='update_kill_switch')fail(400,'Select a specific record before applying this action.');
       const now=new Date().toISOString();
@@ -1222,7 +1224,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       return {admins,invites:(invites??[]).map(i=>({id:i.id,email:i.email,status:i.status,permissions:i.permissions,createdAt:i.createdat,expiresAt:i.expiresat}))};
     }
     case 'createAdminInvite': {
-      const actor=authed(); const actorRole=await requireAdmin(actor,'admins.manage'); requireRecentAdminAuth(request);
+      const actor=authed(); const actorRole=await requireAdmin(actor,'admins.manage'); await requireRecentAdminAuth(actor);
       const email=text(input.email,254).toLowerCase();const permissions=Array.isArray(input.permissions)?input.permissions.filter((p:unknown)=>typeof p==='string'&&['marketing.read','marketing.send','finance.read','finance.write','bookings.manage','users.manage','support.manage','audit.read','admins.manage'].includes(p)):[];
       if(!email.includes('@'))fail(400,'Enter a valid email address.');
       if(actorRole.elevated!==true&&permissions.some((permission:string)=>!(actorRole.permissions??[]).includes(permission)))fail(403,'You cannot grant permissions you do not hold.');
