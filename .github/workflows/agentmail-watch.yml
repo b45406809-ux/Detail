@@ -1,0 +1,46 @@
+name: Check AgentMail inbox
+on:
+  push:
+    branches: [codex/separate-dashboard-into-routed-modules-fl7jlh]
+    paths: [.github/workflows/agentmail-watch.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Wait for first inbox message
+        env:
+          AGENTMAIL_API_KEY: ${{ secrets.AGENTMAIL_API_KEY }}
+        run: |
+          node <<'NODE'
+          const inbox = 'pixel-studio-f7f3df@agentmail.to';
+          const key = process.env.AGENTMAIL_API_KEY;
+          if (!key) throw new Error('AGENTMAIL_API_KEY is not available to this workflow.');
+          const endpoint = `https://api.agentmail.to/v0/inboxes/${encodeURIComponent(inbox)}/messages`;
+          async function get(url) {
+            const response = await fetch(url, {headers: {authorization: `Bearer ${key}`}, signal: AbortSignal.timeout(20000)});
+            if (!response.ok) throw new Error(`AgentMail returned HTTP ${response.status}.`);
+            return response.json();
+          }
+          (async () => {
+            for (let i = 0; i < 40; i++) {
+              const result = await get(`${endpoint}?ascending=true&limit=1`);
+              const first = result.messages?.[0];
+              if (first) {
+                const message = await get(`${endpoint}/${encodeURIComponent(first.message_id)}`);
+                const clean = v => String(v ?? '').replace(/https?:\/\/\S+/gi, '[link removed]').replace(/\b\d{4,10}\b/g, '[number removed]').slice(0, 6000);
+                console.log('INBOX_MESSAGE_FROM:', clean(message.from));
+                console.log('INBOX_MESSAGE_SUBJECT:', clean(message.subject));
+                console.log('INBOX_MESSAGE_DATE:', clean(message.timestamp));
+                console.log('INBOX_MESSAGE_TEXT:', clean(message.extracted_text || message.text || message.snippet || '(No plain-text body available)'));
+                return;
+              }
+              console.log(`No message yet (check ${i + 1}/40).`);
+              await new Promise(resolve => setTimeout(resolve, 15000));
+            }
+            console.log('INBOX_WATCH_TIMEOUT: No message arrived within 10 minutes.');
+          })().catch(error => { console.error(error.message); process.exitCode = 1; });
+          NODE
