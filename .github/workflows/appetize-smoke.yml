@@ -1,0 +1,40 @@
+name: Appetize Android inspection
+on:
+  push:
+    branches: [codex/separate-dashboard-into-routed-modules-fl7jlh]
+    paths: [.github/workflows/appetize-smoke.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --global @appetize/cli@0.25.1 --no-audit --no-fund
+      - name: Inspect current uploaded build
+        run: |
+          set -euo pipefail
+          mkdir -p appetize-results
+          appetize build list --app com.detail.app --json --quiet > appetize-results/builds.json
+          target=$(jq -er '.builds[0].id' appetize-results/builds.json)
+          trap 'appetize session stop --json --quiet || true' EXIT
+          appetize session start pixel7 --target "$target" --json --quiet > appetize-results/session.json
+          appetize inspect appetize-results/launch.json --json --quiet
+          appetize screenshot appetize-results/launch.png --json --quiet
+          appetize tap --select-test-id welcome-skip --json --quiet
+          appetize inspect appetize-results/sign-in.json --select-text 'Welcome back' --timeout 15000 --json --quiet
+          appetize screenshot appetize-results/sign-in.png --json --quiet
+      - name: Save inspection evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appetize-inspection-${{ github.run_id }}
+          path: appetize-results/
+          if-no-files-found: ignore
+          retention-days: 7
