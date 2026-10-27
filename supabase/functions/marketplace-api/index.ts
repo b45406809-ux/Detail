@@ -348,7 +348,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const inputName = text(input.fullName, 120), phone = text(input.phone, 40), address = text(input.address, 250), area = text(input.serviceArea, 120);
       const categories = Array.isArray(input.serviceCategories) ? [...new Set(input.serviceCategories.filter((x: unknown) => x === 'HOUSE' || x === 'CAR'))] : [];
       const radius = Number(input.serviceRadiusKm ?? 15), experience = Number(input.experienceYears ?? 0);
-      if (inputName.length < 2 || phone.length < 7 || address.length < 5 || area.length < 2 || !categories.length || !Number.isFinite(radius) || !Number.isFinite(experience) || radius < 1 || radius > 100 || experience < 0 || experience > 60) fail(400, 'Complete all cleaner application fields with valid values.');
+      if (inputName.length < 2 || phone.length < 7 || address.length < 5 || (area.length > 0 && area.length < 2) || !categories.length || !Number.isFinite(radius) || !Number.isFinite(experience) || radius < 1 || radius > 100 || experience < 0 || experience > 60) fail(400, 'Complete all cleaner application fields with valid values.');
       const { error } = await admin.from('users').update({ displayname: inputName, phone, address, servicearea: area, servicecategories: categories, serviceradiuskm: radius, experienceyears: experience, cleaneronboardingcomplete: true, updatedat: new Date().toISOString() }).eq('id', actor);
       if (error) throw error;
       return { ok: true };
