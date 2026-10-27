@@ -11,66 +11,46 @@ export function AdminEntry() {
 
 function AdminSignIn() {
   const [user, setUser] = useState<User | null>();
-  const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
   useEffect(() => {
     void supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
     return () => subscription.unsubscribe();
   }, []);
-  if (user === undefined) return <main className="admin-login"><p>Checking secure session…</p></main>;
-  if (user) return <AdminMfaGate user={user}/>;
-  const login = async (operation: () => Promise<unknown>) => { setBusy(true); setError(''); try { await operation(); } catch (error) { setError((error as Error).message); } finally { setBusy(false); } };
-  return <main className="admin-login"><form onSubmit={event => { event.preventDefault(); login(async () => { const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password }); if (error) throw error; }); }}><a className="admin-wordmark" href="/">DETAIL.</a><p>SECURE OPERATIONS</p><h1>Admin sign in</h1><label>Email<input type="email" required autoComplete="username" value={email} onChange={event => setEmail(event.target.value)}/></label><label>Password<input type="password" required autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)}/></label>{error && <div className="inline-error" role="alert">{error}</div>}<button className="login-primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button><button type="button" disabled={busy} onClick={() => login(async () => { const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${location.origin}/admin` } }); if (error) throw error; })}>Continue with Google</button><small>Authentication alone does not grant access. An administrator role assigned by Detail is required.</small></form></main>;
-}
 
-function AdminMfaGate({user}:{user:User}){
-  const [stage,setStage]=useState<'checking'|'enroll'|'verify'|'ready'|'error'>('checking');
-  const [factorId,setFactorId]=useState('');const [qr,setQr]=useState('');const [secret,setSecret]=useState('');
-  const [code,setCode]=useState('');const [error,setError]=useState('');const [busy,setBusy]=useState(false);
-  const [retryNonce,setRetryNonce]=useState(0);
-  useEffect(()=>{
-    let active=true;
-    let checking=false;
-    const checkAssurance=async(checkRole:boolean)=>{
-      if(checking)return;checking=true;
-      try{
-        if(checkRole){const {data:role}=await supabase.from('adminroles').select('userid').eq('userid',user.id).maybeSingle();if(!role)throw new Error('Your account does not have a verified administrator role.');}
-        const {data:assurance,error:assuranceError}=await supabase.auth.mfa.getAuthenticatorAssuranceLevel();if(assuranceError)throw assuranceError;
-        const {data:factors,error:factorsError}=await supabase.auth.mfa.listFactors();if(factorsError)throw factorsError;
-        const factor=factors.totp.find(item=>item.status==='verified');
-        if(assurance.currentLevel==='aal2'){if(active){if(factor)setFactorId(factor.id);setStage('ready');}return;}
-        if(factor){if(active){setFactorId(factor.id);setCode('');setStage('verify');}return;}
-        // Supabase does not expose the seed again after an interrupted setup.
-        // Remove stale unverified factors and create a fresh QR code instead
-        // of rendering undefined credentials or bypassing the second factor.
-        for(const stale of factors.totp.filter(item=>item.status!=='verified')){
-          const {error:removeError}=await supabase.auth.mfa.unenroll({factorId:stale.id});
-          if(removeError)throw removeError;
-        }
-        const {data:newFactor,error:enrollError}=await supabase.auth.mfa.enroll({factorType:'totp',friendlyName:'Detail Admin Authenticator'});if(enrollError)throw enrollError;
-        if(active){setFactorId(newFactor.id);setQr(newFactor.totp.qr_code);setSecret(newFactor.totp.secret);setStage('enroll');}
-      }catch(e){if(active){setError((e as Error).message);setStage('error');}}
-      finally{checking=false;}
-    };
-    void checkAssurance(true);
-    const {data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{
-      if(session?.user.id!==user.id)return;
-      if(event==='TOKEN_REFRESHED'||event==='USER_UPDATED'||event==='SIGNED_IN')setTimeout(()=>void checkAssurance(false),0);
-    });
-    const onFocus=()=>{if(document.visibilityState==='visible')void checkAssurance(false);};
-    window.addEventListener('focus',onFocus);
-    document.addEventListener('visibilitychange',onFocus);
-    return()=>{active=false;subscription.unsubscribe();window.removeEventListener('focus',onFocus);document.removeEventListener('visibilitychange',onFocus);};
-  },[user.id,retryNonce]);
-  const verify=async()=>{
-    setBusy(true);setError('');try{
-      const challenge=await supabase.auth.mfa.challenge({factorId});if(challenge.error)throw challenge.error;
-      const result=await supabase.auth.mfa.verify({factorId,challengeId:challenge.data.id,code:code.trim()});if(result.error)throw result.error;
-      const assurance=await supabase.auth.mfa.getAuthenticatorAssuranceLevel();if(assurance.data?.currentLevel!=='aal2')throw new Error('Authenticator verification did not reach the required security level.');
-      setStage('ready');
-    }catch(e){setError((e as Error).message);}finally{setBusy(false);}
+  if (user === undefined) return <main className="admin-login"><p>Checking secure session…</p></main>;
+  // Administrator authorization and permissions are enforced by the API after
+  // authentication. Admins no longer need to enroll or verify TOTP factors.
+  if (user) return <AdminDashboard/>;
+
+  const login = async (operation: () => Promise<unknown>) => {
+    setBusy(true);
+    setError('');
+    try { await operation(); }
+    catch (error) { setError((error as Error).message); }
+    finally { setBusy(false); }
   };
-  if(stage==='ready')return <AdminDashboard/>;
-  if(stage==='checking')return <main className="admin-login"><p>Checking administrator security…</p></main>;
-  return <main className="admin-login"><section><a className="admin-wordmark" href="/">DETAIL.</a><p>SECURE OPERATIONS</p><h1>{stage==='verify'?'Verify your sign-in':stage==='error'?'Could not verify administrator security':'Set up admin authentication'}</h1><p>Detail admin accounts require an authenticator code before accessing operations and finance tools.</p>{stage==='enroll'&&<><p>Scan this QR code in an authenticator app, then enter the six-digit code.</p>{qr&&<img alt="Authenticator setup QR code" src={qr} style={{width:220,height:220,background:'white',padding:12,borderRadius:12}}/>}{secret&&<small>Setup key: {secret}</small>}</>}{stage!=='error'&&<><label>Authenticator code<input inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,'').slice(0,6))}/></label><button className="login-primary" disabled={busy||code.length!==6} onClick={()=>void verify()}>{busy?'Verifying…':'Verify authenticator'}</button></>}{error&&<div className="inline-error" role="alert">{error}</div>}{stage==='error'&&<button onClick={()=>{setStage('checking');setError('');setRetryNonce(value=>value+1);}}>Retry security check</button>}<button onClick={()=>void supabase.auth.signOut()}>Sign out</button></section></main>;
+
+  return <main className="admin-login"><form onSubmit={event => {
+    event.preventDefault();
+    login(async () => {
+      const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+      if (error) throw error;
+    });
+  }}>
+    <a className="admin-wordmark" href="/">DETAIL.</a><p>SECURE OPERATIONS</p><h1>Admin sign in</h1>
+    <label>Email<input type="email" required autoComplete="username" value={email} onChange={event => setEmail(event.target.value)}/></label>
+    <label>Password<input type="password" required autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)}/></label>
+    {error && <div className="inline-error" role="alert">{error}</div>}
+    <button className="login-primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+    <button type="button" disabled={busy} onClick={() => login(async () => {
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${location.origin}/admin` } });
+      if (error) throw error;
+    })}>Continue with Google</button>
+    <small>Authentication alone does not grant access. An administrator role assigned by Detail is required.</small>
+  </form></main>;
 }
