@@ -1,0 +1,58 @@
+name: Dashboard and marketing Playwright smoke
+
+on:
+  push:
+    branches:
+      - codex/separate-dashboard-into-routed-modules-fl7jlh
+    paths:
+      - '.github/workflows/dashboard-playwright.yml'
+      - 'site/src/**'
+      - 'site/scripts/live_dashboard_smoke.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      E2E_ADMIN_EMAIL: ${{ secrets.INITIAL_ADMIN_EMAIL }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.INITIAL_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Validate live administrator credentials
+        run: |
+          set -euo pipefail
+          test -n "$E2E_ADMIN_EMAIL"
+          test -n "$E2E_ADMIN_PASSWORD"
+
+      - name: Install site dependencies and Playwright
+        run: |
+          npm ci --prefix site --no-audit --no-fund
+          npm install --prefix site --no-save --package-lock=false --no-audit --no-fund playwright
+
+      - name: Install Chromium
+        working-directory: site
+        run: npx playwright install --with-deps chromium
+
+      - name: Test production marketing and admin screens
+        working-directory: site
+        run: node scripts/live_dashboard_smoke.mjs
+
+      - name: Upload failure screenshot
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-playwright-failure-${{ github.run_id }}
+          path: site/test-results/dashboard-failure.png
+          if-no-files-found: ignore
+          retention-days: 7
