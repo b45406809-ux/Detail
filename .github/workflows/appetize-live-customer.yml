@@ -58,6 +58,13 @@ jobs:
           appetize tap --select-text '/^Continue to App$/i' --timeout 10000 --json --quiet
           appetize inspect appetize-results/home.json --select-text '/^Request Cleaning$/i' --timeout 25000 --json --quiet
           appetize screenshot appetize-results/home.png --json --quiet
+          appetize tap --select-text '/^Request Cleaning$/i' --json --quiet
+          appetize inspect --select-text 'What do you need cleaned?' --timeout 15000 --json --quiet
+          appetize tap --select-text 'House Cleaning' --json --quiet
+          appetize tap --select-text '/^Next$/i' --json --quiet
+          appetize inspect --select-text 'Specific Room / Part' --timeout 15000 --json --quiet
+          appetize screenshot appetize-results/service-selection.png --json --quiet
+          echo 'LIVE_CUSTOMER_SERVICE_SELECTION_REACHED'
       - name: Clean up disposable accounts
         if: always()
         run: node scripts/live_mobile_ui_e2e.mjs cleanup
