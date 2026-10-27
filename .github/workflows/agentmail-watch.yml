@@ -34,7 +34,7 @@ jobs:
           (async () => {
             const attempts = Math.max(1, Math.min(40, Number.parseInt(process.env.WATCH_ATTEMPTS, 10) || 1));
             for (let i = 0; i < attempts; i++) {
-              const result = await get(`${endpoint}?ascending=true&limit=1&labels=received`);
+              const result = await get(`${endpoint}?ascending=false&limit=1&labels=received`);
               const first = result.messages?.[0];
               if (first) {
                 const message = await get(`${endpoint}/${encodeURIComponent(first.message_id)}`);
