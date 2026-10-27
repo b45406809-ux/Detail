@@ -87,6 +87,19 @@ jobs:
           appetize open 'detail:///help' --json --quiet
           appetize inspect --select-text 'Help & Support' --timeout 12000 --json --quiet
           echo 'LIVE_CUSTOMER_ACCOUNT_ROUTES_RENDERED'
+          appetize open 'detail:///support' --json --quiet
+          appetize inspect --select-text 'Support requests' --timeout 12000 --json --quiet
+          appetize open 'detail:///organization' --json --quiet
+          appetize inspect --select-text 'Organization' --timeout 12000 --json --quiet
+          appetize open 'detail:///account/email' --json --quiet
+          appetize inspect --select-text 'Email address' --timeout 12000 --json --quiet
+          appetize open 'detail:///portfolio' --json --quiet
+          appetize inspect --select-text 'My portfolio' --timeout 12000 --json --quiet
+          appetize open 'detail:///instant-offers' --json --quiet
+          appetize inspect --select-text 'Instant offers' --timeout 12000 --json --quiet
+          appetize open 'detail:///privacy-policy' --json --quiet
+          appetize inspect --select-text 'Privacy Policy' --timeout 12000 --json --quiet
+          echo 'LIVE_CUSTOMER_ADDITIONAL_ROUTES_RENDERED'
       - name: Clean up disposable accounts
         if: always()
         run: node scripts/live_mobile_ui_e2e.mjs cleanup
