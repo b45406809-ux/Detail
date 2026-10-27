@@ -38,6 +38,7 @@ jobs:
               const first = result.messages?.[0];
               if (first) {
                 const message = await get(`${endpoint}/${encodeURIComponent(first.message_id)}`);
+                console.log('MESSAGE_FIELDS:', JSON.stringify(Object.fromEntries(['text','html','extracted_text','extracted_html','preview'].map(k => [k, typeof message[k] === 'string' ? message[k].length : null]))));
                 const clean = v => String(v ?? '').replace(/https?:\/\/\S+/gi, '[link removed]').replace(/\b\d{4,10}\b/g, '[number removed]').slice(0, 6000);
                 console.log('INBOX_MESSAGE_FROM:', clean(message.from));
                 console.log('INBOX_MESSAGE_SUBJECT:', clean(message.subject));
