@@ -30,6 +30,11 @@ jobs:
           appetize tap --select-test-id welcome-skip --json --quiet
           appetize inspect appetize-results/sign-in.json --select-text 'Welcome back' --timeout 15000 --json --quiet
           appetize screenshot appetize-results/sign-in.png --json --quiet
+          appetize tap --select-test-id auth-account-mode-toggle --json --quiet
+          appetize inspect appetize-results/create-account.json --select-text 'Join Detail' --timeout 15000 --json --quiet
+          appetize inspect appetize-results/email.json --select-test-id auth-email-input --timeout 10000 --json --quiet
+          appetize inspect appetize-results/password.json --select-test-id auth-password-input --timeout 10000 --json --quiet
+          appetize screenshot appetize-results/create-account.png --json --quiet
       - name: Save inspection evidence
         if: always()
         uses: actions/upload-artifact@v4
