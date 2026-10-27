@@ -48,7 +48,7 @@ jobs:
           appetize type "$password" --json --quiet
           appetize press back --json --quiet
           appetize tap --select-test-id auth-email-submit --json --quiet
-          appetize tap --select-text 'I Agree' --timeout 10000 --json --quiet
+          appetize tap --select-text '/^I Agree$/i' --timeout 10000 --json --quiet
           appetize inspect --select-text 'Check your email' --timeout 25000 --json --quiet
           node scripts/agentmail_e2e.mjs code
           code=$(cat "$RUNNER_TEMP/detail-email-code")
