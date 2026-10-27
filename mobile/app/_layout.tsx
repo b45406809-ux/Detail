@@ -93,7 +93,7 @@ export default function RootLayout() {
   useEffect(() => {
     let active = true;
     const consumeAuthUrl = (url: string | null) => {
-      if (!url || !url.startsWith('detail://')) return;
+      if (!url || (!url.startsWith('detail://auth/callback') && !url.startsWith('detail://reset-password'))) return;
       void handleAuthCallback(url).catch(error => {
         console.warn('Could not complete the authentication link:', error instanceof Error ? error.message : 'unknown error');
         Alert.alert('Link could not be completed', 'This sign-in or recovery link may have expired or already been used. Return to Detail and request a new code or recovery link.');

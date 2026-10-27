@@ -141,7 +141,20 @@ export function authErrorMessage(error: unknown, fallback = 'Authentication fail
 }
 
 /** Exchanges Supabase recovery links whether the app is cold-started or already open. */
-export async function handleAuthCallback(url: string) {
+let lastAuthCallbackUrl = '';
+let lastAuthCallback: Promise<void> | undefined;
+export function handleAuthCallback(url: string): Promise<void> {
+  if (lastAuthCallbackUrl === url && lastAuthCallback) return lastAuthCallback;
+  lastAuthCallbackUrl = url;
+  lastAuthCallback = processAuthCallback(url).catch(error => {
+    lastAuthCallbackUrl = '';
+    lastAuthCallback = undefined;
+    throw error;
+  });
+  return lastAuthCallback;
+}
+
+async function processAuthCallback(url: string) {
   const parsed = new URL(url);
   const query = parsed.searchParams;
   const hash = new URLSearchParams(parsed.hash.replace(/^#/, ''));

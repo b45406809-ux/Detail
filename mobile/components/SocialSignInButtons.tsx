@@ -1,12 +1,10 @@
-// Google and Apple ID token sign-in for Supabase Auth.
+// Social sign-in for Supabase Auth.
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Platform, Alert } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import * as AuthSession from 'expo-auth-session';
-import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
-import { supabase } from '../services/supabase';
+import { handleAuthCallback, supabase } from '../services/supabase';
 import { IS_MOCK } from '../utils/env';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -82,52 +80,21 @@ export function SocialSignInButtons() {
 }
 
 function GoogleSignInButton() {
-  const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-  const androidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
-  const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
-  const configured = Platform.OS === 'android' ? !!androidClientId
-    : Platform.OS === 'ios' ? !!iosClientId
-    : !!webClientId;
-
-  // Mount the provider hook only when its platform-specific client ID exists.
-  // expo-auth-session validates that ID during render, before a button press.
-  if (!configured) {
-    return (
-      <View className="gap-2">
-        <View testID="google-sign-in-unconfigured" accessibilityRole="text" className="w-full bg-ink/[0.03] flex-row items-center justify-center gap-3 py-4 rounded-[24px] border border-ink/10">
-          <GoogleLogo size={18} />
-          <Text className="font-display font-black text-sm text-ink/50">Google sign-in unavailable</Text>
-        </View>
-        <Text className="font-sans text-xs text-center text-ink/40">Use email or SMS while Google sign-in is being configured.</Text>
-      </View>
-    );
-  }
-  return <ConfiguredGoogleSignInButton webClientId={webClientId} androidClientId={androidClientId} iosClientId={iosClientId} />;
-}
-
-function ConfiguredGoogleSignInButton({ webClientId, androidClientId, iosClientId }: {
-  webClientId?: string;
-  androidClientId?: string;
-  iosClientId?: string;
-}) {
   const [isLoading, setIsLoading] = useState(false);
-  const [, , promptGoogleSignIn] = Google.useAuthRequest({
-    webClientId,
-    androidClientId,
-    iosClientId,
-    redirectUri: AuthSession.makeRedirectUri({ scheme: 'detail' }),
-  });
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
-      const result = await promptGoogleSignIn();
-      if (result.type !== 'success') return;
-      const idToken = result.authentication?.idToken ?? result.params?.id_token;
-      if (!idToken) throw new Error('No ID token returned from Google.');
-      const { data, error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: idToken });
+      const redirectTo = 'detail://auth/callback';
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo, skipBrowserRedirect: true },
+      });
       if (error) throw error;
-      await ensureProfileExists(data.user.id, data.user.email ?? null);
+      if (!data.url) throw new Error('Google sign-in could not be started.');
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      if (result.type !== 'success') return;
+      await handleAuthCallback(result.url);
     } catch (err: any) {
       Alert.alert('Google Sign-In Failed', err.message || 'Please try again.');
     } finally {
