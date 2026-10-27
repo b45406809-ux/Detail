@@ -1,0 +1,55 @@
+name: Apply Supabase email code templates
+on:
+  push:
+    branches: [codex/separate-dashboard-into-routed-modules-fl7jlh]
+    paths: [.github/workflows/deploy-auth-email-templates.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Back up and apply the two email templates
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const token = process.env.SUPABASE_ACCESS_TOKEN;
+          if (!token) throw new Error('Missing SUPABASE_ACCESS_TOKEN.');
+          const url = 'https://api.supabase.com/v1/projects/yiyhmueospjwbaywzusp/config/auth';
+          const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+          async function request(method, body) {
+            const response = await fetch(url, { method, headers, body: body && JSON.stringify(body), signal: AbortSignal.timeout(30000) });
+            if (!response.ok) throw new Error(`Supabase Management API ${method} failed (HTTP ${response.status}).`);
+            return response.json();
+          }
+          (async () => {
+            const keys = ['mailer_templates_confirmation_content', 'mailer_templates_magic_link_content'];
+            const before = await request('GET');
+            fs.writeFileSync(`${process.env.RUNNER_TEMP}/prior-auth-email-templates.json`, JSON.stringify(Object.fromEntries(keys.map(k => [k, before[k]])), null, 2));
+            const desired = {
+              mailer_templates_confirmation_content: fs.readFileSync('supabase/templates/confirmation.html', 'utf8'),
+              mailer_templates_magic_link_content: fs.readFileSync('supabase/templates/magic_link.html', 'utf8'),
+            };
+            await request('PATCH', desired);
+            const after = await request('GET');
+            if (keys.some(key => after[key] !== desired[key])) throw new Error('Template verification failed after update.');
+            console.log('AUTH_EMAIL_TEMPLATES_APPLIED_AND_VERIFIED');
+          })().catch(error => { console.error(error.message); process.exitCode = 1; });
+          NODE
+      - name: Save prior templates for rollback
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prior-auth-email-templates-${{ github.run_id }}
+          path: ${{ runner.temp }}/prior-auth-email-templates.json
+          if-no-files-found: ignore
+          retention-days: 30
