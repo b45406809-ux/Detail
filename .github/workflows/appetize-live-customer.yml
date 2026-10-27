@@ -44,6 +44,20 @@ jobs:
           appetize tap --select-test-id auth-email-submit --json --quiet
           appetize inspect appetize-results/agreement.json --select-text 'Customer Agreement' --timeout 25000 --json --quiet
           appetize screenshot appetize-results/agreement.png --json --quiet
+          for attempt in $(seq 1 12); do
+            if appetize inspect --select-text 'I have read and accept' --timeout 500 --json --quiet >/dev/null 2>&1; then break; fi
+            appetize swipe --direction up --json --quiet
+          done
+          appetize tap --select-text 'I have read and accept' --timeout 10000 --json --quiet
+          appetize inspect --select-text 'Set up your profile' --timeout 20000 --json --quiet
+          appetize tap --select-text 'Your full name' --timeout 10000 --json --quiet
+          appetize type 'E2E Live Customer' --json --quiet
+          appetize press back --json --quiet
+          appetize tap --select-text 'Continue' --timeout 10000 --json --quiet
+          appetize inspect --select-text 'Allow permissions' --timeout 20000 --json --quiet
+          appetize tap --select-text 'Continue to App' --timeout 10000 --json --quiet
+          appetize inspect appetize-results/home.json --select-text 'Request Cleaning' --timeout 25000 --json --quiet
+          appetize screenshot appetize-results/home.png --json --quiet
       - name: Clean up disposable accounts
         if: always()
         run: node scripts/live_mobile_ui_e2e.mjs cleanup
