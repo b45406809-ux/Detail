@@ -261,10 +261,10 @@ export default function HomeScreen() {
           <Mapbox.Camera
             ref={mapRef}
             centerCoordinate={[region.longitude, region.latitude]}
-            zoomLevel={currentLocation ? 14 : 10}
+            zoomLevel={currentLocation ? 15 : 10}
             defaultSettings={{
               centerCoordinate: [region.longitude, region.latitude],
-              zoomLevel: currentLocation ? 14 : 10,
+              zoomLevel: currentLocation ? 15 : 10,
             }}
           />
           <Mapbox.UserLocation visible />
@@ -320,13 +320,25 @@ export default function HomeScreen() {
             right: 20,
             top: Math.max(insets.top, Platform.OS === 'ios' ? 48 : 24) + 70,
           }}
-          onPress={() => {
-            if (currentLocation) {
-              mapRef.current?.setCamera({
-                centerCoordinate: [currentLocation.lng, currentLocation.lat],
-                zoomLevel: 14,
-                animationDuration: 400,
-              });
+          onPress={async () => {
+            try {
+              let location = currentLocation;
+              if (!location) {
+                const permission = await Location.requestForegroundPermissionsAsync();
+                if (!permission.granted) {
+                  Alert.alert('Location permission needed', 'Allow location access in your device settings to show your position on the map.');
+                  return;
+                }
+                const position = await Promise.race([
+                  Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+                  new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Location timed out')), 15000)),
+                ]);
+                location = { lat: position.coords.latitude, lng: position.coords.longitude };
+                setCurrentLocation(location);
+              }
+              mapRef.current?.setCamera({ centerCoordinate: [location.lng, location.lat], zoomLevel: 15, animationDuration: 400 });
+            } catch {
+              Alert.alert('Location unavailable', 'Check that location services are enabled and try again. Emulators may need a simulated location.');
             }
           }}
         >
