@@ -1,8 +1,5 @@
 name: Deploy marketplace function from tested branch
 on:
-  push:
-    branches: [codex/separate-dashboard-into-routed-modules-fl7jlh]
-    paths: [.github/workflows/deploy-marketplace-function.yml]
   workflow_dispatch:
 permissions:
   contents: read
