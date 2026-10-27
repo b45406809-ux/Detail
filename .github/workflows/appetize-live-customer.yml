@@ -1,0 +1,57 @@
+name: Appetize live customer journey
+on:
+  push:
+    branches: [codex/separate-dashboard-into-routed-modules-fl7jlh]
+    paths: [.github/workflows/appetize-live-customer.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  customer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check live booking gate
+        run: node scripts/live_mobile_ui_e2e.mjs preflight
+      - name: Create confirmed disposable accounts
+        run: node scripts/live_mobile_ui_e2e.mjs create
+      - run: npm install --global @appetize/cli@0.25.1 --no-audit --no-fund
+      - name: Sign in through Android UI
+        run: |
+          set -euo pipefail
+          mkdir -p appetize-results
+          target=$(appetize build list --app com.detail.app --json --quiet | jq -er '.builds[0].id')
+          trap 'appetize session stop --json --quiet || true' EXIT
+          appetize session start pixel7 --target "$target" --json --quiet >/dev/null
+          appetize inspect --select-test-id welcome-skip --timeout 25000 --json --quiet
+          appetize tap --select-test-id welcome-skip --json --quiet
+          appetize inspect --select-test-id auth-email-tab --timeout 15000 --json --quiet
+          appetize tap --select-test-id auth-email-tab --json --quiet
+          appetize tap --select-test-id auth-email-mode-password --json --quiet
+          appetize tap --select-test-id auth-email-input --json --quiet
+          appetize type "$E2E_CUSTOMER_EMAIL" --json --quiet
+          appetize tap --select-test-id auth-password-input --json --quiet
+          appetize type "$E2E_CUSTOMER_PASSWORD" --json --quiet
+          appetize press back --json --quiet
+          appetize tap --select-test-id auth-email-submit --json --quiet
+          appetize inspect appetize-results/agreement.json --select-text 'Customer Agreement' --timeout 25000 --json --quiet
+          appetize screenshot appetize-results/agreement.png --json --quiet
+      - name: Clean up disposable accounts
+        if: always()
+        run: node scripts/live_mobile_ui_e2e.mjs cleanup
+      - name: Save test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appetize-live-customer-${{ github.run_id }}
+          path: appetize-results/
+          if-no-files-found: ignore
+          retention-days: 7
