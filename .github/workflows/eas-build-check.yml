@@ -1,0 +1,24 @@
+name: Find latest EAS Android build
+on:
+  push:
+    branches: [codex/separate-dashboard-into-routed-modules-fl7jlh]
+    paths: [.github/workflows/eas-build-check.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Inspect recent EAS build metadata
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN || secrets.EAS_BOT_ACCESS_TOKEN || secrets.EXPO_EAS_BOT_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx eas-cli@latest build:list --platform android --limit 10 --non-interactive --json > "$RUNNER_TEMP/eas-build-list.json"
+          node -e 'const d=require(process.env.RUNNER_TEMP+"/eas-build-list.json");for(const b of d) console.log(JSON.stringify({id:b.id,status:b.status,commit:b.gitCommitHash,profile:b.buildProfile,created:b.createdAt,hasArtifact:!!(b.artifacts?.buildUrl||b.artifacts?.applicationArchiveUrl)}))'
