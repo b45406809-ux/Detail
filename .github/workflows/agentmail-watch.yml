@@ -42,7 +42,7 @@ jobs:
                 console.log('INBOX_MESSAGE_FROM:', clean(message.from));
                 console.log('INBOX_MESSAGE_SUBJECT:', clean(message.subject));
                 console.log('INBOX_MESSAGE_DATE:', clean(message.timestamp));
-                console.log('INBOX_MESSAGE_TEXT:', clean(message.extracted_text || message.text || String(message.html || '').replace(/<[^>]*>/g, ' ') || message.snippet || '(No message body available)'));
+                console.log('INBOX_MESSAGE_TEXT:', clean(String(message.html || '').replace(/<[^>]*>/g, ' ') || message.text || message.extracted_text || message.snippet || '(No message body available)'));
                 return;
               }
               console.log(`No message yet (check ${i + 1}/${attempts}).`);
