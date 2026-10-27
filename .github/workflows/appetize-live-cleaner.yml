@@ -14,6 +14,7 @@ jobs:
       APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE }}
+      SUPABASE_PUBLIC_ANON: ${{ secrets.SUPABASE_PUBLIC_ANON || secrets.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_ANON_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,6 +24,28 @@ jobs:
         run: node scripts/live_mobile_ui_e2e.mjs preflight
       - name: Create confirmed disposable accounts
         run: node scripts/live_mobile_ui_e2e.mjs create
+      - name: Verify live backend rejects unverified cleaner actions
+        run: |
+          node <<'NODE'
+          (async () => {
+            const base = process.env.SUPABASE_URL.replace(/\/$/, '');
+            const key = process.env.SUPABASE_PUBLIC_ANON;
+            if (!key) throw new Error('Missing Supabase public key.');
+            const headers = { apikey: key, 'content-type': 'application/json' };
+            const auth = await fetch(`${base}/auth/v1/token?grant_type=password`, { method:'POST', headers, body:JSON.stringify({email:process.env.E2E_CLEANER_EMAIL,password:process.env.E2E_CLEANER_PASSWORD}) });
+            if (!auth.ok) throw new Error(`Test account authentication failed: HTTP ${auth.status}`);
+            const session = await auth.json();
+            if (!session.access_token) throw new Error('Authentication returned no token.');
+            for (const [name,data] of [
+              ['submitCleanerApplication',{fullName:'E2E Cleaner',phone:'0712345678',address:'Test address Harare',serviceArea:'Harare',serviceCategories:['HOUSE'],serviceRadiusKm:15,experienceYears:0}],
+              ['setActiveRole',{role:'CLEANER'}],
+            ]) {
+              const response = await fetch(`${base}/functions/v1/marketplace-api`, { method:'POST', headers:{...headers,authorization:`Bearer ${session.access_token}`}, body:JSON.stringify({name,data}) });
+              if (response.status !== 409) throw new Error(`${name}: expected HTTP 409, received HTTP ${response.status}`);
+              console.log(`UNVERIFIED_CLEANER_BLOCKED: ${name}`);
+            }
+          })().catch(error => {console.error(error.message);process.exitCode=1});
+          NODE
       - run: npm install --global @appetize/cli@0.25.1 --no-audit --no-fund
       - name: Sign in through Android UI
         run: |
