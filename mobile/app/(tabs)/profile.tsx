@@ -54,7 +54,7 @@ export default function ProfileScreen() {
     const permission = await Notifications.requestPermissionsAsync();
     if (!permission.granted) { Alert.alert('Allow notifications', 'Enable notifications in your device settings to receive booking and payment updates.'); return; }
     try {
-      if (!await registerCurrentPushDevice()) { Alert.alert('Notifications unavailable', 'This device could not register for push notifications right now.'); return; }
+      if (!await registerCurrentPushDevice()) { Alert.alert('Notifications unavailable', 'Push notifications require a supported physical device and working notification services. On an emulator they may be unavailable; check your device settings and try again.'); return; }
       setNotificationsOn(true);
     }
     catch { Alert.alert('Could not enable notifications', 'Please try again.'); }

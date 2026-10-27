@@ -139,7 +139,7 @@ export default function HelpScreen() {
         </View>
 
         {showTicket && <View className="mx-5 mb-6 rounded-3xl border border-slate-100 bg-white p-5 gap-3">
-          <Text className="font-display text-base font-black text-slate-900">Send Detail a message</Text>
+          <Text className="font-display text-base font-black text-slate-900">Send Detail a message</Text><Text className="font-sans text-sm text-slate-500">Your request goes to the Detail support team’s dashboard. You can follow it under View my support requests.</Text>
           <TextInput value={subject} onChangeText={setSubject} placeholder="What do you need help with?" maxLength={160} className="rounded-2xl border border-slate-200 px-4 py-3 font-sans text-sm" />
           <TextInput value={description} onChangeText={setDescription} placeholder="Describe the issue. Include a booking ID if relevant." maxLength={3000} multiline textAlignVertical="top" className="min-h-28 rounded-2xl border border-slate-200 px-4 py-3 font-sans text-sm" />
           <TouchableOpacity disabled={sending} onPress={async()=>{setSending(true);try{await callFunction('createSupportTicket',{subject,description});setSubject('');setDescription('');setShowTicket(false);Alert.alert('Message sent','Your support request has been sent to Detail.');}catch(error:any){Alert.alert('Could not send message',error.message||'Please try again.');}finally{setSending(false);}}} className="items-center rounded-2xl bg-accent py-4">{sending?<ActivityIndicator color="white"/>:<Text className="font-display font-black text-white">Send support request</Text>}</TouchableOpacity>

@@ -45,7 +45,6 @@ import {
   limit,
 } from '../../services/supabase';
 import { Job, JobStatus, Favorite } from '../../types';
-import { Logo } from '../../components/Logo';
 import { rankJobsByProximity } from '../../services/matching';
 import { GlassCard, GlassSheet, GlassIconButton, RoleToggle } from '../../components/glass';
 import { MapPlaceholder } from '../../components/MapPlaceholder';
@@ -122,13 +121,18 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-      .then(({ coords }) => {
-        const location = { lat: coords.latitude, lng: coords.longitude };
-        setCurrentLocation(location);
-      })
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let active = true;
+    let subscription: Location.LocationSubscription | undefined;
+    void (async () => {
+      const permission = await Location.getForegroundPermissionsAsync();
+      if (!permission.granted || !active) return;
+      subscription = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.Balanced, distanceInterval: 25, timeInterval: 10000 },
+        ({ coords }) => { if (active) setCurrentLocation({ lat: coords.latitude, lng: coords.longitude }); }
+      );
+      if (!active) subscription.remove();
+    })().catch(error => console.warn('[location] unable to watch location:', error));
+    return () => { active = false; subscription?.remove(); };
   }, [isCustomer]);
 
   useEffect(() => {
@@ -271,16 +275,12 @@ export default function HomeScreen() {
       <View
         className="absolute top-0 left-0 right-0"
         style={{
-          paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 48 : 24) + 6,
+          paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 48 : 24) + 16,
         }}
         pointerEvents="box-none"
       >
         <View className="flex-row items-center justify-between px-5" pointerEvents="box-none">
-          <GlassCard style={{ width: 44, height: 44, borderRadius: 16 }} noBlur={false}>
-            <View className="flex-1 items-center justify-center">
-              <Logo size={20} color="#3906D2" />
-            </View>
-          </GlassCard>
+          <View style={{ width: 44, height: 44 }} />
 
           <RoleToggle value={viewRole} onChange={handleRoleToggle} />
 
@@ -318,7 +318,7 @@ export default function HomeScreen() {
           style={{
             position: 'absolute',
             right: 20,
-            top: Math.max(insets.top, Platform.OS === 'ios' ? 48 : 24) + 60,
+            top: Math.max(insets.top, Platform.OS === 'ios' ? 48 : 24) + 70,
           }}
           onPress={() => {
             if (currentLocation) {

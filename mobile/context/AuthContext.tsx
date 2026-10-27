@@ -98,9 +98,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let unsubProfile: (() => void) | null = null;
+    let previousUserId: string | null | undefined;
 
     const unsubAuth = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
+      const nextUserId = firebaseUser?.uid ?? null;
+      if (previousUserId === nextUserId) return;
+      previousUserId = nextUserId;
       setProfile(null);
       setProfileError(null);
       setIsLoading(true);

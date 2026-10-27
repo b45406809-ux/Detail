@@ -36,6 +36,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { db, addDoc, collection, serverTimestamp, Timestamp } from '../../services/supabase';
 import { uploadJobPhoto } from '../../services/storage';
+import { Mapbox, IS_MAPBOX_AVAILABLE, MAPBOX_ACCESS_TOKEN } from '../../services/mapbox';
 import { JobStatus, ServiceCategory, HouseChecklist, CarChecklist } from '../../types';
 import * as Catalog from '../../constants/services';
 
@@ -93,6 +94,33 @@ export default function CreateBookingScreen() {
   const [address, setAddress] = useState('');
   const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(null);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
+  const [addressSuggestions, setAddressSuggestions] = useState<{ id: string; label: string; lat: number; lng: number }[]>([]);
+  useEffect(() => {
+    if (!MAPBOX_ACCESS_TOKEN || coordinates || address.trim().length < 3) { setAddressSuggestions([]); return; }
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address.trim())}.json?autocomplete=true&limit=5&access_token=${encodeURIComponent(MAPBOX_ACCESS_TOKEN)}`;
+      fetch(url, { signal: controller.signal }).then(response => {
+        if (!response.ok) throw new Error('Address search unavailable');
+        return response.json();
+      }).then(data => setAddressSuggestions((data.features ?? []).filter((item: any) => Array.isArray(item.center) && item.center.length >= 2).map((item: any) => ({ id: String(item.id), label: String(item.place_name), lng: Number(item.center[0]), lat: Number(item.center[1]) })).filter((item: any) => Number.isFinite(item.lat) && Number.isFinite(item.lng))))
+        .catch(error => { if (error?.name !== 'AbortError') setAddressSuggestions([]); });
+    }, 400);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [address, coordinates]);
+
+  const selectMapLocation = async (longitude: number, latitude: number) => {
+    if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return;
+    setCoordinates({ lat: latitude, lng: longitude });
+    setAddressSuggestions([]);
+    setAddress(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+    try {
+      const [place] = await Location.reverseGeocodeAsync({ latitude, longitude });
+      const label = place && [place.streetNumber, place.street, place.city, place.region].filter(Boolean).join(', ');
+      if (label) setAddress(label);
+    } catch { /* Coordinates remain valid even without a street address. */ }
+  };
 
   const [timePreference, setTimePreference] = useState<(typeof Catalog.TIME_OPTIONS)[number]['id']>('ASAP');
   const [customDateTime, setCustomDateTime] = useState<Date | null>(null);
@@ -123,14 +151,23 @@ export default function CreateBookingScreen() {
   const useCurrentLocation = async () => {
     setIsFetchingLocation(true);
     try {
-      const { coords } = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Location permission needed', 'Allow location access in your device settings, or enter the address manually.');
+        return;
+      }
+      const position = await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Location timed out')), 15000)),
+      ]);
+      const { coords } = position;
       setCoordinates({ lat: coords.latitude, lng: coords.longitude });
       const [place] = await Location.reverseGeocodeAsync({ latitude: coords.latitude, longitude: coords.longitude });
       if (place) {
         setAddress([place.streetNumber, place.street, place.city, place.region].filter(Boolean).join(', '));
       }
     } catch {
-      Alert.alert('Location Error', 'Could not fetch your current location.');
+      Alert.alert('Location unavailable', 'Check that location services are enabled and try again, or enter the address manually. Emulators may need a simulated location.');
     } finally {
       setIsFetchingLocation(false);
     }
@@ -141,6 +178,7 @@ export default function CreateBookingScreen() {
       Alert.alert('Limit reached', 'You can add up to 6 photos.');
       return;
     }
+    try {
     const permission = fromCamera
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -162,13 +200,20 @@ export default function CreateBookingScreen() {
     } finally {
       setIsUploadingPhoto(false);
     }
+    } catch {
+      Alert.alert('Photo unavailable', fromCamera ? 'The camera could not be opened. Check camera permissions or try the photo library.' : 'The photo library could not be opened. Check permissions and try again.');
+    }
   };
 
   const removePhoto = (url: string) => setPhotoUris((prev) => prev.filter((p) => p !== url));
 
   const goBack = () => {
-    if (stepIndex === 0) return router.back();
-    setStepIndex((i) => i - 1);
+    if (stepIndex === 0) {
+      if (router.canGoBack()) router.back();
+      else router.replace('/home');
+      return;
+    }
+    setStepIndex((i) => Math.max(0, i - 1));
   };
   const goNext = () => setStepIndex((i) => Math.min(i + 1, STEPS.length - 1));
 
@@ -343,6 +388,7 @@ export default function CreateBookingScreen() {
                 {id:'SCHEDULED' as const,title:'Schedule and compare quotes',copy:'Cleaners send a price for you to review.'},
                 ...(instantBookingEnabled?[{id:'INSTANT' as const,title:'Book now',copy:'Find an available nearby cleaner at the listed starting price.'}]:[]),
               ]).map(option=><TouchableOpacity key={option.id} onPress={()=>setBookingMode(option.id)} className={`p-4 rounded-2xl border-2 mb-2 ${bookingMode===option.id?'border-accent bg-accent/5':'border-ink/10 bg-white'}`}><Text className="font-display font-black text-ink">{option.title}</Text><Text className="font-sans text-xs text-ink/50 mt-1">{option.copy}</Text></TouchableOpacity>)}
+              <Text className="font-sans text-xs text-ink/50 mt-1">{bookingMode === 'SCHEDULED' ? 'Selected. Choose Next to describe the job and schedule it.' : 'Selected. Choose Next to describe the job.'}</Text>
               {!instantBookingEnabled&&<Text className="font-sans text-xs text-ink/50 mt-2">Book Now will open after service pricing and estimated cleaning times are finalized.</Text>}
             </View>
           )}
@@ -361,8 +407,9 @@ export default function CreateBookingScreen() {
               <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest mb-2">Special Instructions (Optional)</Text>
               <TouchableOpacity onPress={()=>setSuppliesRequired(value=>!value)} className="flex-row items-center gap-3 p-4 rounded-2xl border border-ink/10 bg-white mb-5">
                 <View className={`w-5 h-5 rounded border-2 items-center justify-center ${suppliesRequired?'bg-accent border-accent':'border-ink/30'}`}>{suppliesRequired&&<Text className="text-white text-xs font-black">✓</Text>}</View>
-                <View className="flex-1"><Text className="font-display font-black text-ink">Cleaner should bring supplies</Text><Text className="font-sans text-xs text-ink/50 mt-1">Adds ${suppliesFee.toFixed(2)} to the booking.</Text></View>
+                <View className="flex-1"><Text className="font-display font-black text-ink">Cleaner should bring supplies</Text></View>
               </TouchableOpacity>
+              <Text className="font-sans text-xs text-ink/60 mb-2">These notes are shared with the assigned cleaner after a booking is accepted.</Text>
               <TextInput
                 className="font-sans border-2 border-ink/10 rounded-2xl px-4 py-4 text-sm font-medium text-ink bg-ink/[0.02] mb-6"
                 placeholder="Gate code, pets, stains to focus on, parking instructions…"
@@ -457,6 +504,8 @@ export default function CreateBookingScreen() {
                 </View>
               </View>
 
+              {addressSuggestions.length > 0 && <View className="mb-4 rounded-2xl border border-ink/10 bg-white">{addressSuggestions.map(item => <TouchableOpacity key={item.id} onPress={() => { setAddress(item.label); setCoordinates({ lat: item.lat, lng: item.lng }); setAddressSuggestions([]); }} className="px-4 py-3 border-b border-ink/5"><Text className="font-sans text-sm text-ink">{item.label}</Text></TouchableOpacity>)}</View>}
+              {IS_MAPBOX_AVAILABLE && <View className="mb-4"><TouchableOpacity onPress={() => setShowMapPicker(value => !value)} className="rounded-2xl border border-accent/20 bg-accent/5 px-4 py-4"><Text className="font-display font-black text-accent">{showMapPicker ? 'Hide map' : 'Select on map'}</Text></TouchableOpacity>{showMapPicker && <View className="mt-2 overflow-hidden rounded-2xl" style={{ height: 240 }}><Mapbox.MapView style={{ flex: 1 }} styleURL={Mapbox.StyleURL.Street} onPress={feature => { const point = feature.geometry?.type === 'Point' ? feature.geometry.coordinates : undefined; if (point && point.length >= 2) void selectMapLocation(point[0], point[1]); }}><Mapbox.Camera defaultSettings={{ centerCoordinate: coordinates ? [coordinates.lng, coordinates.lat] : [31.0522, -17.8292], zoomLevel: coordinates ? 15 : 11 }} />{coordinates && <Mapbox.PointAnnotation id="booking-location" coordinate={[coordinates.lng, coordinates.lat]}><View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#3906D2', borderWidth: 2, borderColor: 'white' }} /></Mapbox.PointAnnotation>}</Mapbox.MapView></View>}{showMapPicker && <Text className="font-sans text-xs text-ink/60 mt-2">Tap the map to choose the job location.</Text>}</View>}
               <TouchableOpacity
                 onPress={useCurrentLocation}
                 disabled={isFetchingLocation}
@@ -580,6 +629,7 @@ export default function CreateBookingScreen() {
                 <View className="rounded-2xl border border-ink/10 bg-white p-4 gap-2"><Text className="font-sans text-sm text-ink">{serviceLabel()} starting price: ${Number(Catalog.SERVICE_PACKAGES[category!].find(item=>item.id===serviceId)?.price.replace('$','')??0).toFixed(2)}</Text>{suppliesRequired&&<Text className="font-sans text-sm text-ink">Supplies: ${suppliesFee.toFixed(2)}</Text>}<Text className="font-display font-black text-lg text-ink">Total: ${(Number(Catalog.SERVICE_PACKAGES[category!].find(item=>item.id===serviceId)?.price.replace('$','')??0)+(suppliesRequired?suppliesFee:0)).toFixed(2)}</Text></View>
               </>:<>
               <Text className="text-2xl font-display font-black text-ink mb-1">Set your budget</Text>
+              {suppliesRequired && <Text className="font-sans text-sm text-ink/70 mb-3">Supplies fee: ${suppliesFee.toFixed(2)}. This fee is added to the booking.</Text>}
               <Text className="font-sans text-sm text-ink/50 font-medium mb-6">
                 Choose how you want to price your job. Your request stays open for 30 minutes to receive competitive bids from local pros.
               </Text>

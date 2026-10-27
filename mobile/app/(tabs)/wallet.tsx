@@ -164,6 +164,8 @@ export default function WalletScreen() {
         </View>
       </View>
 
+      {isCleaner && <View className="mx-5 mb-6 rounded-2xl bg-white p-4 border border-slate-100"><Text className="font-display font-black text-slate-900">How earnings and commission work</Text><Text className="font-sans text-sm text-slate-600 mt-2">Completed jobs may have a Detail commission. Commission credit covers eligible direct-payment jobs. Cleared earnings appear above when available; request a payout from this screen. Payouts are reviewed and sent manually while integrations are unavailable, so transfer timing is not guaranteed.</Text></View>}
+
       {balance < 0 && (
         <TouchableOpacity
           onPress={() => setIsAddFundsOpen(true)}
