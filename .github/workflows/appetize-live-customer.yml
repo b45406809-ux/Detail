@@ -64,6 +64,17 @@ jobs:
           appetize tap --select-text '/^Next$/i' --json --quiet
           appetize inspect --select-text 'Specific Room / Part' --timeout 15000 --json --quiet
           appetize screenshot appetize-results/service-selection.png --json --quiet
+          appetize tap --select-text 'Specific Room / Part' --json --quiet
+          for label in 'Kitchen' 'Under 10 m²'; do
+            for attempt in $(seq 1 8); do
+              if appetize inspect --select-text "$label" --timeout 500 --json --quiet >/dev/null 2>&1; then break; fi
+              appetize swipe --direction up --json --quiet
+            done
+            appetize tap --select-text "$label" --timeout 10000 --json --quiet
+          done
+          appetize tap --select-text '/^Next$/i' --timeout 10000 --json --quiet
+          appetize inspect --select-text 'Details & Condition' --timeout 15000 --json --quiet
+          echo 'LIVE_CUSTOMER_CHECKLIST_COMPLETED'
           echo 'LIVE_CUSTOMER_SERVICE_SELECTION_REACHED'
           appetize open 'detail:///activity' --json --quiet
           appetize inspect --select-text 'Your bookings' --timeout 15000 --json --quiet
