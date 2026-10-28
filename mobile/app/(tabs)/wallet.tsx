@@ -49,7 +49,7 @@ export default function WalletScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [isPayoutOpen, setIsPayoutOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('');
-  const [payoutMethod, setPayoutMethod] = useState<'ECOCASH' | 'INNBUCKS' | 'BANK'>('ECOCASH');
+  const [payoutMethod, setPayoutMethod] = useState<'ECOCASH' | 'INNBUCKS' | 'OMARI' | 'BANK'>('ECOCASH');
   const [payoutName, setPayoutName] = useState('');
   const [payoutDestination, setPayoutDestination] = useState('');
 
@@ -345,9 +345,9 @@ export default function WalletScreen() {
           <View className="flex-row justify-between items-center mb-4"><Text className="text-xl font-display font-black">Request payout</Text><TouchableOpacity onPress={() => setIsPayoutOpen(false)}><X size={22} color="#94a3b8" /></TouchableOpacity></View>
           <Text className="font-sans text-sm text-slate-500 mb-3">Available cleared earnings: ${availableEarnings.toFixed(2)}. Minimum payout $5. Transfers are sent manually while payout integrations are unavailable.</Text>
           <TextInput className="font-sans border border-slate-200 rounded-xl p-4 mb-3" placeholder="Amount in USD" keyboardType="decimal-pad" value={payoutAmount} onChangeText={setPayoutAmount} />
-          <View className="flex-row gap-2 mb-3">{(['ECOCASH','INNBUCKS','BANK'] as const).map(m => <TouchableOpacity key={m} onPress={() => setPayoutMethod(m)} className={`flex-1 p-3 rounded-xl ${payoutMethod === m ? 'bg-accent' : 'bg-slate-100'}`}><Text className={`text-center text-xs font-bold ${payoutMethod === m ? 'text-white' : 'text-slate-700'}`}>{m}</Text></TouchableOpacity>)}</View>
+          <View className="flex-row gap-2 mb-3">{(['ECOCASH','INNBUCKS','OMARI','BANK'] as const).map(m => <TouchableOpacity key={m} onPress={() => setPayoutMethod(m)} className={`flex-1 p-3 rounded-xl ${payoutMethod === m ? 'bg-accent' : 'bg-slate-100'}`}><Text className={`text-center text-xs font-bold ${payoutMethod === m ? 'text-white' : 'text-slate-700'}`}>{m}</Text></TouchableOpacity>)}</View>
           <TextInput className="font-sans border border-slate-200 rounded-xl p-4 mb-3" placeholder="Account / wallet holder name" value={payoutName} onChangeText={setPayoutName} />
-          <TextInput className="font-sans border border-slate-200 rounded-xl p-4 mb-4" placeholder={payoutMethod === 'BANK' ? 'Bank account number and bank' : 'Mobile money number'} value={payoutDestination} onChangeText={setPayoutDestination} />
+          <TextInput className="font-sans border border-slate-200 rounded-xl p-4 mb-4" placeholder={payoutMethod === 'BANK' ? 'Bank account number and bank' : payoutMethod === 'OMARI' ? 'Omari wallet number' : 'Mobile money number'} value={payoutDestination} onChangeText={setPayoutDestination} />
           <TouchableOpacity disabled={isLoading} onPress={requestPayout} className="bg-accent rounded-2xl p-4 items-center">{isLoading ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-display font-black">Submit payout request</Text>}</TouchableOpacity>
         </View></View>
       </Modal>
