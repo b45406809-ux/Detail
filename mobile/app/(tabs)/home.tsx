@@ -64,6 +64,7 @@ export default function HomeScreen() {
   const [availableJobs, setAvailableJobs] = useState<Job[]>([]);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [canUseForegroundLocation, setCanUseForegroundLocation] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [viewRole, setViewRole] = useState<'CUSTOMER' | 'CLEANER'>(
@@ -125,7 +126,9 @@ export default function HomeScreen() {
     let subscription: Location.LocationSubscription | undefined;
     void (async () => {
       const permission = await Location.getForegroundPermissionsAsync();
-      if (!permission.granted || !active) return;
+      if (!active) return;
+      setCanUseForegroundLocation(permission.granted);
+      if (!permission.granted) return;
       subscription = await Location.watchPositionAsync(
         { accuracy: Location.Accuracy.Balanced, distanceInterval: 25, timeInterval: 10000 },
         ({ coords }) => { if (active) setCurrentLocation({ lat: coords.latitude, lng: coords.longitude }); }
@@ -133,7 +136,7 @@ export default function HomeScreen() {
       if (!active) subscription.remove();
     })().catch(error => console.warn('[location] unable to watch location:', error));
     return () => { active = false; subscription?.remove(); };
-  }, [isCustomer]);
+  }, [isCustomer, canUseForegroundLocation]);
 
   useEffect(() => {
     if (!user) return;
@@ -329,6 +332,7 @@ export default function HomeScreen() {
                   Alert.alert('Location permission needed', 'Allow location access in your device settings to show your position on the map.');
                   return;
                 }
+                setCanUseForegroundLocation(true);
                 const position = await Promise.race([
                   Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
                   new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Location timed out')), 15000)),
