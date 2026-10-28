@@ -113,6 +113,7 @@ export default function TrackingScreen() {
   const [routeIsRoadBased,setRouteIsRoadBased]=useState(false);
   const [instantCleanerAccepted,setInstantCleanerAccepted]=useState(false);
   const [photoTab, setPhotoTab] = useState<'BEFORE' | 'AFTER'>('BEFORE');
+  const trackingCameraRef = useRef<React.ElementRef<typeof Mapbox.Camera>>(null);
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
   const slideAnim = useRef(new Animated.Value(300)).current;
 
@@ -129,6 +130,15 @@ export default function TrackingScreen() {
     });
     return()=>{active=false;};
   },[isCustomer,job?.cleanerLocation?.lat,job?.cleanerLocation?.lng,job?.location?.lat,job?.location?.lng]);
+
+  useEffect(() => {
+    const cleaner = job?.cleanerLocation;
+    const destination = job?.location;
+    if (!isCustomer || !cleaner || !destination || !trackingCameraRef.current) return;
+    const northEast: [number, number] = [Math.max(cleaner.lng, destination.lng), Math.max(cleaner.lat, destination.lat)];
+    const southWest: [number, number] = [Math.min(cleaner.lng, destination.lng), Math.min(cleaner.lat, destination.lat)];
+    trackingCameraRef.current.fitBounds(northEast, southWest, [150, 48, 320, 48], 700);
+  }, [isCustomer, job?.cleanerLocation?.lat, job?.cleanerLocation?.lng, job?.location?.lat, job?.location?.lng]);
 
   useEffect(()=>{
     if(!isCustomer||job?.bookingMode!=='INSTANT'||job.status!=='PENDING')return;
@@ -664,6 +674,7 @@ export default function TrackingScreen() {
       ) : mapRegion ? (
         <Mapbox.MapView style={{ flex: 1 }} styleURL={Mapbox.StyleURL.Street} compassEnabled={false} scaleBarEnabled={false}>
           <Mapbox.Camera
+            ref={trackingCameraRef}
             defaultSettings={{
               centerCoordinate: [mapRegion.longitude, mapRegion.latitude],
               zoomLevel: mapRegion.latitudeDelta < 0.02 ? 15 : 10,
