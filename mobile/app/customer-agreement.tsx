@@ -1,3 +1,4 @@
+import { goBackSafely } from '@/utils/navigation';
 import React, { useState } from 'react';
 import { Alert, ActivityIndicator, View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -77,7 +78,7 @@ export default function CustomerAgreementScreen() {
   const { user, profile, refreshProfile } = useAuth();
   const [isAccepting, setIsAccepting] = useState(false);
   const acceptAgreement = async () => {
-    if (!user) { router.back(); return; }
+    if (!user) { goBackSafely(); return; }
     setIsAccepting(true);
     try {
       await callFunction('acceptCustomerAgreement');
@@ -93,7 +94,7 @@ export default function CustomerAgreementScreen() {
     <SafeAreaView className="flex-1 bg-white">
       <View className="flex-row items-center gap-3 px-5 pt-4 pb-4 border-b border-slate-100">
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => goBackSafely()}
           className="w-10 h-10 bg-slate-50 rounded-2xl items-center justify-center"
         >
           <ArrowLeft size={18} color="#0f172a" />

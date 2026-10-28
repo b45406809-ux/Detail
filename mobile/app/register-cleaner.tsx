@@ -1,3 +1,4 @@
+import { goBackSafely } from '@/utils/navigation';
 // Cleaner registration — collects the identity/verification info required by
 // the Cleaner Agreement §4 (full name, phone, physical address) plus service details, and proves email ownership via Firebase's
 // built-in email-verification flow (the OTP-equivalent — no separate email
@@ -166,7 +167,7 @@ export default function RegisterCleanerScreen() {
     <SafeAreaView className="flex-1 bg-white">
       <View className="flex-row items-center gap-3 px-5 pt-4 pb-4 border-b border-slate-100">
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => goBackSafely()}
           className="w-10 h-10 bg-slate-50 rounded-2xl items-center justify-center"
         >
           <ArrowLeft size={18} color="#0f172a" />

@@ -1,3 +1,4 @@
+import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -66,7 +67,7 @@ export default function CleanersScreen() {
 
   return <SafeAreaView className="flex-1 bg-[#F3F1FC]">
     <View className="flex-row items-center gap-3 px-5 pt-4 pb-4 bg-white">
-      <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 bg-ink/5 rounded-2xl items-center justify-center"><ArrowLeft size={18} color="#150256" /></TouchableOpacity>
+      <TouchableOpacity onPress={() => goBackSafely()} className="w-10 h-10 bg-ink/5 rounded-2xl items-center justify-center"><ArrowLeft size={18} color="#150256" /></TouchableOpacity>
       <View><Text className="text-xl font-display font-black text-ink">Find Cleaners</Text><Text className="font-sans text-xs text-ink/40">Search verified professionals</Text></View>
     </View>
     <View className="px-5 pt-4 pb-2"><View className="flex-row items-center gap-2 bg-white border border-ink/10 rounded-2xl px-4"><Search size={17} color="#9C94C4" /><TextInput value={search} onChangeText={setSearch} placeholder="Search by name, city or service" placeholderTextColor="#9C94C4" className="font-sans flex-1 py-3.5 text-sm text-ink" autoCorrect={false} /></View><View className="mt-3 flex-row gap-2"><TouchableOpacity onPress={()=>setCategory('')} className={`rounded-xl px-3.5 py-2 ${!category?'bg-accent':'bg-white'}`}><Text className={`font-sans text-xs font-bold ${!category?'text-white':'text-ink/60'}`}>All services</Text></TouchableOpacity>{['HOUSE','CAR'].map(value=><TouchableOpacity key={value} onPress={()=>setCategory(category===value?'':value)} className={`rounded-xl px-3.5 py-2 ${category===value?'bg-accent':'bg-white'}`}><Text className={`font-sans text-xs font-bold ${category===value?'text-white':'text-ink/60'}`}>{value==='HOUSE'?'House':'Car'}</Text></TouchableOpacity>)}<TouchableOpacity onPress={()=>void findNearby()} className={`ml-auto flex-row items-center gap-1 rounded-xl px-3 py-2 ${nearby?'bg-emerald-600':'bg-white'}`}><MapPin size={13} color={nearby?'white':'#3906D2'}/><Text className={`font-sans text-xs font-bold ${nearby?'text-white':'text-accent'}`}>{nearby?'Nearby on':'Nearby'}</Text></TouchableOpacity></View></View>

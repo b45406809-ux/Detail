@@ -1,3 +1,4 @@
+import { goBackSafely } from '@/utils/navigation';
 import React, { useState } from 'react';
 import {
   View,
@@ -52,7 +53,7 @@ export default function ForgotPasswordScreen() {
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerClassName="flex-grow px-6 pt-6 pb-10" keyboardShouldPersistTaps="handled">
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => goBackSafely()}
             className="w-12 h-12 bg-white rounded-2xl items-center justify-center mb-8 border border-ink/10"
           >
             <ArrowLeft size={20} color="#150256" />
@@ -154,7 +155,7 @@ export default function ForgotPasswordScreen() {
 
               <View className="mt-8 items-center">
                 <TouchableOpacity
-                  onPress={() => router.back()}
+                  onPress={() => goBackSafely()}
                   activeOpacity={0.7}
                   className="py-2"
                 >

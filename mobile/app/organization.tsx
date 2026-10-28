@@ -1,3 +1,4 @@
+import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Share, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -77,7 +78,7 @@ export default function OrganizationScreen() {
 
   return <SafeAreaView className="flex-1 bg-[#F3F1FC]">
     <View className="flex-row items-center gap-3 px-5 pt-4 pb-4 bg-white">
-      <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 bg-ink/5 rounded-2xl items-center justify-center"><ArrowLeft size={18} color="#150256" /></TouchableOpacity>
+      <TouchableOpacity onPress={() => goBackSafely()} className="w-10 h-10 bg-ink/5 rounded-2xl items-center justify-center"><ArrowLeft size={18} color="#150256" /></TouchableOpacity>
       <View><Text className="text-xl font-display font-black text-ink">Organization</Text><Text className="font-sans text-xs text-ink/40">Register and manage cleaner membership</Text></View>
     </View>
     {loading ? <View className="flex-1 items-center justify-center"><ActivityIndicator color="#3906D2" /></View> : !organization ? <FlatList

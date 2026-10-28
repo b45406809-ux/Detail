@@ -1,3 +1,4 @@
+import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
@@ -485,7 +486,7 @@ export default function TrackingScreen() {
           <TouchableOpacity accessibilityRole="button" onPress={() => { setJobLoadState('LOADING'); setJobLoadAttempt(value => value + 1); }} className="mt-5 rounded-xl bg-accent px-5 py-3">
             <Text className="font-display font-bold text-white">Try again</Text>
           </TouchableOpacity>
-          <TouchableOpacity accessibilityRole="button" onPress={() => router.back()} className="mt-3 px-5 py-3">
+          <TouchableOpacity accessibilityRole="button" onPress={() => goBackSafely()} className="mt-3 px-5 py-3">
             <Text className="font-display font-bold text-accent">Go back</Text>
           </TouchableOpacity>
         </>}
@@ -720,7 +721,7 @@ export default function TrackingScreen() {
 
       <SafeAreaView className="absolute top-0 left-0 right-0" edges={['top']} pointerEvents="box-none">
         <View className="flex-row items-center justify-between px-5 pt-4" pointerEvents="box-none">
-          <GlassIconButton size={48} onPress={() => router.back()}>
+          <GlassIconButton size={48} onPress={() => goBackSafely()}>
             <ArrowLeft size={20} color="#150256" />
           </GlassIconButton>
 

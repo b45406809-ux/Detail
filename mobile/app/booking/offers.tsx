@@ -1,3 +1,4 @@
+import { goBackSafely } from '@/utils/navigation';
 // "Bids Received" — the client vets every bid (no instant-book, no
 // negotiate). Ranked by cleaner rating so the strongest pros surface first.
 // A 30-minute countdown runs from job.biddingExpiresAt; while it's live (or
@@ -184,7 +185,7 @@ export default function OffersScreen() {
   return (
     <SafeAreaView className="flex-1 bg-[#F3F1FC]">
       <View className="flex-row items-center gap-3 px-5 pt-4 pb-4">
-        <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 bg-white rounded-2xl items-center justify-center border border-ink/5">
+        <TouchableOpacity onPress={() => goBackSafely()} className="w-10 h-10 bg-white rounded-2xl items-center justify-center border border-ink/5">
           <ArrowLeft size={18} color="#150256" />
         </TouchableOpacity>
         <View className="flex-1">

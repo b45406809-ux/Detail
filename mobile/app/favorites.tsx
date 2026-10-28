@@ -1,3 +1,4 @@
+import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -35,7 +36,7 @@ export default function FavoritesScreen() {
   return (
     <SafeAreaView className="flex-1 bg-[#F3F1FC]">
       <View className="flex-row items-center gap-3 px-5 pt-4 pb-4">
-        <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 bg-white rounded-2xl items-center justify-center border border-ink/5">
+        <TouchableOpacity onPress={() => goBackSafely()} className="w-10 h-10 bg-white rounded-2xl items-center justify-center border border-ink/5">
           <ArrowLeft size={18} color="#150256" />
         </TouchableOpacity>
         <Text className="text-xl font-display font-black text-ink">Favorites</Text>

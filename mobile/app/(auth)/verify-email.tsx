@@ -1,3 +1,4 @@
+import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -50,7 +51,7 @@ export default function VerifyEmailScreen() {
 
   return <SafeAreaView className="flex-1 bg-white">
     <KeyboardAvoidingView className="flex-1 px-6 pt-6" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <TouchableOpacity onPress={() => router.back()} className="w-12 h-12 bg-white rounded-2xl items-center justify-center mb-8 border border-ink/10"><ArrowLeft size={20} color="#150256" /></TouchableOpacity>
+      <TouchableOpacity onPress={() => goBackSafely()} className="w-12 h-12 bg-white rounded-2xl items-center justify-center mb-8 border border-ink/10"><ArrowLeft size={20} color="#150256" /></TouchableOpacity>
       <Text className="text-3xl font-display font-black text-ink tracking-tight mb-2">Check your email</Text>
       <Text className="font-sans text-base text-ink/50 font-medium mb-10">Enter the six-digit code sent to <Text className="font-display font-black text-ink">{email}</Text>.</Text>
       <GlassCard style={{ padding: 20 }}>

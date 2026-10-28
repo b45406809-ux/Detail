@@ -1,3 +1,4 @@
+import { goBackSafely } from '@/utils/navigation';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
@@ -98,7 +99,7 @@ export default function VerifyScreen() {
     <SafeAreaView className="flex-1 bg-white">
       <KeyboardAvoidingView className="flex-1 px-6 pt-6" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => goBackSafely()}
           className="w-12 h-12 bg-white rounded-2xl items-center justify-center mb-8 border border-ink/10"
         >
           <ArrowLeft size={20} color="#150256" />

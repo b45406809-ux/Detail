@@ -1,3 +1,4 @@
+import { goBackSafely } from '@/utils/navigation';
 import React, { useState } from 'react';
 import {
   View,
@@ -88,7 +89,7 @@ export default function HelpScreen() {
       {/* Header */}
       <View className="flex-row items-center gap-3 px-5 pt-4 pb-4">
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => goBackSafely()}
           className="w-10 h-10 bg-white rounded-2xl items-center justify-center border border-slate-100"
         >
           <ArrowLeft size={18} color="#0f172a" />

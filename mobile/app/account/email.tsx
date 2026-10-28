@@ -1,3 +1,4 @@
+import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
@@ -53,7 +54,7 @@ export default function AccountEmailScreen() {
   return (
     <SafeAreaView className="flex-1 bg-[#F2F1F5]">
       <View className="flex-row items-center gap-3 px-5 pt-4 pb-4 bg-white border-b border-slate-100">
-        <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 bg-slate-50 rounded-2xl items-center justify-center" accessibilityRole="button" accessibilityLabel="Back">
+        <TouchableOpacity onPress={() => goBackSafely()} className="w-10 h-10 bg-slate-50 rounded-2xl items-center justify-center" accessibilityRole="button" accessibilityLabel="Back">
           <ArrowLeft size={18} color="#0f172a" />
         </TouchableOpacity>
         <Text className="text-xl font-display font-black text-slate-900">Email address</Text>

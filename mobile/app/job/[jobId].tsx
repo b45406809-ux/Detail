@@ -1,3 +1,4 @@
+import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -110,7 +111,7 @@ export default function CleanerJobDetailScreen() {
     return (
       <SafeAreaView className="flex-1 bg-white items-center justify-center px-6">
         <Text className="text-lg font-display font-black text-ink text-center">Job not found</Text>
-        <TouchableOpacity onPress={() => router.back()} className="mt-4">
+        <TouchableOpacity onPress={() => goBackSafely()} className="mt-4">
           <Text className="text-accent font-display font-black">Go Back</Text>
         </TouchableOpacity>
       </SafeAreaView>
@@ -128,7 +129,7 @@ export default function CleanerJobDetailScreen() {
     <SafeAreaView className="flex-1 bg-[#F3F1FC]">
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View className="flex-row items-center gap-3 px-5 pt-4 pb-4">
-          <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 bg-white rounded-2xl items-center justify-center border border-ink/5">
+          <TouchableOpacity onPress={() => goBackSafely()} className="w-10 h-10 bg-white rounded-2xl items-center justify-center border border-ink/5">
             <ArrowLeft size={18} color="#150256" />
           </TouchableOpacity>
           <View className="flex-1">
