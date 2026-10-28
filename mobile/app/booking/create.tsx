@@ -131,6 +131,7 @@ export default function CreateBookingScreen() {
   const [bookingMode, setBookingMode] = useState<'SCHEDULED'|'INSTANT'>('SCHEDULED');
   const [instantBookingEnabled, setInstantBookingEnabled] = useState(false);
   const [bookingEnabled, setBookingEnabled] = useState(false);
+  const [bookingConfigStatus, setBookingConfigStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [suppliesRequired, setSuppliesRequired] = useState(false);
   const [suppliesFee, setSuppliesFee] = useState(10);
 
@@ -139,7 +140,8 @@ export default function CreateBookingScreen() {
       setBookingEnabled(value.bookingEnabled===true);
       setInstantBookingEnabled(value.instantBookingEnabled===true);
       if(Number.isFinite(Number(value.suppliesFeeUsd)))setSuppliesFee(Math.max(0,Number(value.suppliesFeeUsd)));
-    }).catch(()=>{});
+      setBookingConfigStatus('ready');
+    }).catch(()=>setBookingConfigStatus('error'));
   },[]);
 
   const step = STEPS[stepIndex];
@@ -247,8 +249,16 @@ export default function CreateBookingScreen() {
   };
 
   const handleSubmit = async () => {
+    if (bookingConfigStatus === 'loading') {
+      Alert.alert('Checking booking availability', 'Please wait while Detail checks whether bookings are open in your area.');
+      return;
+    }
+    if (bookingConfigStatus === 'error') {
+      Alert.alert('Could not check booking availability', 'Check your internet connection and try again. Your request has not been submitted.');
+      return;
+    }
     if(!bookingEnabled){
-      Alert.alert('Bookings are not open yet','Join the Detail waitlist for an update when bookings open in your area.');
+      Alert.alert('Bookings are not open in your area yet','Your booking details have not been submitted. Join the Detail waitlist for an update when bookings open in your area.');
       return;
     }
     if (!user || !category) return;
@@ -773,7 +783,7 @@ export default function CreateBookingScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <Text className={`font-black text-sm uppercase tracking-widest ${canProceed() ? 'text-white' : 'text-ink/30'}`}>
-                {step === 'BUDGET' ? 'Submit Request' : 'Next'}
+                {step === 'BUDGET' ? bookingConfigStatus === 'loading' ? 'Checking availability…' : 'Submit Request' : 'Next'}
               </Text>
             )}
           </TouchableOpacity>
