@@ -53,7 +53,7 @@ jobs:
           npm run build --prefix site
           test -f site/dist/index.html
           test -f site/dist/.htaccess
-          rg -q -- '--lime:#3906D2' site/dist/assets/*.css
+          grep -q -- '--lime:#3906D2' site/dist/assets/*.css
         env:
           VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
