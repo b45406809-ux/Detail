@@ -96,7 +96,7 @@ export default function TrackingScreen() {
   const [step, setStep] = useState<TrackingStep>('TRACKING');
   const [rating, setRating] = useState(0);
   const [problemDescription, setProblemDescription] = useState('');
-  const [selectedPayment, setSelectedPayment] = useState<'WALLET' | 'CASH' | 'ECOCASH' | 'INNBUCKS'>('WALLET');
+  const [selectedPayment, setSelectedPayment] = useState<'WALLET' | 'CASH' | 'ECOCASH' | 'INNBUCKS' | 'OMARI'>('WALLET');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [showCompletionDispute, setShowCompletionDispute] = useState(false);
@@ -221,7 +221,7 @@ export default function TrackingScreen() {
   }, [jobId, isCustomer, step, jobLoadAttempt]);
 
   useEffect(() => {
-    if (['WALLET', 'CASH', 'ECOCASH', 'INNBUCKS'].includes(String(job?.paymentMethod))) setSelectedPayment(job!.paymentMethod as any);
+    if (['WALLET', 'CASH', 'ECOCASH', 'INNBUCKS', 'OMARI'].includes(String(job?.paymentMethod))) setSelectedPayment(job!.paymentMethod as any);
   }, [job?.paymentMethod]);
 
   // Check whether this cleaner is already in the customer's favorites
@@ -618,6 +618,7 @@ export default function TrackingScreen() {
       { id: 'CASH', label: 'Cash', emoji: '💵', sub: 'Pay cleaner directly' },
       { id: 'ECOCASH', label: 'EcoCash', emoji: '📱', sub: 'Transfer directly to cleaner' },
       { id: 'INNBUCKS', label: 'InnBucks', emoji: '📱', sub: 'Transfer directly to cleaner' },
+      { id: 'OMARI', label: 'Omari', emoji: '📱', sub: 'Transfer directly to cleaner' },
     ] as const;
 
     return (
