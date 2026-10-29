@@ -92,7 +92,7 @@ jobs:
               body: JSON.stringify([{ key: 'beta', value: updated, updatedby: null, updatedat: new Date().toISOString() }]),
             });
             if (!patch.ok) throw new Error(`Could not enable scheduled quote bookings (HTTP ${patch.status}: ${(await patch.text()).slice(0, 300)}).`);
-            const audit = await fetch(`${base}/rest/v1/adminAuditEvents`, {
+            const audit = await fetch(`${base}/rest/v1/adminauditevents`, {
               method: 'POST', headers: { ...headers, prefer: 'return=minimal' },
               body: JSON.stringify({
                 id: `booking-launch-offline-${Date.now()}`,
