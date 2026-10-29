@@ -89,19 +89,19 @@ jobs:
             const updated = { ...beta, bookingEnabled: true, instantBookingEnabled: false };
             const patch = await fetch(`${base}/rest/v1/configuration`, {
               method: 'POST', headers: { ...headers, prefer: 'resolution=merge-duplicates,return=minimal' },
-              body: JSON.stringify([{ key: 'beta', value: updated, updatedBy: null, updatedAt: new Date().toISOString() }]),
+              body: JSON.stringify([{ key: 'beta', value: updated, updatedby: null, updatedat: new Date().toISOString() }]),
             });
-            if (!patch.ok) throw new Error(`Could not enable scheduled quote bookings (HTTP ${patch.status}).`);
+            if (!patch.ok) throw new Error(`Could not enable scheduled quote bookings (HTTP ${patch.status}: ${(await patch.text()).slice(0, 300)}).`);
             const audit = await fetch(`${base}/rest/v1/adminAuditEvents`, {
               method: 'POST', headers: { ...headers, prefer: 'return=minimal' },
               body: JSON.stringify({
                 id: `booking-launch-offline-${Date.now()}`,
-                action: 'scheduled_booking_launch_offline_payment', actorId: null, targetId: 'beta',
+                action: 'scheduled_booking_launch_offline_payment', actorid: null, targetid: 'beta',
                 reason: 'User requested bookings to operate before Paynow secrets are available. Customers and cleaners must arrange payment outside Detail; the app records payment as pending and does not process commission.',
                 data: { bookingMode: 'SCHEDULED_QUOTES_ONLY', paynowConfigured: false, instantBookingEnabled: false }, immutable: true,
               }),
             });
-            if (!audit.ok) throw new Error(`Launch state changed, but its audit record could not be written (HTTP ${audit.status}).`);
+            if (!audit.ok) throw new Error(`Launch state changed, but its audit record could not be written (HTTP ${audit.status}: ${(await audit.text()).slice(0, 300)}).`);
             console.log('SCHEDULED_QUOTE_BOOKINGS: ENABLED; INSTANT_BOOKING: DISABLED; PAYNOW: UNCONFIGURED; OFFLINE_PAYMENT_NOTICE: ACTIVE');
           })().catch(error => { console.error(error.message); process.exitCode = 1; });
           NODE
