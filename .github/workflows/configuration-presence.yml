@@ -107,6 +107,8 @@ jobs:
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE }}
           PAYNOW_INTEGRATION_ID: ${{ secrets.PAYNOW_INTEGRATION_ID }}
           PAYNOW_INTEGRATION_KEY: ${{ secrets.PAYNOW_INTEGRATION_KEY }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
           node <<'NODE'
@@ -132,9 +134,30 @@ jobs:
             operationsBookingCreation: switches.bookingCreation === true,
             operationsBidAcceptance: switches.bidAcceptance === true,
             operationsPayments: switches.payments === true,
-            paynowCredentialsPresent: Boolean(process.env.PAYNOW_INTEGRATION_ID && process.env.PAYNOW_INTEGRATION_KEY),
+            paynowCredentialsInGitHub: Boolean(process.env.PAYNOW_INTEGRATION_ID && process.env.PAYNOW_INTEGRATION_KEY),
           };
-          const output = `## Live marketplace gates\n\n| Gate | State |\n| --- | --- |\n${Object.entries(result).map(([name, value]) => `| ${name} | ${value ? 'ON' : 'OFF'} |`).join('\n')}\n`;
+          const projectRef = process.env.SUPABASE_PROJECT_REF || new URL(base).hostname.split('.')[0];
+          const managementToken = process.env.SUPABASE_ACCESS_TOKEN;
+          if (managementToken) {
+            const headers = { authorization: `Bearer ${managementToken}` };
+            const [secretResponse, functionResponse] = await Promise.all([
+              fetch(`https://api.supabase.com/v1/projects/${projectRef}/secrets`, { headers }),
+              fetch(`https://api.supabase.com/v1/projects/${projectRef}/functions`, { headers }),
+            ]);
+            if (!secretResponse.ok || !functionResponse.ok) throw new Error('Supabase deployment metadata could not be read.');
+            const secrets = await secretResponse.json();
+            const functions = await functionResponse.json();
+            const secretNames = new Set(secrets.map(secret => secret.name));
+            const functionNames = new Set(functions.map(fn => fn.slug ?? fn.name));
+            result.paynowIntegrationIdInSupabase = secretNames.has('PAYNOW_INTEGRATION_ID');
+            result.paynowIntegrationKeyInSupabase = secretNames.has('PAYNOW_INTEGRATION_KEY');
+            result.marketplaceApiDeployed = functionNames.has('marketplace-api');
+            result.paynowWebhookDeployed = functionNames.has('paynow-webhook');
+            result.paynowReconcileDeployed = functionNames.has('paynow-reconcile');
+          } else {
+            result.supabaseManagementCheck = 'unavailable';
+          }
+          const output = `## Live marketplace gates\n\n| Gate | State |\n| --- | --- |\n${Object.entries(result).map(([name, value]) => `| ${name} | ${value === true ? 'ON' : value === false ? 'OFF' : value} |`).join('\n')}\n`;
           appendFileSync(process.env.GITHUB_STEP_SUMMARY, output);
           process.stdout.write(output);
           NODE
