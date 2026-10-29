@@ -23,6 +23,8 @@ jobs:
           mkdir -p appetize-results
           appetize build list --app com.detail.app --json --quiet > appetize-results/builds.json
           target=$(jq -er '.builds[0].id' appetize-results/builds.json)
+          echo "Current Appetize build: https://appetize.io/app/$target" >> "$GITHUB_STEP_SUMMARY"
+          echo "Appetize link: https://appetize.io/app/$target"
           trap 'appetize session stop --json --quiet || true' EXIT
           appetize session start pixel7 --target "$target" --json --quiet > appetize-results/session.json
           appetize inspect appetize-results/launch.json --json --quiet
