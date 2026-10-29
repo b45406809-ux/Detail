@@ -87,5 +87,5 @@ appId: com.detail.app
 - tapOn: "Next"
 - assertVisible: "Set your budget"
 - tapOn: "Submit Request"
-- assertVisible: "Bookings are not open yet"
+- assertVisible: "Bookings are not open in your area yet"
 - tapOn: "OK"

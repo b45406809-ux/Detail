@@ -60,7 +60,30 @@ appId: com.detail.app
 - extendedWaitUntil:
     visible: "Become a Cleaner"
     timeout: 20000
+- tapOn: "+263 7X XXX XXXX"
+- inputText: "0770000000"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Street, suburb, city"
+    direction: DOWN
+- tapOn: "Street, suburb, city"
+- inputText: "UI test address, Harare"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "House Cleaning"
+    direction: DOWN
+- tapOn: "House Cleaning"
+- scrollUntilVisible:
+    element:
+      text: "Email verified"
+    direction: UP
 - assertVisible: "Email verified"
+- scrollUntilVisible:
+    element:
+      text: "Verify with Didit"
+    direction: DOWN
 - assertVisible: "Verify with Didit"
 - scrollUntilVisible:
     element:
@@ -69,4 +92,8 @@ appId: com.detail.app
 - tapOn: "Continue to Agreement"
 - assertVisible: "Identity check required"
 - tapOn: "OK"
+- scrollUntilVisible:
+    element:
+      text: "Verify with Didit"
+    direction: UP
 - assertVisible: "Verify with Didit"
