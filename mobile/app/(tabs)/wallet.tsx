@@ -12,6 +12,8 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LoadingList } from '../../components/LoadingList';
+import { LoadingError } from '../../components/LoadingError';
 import {
   ArrowUpRight,
   ArrowDownLeft,
@@ -44,6 +46,10 @@ const METHOD_ICONS: Record<string, any> = {
 export default function WalletScreen() {
   const { user, profile } = useAuth();
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(true);
+  const [transactionsError, setTransactionsError] = useState(false);
+  const [transactionsRetry, setTransactionsRetry] = useState(0);
+  const userId = user?.uid;
   const [isAddFundsOpen, setIsAddFundsOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -57,17 +63,21 @@ export default function WalletScreen() {
 
   // Real-time transaction feed from Firestore
   useEffect(() => {
-    if (!user) return;
+    if (!userId) { setTransactions([]); setTransactionsLoading(false); return; }
+    setTransactionsLoading(true);
+    setTransactionsError(false);
     const q = query(
       collection(db, 'transactions'),
-      where('userId', '==', user.uid),
+      where('userId', '==', userId),
       orderBy('createdAt', 'desc'),
       limit(20)
     );
     return onSnapshot(q, (snap) => {
       setTransactions(snap.docs.map((d) => ({ id: d.id, ...d.data() } as WalletTransaction)));
-    });
-  }, [user]);
+      setTransactionsLoading(false);
+      setTransactionsError(false);
+    }, () => { setTransactionsLoading(false); setTransactionsError(true); });
+  }, [userId, transactionsRetry]);
 
   const handleAddFunds = async () => {
     const value = parseFloat(amount);
@@ -217,7 +227,11 @@ export default function WalletScreen() {
         <Text className="text-xs font-display font-black text-slate-400 uppercase tracking-widest mb-3">
           Recent Transactions
         </Text>
-        {transactions.length === 0 ? (
+        {transactionsLoading ? (
+          <LoadingList rows={3} />
+        ) : transactionsError ? (
+          <LoadingError message="Could not load transactions. Check your connection and try again." onRetry={() => setTransactionsRetry(value => value + 1)} />
+        ) : transactions.length === 0 ? (
           <View className="bg-white rounded-3xl p-8 items-center border border-slate-100">
             <Text className="font-sans text-3xl mb-3">💳</Text>
             <Text className="text-sm font-display font-black text-slate-600 text-center">

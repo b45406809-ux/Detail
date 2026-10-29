@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../components/LoadingList';
+import { LoadingError } from '../components/LoadingError';
 import { router } from 'expo-router';
 import { ArrowLeft, Heart, MessageCircle, Star } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
@@ -13,19 +14,25 @@ export default function FavoritesScreen() {
   const { user } = useAuth();
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const userId = user?.uid;
 
   useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, 'favorites'), where('customerId', '==', user.uid), orderBy('createdAt', 'desc'));
+    if (!userId) { setFavorites([]); setIsLoading(false); return; }
+    setIsLoading(true);
+    setLoadError(false);
+    const q = query(collection(db, 'favorites'), where('customerId', '==', userId), orderBy('createdAt', 'desc'));
     return onSnapshot(
       q,
       (snap) => {
         setFavorites(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Favorite)));
+        setLoadError(false);
         setIsLoading(false);
       },
-      () => setIsLoading(false)
+      () => { setLoadError(true); setIsLoading(false); }
     );
-  }, [user]);
+  }, [userId, retry]);
 
   const removeFavorite = (fav: Favorite) => {
     Alert.alert('Remove favorite?', `Remove ${fav.cleanerName ?? 'this cleaner'} from your favorites.`, [
@@ -45,6 +52,8 @@ export default function FavoritesScreen() {
 
       {isLoading ? (
         <LoadingList />
+      ) : loadError ? (
+        <LoadingError message="Could not load favorites. Check your connection and try again." onRetry={() => setRetry(value => value + 1)} />
       ) : favorites.length === 0 ? (
         <View className="flex-1 items-center justify-center px-6">
           <View className="w-20 h-20 bg-accent/10 rounded-3xl items-center justify-center mb-4">

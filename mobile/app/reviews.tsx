@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../components/LoadingList';
+import { LoadingError } from '../components/LoadingError';
 import { router } from 'expo-router';
 import { ArrowLeft, Star } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
@@ -36,21 +37,27 @@ export default function ReviewsScreen() {
   const { user, profile } = useAuth();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const userId = user?.uid;
 
   useEffect(() => {
-    if (!user) return;
+    if (!userId) { setReviews([]); setIsLoading(false); return; }
+    setIsLoading(true);
+    setLoadError(false);
     const q = query(
       collection(db, 'reviews'),
-      where('cleanerId', '==', user.uid),
+      where('cleanerId', '==', userId),
       orderBy('createdAt', 'desc'),
       limit(50)
     );
     const unsub = onSnapshot(q, (snap) => {
       setReviews(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Review)));
+      setLoadError(false);
       setIsLoading(false);
-    });
+    }, () => { setLoadError(true); setIsLoading(false); });
     return unsub;
-  }, [user]);
+  }, [userId, retry]);
 
   const averageRating =
     reviews.length > 0
@@ -114,6 +121,8 @@ export default function ReviewsScreen() {
 
       {isLoading ? (
         <LoadingList />
+      ) : loadError ? (
+        <LoadingError message="Could not load reviews. Check your connection and try again." onRetry={() => setRetry(value => value + 1)} />
       ) : reviews.length === 0 ? (
         <View className="flex-1 items-center justify-center px-8">
           <Text className="font-sans text-4xl mb-4">⭐</Text>

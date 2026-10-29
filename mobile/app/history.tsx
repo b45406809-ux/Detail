@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../components/LoadingList';
+import { LoadingError } from '../components/LoadingError';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { ArrowLeft, MapPin, Flag, X, ImagePlus } from 'lucide-react-native';
@@ -40,6 +41,10 @@ export default function HistoryScreen() {
   const { user, profile } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const userId = user?.uid;
+  const role = profile?.role;
   const [reportingJob, setReportingJob] = useState<Job | null>(null);
   const [reportReason, setReportReason] = useState('');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
@@ -76,20 +81,23 @@ export default function HistoryScreen() {
   };
 
   useEffect(() => {
-    if (!user) return;
-    const field = profile?.role === 'CUSTOMER' ? 'customerId' : 'cleanerId';
+    if (!userId || !role) { setJobs([]); setIsLoading(false); return; }
+    setIsLoading(true);
+    setLoadError(false);
+    const field = role === 'CUSTOMER' ? 'customerId' : 'cleanerId';
     const q = query(
       collection(db, 'jobs'),
-      where(field, '==', user.uid),
+      where(field, '==', userId),
       where('status', 'in', [JobStatus.COMPLETED, JobStatus.CANCELLED]),
       orderBy('createdAt', 'desc'),
       limit(30)
     );
     return onSnapshot(q, (snap) => {
       setJobs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Job)));
+      setLoadError(false);
       setIsLoading(false);
-    });
-  }, [user, profile]);
+    }, () => { setLoadError(true); setIsLoading(false); });
+  }, [userId, role, retry]);
 
   return (
     <SafeAreaView className="flex-1 bg-[#F2F1F5]">
@@ -106,6 +114,8 @@ export default function HistoryScreen() {
 
       {isLoading ? (
         <LoadingList />
+      ) : loadError ? (
+        <LoadingError message="Could not load your service history. Check your connection and try again." onRetry={() => setRetry(value => value + 1)} />
       ) : jobs.length === 0 ? (
         <View className="flex-1 items-center justify-center px-6">
           <Text className="font-sans text-4xl mb-4">📋</Text>

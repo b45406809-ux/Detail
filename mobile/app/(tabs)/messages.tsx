@@ -48,6 +48,7 @@ interface Conversation {
 
 export default function MessagesScreen() {
   const { user, profile } = useAuth();
+  const userId = user?.uid;
   const params = useLocalSearchParams<{ jobId?: string }>();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeJobId, setActiveJobId] = useState<string | null>(params.jobId ?? null);
@@ -99,11 +100,11 @@ export default function MessagesScreen() {
 
   // Load conversations from jobs the user is part of
   useEffect(() => {
-    if (!user) return;
+    if (!userId) { setConversations([]); setIsLoading(false); return; }
     setIsLoading(true);
     setConversationError('');
     const field = isCustomer ? 'customerId' : 'cleanerId';
-    const q = query(collection(db, 'jobs'), where(field, '==', user.uid));
+    const q = query(collection(db, 'jobs'), where(field, '==', userId));
     return onSnapshot(
       q,
       (snap) => {
@@ -126,11 +127,11 @@ export default function MessagesScreen() {
       },
       (err) => { setIsLoading(false); setConversationError(err.message || 'Conversations could not be loaded.'); }
     );
-  }, [user, isCustomer, unreadField, chatRetry]);
+  }, [userId, isCustomer, unreadField, chatRetry]);
 
   // Load messages for active conversation and reset unread count
   useEffect(() => {
-    if (!activeJobId || !user) return;
+    if (!activeJobId || !userId) return;
 
     // Read-state writes are authorized and serialized with message writes.
     supabase.rpc('mark_job_messages_read', { p_job_id: activeJobId }).then(({ error }) => {
@@ -159,7 +160,7 @@ export default function MessagesScreen() {
       // Scroll to bottom on new messages
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     }, err => setChatError(err.message || 'Messages could not be refreshed.'));
-  }, [activeJobId, user, chatRetry]);
+  }, [activeJobId, userId, chatRetry]);
 
   const loadOlderMessages = async () => {
     const oldest = messages[0];

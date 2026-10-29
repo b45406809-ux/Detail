@@ -35,9 +35,10 @@ export default function ActivityScreen() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const userId = user?.uid;
 
   useEffect(() => {
-    if (!user) { setCustomerJobs([]); setCleanerJobs([]); setLoading(false); return; }
+    if (!userId) { setCustomerJobs([]); setCleanerJobs([]); setLoading(false); return; }
     setLoading(true);
     setLoadError('');
     let customerLoaded = false;
@@ -48,8 +49,8 @@ export default function ActivityScreen() {
       setLoadError('We could not load your bookings. Check your connection and try again.');
       setLoading(false);
     };
-    const customerQuery = query(collection(db, 'jobs'), where('customerId', '==', user.uid), orderBy('createdAt', 'desc'), limit(100));
-    const cleanerQuery = query(collection(db, 'jobs'), where('cleanerId', '==', user.uid), orderBy('createdAt', 'desc'), limit(100));
+    const customerQuery = query(collection(db, 'jobs'), where('customerId', '==', userId), orderBy('createdAt', 'desc'), limit(100));
+    const cleanerQuery = query(collection(db, 'jobs'), where('cleanerId', '==', userId), orderBy('createdAt', 'desc'), limit(100));
     const stopCustomer = onSnapshot(customerQuery, snapshot => {
       setCustomerJobs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Job)));
       customerLoaded = true;
@@ -61,7 +62,7 @@ export default function ActivityScreen() {
       updateLoading();
     }, onError);
     return () => { stopCustomer(); stopCleaner(); };
-  }, [user, reloadKey]);
+  }, [userId, reloadKey]);
 
   const jobs = useMemo(() => {
     const unique = new Map<string, Job>();

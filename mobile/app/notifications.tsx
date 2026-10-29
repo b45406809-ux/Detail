@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../components/LoadingList';
+import { LoadingError } from '../components/LoadingError';
 import { router } from 'expo-router';
 import { ArrowLeft, Bell, MessageSquare, DollarSign, Star, Zap, Info } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
@@ -46,19 +47,25 @@ export default function NotificationsScreen() {
   const { user } = useAuth();
   const [items, setItems] = useState<AppNotification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const userId = user?.uid;
 
   useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, 'notifications'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'), limit(50));
+    if (!userId) { setItems([]); setIsLoading(false); return; }
+    setIsLoading(true);
+    setLoadError(false);
+    const q = query(collection(db, 'notifications'), where('userId', '==', userId), orderBy('createdAt', 'desc'), limit(50));
     return onSnapshot(
       q,
       (snap) => {
         setItems(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AppNotification)));
+        setLoadError(false);
         setIsLoading(false);
       },
-      () => setIsLoading(false)
+      () => { setLoadError(true); setIsLoading(false); }
     );
-  }, [user]);
+  }, [userId, retry]);
 
   const openNotification = (n: AppNotification) => {
     if (!n.read) updateDoc(doc(db, 'notifications', n.id), { read: true }).catch(() => {});
@@ -77,6 +84,8 @@ export default function NotificationsScreen() {
 
       {isLoading ? (
         <LoadingList />
+      ) : loadError ? (
+        <LoadingError message="Could not load notifications. Check your connection and try again." onRetry={() => setRetry(value => value + 1)} />
       ) : items.length === 0 ? (
         <View className="flex-1 items-center justify-center px-6">
           <View className="w-20 h-20 bg-accent/10 rounded-3xl items-center justify-center mb-4">
