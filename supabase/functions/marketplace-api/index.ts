@@ -634,6 +634,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(!booking||booking.customerid!==actor)fail(403,'Only the customer can accept a quote.');
       const operations=await assertPaymentsAvailable();
       if(operations?.switches?.bidAcceptance===true)fail(503,'PAYMENTS_DISABLED');
+      if(method==='PAYNOW'&&(!Deno.env.get('PAYNOW_INTEGRATION_ID')||!Deno.env.get('PAYNOW_INTEGRATION_KEY')))fail(503,'Paynow is not configured yet. Please contact Detail support before accepting this quote.');
       const {data,error}=await admin.rpc('accept_bid',{p_actor_id:actor,p_job_id:jobId,p_bid_id:bidId,p_payment_method:method,p_idempotency_key:key});
       if(error)throw error;
       let redirectUrl: string | null=data.redirectUrl??null;
