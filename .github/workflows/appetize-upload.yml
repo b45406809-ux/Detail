@@ -53,6 +53,8 @@ jobs:
           path: apk-artifact
           run-id: ${{ inputs.source_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v4
+        if: ${{ inputs.eas_source_run_id != '' }}
       - name: Set up Node for EAS download
         if: ${{ inputs.eas_source_run_id != '' }}
         uses: actions/setup-node@v4
