@@ -1,5 +1,5 @@
 import { goBackSafely } from '@/utils/navigation';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -30,6 +30,7 @@ type AuthTab = 'phone' | 'email';
 type EmailAuthMode = 'CODE' | 'PASSWORD';
 
 export default function SignInScreen() {
+  const passwordInputRef = useRef<TextInput>(null);
   const [tab, setTab] = useState<AuthTab>('phone');
   const [phone, setPhone] = useState('');
   const [selectedCountry, setSelectedCountry] = useState<Country>(DEFAULT_COUNTRY);
@@ -76,6 +77,7 @@ export default function SignInScreen() {
   };
 
   const handleEmailAuth = async () => {
+    if (isLoading) return;
     if (!email.trim()) {
       Alert.alert('Email required', 'Please enter your email address.');
       return;
@@ -314,7 +316,12 @@ export default function SignInScreen() {
                         autoCapitalize="none"
                         value={email}
                         onChangeText={setEmail}
-                        autoFocus
+                        returnKeyType={emailAuthMode === 'PASSWORD' ? 'next' : 'done'}
+                        blurOnSubmit={emailAuthMode !== 'PASSWORD'}
+                        onSubmitEditing={() => {
+                          if (emailAuthMode === 'PASSWORD') passwordInputRef.current?.focus();
+                          else void handleEmailAuth();
+                        }}
                       />
                     </View>
 
@@ -331,6 +338,7 @@ export default function SignInScreen() {
                         )}
                       </View>
                       <TextInput
+                        ref={passwordInputRef}
                         testID="auth-password-input"
                         className="font-sans border border-white/40 rounded-2xl px-4 py-4 text-base font-medium text-ink bg-white/50"
                         placeholder="••••••••"
@@ -338,6 +346,8 @@ export default function SignInScreen() {
                         secureTextEntry
                         value={password}
                         onChangeText={setPassword}
+                        returnKeyType="done"
+                        onSubmitEditing={() => void handleEmailAuth()}
                       />
                     </View>}
 
