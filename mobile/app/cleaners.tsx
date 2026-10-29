@@ -1,7 +1,8 @@
 import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, Image, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LoadingList } from '../components/LoadingList';
 import { router } from 'expo-router';
 import { ArrowLeft, Heart, Search, Star } from 'lucide-react-native';
 import { MapPin } from 'lucide-react-native';
@@ -15,6 +16,7 @@ type Cleaner = { uid: string; displayName: string; photoURL?: string; ratingAver
 
 export default function CleanersScreen() {
   const { user } = useAuth();
+  const userId = user?.uid;
   const [cleaners, setCleaners] = useState<Cleaner[]>([]);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [search, setSearch] = useState('');
@@ -33,7 +35,7 @@ export default function CleanersScreen() {
         .then((result) => { if (active) setCleaners(result.cleaners); })
         .catch(() => { if (active) { setCleaners([]); setLoadError(true); } })
         .finally(() => { if (active) setLoading(false); });
-    }, 250);
+    }, search.trim() ? 250 : 0);
     return () => { active = false; clearTimeout(timer); };
   }, [search, retry, category, nearby]);
 
@@ -46,11 +48,11 @@ export default function CleanersScreen() {
   };
 
   useEffect(() => {
-    if (!user) return;
-    return onSnapshot(query(collection(db, 'favorites'), where('customerId', '==', user.uid)), (snap) => {
+    if (!userId) { setFavorites([]); return; }
+    return onSnapshot(query(collection(db, 'favorites'), where('customerId', '==', userId)), (snap) => {
       setFavorites(snap.docs.map((item) => ({ id: item.id, ...item.data() } as Favorite)));
     });
-  }, [user]);
+  }, [userId]);
 
   const visibleCleaners = useMemo(() => cleaners, [cleaners]);
 
@@ -71,7 +73,7 @@ export default function CleanersScreen() {
       <View><Text className="text-xl font-display font-black text-ink">Find Cleaners</Text><Text className="font-sans text-xs text-ink/40">Search verified professionals</Text></View>
     </View>
     <View className="px-5 pt-4 pb-2"><View className="flex-row items-center gap-2 bg-white border border-ink/10 rounded-2xl px-4"><Search size={17} color="#9C94C4" /><TextInput value={search} onChangeText={setSearch} placeholder="Search by name, city or service" placeholderTextColor="#9C94C4" className="font-sans flex-1 py-3.5 text-sm text-ink" autoCorrect={false} /></View><View className="mt-3 flex-row gap-2"><TouchableOpacity onPress={()=>setCategory('')} className={`rounded-xl px-3.5 py-2 ${!category?'bg-accent':'bg-white'}`}><Text className={`font-sans text-xs font-bold ${!category?'text-white':'text-ink/60'}`}>All services</Text></TouchableOpacity>{['HOUSE','CAR'].map(value=><TouchableOpacity key={value} onPress={()=>setCategory(category===value?'':value)} className={`rounded-xl px-3.5 py-2 ${category===value?'bg-accent':'bg-white'}`}><Text className={`font-sans text-xs font-bold ${category===value?'text-white':'text-ink/60'}`}>{value==='HOUSE'?'House':'Car'}</Text></TouchableOpacity>)}<TouchableOpacity onPress={()=>void findNearby()} className={`ml-auto flex-row items-center gap-1 rounded-xl px-3 py-2 ${nearby?'bg-emerald-600':'bg-white'}`}><MapPin size={13} color={nearby?'white':'#3906D2'}/><Text className={`font-sans text-xs font-bold ${nearby?'text-white':'text-accent'}`}>{nearby?'Nearby on':'Nearby'}</Text></TouchableOpacity></View></View>
-    {loading ? <View className="flex-1 items-center justify-center"><ActivityIndicator size="large" color="#3906D2" /></View> : <FlatList
+    {loading ? <LoadingList /> : <FlatList
       data={visibleCleaners}
       keyExtractor={(item) => item.uid}
       contentContainerClassName="px-5 pb-10 gap-3"

@@ -2,6 +2,8 @@ import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Share, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LoadingList } from '../components/LoadingList';
+import { LoadingError } from '../components/LoadingError';
 import { router } from 'expo-router';
 import { ArrowLeft, Building2, UserPlus, UserMinus } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
@@ -16,6 +18,10 @@ export default function OrganizationScreen() {
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const userId = user?.uid;
+  const hasOrganization = !!organization;
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
   const [registrationNumber, setRegistrationNumber] = useState('');
@@ -26,19 +32,22 @@ export default function OrganizationScreen() {
   const [cleanerEmail, setCleanerEmail] = useState('');
 
   useEffect(() => {
-    if (!user) return;
-    return onSnapshot(doc(db, 'organizations', user.uid), (snap) => {
+    if (!userId) { setOrganization(null); setLoading(false); return; }
+    setLoading(true);
+    setLoadError(false);
+    return onSnapshot(doc(db, 'organizations', userId), (snap) => {
       setOrganization(snap.exists() ? snap.data() as Organization : null);
+      setLoadError(false);
       setLoading(false);
-    }, () => setLoading(false));
-  }, [user]);
+    }, () => { setLoadError(true); setLoading(false); });
+  }, [userId, retry]);
 
   useEffect(() => {
-    if (!user || !organization) return;
-    return onSnapshot(query(collection(db, 'organizationMembers'), where('organizationId', '==', user.uid)), (snap) => {
+    if (!userId || !hasOrganization) { setMembers([]); return; }
+    return onSnapshot(query(collection(db, 'organizationMembers'), where('organizationId', '==', userId)), (snap) => {
       setMembers(snap.docs.map((item) => ({ id: item.id, ...item.data() } as Member)));
     });
-  }, [user, organization]);
+  }, [userId, hasOrganization]);
 
   const register = async () => {
     if (!name.trim() || !registrationNumber.trim() || !phone.trim() || !country.trim() || !city.trim()) {
@@ -81,7 +90,7 @@ export default function OrganizationScreen() {
       <TouchableOpacity onPress={() => goBackSafely()} className="w-10 h-10 bg-ink/5 rounded-2xl items-center justify-center"><ArrowLeft size={18} color="#150256" /></TouchableOpacity>
       <View><Text className="text-xl font-display font-black text-ink">Organization</Text><Text className="font-sans text-xs text-ink/40">Register and manage cleaner membership</Text></View>
     </View>
-    {loading ? <View className="flex-1 items-center justify-center"><ActivityIndicator color="#3906D2" /></View> : !organization ? <FlatList
+    {loading ? <LoadingList /> : loadError ? <LoadingError message="Could not load your organization. Check your connection and try again." onRetry={() => setRetry(value => value + 1)} /> : !organization ? <FlatList
       data={[{ key: 'form' }]}
       keyExtractor={(item) => item.key}
       contentContainerClassName="p-5 pb-10"
