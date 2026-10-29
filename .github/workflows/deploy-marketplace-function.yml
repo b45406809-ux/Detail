@@ -81,15 +81,15 @@ jobs:
               if (!rows[0] && required) throw new Error(`Missing ${keyName} launch settings.`);
               return rows[0]?.value ?? {};
             };
-            const [beta, operations] = await Promise.all([read('beta', true), read('operations', false)]);
+            const [beta, operations] = await Promise.all([read('beta', false), read('operations', false)]);
             const switches = operations?.switches ?? {};
             if (beta.maintenanceMode || beta.disableNewBookings || switches.maintenance || switches.bookingCreation || switches.bidAcceptance) {
               throw new Error('Booking launch remains blocked by a maintenance or operations safety switch.');
             }
             const updated = { ...beta, bookingEnabled: true, instantBookingEnabled: false };
-            const patch = await fetch(`${base}/rest/v1/configuration?key=eq.beta`, {
-              method: 'PATCH', headers: { ...headers, prefer: 'return=minimal' },
-              body: JSON.stringify({ value: updated, updatedBy: null, updatedAt: new Date().toISOString() }),
+            const patch = await fetch(`${base}/rest/v1/configuration`, {
+              method: 'POST', headers: { ...headers, prefer: 'resolution=merge-duplicates,return=minimal' },
+              body: JSON.stringify([{ key: 'beta', value: updated, updatedBy: null, updatedAt: new Date().toISOString() }]),
             });
             if (!patch.ok) throw new Error(`Could not enable scheduled quote bookings (HTTP ${patch.status}).`);
             const audit = await fetch(`${base}/rest/v1/adminAuditEvents`, {
