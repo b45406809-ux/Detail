@@ -36,6 +36,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Enable Android emulator acceleration
+        run: |
+          set -euo pipefail
+          if [[ ! -c /dev/kvm ]]; then
+            echo 'Android hardware acceleration is unavailable on this runner; stopping before starting an EAS build.' >&2
+            exit 1
+          fi
+          sudo chmod a+rw /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
