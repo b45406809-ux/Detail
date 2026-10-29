@@ -13,6 +13,7 @@ import {
   Image,
   Platform,
   Alert,
+  AppState,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -57,11 +58,14 @@ const FALLBACK_REGION = { latitude: -17.8252, longitude: 31.0335, latitudeDelta:
 
 export default function HomeScreen() {
   const { user, profile, locationTrackingError } = useAuth();
+  const userId = user?.uid;
   const insets = useSafeAreaInsets();
   const mapRef = useRef<React.ElementRef<typeof Mapbox.Camera>>(null);
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [recentJobs, setRecentJobs] = useState<Job[]>([]);
   const [availableJobs, setAvailableJobs] = useState<Job[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
+  const [jobsError, setJobsError] = useState(false);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [canUseForegroundLocation, setCanUseForegroundLocation] = useState(false);
@@ -123,12 +127,21 @@ export default function HomeScreen() {
 
   useEffect(() => {
     let active = true;
+    const checkPermission = () => {
+      void Location.getForegroundPermissionsAsync().then(permission => {
+        if (active) setCanUseForegroundLocation(permission.granted);
+      }).catch(error => console.warn('[location] unable to check permission:', error));
+    };
+    checkPermission();
+    const appState = AppState.addEventListener('change', state => { if (state === 'active') checkPermission(); });
+    return () => { active = false; appState.remove(); };
+  }, []);
+
+  useEffect(() => {
+    if (!canUseForegroundLocation) return;
+    let active = true;
     let subscription: Location.LocationSubscription | undefined;
     void (async () => {
-      const permission = await Location.getForegroundPermissionsAsync();
-      if (!active) return;
-      setCanUseForegroundLocation(permission.granted);
-      if (!permission.granted) return;
       subscription = await Location.watchPositionAsync(
         { accuracy: Location.Accuracy.Balanced, distanceInterval: 25, timeInterval: 10000 },
         ({ coords }) => { if (active) setCurrentLocation({ lat: coords.latitude, lng: coords.longitude }); }
@@ -136,14 +149,14 @@ export default function HomeScreen() {
       if (!active) subscription.remove();
     })().catch(error => console.warn('[location] unable to watch location:', error));
     return () => { active = false; subscription?.remove(); };
-  }, [isCustomer, canUseForegroundLocation]);
+  }, [canUseForegroundLocation]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!userId) { setActiveJob(null); return; }
     const field = isCustomer ? 'customerId' : 'cleanerId';
     const q = query(
       collection(db, 'jobs'),
-      where(field, '==', user.uid),
+      where(field, '==', userId),
       where('status', 'in', [JobStatus.ASSIGNED, JobStatus.EN_ROUTE, JobStatus.IN_PROGRESS, JobStatus.IN_PROGRESS]),
       limit(1)
     );
@@ -154,14 +167,14 @@ export default function HomeScreen() {
       },
       (err) => console.warn('[home] activeJob listener error:', err.message)
     );
-  }, [user, isCustomer, refreshNonce]);
+  }, [userId, isCustomer, refreshNonce]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!userId) { setRecentJobs([]); return; }
     const field = isCustomer ? 'customerId' : 'cleanerId';
     const q = query(
       collection(db, 'jobs'),
-      where(field, '==', user.uid),
+      where(field, '==', userId),
       where('status', '==', JobStatus.COMPLETED),
       orderBy('createdAt', 'desc'),
       limit(3)
@@ -171,10 +184,12 @@ export default function HomeScreen() {
       (snap) => setRecentJobs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Job))),
       (err) => console.warn('[home] recentJobs listener error:', err.message)
     );
-  }, [user, isCustomer, refreshNonce]);
+  }, [userId, isCustomer, refreshNonce]);
 
   useEffect(() => {
-    if (isCustomer) return;
+    if (isCustomer || !userId) { setAvailableJobs([]); setJobsLoading(false); setJobsError(false); return; }
+    setJobsLoading(true);
+    setJobsError(false);
     // Keep the open-job listener realtime, then hydrate one sanitized scope
     // batch so cleaners can assess work without reading the private job row.
     const q = query(collection(db, 'openJobs'), where('status', '==', JobStatus.PENDING), orderBy('createdAt', 'desc'), limit(30));
@@ -185,28 +200,28 @@ export default function HomeScreen() {
       (snap) => {
         const currentRevision = ++revision;
         const jobIds = snap.docs.map((item) => item.id);
-        if (!jobIds.length) { setAvailableJobs([]); return; }
+        if (!jobIds.length) { setAvailableJobs([]); setJobsLoading(false); setJobsError(false); return; }
         callFunction<{ jobIds: string[] }, { jobs: Job[] }>('getCleanerBookingPreviews', { jobIds })
-          .then(({ jobs }) => { if (active && currentRevision === revision) setAvailableJobs(jobs); })
+          .then(({ jobs }) => { if (active && currentRevision === revision) { setAvailableJobs(jobs); setJobsLoading(false); setJobsError(false); } })
           .catch((err) => {
             console.warn('[home] availableJobs preview failed:', err instanceof Error ? err.message : String(err));
-            if (active && currentRevision === revision) setAvailableJobs([]);
+            if (active && currentRevision === revision) { setAvailableJobs([]); setJobsLoading(false); setJobsError(true); }
           });
       },
-      (err) => { console.warn('[home] availableJobs listener error:', err.message); setAvailableJobs([]); }
+      (err) => { console.warn('[home] availableJobs listener error:', err.message); revision++; if (active) { setAvailableJobs([]); setJobsLoading(false); setJobsError(true); } }
     );
     return () => { active = false; revision++; unsubscribe(); };
-  }, [isCustomer, refreshNonce]);
+  }, [userId, isCustomer, refreshNonce]);
 
   useEffect(() => {
-    if (!user || !isCustomer) return;
-    const q = query(collection(db, 'favorites'), where('customerId', '==', user.uid), limit(10));
+    if (!userId || !isCustomer) { setFavorites([]); return; }
+    const q = query(collection(db, 'favorites'), where('customerId', '==', userId), limit(10));
     return onSnapshot(
       q,
       (snap) => setFavorites(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Favorite))),
       (err) => console.warn('[home] favorites listener error:', err.message)
     );
-  }, [user, isCustomer, refreshNonce]);
+  }, [userId, isCustomer, refreshNonce]);
 
   const toggleCleanerStatus = async () => {
     const next = cleanerStatus === 'AVAILABLE' ? 'OFFLINE' : 'AVAILABLE';
@@ -367,6 +382,9 @@ export default function HomeScreen() {
                 locationUpdatedAt={profile.locationUpdatedAt}
                 onToggleStatus={toggleCleanerStatus}
                 availableJobs={availableJobs}
+                jobsLoading={jobsLoading}
+                jobsError={jobsError}
+                onRetryJobs={() => setRefreshNonce(value => value + 1)}
                 currentLocation={currentLocation}
               />
             )}
@@ -498,6 +516,9 @@ function CleanerPanel({
   locationUpdatedAt,
   onToggleStatus,
   availableJobs,
+  jobsLoading,
+  jobsError,
+  onRetryJobs,
   currentLocation,
 }: {
   profile: any;
@@ -506,6 +527,9 @@ function CleanerPanel({
   locationUpdatedAt?: string;
   onToggleStatus: () => void;
   availableJobs: Job[];
+  jobsLoading: boolean;
+  jobsError: boolean;
+  onRetryJobs: () => void;
   currentLocation: { lat: number; lng: number } | null;
 }) {
   const isAvailable = status === 'AVAILABLE';
@@ -573,7 +597,17 @@ function CleanerPanel({
           <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest mb-3">
             Incoming Jobs{displayJobs.length > 0 ? ` (${displayJobs.length}) · Nearest first` : ''}
           </Text>
-          {displayJobs.length === 0 ? (
+          {jobsLoading ? (
+            <View accessibilityRole="progressbar" accessibilityLabel="Loading nearby jobs" className="bg-white rounded-2xl p-5 border border-slate-100">
+              <View className="h-4 w-2/3 rounded-full bg-[#EBE8F7] mb-3" />
+              <View className="h-3 w-4/5 rounded-full bg-[#F3F1FC]" />
+            </View>
+          ) : jobsError ? (
+            <View className="bg-white rounded-2xl p-5 border border-slate-100 items-center">
+              <Text accessibilityRole="alert" className="text-center text-sm text-ink/60">Could not load nearby jobs. Check your connection and try again.</Text>
+              <TouchableOpacity accessibilityRole="button" onPress={onRetryJobs} className="mt-3 rounded-xl bg-accent px-5 py-3"><Text className="font-display font-bold text-white">Try again</Text></TouchableOpacity>
+            </View>
+          ) : displayJobs.length === 0 ? (
             <View className="bg-white rounded-2xl p-8 items-center border border-slate-100">
               <View className="w-14 h-14 bg-accent/10 rounded-2xl items-center justify-center mb-3">
                 <CheckCircle size={28} color="#3906D2" />
