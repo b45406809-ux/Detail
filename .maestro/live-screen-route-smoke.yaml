@@ -17,10 +17,21 @@ appId: com.detail.app
 - tapOn:
     id: auth-email-input
 - inputText: ${CUSTOMER_EMAIL}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: auth-password-input
+    direction: DOWN
+    timeout: 10000
 - tapOn:
     id: auth-password-input
 - inputText: ${CUSTOMER_PASSWORD}
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: auth-email-submit
+    direction: DOWN
+    timeout: 10000
 - tapOn:
     id: auth-email-submit
 - extendedWaitUntil:
