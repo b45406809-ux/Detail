@@ -3,8 +3,12 @@ on:
   workflow_dispatch:
     inputs:
       source_run_id:
-        description: GitHub run containing the EAS APK artifact
-        required: true
+        description: GitHub run containing the live-tested APK artifact
+        required: false
+        type: string
+      eas_source_run_id:
+        description: GitHub EAS-build workflow run to fetch and upload its APK
+        required: false
         type: string
 permissions:
   actions: read
@@ -14,7 +18,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 80
     steps:
+      - name: Validate source run input
+        env:
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          EAS_SOURCE_RUN_ID: ${{ inputs.eas_source_run_id }}
+        run: |
+          set -euo pipefail
+          [[ -n "$SOURCE_RUN_ID" || -n "$EAS_SOURCE_RUN_ID" ]] || { echo 'Provide source_run_id or eas_source_run_id.'; exit 1; }
+          [[ -z "$SOURCE_RUN_ID" || -z "$EAS_SOURCE_RUN_ID" ]] || { echo 'Use only one APK source.'; exit 1; }
+
       - name: Wait for the requested APK artifact
+        if: ${{ inputs.source_run_id != '' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SOURCE_RUN_ID: ${{ inputs.source_run_id }}
@@ -32,17 +46,58 @@ jobs:
           echo 'Timed out waiting for the APK artifact.' >&2
           exit 1
       - name: Download existing EAS APK artifact
+        if: ${{ inputs.source_run_id != '' }}
         uses: actions/download-artifact@v4
         with:
           name: detail-live-tested-apk-${{ inputs.source_run_id }}
           path: apk-artifact
           run-id: ${{ inputs.source_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Find APK
-        id: apk
+      - name: Set up Node for EAS download
+        if: ${{ inputs.eas_source_run_id != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Resolve APK from the EAS source run
+        if: ${{ inputs.eas_source_run_id != '' }}
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN || secrets.EAS_BOT_ACCESS_TOKEN || secrets.EXPO_EAS_BOT_ACCESS_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EAS_SOURCE_RUN_ID: ${{ inputs.eas_source_run_id }}
+          REPO: ${{ github.repository }}
+        working-directory: mobile
         run: |
           set -euo pipefail
-          mapfile -t apks < <(find apk-artifact -type f -name '*.apk')
+          [[ "$EAS_SOURCE_RUN_ID" =~ ^[0-9]+$ ]]
+          test -n "$EXPO_TOKEN" || { echo 'Missing EXPO_TOKEN for the EAS download.'; exit 1; }
+          commit=$(gh api "repos/$REPO/actions/runs/$EAS_SOURCE_RUN_ID" --jq .head_sha)
+          npx --yes eas-cli@latest build:list --platform android --build-profile production-apk --git-commit-hash "$commit" --limit 10 --json --non-interactive > "$RUNNER_TEMP/eas-builds.json"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const builds = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/eas-builds.json`, 'utf8'));
+          const build = builds.find(item => item.status === 'FINISHED' && (item.artifacts?.buildUrl || item.artifacts?.applicationArchiveUrl));
+          const url = build?.artifacts?.buildUrl ?? build?.artifacts?.applicationArchiveUrl;
+          if (!url) throw new Error('No completed production APK matches the selected GitHub source commit.');
+          fs.appendFileSync(process.env.GITHUB_ENV, `DETAIL_EAS_APK_URL=${url}\n`);
+          console.log(`Found the completed APK for EAS build ${build.id}.`);
+          NODE
+
+      - name: Download resolved EAS APK
+        if: ${{ inputs.eas_source_run_id != '' }}
+        run: curl --fail --location --silent --show-error "$DETAIL_EAS_APK_URL" --output "$RUNNER_TEMP/detail-eas-build.apk"
+
+      - name: Find APK
+        id: apk
+        env:
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$SOURCE_RUN_ID" ]]; then
+            mapfile -t apks < <(find apk-artifact -type f -name '*.apk')
+          else
+            apks=("$RUNNER_TEMP/detail-eas-build.apk")
+          fi
           test "${#apks[@]}" -eq 1
           echo "path=${apks[0]}" >> "$GITHUB_OUTPUT"
       - name: Upload APK to Appetize
@@ -52,7 +107,7 @@ jobs:
           apiToken: ${{ secrets.APPETIZE_API_TOKEN }}
           platform: android
           appFile: ${{ steps.apk.outputs.path }}
-          note: Detail EAS APK from GitHub run ${{ inputs.source_run_id }}
+          note: Detail APK from GitHub run ${{ inputs.eas_source_run_id || inputs.source_run_id }}
       - name: Record Appetize link
         env:
           APP_KEY: ${{ steps.upload.outputs.publicKey }}
