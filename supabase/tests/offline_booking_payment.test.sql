@@ -10,7 +10,7 @@ insert into public.users(id,email,displayName,role,status,verificationStatus,cle
 values
  ('db37bbce-d766-40ea-a722-0d4fca09df11','offline-customer@detail.invalid','Offline Customer','CUSTOMER','OFFLINE','NOT_STARTED',false,false,100,0),
  ('ac87c0fa-5c20-454c-8ca0-06c802f2bc62','offline-cleaner@detail.invalid','Offline Cleaner','CLEANER','AVAILABLE','VERIFIED',true,true,0,0)
-on conflict(id) do update set role=excluded.role,status=excluded.status,verificationStatus=excluded.verificationStatus,cleanerAgreementAccepted=true,commissionBalance=0;
+on conflict(id) do update set role=excluded.role,status=excluded.status,verificationStatus=excluded.verificationStatus,cleanerAgreementAccepted=true,balance=100,commissionBalance=0;
 insert into public.jobs(id,customerId,category,serviceType,status,bookingMode,biddingExpiresAt,checklist,location,budget)
 values('71ab570c-2ef4-4db4-84c5-8782e9347d60','db37bbce-d766-40ea-a722-0d4fca09df11','HOUSE','Basic house clean','PENDING','SCHEDULED',now()+interval '1 hour','{}'::jsonb,'{"address":"Test address"}'::jsonb,30);
 insert into public.bids(id,jobId,cleanerId,bidPrice,estimatedArrival,status,message)
