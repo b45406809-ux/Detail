@@ -13,6 +13,9 @@ jobs:
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE }}
       SUPABASE_PUBLIC_ANON: ${{ secrets.SUPABASE_PUBLIC_ANON || secrets.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_ANON_KEY }}
+      PAYNOW_INTEGRATION_ID: ${{ secrets.PAYNOW_INTEGRATION_ID }}
+      PAYNOW_INTEGRATION_KEY: ${{ secrets.PAYNOW_INTEGRATION_KEY }}
+      PAYNOW_RETURN_URL: ${{ vars.PAYNOW_RETURN_URL }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,12 +26,23 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
-      - name: Deploy tested marketplace Edge Function
+      - name: Configure Paynow and deploy payment Edge Functions
         run: |
           set -euo pipefail
           test "$SUPABASE_PROJECT_REF" = yiyhmueospjwbaywzusp
           test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$PAYNOW_INTEGRATION_ID" || { echo 'Missing production secret PAYNOW_INTEGRATION_ID'; exit 1; }
+          test -n "$PAYNOW_INTEGRATION_KEY" || { echo 'Missing production secret PAYNOW_INTEGRATION_KEY'; exit 1; }
+          secret_file="$RUNNER_TEMP/detail-paynow-secrets.env"
+          trap 'rm -f "$secret_file"' EXIT
+          printf 'PAYNOW_INTEGRATION_ID=%s\nPAYNOW_INTEGRATION_KEY=%s\n' "$PAYNOW_INTEGRATION_ID" "$PAYNOW_INTEGRATION_KEY" > "$secret_file"
+          if [[ -n "$PAYNOW_RETURN_URL" ]]; then printf 'PAYNOW_RETURN_URL=%s\n' "$PAYNOW_RETURN_URL" >> "$secret_file"; fi
+          supabase secrets set --env-file "$secret_file" --project-ref "$SUPABASE_PROJECT_REF"
+          rm -f "$secret_file"
           supabase functions deploy marketplace-api --project-ref "$SUPABASE_PROJECT_REF"
+          supabase functions deploy paynow-webhook --project-ref "$SUPABASE_PROJECT_REF"
+          supabase functions deploy paynow-reconcile --project-ref "$SUPABASE_PROJECT_REF"
+          supabase functions deploy paynow-return --project-ref "$SUPABASE_PROJECT_REF"
       - name: Create disposable accounts for live verification
         run: node scripts/live_mobile_ui_e2e.mjs create
       - name: Verify deployed backend access guards
