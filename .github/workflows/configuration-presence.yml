@@ -101,3 +101,39 @@ jobs:
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, output);
           process.stdout.write(output);
           NODE
+      - name: Report live marketplace gates without exposing configuration values
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE }}
+          PAYNOW_INTEGRATION_ID: ${{ secrets.PAYNOW_INTEGRATION_ID }}
+          PAYNOW_INTEGRATION_KEY: ${{ secrets.PAYNOW_INTEGRATION_KEY }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const base = process.env.SUPABASE_URL?.replace(/\/+$/, '');
+          const key = process.env.SUPABASE_SECRET_KEY;
+          if (!base || !key) throw new Error('Live configuration read is missing its backend credentials.');
+          const response = await fetch(`${base}/rest/v1/configuration?select=key,value&key=in.(beta,operations)`, {
+            headers: { apikey: key, authorization: `Bearer ${key}` },
+          });
+          if (!response.ok) throw new Error(`Live configuration read failed with HTTP ${response.status}.`);
+          const rows = await response.json();
+          const beta = rows.find(row => row.key === 'beta')?.value ?? {};
+          const operations = rows.find(row => row.key === 'operations')?.value ?? {};
+          const switches = operations.switches ?? {};
+          const result = {
+            bookingEnabled: beta.bookingEnabled === true,
+            instantBookingEnabled: beta.instantBookingEnabled === true,
+            betaMaintenanceMode: beta.maintenanceMode === true,
+            betaDisableNewBookings: beta.disableNewBookings === true,
+            betaDisablePayments: beta.disablePayments === true,
+            operationsMaintenance: switches.maintenance === true,
+            operationsBookingCreation: switches.bookingCreation === true,
+            operationsBidAcceptance: switches.bidAcceptance === true,
+            operationsPayments: switches.payments === true,
+            paynowCredentialsPresent: Boolean(process.env.PAYNOW_INTEGRATION_ID && process.env.PAYNOW_INTEGRATION_KEY),
+          };
+          const output = `## Live marketplace gates\n\n| Gate | State |\n| --- | --- |\n${Object.entries(result).map(([name, value]) => `| ${name} | ${value ? 'ON' : 'OFF'} |`).join('\n')}\n`;
+          require('node:fs').appendFileSync(process.env.GITHUB_STEP_SUMMARY, output);
+          process.stdout.write(output);
+          NODE
