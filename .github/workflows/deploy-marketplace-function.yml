@@ -74,14 +74,14 @@ jobs:
             const key = process.env.SUPABASE_SECRET_KEY;
             if (!base || !key) throw new Error('Missing Supabase production API credentials.');
             const headers = { apikey: key, authorization: `Bearer ${key}`, 'content-type': 'application/json' };
-            const read = async (table, keyName) => {
+            const read = async (keyName, required) => {
               const response = await fetch(`${base}/rest/v1/configuration?select=value&key=eq.${keyName}`, { headers });
               if (!response.ok) throw new Error(`Could not read ${keyName} launch settings (HTTP ${response.status}).`);
               const rows = await response.json();
-              if (!rows[0]) throw new Error(`Missing ${keyName} launch settings.`);
-              return rows[0].value;
+              if (!rows[0] && required) throw new Error(`Missing ${keyName} launch settings.`);
+              return rows[0]?.value ?? {};
             };
-            const [beta, operations] = await Promise.all([read('configuration', 'beta'), read('configuration', 'operations')]);
+            const [beta, operations] = await Promise.all([read('beta', true), read('operations', false)]);
             const switches = operations?.switches ?? {};
             if (beta.maintenanceMode || beta.disableNewBookings || switches.maintenance || switches.bookingCreation || switches.bidAcceptance) {
               throw new Error('Booking launch remains blocked by a maintenance or operations safety switch.');
