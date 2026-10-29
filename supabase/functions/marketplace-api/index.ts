@@ -271,6 +271,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         maintenanceMode,
         disableNewBookings,
         disablePayments:settings.disablePayments===true||switches.payments===true,
+        paynowConfigured:Boolean(Deno.env.get('PAYNOW_INTEGRATION_ID')&&Deno.env.get('PAYNOW_INTEGRATION_KEY')),
       };
     }
     case 'registerPushDevice': {
@@ -589,7 +590,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if (!Array.isArray(job.completionphotos) || job.completionphotos.length < 1) fail(409,'Add at least one completion photo before submitting the finished booking.');
       const { error } = await admin.rpc('transition_booking',{p_job_id:jobId,p_actor_id:actor,p_new_status:'COMPLETED',p_idempotency_key:key,p_reason:null});
       if (error) throw error;
-      await notify(job.customerid,{type:'COMPLETED',title:'Booking completed',body:'Your cleaning is complete. Confirm delivery in Paynow BuySafe, then leave a rating.',jobId});
+      await notify(job.customerid,{type:'COMPLETED',title:'Booking completed',body:job.paymentmethod==='DIRECT_OFFLINE'?'Your cleaning is complete. Payment was arranged directly with the cleaner; Detail did not process or verify it. You can now leave a rating.':'Your cleaning is complete. Confirm delivery in Paynow BuySafe, then leave a rating.',jobId});
       return { success:true };
     }
     case 'submitBid': {
@@ -632,10 +633,19 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const {data:booking,error:bookingError}=await admin.from('jobs').select('customerid').eq('id',jobId).maybeSingle();
       if(bookingError)throw bookingError;
       if(!booking||booking.customerid!==actor)fail(403,'Only the customer can accept a quote.');
-      const operations=await assertPaymentsAvailable();
-      if(operations?.switches?.bidAcceptance===true)fail(503,'PAYMENTS_DISABLED');
-      if(method==='PAYNOW'&&(!Deno.env.get('PAYNOW_INTEGRATION_ID')||!Deno.env.get('PAYNOW_INTEGRATION_KEY')))fail(503,'Paynow is not configured yet. Please contact Detail support before accepting this quote.');
-      const {data,error}=await admin.rpc('accept_bid',{p_actor_id:actor,p_job_id:jobId,p_bid_id:bidId,p_payment_method:method,p_idempotency_key:key});
+      const {data:operations,error:operationsError}=await admin.from('configuration').select('value').eq('key','operations').maybeSingle();
+      if(operationsError)throw operationsError;
+      if(operations?.value?.switches?.maintenance===true||operations?.value?.switches?.bidAcceptance===true)fail(503,'Booking acceptance is temporarily paused. Please try again later.');
+      const paynowConfigured=Boolean(Deno.env.get('PAYNOW_INTEGRATION_ID')&&Deno.env.get('PAYNOW_INTEGRATION_KEY'));
+      const paymentUnavailable=method==='DIRECT_OFFLINE'||(method==='PAYNOW'&&!paynowConfigured);
+      const acceptedMethod=paymentUnavailable?'DIRECT_OFFLINE':method;
+      if(!['PAYNOW','WALLET','CASH','ECOCASH','INNBUCKS','DIRECT_OFFLINE'].includes(acceptedMethod))fail(400,'Unsupported payment method.');
+      if(acceptedMethod!=='DIRECT_OFFLINE'){
+        const {data:beta,error:betaError}=await admin.from('configuration').select('value').eq('key','beta').maybeSingle();
+        if(betaError)throw betaError;
+        if(isPaymentGateClosed(beta?.value,operations?.value))fail(503,'Payments are temporarily unavailable.');
+      }
+      const {data,error}=await admin.rpc('accept_bid',{p_actor_id:actor,p_job_id:jobId,p_bid_id:bidId,p_payment_method:acceptedMethod,p_idempotency_key:key});
       if(error)throw error;
       let redirectUrl: string | null=data.redirectUrl??null;
       if(data.paymentMethod==='PAYNOW'&&!data.replayed) {
@@ -645,8 +655,10 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         try { redirectUrl=await startPaynowCheckout(jobId,email,{reference:data.payment.reference,amount:data.payment.amount,cleanerName:data.cleanerName}); }
         catch(error){const {data:current}=await admin.from('payments').select('data').eq('id',`${jobId}_booking`).maybeSingle();await admin.from('payments').update({status:'FAILED',data:{...(current?.data??{}),failureReason:'INITIATION_FAILED'}}).eq('id',`${jobId}_booking`);await admin.from('jobs').update({paymentstatus:'FAILED'}).eq('id',jobId);throw error;}
       }
-      if(data.cleanerId && data.paymentMethod!=='PAYNOW'&&!data.replayed) await notify(data.cleanerId,{type:'BID_ACCEPTED',title:'Quote accepted',body:'The customer accepted your quote.',jobId});
-      return {...data,redirectUrl};
+      const offlineNotice='Booking confirmed. Detail is not processing payment or collecting commission yet. Please arrange payment directly with the customer; it will not be tracked, verified, refunded, or protected in Detail.';
+      if(data.cleanerId && data.paymentMethod!=='PAYNOW'&&!data.replayed) await notify(data.cleanerId,{type:'BID_ACCEPTED',title:'Quote accepted',body:data.paymentMethod==='DIRECT_OFFLINE'?offlineNotice:'The customer accepted your quote.',jobId});
+      if(data.paymentMethod==='DIRECT_OFFLINE'&&!data.replayed) await notify(actor,{type:'PAYMENT_UNAVAILABLE',title:'Booking confirmed — arrange payment directly',body:'Your cleaner is selected. In-app payments are not available yet. Agree payment directly with your cleaner; Detail will not collect, verify, refund, or protect this payment.',jobId});
+      return {...data,redirectUrl,paymentUnavailable:data.paymentMethod==='DIRECT_OFFLINE'};
     }
     case 'refreshPaynowBookingPayment': {
       const actor=authed(), jobId=text(input.jobId,80);await enforceRateLimit(request,actor,'paynow_booking_refresh',12,300);

@@ -45,6 +45,7 @@ export default function OffersScreen() {
   const [newBudgetValue, setNewBudgetValue] = useState('');
   const [isSavingBudget, setIsSavingBudget] = useState(false);
   const [msRemaining, setMsRemaining] = useState<number | null>(null);
+  const [paynowConfigured, setPaynowConfigured] = useState(false);
   const acceptedLocally = useRef(false);
 
   useEffect(() => {
@@ -58,6 +59,14 @@ export default function OffersScreen() {
       () => setIsLoading(false)
     );
   }, [jobId]);
+
+  useEffect(() => {
+    let active = true;
+    callFunction<{}, { paynowConfigured?: boolean }>('getBetaConfig', {}).then((config) => {
+      if (active) setPaynowConfigured(config.paynowConfigured === true);
+    }).catch(() => { if (active) setPaynowConfigured(false); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (!jobId) return;
@@ -366,12 +375,12 @@ export default function OffersScreen() {
       <Modal visible={!!paymentChoiceBid} transparent animationType="slide" onRequestClose={() => setPaymentChoiceBid(null)}>
         <View className="flex-1 justify-end bg-black/50"><View className="rounded-t-[32px] bg-white px-5 pb-9 pt-6">
           <View className="mb-5 h-1 w-12 self-center rounded-full bg-slate-200" />
-          <Text className="text-2xl font-display font-black text-ink">Choose how to pay</Text>
-          <Text className="mt-1 mb-5 font-sans text-sm leading-5 text-slate-500">Cleaner quote: ${Number(paymentChoiceBid?.bidPrice ?? 0).toFixed(2)}{job?.suppliesRequired&&job.bookingMode!=='INSTANT'?` + $${Number(job.suppliesFee??0).toFixed(2)} supplies`:''}. Total: ${(Number(paymentChoiceBid?.bidPrice??0)+(job?.bookingMode==='INSTANT'?0:job?.suppliesRequired?Number(job.suppliesFee??0):0)).toFixed(2)}. Pay through Paynow; available mobile money and other payment methods are shown in its secure checkout.</Text>
-          <TouchableOpacity disabled={!!busyBidId} onPress={() => { const bid = paymentChoiceBid; setPaymentChoiceBid(null); if (bid) void submitAcceptance(bid, IS_MOCK ? 'WALLET' : 'PAYNOW'); }} activeOpacity={0.85} className="rounded-3xl border border-violet-100 bg-[#F7F4FF] p-4">
-            <View className="flex-row items-center"><View className="mr-3 h-12 w-12 items-center justify-center rounded-2xl bg-accent"><Text className="font-display text-xl font-black text-white">P</Text></View><View className="flex-1"><Text className="font-display text-base font-black text-ink">{IS_MOCK ? 'Detail Wallet (test)' : 'Paynow BuySafe'}</Text><Text className="mt-0.5 font-sans text-xs text-ink/60">Protected checkout • payment status updates in Detail</Text></View><ChevronRight size={20} color="#3906D2"/></View>
-            <View className="mt-4 rounded-2xl bg-white/80 px-3 py-2.5"><Text className="font-sans text-xs leading-4 text-ink/70">Paynow opens in a secure checkout. BuySafe holds eligible payments; after the clean, confirm delivery in Paynow. Detail never asks for your payment PIN.</Text></View>
-            <View className="mt-3 items-center rounded-2xl bg-accent py-3.5"><Text className="font-display text-sm font-black uppercase tracking-wider text-white">Continue securely with Paynow</Text></View>
+          <Text className="text-2xl font-display font-black text-ink">{paynowConfigured || IS_MOCK ? 'Choose how to pay' : 'Payment isn’t available in Detail yet'}</Text>
+          <Text className="mt-1 mb-5 font-sans text-sm leading-5 text-slate-500">Cleaner quote: ${Number(paymentChoiceBid?.bidPrice ?? 0).toFixed(2)}{job?.suppliesRequired&&job.bookingMode!=='INSTANT'?` + $${Number(job.suppliesFee??0).toFixed(2)} supplies`:''}. Total: ${(Number(paymentChoiceBid?.bidPrice??0)+(job?.bookingMode==='INSTANT'?0:job?.suppliesRequired?Number(job.suppliesFee??0):0)).toFixed(2)}. {paynowConfigured || IS_MOCK ? 'Pay through Paynow; available mobile money and other methods appear in its checkout.' : 'You can still confirm this booking. Arrange payment directly with your cleaner. Detail will not collect, verify, refund, or protect that payment, and commission is not processed by Detail during this pause.'}</Text>
+          <TouchableOpacity disabled={!!busyBidId} onPress={() => { const bid = paymentChoiceBid; setPaymentChoiceBid(null); if (bid) void submitAcceptance(bid, IS_MOCK ? 'WALLET' : paynowConfigured ? 'PAYNOW' : 'DIRECT_OFFLINE'); }} activeOpacity={0.85} className="rounded-3xl border border-violet-100 bg-[#F7F4FF] p-4">
+            <View className="flex-row items-center"><View className="mr-3 h-12 w-12 items-center justify-center rounded-2xl bg-accent"><Text className="font-display text-xl font-black text-white">{paynowConfigured || IS_MOCK ? 'P' : '✓'}</Text></View><View className="flex-1"><Text className="font-display text-base font-black text-ink">{IS_MOCK ? 'Detail Wallet (test)' : paynowConfigured ? 'Paynow BuySafe' : 'Confirm and arrange payment directly'}</Text><Text className="mt-0.5 font-sans text-xs text-ink/60">{paynowConfigured || IS_MOCK ? 'Protected checkout • payment status updates in Detail' : 'Booking is confirmed; payment stays unpaid in Detail'}</Text></View><ChevronRight size={20} color="#3906D2"/></View>
+            {(paynowConfigured || IS_MOCK) && <View className="mt-4 rounded-2xl bg-white/80 px-3 py-2.5"><Text className="font-sans text-xs leading-4 text-ink/70">Paynow opens in a secure checkout. BuySafe holds eligible payments; after the clean, confirm delivery in Paynow. Detail never asks for your payment PIN.</Text></View>}
+            <View className="mt-3 items-center rounded-2xl bg-accent py-3.5"><Text className="font-display text-sm font-black uppercase tracking-wider text-white">{paynowConfigured || IS_MOCK ? 'Continue securely with Paynow' : 'Accept quote and confirm booking'}</Text></View>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setPaymentChoiceBid(null)} className="pt-5"><Text className="font-sans text-center font-bold text-slate-400">Cancel</Text></TouchableOpacity>
         </View></View>

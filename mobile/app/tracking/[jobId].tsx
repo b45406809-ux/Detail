@@ -572,6 +572,23 @@ export default function TrackingScreen() {
   }
 
   if (step === 'PAYMENT') {
+    if (job.paymentMethod === 'DIRECT_OFFLINE') {
+      return (
+        <SafeAreaView className="flex-1 bg-white">
+          <View className="flex-1 px-6 pt-12 pb-10">
+            <Text className="text-3xl font-display font-black text-ink mb-2">Arrange payment directly</Text>
+            <Text className="font-sans text-base text-ink/50 font-medium mb-4">Booking total: <Text className="font-display font-black text-ink">${job.price?.toFixed(2) ?? '—'}</Text></Text>
+            <View className="rounded-3xl border border-amber-200 bg-amber-50 p-5 mb-6">
+              <Text className="text-xs font-display font-black text-amber-800 uppercase tracking-widest mb-2">In-app payments are not available yet</Text>
+              <Text className="font-sans text-sm text-amber-900 leading-6">Agree payment directly with your cleaner. Detail has not charged you or collected commission, and cannot track, verify, refund, or protect this payment. Your booking remains unpaid in Detail.</Text>
+            </View>
+            <TouchableOpacity onPress={() => setStep('RATING')} className="mt-auto bg-accent py-5 rounded-[32px] items-center mb-3">
+              <Text className="text-white font-display font-black text-sm uppercase tracking-widest">Continue to rating</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      );
+    }
     if (job.paymentMethod === 'PAYNOW') {
       const status = String(job.paymentStatus ?? 'PENDING');
       const statusText: Record<string, string> = {
