@@ -60,6 +60,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Install app config dependencies
+        if: ${{ inputs.eas_source_run_id != '' }}
+        run: npm ci --prefix mobile --no-audit --no-fund
 
       - name: Resolve APK from the EAS source run
         if: ${{ inputs.eas_source_run_id != '' }}
