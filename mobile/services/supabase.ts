@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, type SupabaseClient, type User as SupabaseUser } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 import { signMediaValue } from './storage';
+import { resolveMediaInBackground } from './deferredMedia';
 import { unregisterCurrentPushDevice } from './pushRegistration';
 import { IS_MOCK, IS_STAGING_AUTH } from '../utils/env';
 
@@ -316,11 +317,11 @@ async function fetchRows(ref: QueryRef) {
   return Promise.all(rows.map(async row => ({ ...row, __signedData: await signMediaValue(rowToData(table, row)) })));
 }
 
-export async function getDoc(ref: DocumentRef) {
+export async function getDoc(ref: DocumentRef, options: { resolveMedia?: boolean } = {}) {
   const { data, error } = await supabase.from(physicalTable(ref.table)).select('*').eq(keyOf(ref.table), ref.id).maybeSingle();
   if (error) throw error;
   const row = data as Record<string, any> | null;
-  if (row) row.__signedData = await signMediaValue(rowToData(ref.table, row));
+  if (row && options.resolveMedia !== false) row.__signedData = await signMediaValue(rowToData(ref.table, row));
   return documentSnapshot(ref.table, row);
 }
 export async function getDocs(ref: QueryRef) { return querySnapshot(ref.collection.table, await fetchRows(ref)); }
@@ -373,21 +374,37 @@ export async function addDoc(ref: CollectionRef, input: Record<string, any>) {
   return { id: String((data as Record<string, any>)[keyOf(ref.table)]) };
 }
 
-export function onSnapshot(ref: DocumentRef, next: (snapshot: DocumentSnapshot) => void, error?: (error: Error) => void): () => void;
+type SnapshotOptions = { deferMedia?: boolean; onMediaResolved?: (resolved: unknown, original: unknown) => void };
+export function onSnapshot(ref: DocumentRef, next: (snapshot: DocumentSnapshot) => void, error?: (error: Error) => void, options?: SnapshotOptions): () => void;
 export function onSnapshot(ref: QueryRef, next: (snapshot: QuerySnapshot) => void, error?: (error: Error) => void): () => void;
-export function onSnapshot(ref: DocumentRef | QueryRef, next: (snapshot: any) => void, error?: (error: Error) => void) {
+export function onSnapshot(ref: DocumentRef | QueryRef, next: (snapshot: any) => void, error?: (error: Error) => void, options?: SnapshotOptions) {
   let stopped = false;
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
   let refreshing = false;
   let refreshQueued = false;
+  let mediaGeneration = 0;
   const table = tableOf(ref);
   const refresh = async () => {
     if (refreshing) { refreshQueued = true; return; }
     refreshing = true;
+    const generation = ++mediaGeneration;
     try {
       if (stopped) return;
-      const snapshot = ref.kind === 'document' ? await getDoc(ref) : querySnapshot(table, await fetchRows(ref));
-      if (!stopped) next(snapshot);
+      if (ref.kind === 'document') {
+        const snapshot = await getDoc(ref, { resolveMedia: !options?.deferMedia });
+        const data = snapshot.data();
+        // Keep the original data identity stable so a delayed image result cannot
+        // overwrite a newer profile or a signed-out session.
+        if (!stopped) next(options?.deferMedia ? { ...snapshot, data: () => data } : snapshot);
+        if (!stopped && options?.deferMedia && snapshot.exists()) {
+          void resolveMediaInBackground(data, signMediaValue, () => !stopped && generation === mediaGeneration,
+            (resolved, original) => options.onMediaResolved?.(resolved, original),
+            () => console.warn('Could not load account images.'));
+        }
+      } else {
+        const snapshot = querySnapshot(table, await fetchRows(ref));
+        if (!stopped) next(snapshot);
+      }
     } catch (err) { if (!stopped) error?.(err as Error); }
     finally {
       refreshing = false;

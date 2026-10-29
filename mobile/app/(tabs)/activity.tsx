@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
+import { FlatList, Pressable, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LoadingList } from '../../components/LoadingList';
 import { ArrowRight, CalendarDays, Clock3, RefreshCw } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { collection, db, limit, onSnapshot, orderBy, query, where } from '../../services/supabase';
@@ -72,7 +73,7 @@ export default function ActivityScreen() {
 
   return <SafeAreaView className="flex-1 bg-[#F2F1F5]">
     <View className="px-5 pt-5 pb-4"><Text className="text-2xl font-display font-black text-ink">Your bookings</Text><Text className="mt-1 font-sans text-sm text-ink/50">Pending, active and completed services in one place.</Text></View>
-    {loading ? <View className="flex-1 items-center justify-center"><ActivityIndicator size="large" color="#3906d2" /></View>
+    {loading ? <LoadingList />
       : loadError ? <View className="flex-1 items-center justify-center px-8"><Text className="text-center font-sans text-ink/60 mb-5">{loadError}</Text><Pressable accessibilityRole="button" onPress={() => { setCustomerJobs([]); setCleanerJobs([]); setLoading(true); setLoadError(''); setReloadKey(key => key + 1); }} className="flex-row items-center gap-2 rounded-2xl bg-accent px-5 py-4"><RefreshCw size={17} color="white"/><Text className="font-display font-bold text-white">Retry</Text></Pressable></View>
       : jobs.length === 0 ? <View className="flex-1 items-center justify-center px-8"><CalendarDays size={36} color="#3906d2"/><Text className="mt-4 text-xl font-display font-black text-ink">No bookings yet</Text><Text className="mt-2 text-center font-sans text-sm text-ink/50">Your requests and completed services will show here.</Text></View>
       : <FlatList data={jobs} keyExtractor={job => job.id} contentContainerClassName="px-5 pb-8 gap-3" renderItem={({ item: job }) => {

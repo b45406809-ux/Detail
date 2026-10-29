@@ -130,6 +130,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               firstLoad = false;
               setIsLoading(false);
             }
+          },
+          {
+            deferMedia: true,
+            onMediaResolved: (resolved, original) => {
+              setProfile(current => current === original ? resolved as UserProfile : current);
+            },
           }
         );
       } else {

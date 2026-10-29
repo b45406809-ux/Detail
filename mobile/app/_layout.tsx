@@ -13,6 +13,7 @@ import { DMSans_400Regular, DMSans_500Medium, DMSans_600SemiBold, DMSans_700Bold
 import { Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrope';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { LoadingList } from '../components/LoadingList';
 import { handleAuthCallback, supabase } from '../services/supabase';
 import { APP_ENVIRONMENT } from '../utils/env';
 
@@ -50,7 +51,9 @@ function AuthGuard() {
     }
   }, [user, profile, isLoading, profileError, segments]);
 
-  if (profileError && user) return <View className="flex-1 items-center justify-center bg-white px-8"><Text className="text-center text-base font-sans text-ink mb-5">{profileError}</Text><Pressable accessibilityRole="button" onPress={() => void refreshProfile().catch(() => undefined)} className="rounded-2xl bg-accent px-6 py-4"><Text className="font-display font-bold text-white">Try again</Text></Pressable></View>;
+  const overlayStyle = { position: 'absolute' as const, top: 0, bottom: 0, left: 0, right: 0, zIndex: 1000, elevation: 1000 };
+  if (profileError && user) return <View style={overlayStyle} className="items-center justify-center bg-white px-8"><Text accessibilityRole="alert" className="text-center text-base font-sans text-ink mb-5">{profileError}</Text><Pressable accessibilityRole="button" onPress={() => void refreshProfile().catch(() => undefined)} className="rounded-2xl bg-accent px-6 py-4"><Text className="font-display font-bold text-white">Try again</Text></Pressable></View>;
+  if (isLoading) return <View style={overlayStyle} className="bg-[#F3F1FC] pt-20"><Text accessibilityLiveRegion="polite" className="px-5 pb-5 text-xl font-display font-black text-ink">Opening your account…</Text><LoadingList rows={3} /></View>;
 
   return null;
 }
