@@ -107,6 +107,8 @@ jobs:
             });
           '
       - run: npm run type-check --prefix mobile
+      - name: Test deferred account media handling
+        run: node --experimental-strip-types --test qa/deferred-profile-media.test.mjs
       - run: npm run lint --prefix mobile
 
   functions:
