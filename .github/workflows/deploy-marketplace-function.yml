@@ -11,38 +11,31 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE }}
       SUPABASE_PUBLIC_ANON: ${{ secrets.SUPABASE_PUBLIC_ANON || secrets.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_ANON_KEY }}
-      PAYNOW_INTEGRATION_ID: ${{ secrets.PAYNOW_INTEGRATION_ID }}
-      PAYNOW_INTEGRATION_KEY: ${{ secrets.PAYNOW_INTEGRATION_KEY }}
-      PAYNOW_RETURN_URL: ${{ vars.PAYNOW_RETURN_URL }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 08b02b1d2b0303ced165a8fd73f73f20e3aa3317
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - uses: supabase/setup-cli@v1
         with:
           version: latest
-      - name: Configure Paynow and deploy payment Edge Functions
+      - name: Apply reviewed database migrations
         run: |
           set -euo pipefail
           test "$SUPABASE_PROJECT_REF" = yiyhmueospjwbaywzusp
           test -n "$SUPABASE_ACCESS_TOKEN"
-          test -n "$PAYNOW_INTEGRATION_ID" || { echo 'Missing production secret PAYNOW_INTEGRATION_ID'; exit 1; }
-          test -n "$PAYNOW_INTEGRATION_KEY" || { echo 'Missing production secret PAYNOW_INTEGRATION_KEY'; exit 1; }
-          secret_file="$RUNNER_TEMP/detail-paynow-secrets.env"
-          trap 'rm -f "$secret_file"' EXIT
-          printf 'PAYNOW_INTEGRATION_ID=%s\nPAYNOW_INTEGRATION_KEY=%s\n' "$PAYNOW_INTEGRATION_ID" "$PAYNOW_INTEGRATION_KEY" > "$secret_file"
-          if [[ -n "$PAYNOW_RETURN_URL" ]]; then printf 'PAYNOW_RETURN_URL=%s\n' "$PAYNOW_RETURN_URL" >> "$secret_file"; fi
-          supabase secrets set --env-file "$secret_file" --project-ref "$SUPABASE_PROJECT_REF"
-          rm -f "$secret_file"
+          test -n "$SUPABASE_DB_PASSWORD" || { echo 'Missing production secret SUPABASE_DB_PASSWORD'; exit 1; }
+          supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          supabase db push
+      - name: Deploy marketplace Edge Function
+        run: |
+          set -euo pipefail
           supabase functions deploy marketplace-api --project-ref "$SUPABASE_PROJECT_REF"
-          supabase functions deploy paynow-webhook --project-ref "$SUPABASE_PROJECT_REF"
-          supabase functions deploy paynow-reconcile --project-ref "$SUPABASE_PROJECT_REF"
-          supabase functions deploy paynow-return --project-ref "$SUPABASE_PROJECT_REF"
       - name: Create disposable accounts for live verification
         run: node scripts/live_mobile_ui_e2e.mjs create
       - name: Verify deployed backend access guards
@@ -70,3 +63,45 @@ jobs:
       - name: Clean up verification accounts
         if: always()
         run: node scripts/live_mobile_ui_e2e.mjs cleanup
+      - name: Enable scheduled quote bookings with explicit offline payment status
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE }}
+        run: |
+          node <<'NODE'
+          (async () => {
+            const base = process.env.SUPABASE_URL.replace(/\/$/, '');
+            const key = process.env.SUPABASE_SECRET_KEY;
+            if (!base || !key) throw new Error('Missing Supabase production API credentials.');
+            const headers = { apikey: key, authorization: `Bearer ${key}`, 'content-type': 'application/json' };
+            const read = async (table, keyName) => {
+              const response = await fetch(`${base}/rest/v1/configuration?select=value&key=eq.${keyName}`, { headers });
+              if (!response.ok) throw new Error(`Could not read ${keyName} launch settings (HTTP ${response.status}).`);
+              const rows = await response.json();
+              if (!rows[0]) throw new Error(`Missing ${keyName} launch settings.`);
+              return rows[0].value;
+            };
+            const [beta, operations] = await Promise.all([read('configuration', 'beta'), read('configuration', 'operations')]);
+            const switches = operations?.switches ?? {};
+            if (beta.maintenanceMode || beta.disableNewBookings || switches.maintenance || switches.bookingCreation || switches.bidAcceptance) {
+              throw new Error('Booking launch remains blocked by a maintenance or operations safety switch.');
+            }
+            const updated = { ...beta, bookingEnabled: true, instantBookingEnabled: false };
+            const patch = await fetch(`${base}/rest/v1/configuration?key=eq.beta`, {
+              method: 'PATCH', headers: { ...headers, prefer: 'return=minimal' },
+              body: JSON.stringify({ value: updated, updatedBy: null, updatedAt: new Date().toISOString() }),
+            });
+            if (!patch.ok) throw new Error(`Could not enable scheduled quote bookings (HTTP ${patch.status}).`);
+            const audit = await fetch(`${base}/rest/v1/adminAuditEvents`, {
+              method: 'POST', headers: { ...headers, prefer: 'return=minimal' },
+              body: JSON.stringify({
+                id: `booking-launch-offline-${Date.now()}`,
+                action: 'scheduled_booking_launch_offline_payment', actorId: null, targetId: 'beta',
+                reason: 'User requested bookings to operate before Paynow secrets are available. Customers and cleaners must arrange payment outside Detail; the app records payment as pending and does not process commission.',
+                data: { bookingMode: 'SCHEDULED_QUOTES_ONLY', paynowConfigured: false, instantBookingEnabled: false }, immutable: true,
+              }),
+            });
+            if (!audit.ok) throw new Error(`Launch state changed, but its audit record could not be written (HTTP ${audit.status}).`);
+            console.log('SCHEDULED_QUOTE_BOOKINGS: ENABLED; INSTANT_BOOKING: DISABLED; PAYNOW: UNCONFIGURED; OFFLINE_PAYMENT_NOTICE: ACTIVE');
+          })().catch(error => { console.error(error.message); process.exitCode = 1; });
+          NODE

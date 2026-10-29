@@ -12,6 +12,7 @@ export default function BookingConfirmationScreen() {
   const [job,setJob]=useState<Job|null>(null);const [refreshing,setRefreshing]=useState(false);
   useEffect(()=>{if(!jobId)return;return onSnapshot(doc(db,'jobs',jobId),(snapshot)=>{if(snapshot.exists())setJob({id:snapshot.id,...snapshot.data()} as Job);});},[jobId]);
   const isPaynow=job?.paymentMethod==='PAYNOW';
+  const isDirectOffline=job?.paymentMethod==='DIRECT_OFFLINE';
   const isFunded=['ESCROWED','DELIVERED','PAID'].includes(String(job?.paymentStatus??''));
   const refreshPayment=async()=>{setRefreshing(true);try{const result=await callFunction<{jobId:string},{success:boolean;status:string}>('refreshPaynowBookingPayment',{jobId});Alert.alert('Paynow status',`Current status: ${result.status.replaceAll('_',' ')}.`);}catch(error:any){Alert.alert('Status not updated',error.message||'Paynow is still processing this payment.');}finally{setRefreshing(false);}};
 
@@ -22,10 +23,10 @@ export default function BookingConfirmationScreen() {
           <CheckCircle size={48} color="#10b981" />
         </View>
           <Text className="text-3xl font-display font-black text-slate-900 text-center mb-2">
-          {!job?'Booking accepted':isPaynow&&!isFunded?'Booking accepted':isPaynow?'Payment protected':'Booking Confirmed!'}
+          {!job?'Booking accepted':isDirectOffline?'Booking confirmed':isPaynow&&!isFunded?'Booking accepted':isPaynow?'Payment protected':'Booking Confirmed!'}
         </Text>
         <Text className="font-sans text-base text-slate-500 font-medium text-center mb-10">
-          {!job?'Your cleaner is selected. We are checking your booking and payment status.':isPaynow&&!isFunded?'Your cleaner is selected, but Paynow has not confirmed the payment yet. Open the payment status to complete or retry secure checkout.':isPaynow?'Paynow BuySafe is holding your payment. After the cleaning, confirm delivery in Paynow; Detail will keep you updated here.':'Your cleaner is selected. You can follow booking updates and message them in Detail.'}
+          {!job?'Your cleaner is selected. We are checking your booking and payment status.':isDirectOffline?'Your cleaner is confirmed. In-app payments are not available yet, so agree payment directly with them. Detail will not collect, verify, refund, or protect the payment; it remains unpaid in the app.':isPaynow&&!isFunded?'Your cleaner is selected, but Paynow has not confirmed the payment yet. Open the payment status to complete or retry secure checkout.':isPaynow?'Paynow BuySafe is holding your payment. After the cleaning, confirm delivery in Paynow; Detail will keep you updated here.':'Your cleaner is selected. You can follow booking updates and message them in Detail.'}
         </Text>
 
         {isPaynow&&<View className="w-full rounded-3xl border border-violet-100 bg-[#F7F4FF] p-4 mb-5"><View className="flex-row items-center gap-3"><View className="h-11 w-11 items-center justify-center rounded-2xl bg-accent"><Text className="font-display text-lg font-black text-white">P</Text></View><View className="flex-1"><Text className="font-display font-black text-ink">Paynow BuySafe</Text><Text className="font-sans text-xs text-ink/55">{String(job?.paymentStatus??'PENDING').replaceAll('_',' ')}</Text></View>{!isFunded&&<TouchableOpacity disabled={refreshing} onPress={()=>void refreshPayment()} className="rounded-xl bg-white px-3 py-2">{refreshing?<ActivityIndicator color="#3906D2" size="small"/>:<Text className="font-sans text-xs font-bold text-accent">Refresh</Text>}</TouchableOpacity>}</View></View>}
