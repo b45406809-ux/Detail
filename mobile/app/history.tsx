@@ -5,13 +5,14 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
-  ActivityIndicator,
   Image,
   Modal,
   TextInput,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LoadingList } from '../components/LoadingList';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { ArrowLeft, MapPin, Flag, X, ImagePlus } from 'lucide-react-native';
@@ -104,9 +105,7 @@ export default function HistoryScreen() {
       </View>
 
       {isLoading ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#3906d2" size="large" />
-        </View>
+        <LoadingList />
       ) : jobs.length === 0 ? (
         <View className="flex-1 items-center justify-center px-6">
           <Text className="font-sans text-4xl mb-4">📋</Text>

@@ -5,9 +5,9 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LoadingList } from '../components/LoadingList';
 import { router } from 'expo-router';
 import { ArrowLeft, Star } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
@@ -113,9 +113,7 @@ export default function ReviewsScreen() {
       )}
 
       {isLoading ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#3906d2" size="large" />
-        </View>
+        <LoadingList />
       ) : reviews.length === 0 ? (
         <View className="flex-1 items-center justify-center px-8">
           <Text className="font-sans text-4xl mb-4">⭐</Text>

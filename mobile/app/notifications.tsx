@@ -1,7 +1,8 @@
 import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LoadingList } from '../components/LoadingList';
 import { router } from 'expo-router';
 import { ArrowLeft, Bell, MessageSquare, DollarSign, Star, Zap, Info } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
@@ -75,9 +76,7 @@ export default function NotificationsScreen() {
       </View>
 
       {isLoading ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#3906D2" size="large" />
-        </View>
+        <LoadingList />
       ) : items.length === 0 ? (
         <View className="flex-1 items-center justify-center px-6">
           <View className="w-20 h-20 bg-accent/10 rounded-3xl items-center justify-center mb-4">
