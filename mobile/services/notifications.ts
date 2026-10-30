@@ -29,11 +29,13 @@ export function resolveNotificationTarget(data: { type?: string; jobId?: string;
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
+    // Foreground notifications use Detail's branded in-app banner. Background
+    // notifications continue to use the native OS tray and lock-screen UI.
+    shouldShowAlert: false,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+    shouldShowBanner: false,
+    shouldShowList: false,
   }),
 });
 

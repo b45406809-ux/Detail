@@ -8,7 +8,9 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { configureNotificationChannels, resolveNotificationTarget } from '../services/notifications';
+import { DynamicNotification, DynamicNotificationBanner } from '../components/DynamicNotificationBanner';
 import { DMSans_400Regular, DMSans_500Medium, DMSans_600SemiBold, DMSans_700Bold } from '@expo-google-fonts/dm-sans';
 import { Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrope';
 import { AuthProvider, useAuth } from '../context/AuthContext';
@@ -86,6 +88,7 @@ function EnvironmentIndicator() {
 export default function RootLayout() {
   const [fontsLoaded, setFontsLoaded] = React.useState(false);
   const [pendingNotification, setPendingNotification] = useState<Notifications.NotificationResponse | null>(null);
+  const [activeNotification, setActiveNotification] = useState<DynamicNotification | null>(null);
   const notificationKey = useRef('');
   const consumeNotification = useCallback(() => {
     notificationKey.current = '';
@@ -114,14 +117,24 @@ export default function RootLayout() {
       setPendingNotification(response);
     };
     let notificationSubscription: Notifications.Subscription | undefined;
+    let foregroundNotificationSubscription: Notifications.Subscription | undefined;
     if (Platform.OS !== 'web') {
       configureNotificationChannels().catch(() => undefined);
       notificationSubscription = Notifications.addNotificationResponseReceivedListener(queueNotification);
+      foregroundNotificationSubscription = Notifications.addNotificationReceivedListener(notification => {
+        const content = notification.request.content;
+        setActiveNotification({
+          title: content.title?.trim() || 'New Detail update',
+          body: content.body?.trim() || 'Open Detail to see the latest update.',
+          data: content.data as DynamicNotification['data'],
+        });
+      });
       Notifications.getLastNotificationResponseAsync().then(response => response && queueNotification(response));
     }
     return () => {
       active = false;
       notificationSubscription?.remove();
+      foregroundNotificationSubscription?.remove();
       linkSubscription.remove();
       authSubscription.subscription.unsubscribe();
     };
@@ -148,13 +161,24 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ErrorBoundary>
-        <AuthProvider>
-          <AuthGuard />
-          <NotificationRouter response={pendingNotification} onConsumed={consumeNotification} />
-          <EnvironmentIndicator />
-          <StatusBar style="auto" />
-          <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+      <SafeAreaProvider>
+        <ErrorBoundary>
+          <AuthProvider>
+            <AuthGuard />
+            <NotificationRouter response={pendingNotification} onConsumed={consumeNotification} />
+            <EnvironmentIndicator />
+            <DynamicNotificationBanner
+              notification={activeNotification}
+              onDismiss={() => setActiveNotification(null)}
+              onPress={() => {
+                const target = resolveNotificationTarget(activeNotification?.data ?? {});
+                setActiveNotification(null);
+                if (target) router.push(target);
+                else router.push('/notifications');
+              }}
+            />
+            <StatusBar style="auto" />
+            <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
             <Stack.Screen name="(auth)" options={{ animation: 'none' }} />
             <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
             {/* Stack screens without tab bar */}
@@ -176,9 +200,10 @@ export default function RootLayout() {
             <Stack.Screen name="register-cleaner" />
             <Stack.Screen name="account/email" />
             <Stack.Screen name="+not-found" />
-          </Stack>
-        </AuthProvider>
-      </ErrorBoundary>
+            </Stack>
+          </AuthProvider>
+        </ErrorBoundary>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
