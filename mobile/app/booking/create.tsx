@@ -94,14 +94,27 @@ export default function CreateBookingScreen() {
 
   const [address, setAddress] = useState('');
   const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(null);
+  const [searchProximity, setSearchProximity] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [addressSuggestions, setAddressSuggestions] = useState<{ id: string; label: string; lat: number; lng: number }[]>([]);
   useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const permission = await Location.getForegroundPermissionsAsync();
+        if (!permission.granted) return;
+        const lastKnown = await Location.getLastKnownPositionAsync();
+        if (active && lastKnown) setSearchProximity({ latitude: lastKnown.coords.latitude, longitude: lastKnown.coords.longitude });
+      } catch { /* Global address search remains available when device location is unavailable. */ }
+    })();
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
     if (!MAPBOX_ACCESS_TOKEN || coordinates || address.trim().length < 3) { setAddressSuggestions([]); return; }
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      const url = buildAddressSuggestionUrl(address, MAPBOX_ACCESS_TOKEN);
+      const url = buildAddressSuggestionUrl(address, MAPBOX_ACCESS_TOKEN, searchProximity);
       fetch(url, { signal: controller.signal }).then(response => {
         if (!response.ok) throw new Error('Address search unavailable');
         return response.json();
@@ -109,7 +122,7 @@ export default function CreateBookingScreen() {
         .catch(error => { if (error?.name !== 'AbortError') setAddressSuggestions([]); });
     }, 400);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [address, coordinates]);
+  }, [address, coordinates, searchProximity]);
 
   const selectMapLocation = async (longitude: number, latitude: number) => {
     if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return;
@@ -165,6 +178,7 @@ export default function CreateBookingScreen() {
       ]);
       const { coords } = position;
       setCoordinates({ lat: coords.latitude, lng: coords.longitude });
+      setSearchProximity({ latitude: coords.latitude, longitude: coords.longitude });
       const [place] = await Location.reverseGeocodeAsync({ latitude: coords.latitude, longitude: coords.longitude });
       if (place) {
         setAddress([place.streetNumber, place.street, place.city, place.region].filter(Boolean).join(', '));

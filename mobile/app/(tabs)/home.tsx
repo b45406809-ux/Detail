@@ -54,8 +54,6 @@ import { callFunction } from '../../services/functions';
 import { Mapbox, IS_MAPBOX_AVAILABLE } from '../../services/mapbox';
 import { completeCleanerPresenceStart, startCleanerLocationUpdates, stopCleanerLocationUpdates } from '../../services/locationTracking';
 
-const FALLBACK_REGION = { latitude: -17.8252, longitude: 31.0335, latitudeDelta: 0.12, longitudeDelta: 0.12 };
-
 export default function HomeScreen() {
   const { user, profile, locationTrackingError } = useAuth();
   const userId = user?.uid;
@@ -261,9 +259,13 @@ export default function HomeScreen() {
     );
   }
 
-  const region = currentLocation
-    ? { latitude: currentLocation.lat, longitude: currentLocation.lng, latitudeDelta: 0.02, longitudeDelta: 0.02 }
-    : FALLBACK_REGION;
+  const savedLocation = profile.location && Number.isFinite(profile.location.lat) && Number.isFinite(profile.location.lng)
+    ? profile.location
+    : null;
+  const mapCenter = currentLocation ?? savedLocation;
+  const region = mapCenter
+    ? { latitude: mapCenter.lat, longitude: mapCenter.lng, latitudeDelta: 0.02, longitudeDelta: 0.02 }
+    : { latitude: 0, longitude: 0, latitudeDelta: 120, longitudeDelta: 120 };
 
   return (
     <View className="flex-1 bg-[#EDEBFA]">
@@ -279,10 +281,10 @@ export default function HomeScreen() {
           <Mapbox.Camera
             ref={mapRef}
             centerCoordinate={[region.longitude, region.latitude]}
-            zoomLevel={currentLocation ? 15 : 10}
+            zoomLevel={mapCenter ? 15 : 1}
             defaultSettings={{
               centerCoordinate: [region.longitude, region.latitude],
-              zoomLevel: currentLocation ? 15 : 10,
+              zoomLevel: mapCenter ? 15 : 1,
             }}
           />
           <Mapbox.UserLocation visible />
