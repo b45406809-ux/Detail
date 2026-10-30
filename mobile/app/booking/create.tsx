@@ -37,6 +37,7 @@ import { useAuth } from '../../context/AuthContext';
 import { db, addDoc, collection, serverTimestamp, Timestamp } from '../../services/supabase';
 import { uploadJobPhoto } from '../../services/storage';
 import { Mapbox, IS_MAPBOX_AVAILABLE, MAPBOX_ACCESS_TOKEN } from '../../services/mapbox';
+import { buildAddressSuggestionUrl } from '../../services/geocoding';
 import { JobStatus, ServiceCategory, HouseChecklist, CarChecklist } from '../../types';
 import * as Catalog from '../../constants/services';
 
@@ -100,7 +101,7 @@ export default function CreateBookingScreen() {
     if (!MAPBOX_ACCESS_TOKEN || coordinates || address.trim().length < 3) { setAddressSuggestions([]); return; }
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address.trim())}.json?autocomplete=true&limit=5&access_token=${encodeURIComponent(MAPBOX_ACCESS_TOKEN)}`;
+      const url = buildAddressSuggestionUrl(address, MAPBOX_ACCESS_TOKEN);
       fetch(url, { signal: controller.signal }).then(response => {
         if (!response.ok) throw new Error('Address search unavailable');
         return response.json();
