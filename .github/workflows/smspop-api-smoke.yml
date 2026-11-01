@@ -8,6 +8,13 @@ on:
         type: boolean
         required: true
         default: false
+      sender_id:
+        description: Sender ID to test
+        type: choice
+        required: true
+        options:
+          - DETAIL
+          - SMSPoP
 
 permissions:
   contents: read
@@ -20,7 +27,7 @@ jobs:
     timeout-minutes: 5
     env:
       SMSPOP_API_KEY: ${{ secrets.SMSPOP_API_KEY || secrets.SMSPOP_API_TOKEN }}
-      SMSPOP_SENDER_ID: SMSPoP
+      SMSPOP_SENDER_ID: ${{ inputs.sender_id }}
       LIVE_E2E_SMS_TO: ${{ secrets.LIVE_E2E_SMS_TO }}
       CONFIRM_SIDE_EFFECTS: ${{ inputs.confirm_live_side_effects }}
     steps:
