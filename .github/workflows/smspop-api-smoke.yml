@@ -1,0 +1,32 @@
+name: SMSPoP shared sender API test
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_live_side_effects:
+        description: Send one test SMS to LIVE_E2E_SMS_TO. SMSPoP may charge one credit.
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    if: inputs.confirm_live_side_effects == true
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    env:
+      SMSPOP_API_KEY: ${{ secrets.SMSPOP_API_KEY || secrets.SMSPOP_API_TOKEN }}
+      SMSPOP_SENDER_ID: SMSPoP
+      LIVE_E2E_SMS_TO: ${{ secrets.LIVE_E2E_SMS_TO }}
+      CONFIRM_SIDE_EFFECTS: ${{ inputs.confirm_live_side_effects }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Send one shared-sender API test
+        run: node scripts/smspop_api_smoke.mjs
