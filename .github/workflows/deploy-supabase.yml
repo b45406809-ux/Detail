@@ -81,7 +81,7 @@ jobs:
             if [ -n "$value" ]; then printf '%s=%s\n' "$name" "$value" >> "$secret_file"; fi
           done
           if [ -s "$secret_file" ]; then
-            npx --yes supabase@latest secrets set --env-file "$secret_file" --project-ref "$SUPABASE_PROJECT_REF"
+            npx --yes supabase@latest secrets set --env-file "$secret_file" --project-ref "$SUPABASE_PROJECT_REF" --yes
           fi
           rm -f "$secret_file"
       - name: Deploy marketplace and provider functions
