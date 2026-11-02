@@ -35,9 +35,6 @@ jobs:
       TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
       TWILIO_MESSAGING_SERVICE_SID: ${{ secrets.TWILIO_MESSAGING_SERVICE_SID }}
       TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
-      SMSPOP_API_KEY: ${{ secrets.SMSPOP_API_KEY || secrets.SMSPOP_API_TOKEN }}
-      SMSPOP_SENDER_ID: ${{ vars.SMSPOP_SENDER_ID }}
-      SEND_SMS_HOOK_SECRET: ${{ secrets.SEND_SMS_HOOK_SECRET }}
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
     steps:
       - uses: actions/checkout@v4
@@ -70,13 +67,13 @@ jobs:
       - name: Link and apply database migrations
         run: |
           npx --yes supabase@latest link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-          npx --yes supabase@latest db push
+          npx --yes supabase@latest db push --remote
       - name: Configure Supabase Edge Function secrets
         shell: bash
         run: |
           secret_file="$RUNNER_TEMP/detail-supabase-secrets.env"
           : > "$secret_file"
-          for name in PAYNOW_INTEGRATION_ID PAYNOW_INTEGRATION_KEY PAYNOW_RETURN_URL DIDIT_API_KEY DIDIT_WORKFLOW_ID TURNSTILE_SECRET RESEND_API_KEY APP_RETURN_URL PAYOUT_ENCRYPTION_KEY TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_MESSAGING_SERVICE_SID TWILIO_FROM_NUMBER SMSPOP_API_KEY SMSPOP_SENDER_ID SEND_SMS_HOOK_SECRET CRON_SECRET; do
+          for name in PAYNOW_INTEGRATION_ID PAYNOW_INTEGRATION_KEY PAYNOW_RETURN_URL DIDIT_API_KEY DIDIT_WORKFLOW_ID TURNSTILE_SECRET RESEND_API_KEY APP_RETURN_URL PAYOUT_ENCRYPTION_KEY TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_MESSAGING_SERVICE_SID TWILIO_FROM_NUMBER CRON_SECRET; do
             value="${!name}"
             if [ -n "$value" ]; then printf '%s=%s\n' "$name" "$value" >> "$secret_file"; fi
           done
@@ -93,4 +90,3 @@ jobs:
           npx --yes supabase@latest functions deploy marketing-unsubscribe --project-ref "$SUPABASE_PROJECT_REF"
           npx --yes supabase@latest functions deploy delivery-worker --project-ref "$SUPABASE_PROJECT_REF"
           npx --yes supabase@latest functions deploy twilio-status --project-ref "$SUPABASE_PROJECT_REF"
-          npx --yes supabase@latest functions deploy auth-sms-smspop --project-ref "$SUPABASE_PROJECT_REF"

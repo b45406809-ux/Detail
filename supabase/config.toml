@@ -66,9 +66,6 @@ verify_jwt = false
 [functions.twilio-status]
 verify_jwt = false
 
-[functions.auth-sms-smspop]
-verify_jwt = false
-
 [functions.paynow-webhook]
 verify_jwt = false
 
