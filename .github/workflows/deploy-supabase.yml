@@ -70,7 +70,7 @@ jobs:
       - name: Link and apply database migrations
         run: |
           npx --yes supabase@latest link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-          npx --yes supabase@latest db push
+          npx --yes supabase@latest db push --remote
       - name: Configure Supabase Edge Function secrets
         shell: bash
         run: |
