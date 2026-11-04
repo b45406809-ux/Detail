@@ -142,10 +142,9 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    // Keep the native splash screen only briefly. On slower devices font
-    // registration can take several seconds; the app can render with system
-    // fallbacks while the bundled custom fonts finish loading.
-    const startupFallback = setTimeout(() => setStartupReady(true), 900);
+    // Keep the native splash visible long enough for its loading animation to
+    // finish. Font loading continues in parallel so it cannot extend startup.
+    const startupFallback = setTimeout(() => setStartupReady(true), 2000);
     Font.loadAsync({
       DMSans_400Regular,
       DMSans_500Medium,
@@ -154,11 +153,8 @@ export default function RootLayout() {
       Manrope_700Bold,
       Manrope_800ExtraBold,
     })
-      .then(() => {
-        setFontsLoaded(true);
-        setStartupReady(true);
-      })
-      .catch(() => setStartupReady(true));
+      .then(() => setFontsLoaded(true))
+      .catch(() => undefined);
     return () => clearTimeout(startupFallback);
   }, []);
 
