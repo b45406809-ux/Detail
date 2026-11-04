@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MapPin, Clock, DollarSign, MessageSquare, Hash, Home, Layers, Sparkles, X } from 'lucide-react-native';
+import { ArrowLeft, MapPin, Clock, DollarSign, MessageSquare, Hash, Home, Layers, Sparkles, X, CheckCircle2 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { db, doc, collection, onSnapshot, query, where, getDocs, limit } from '../../services/supabase';
 import { callFunction } from '../../services/functions';
@@ -250,8 +250,11 @@ export default function CleanerJobDetailScreen() {
             </View>
           ) : alreadyBid ? (
             <View className="mx-5 bg-emerald-50 rounded-3xl p-5 border border-emerald-100 items-center">
-              <Text className="font-sans text-2xl mb-2">✅</Text>
-              <Text className="text-sm font-display font-black text-emerald-700 text-center">Bid submitted — waiting for customer to accept</Text>
+              <View className="w-10 h-10 rounded-full bg-emerald-100 items-center justify-center mb-3">
+                <CheckCircle2 size={22} color="#15803D" strokeWidth={2.25} />
+              </View>
+              <Text className="text-sm font-display font-black text-emerald-800 text-center">Bid submitted</Text>
+              <Text className="text-xs font-sans text-emerald-700/80 text-center mt-1">Waiting for the customer to accept</Text>
             </View>
           ) : (
             <View className="mx-5 bg-white rounded-3xl p-5 border border-ink/5">
