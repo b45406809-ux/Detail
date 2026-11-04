@@ -1,6 +1,14 @@
 name: Live Android APK UI test
 
 on:
+  push:
+    branches:
+      - codex/separate-dashboard-into-routed-modules-fl7jlh
+    paths:
+      - '.github/workflows/live-apk-ui-test.yml'
+      - '.maestro/**'
+      - 'scripts/live_mobile_ui_e2e.mjs'
+      - 'scripts/run-live-android-ui.sh'
   workflow_dispatch:
     inputs:
       source_run_id:
@@ -61,6 +69,8 @@ jobs:
           test -n "$SUPABASE_SECRET_KEY"
           test -n "$EXPO_PUBLIC_SUPABASE_URL"
           test -n "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
+          test -n "$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID" || { echo 'Missing EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID; refusing to spend an EAS build on an unconfigured native sign-in.'; exit 1; }
+          [[ "$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID" == *.apps.googleusercontent.com ]]
           node scripts/live_mobile_ui_e2e.mjs preflight
 
       - run: npm ci --prefix mobile --no-audit --no-fund

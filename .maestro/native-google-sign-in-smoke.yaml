@@ -1,0 +1,21 @@
+appId: com.detail.app
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Skip onboarding"
+    timeout: 20000
+- tapOn:
+    id: welcome-skip
+- assertVisible:
+    id: google-sign-in-button
+- tapOn:
+    id: google-sign-in-button
+- waitForAnimationToEnd:
+    timeout: 10000
+- pressKey: BACK
+- extendedWaitUntil:
+    visible:
+      id: google-sign-in-button
+    timeout: 15000
+- assertNotVisible: "Google Sign-In Failed"

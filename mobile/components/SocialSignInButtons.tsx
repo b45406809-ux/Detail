@@ -1,23 +1,12 @@
-// Social sign-in for Supabase Auth.
+// Google and Apple ID token sign-in for Supabase Auth.
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Platform, Alert } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import * as WebBrowser from 'expo-web-browser';
-import { handleAuthCallback, supabase } from '../services/supabase';
+import GoogleSignInButton from './GoogleSignInButton';
+import { supabase } from '../services/supabase';
 import { IS_MOCK } from '../utils/env';
-
-WebBrowser.maybeCompleteAuthSession();
-
-/**
- * Supabase's auth.users trigger creates a profile for new providers. Check
- * that it exists without writing a client-controlled role or KYC state.
- */
-async function ensureProfileExists(uid: string, email: string | null) {
-  const { data } = await supabase.from('users').select('id').eq('id', uid).maybeSingle();
-  if (data) return;
-  throw new Error(`The Supabase profile trigger did not create a profile for ${email ?? uid}.`);
-}
+import { ensureProfileExists } from './authProfiles';
 
 export function SocialSignInButtons() {
   const [isAppleLoading, setIsAppleLoading] = useState(false);
@@ -76,66 +65,6 @@ export function SocialSignInButtons() {
         </TouchableOpacity>
       )}
     </View>
-  );
-}
-
-function GoogleSignInButton() {
-  const [isLoading, setIsLoading] = useState(false);
-
-  const handleGoogleSignIn = async () => {
-    setIsLoading(true);
-    try {
-      const redirectTo = 'detail://auth/callback';
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo, skipBrowserRedirect: true },
-      });
-      if (error) throw error;
-      if (!data.url) throw new Error('Google sign-in could not be started.');
-      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-      if (result.type !== 'success') return;
-      await handleAuthCallback(result.url);
-    } catch (err: any) {
-      Alert.alert('Google Sign-In Failed', err.message || 'Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <TouchableOpacity
-      testID="google-sign-in-button"
-      onPress={handleGoogleSignIn}
-      disabled={isLoading}
-      activeOpacity={0.85}
-      className="w-full bg-white flex-row items-center justify-center gap-3 py-4 rounded-[24px] border-2 border-ink/10"
-    >
-      {isLoading ? <ActivityIndicator color="#3906D2" /> : <GoogleLogo size={18} />}
-      <Text className="font-display font-black text-sm text-ink">Continue with Google</Text>
-    </TouchableOpacity>
-  );
-}
-
-function GoogleLogo({ size = 18 }: { size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 48 48">
-      <Path
-        fill="#FFC107"
-        d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"
-      />
-      <Path
-        fill="#FF3D00"
-        d="M6.3 14.7l6.6 4.8C14.6 16 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 16.3 4 9.6 8.3 6.3 14.7z"
-      />
-      <Path
-        fill="#4CAF50"
-        d="M24 44c5.2 0 10-2 13.5-5.2l-6.2-5.3C29.3 35.1 26.8 36 24 36c-5.3 0-9.6-3.3-11.3-8l-6.6 5.1C9.5 39.6 16.2 44 24 44z"
-      />
-      <Path
-        fill="#1976D2"
-        d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.2 5.5l6.2 5.3C40.4 36.4 44 30.8 44 24c0-1.3-.1-2.7-.4-3.5z"
-      />
-    </Svg>
   );
 }
 

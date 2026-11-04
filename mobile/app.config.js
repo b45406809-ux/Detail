@@ -26,9 +26,19 @@ if (supabaseUrl && !/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(supabaseUrl)
 if (supabasePublicKey && !/^(sb_publishable_[A-Za-z0-9_-]+|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/.test(supabasePublicKey)) {
   throw new Error('EXPO_PUBLIC_SUPABASE_ANON_KEY must be a Supabase publishable or legacy anon key.');
 }
+
+const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? '';
+const iosClientIdSuffix = '.apps.googleusercontent.com';
+const iosUrlScheme = iosClientId.endsWith(iosClientIdSuffix)
+  ? `com.googleusercontent.apps.${iosClientId.slice(0, -iosClientIdSuffix.length)}`
+  // Android builds do not use this URL scheme. Set the iOS client ID in EAS
+  // before building iOS so the plugin registers the real reversed client ID.
+  : 'com.googleusercontent.apps.detail-unconfigured';
+
 expo.plugins = [
   ...(expo.plugins || []),
   './plugins/withMapboxDownloadToken',
+  ['react-native-nitro-google-signin', { iosUrlScheme }],
 ];
 expo.extra = {
   ...(expo.extra || {}),
