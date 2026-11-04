@@ -86,7 +86,8 @@ function EnvironmentIndicator() {
 }
 
 export default function RootLayout() {
-  const [fontsLoaded, setFontsLoaded] = React.useState(false);
+  const [startupReady, setStartupReady] = React.useState(false);
+  const [, setFontsLoaded] = React.useState(false);
   const [pendingNotification, setPendingNotification] = useState<Notifications.NotificationResponse | null>(null);
   const [activeNotification, setActiveNotification] = useState<DynamicNotification | null>(null);
   const notificationKey = useRef('');
@@ -141,6 +142,10 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
+    // Keep the native splash screen only briefly. On slower devices font
+    // registration can take several seconds; the app can render with system
+    // fallbacks while the bundled custom fonts finish loading.
+    const startupFallback = setTimeout(() => setStartupReady(true), 900);
     Font.loadAsync({
       DMSans_400Regular,
       DMSans_500Medium,
@@ -149,15 +154,19 @@ export default function RootLayout() {
       Manrope_700Bold,
       Manrope_800ExtraBold,
     })
-      .then(() => setFontsLoaded(true))
-      .catch(() => setFontsLoaded(true));
+      .then(() => {
+        setFontsLoaded(true);
+        setStartupReady(true);
+      })
+      .catch(() => setStartupReady(true));
+    return () => clearTimeout(startupFallback);
   }, []);
 
   useEffect(() => {
-    if (fontsLoaded) SplashScreen.hideAsync();
-  }, [fontsLoaded]);
+    if (startupReady) void SplashScreen.hideAsync().catch(() => undefined);
+  }, [startupReady]);
 
-  if (!fontsLoaded) return null;
+  if (!startupReady) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
