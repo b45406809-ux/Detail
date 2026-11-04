@@ -414,7 +414,7 @@ export default function MessagesScreen() {
               activeOpacity={0.8}
             >
               <View className="w-12 h-12 bg-accent/10 rounded-2xl items-center justify-center">
-                <Text className="font-sans text-xl">💬</Text>
+                <MessageSquare size={22} color="#3906D2" />
               </View>
               <View className="flex-1">
                 <Text className="text-sm font-display font-black text-slate-900">{item.otherUserName}</Text>

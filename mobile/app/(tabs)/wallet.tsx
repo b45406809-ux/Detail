@@ -233,7 +233,7 @@ export default function WalletScreen() {
           <LoadingError message="Could not load transactions. Check your connection and try again." onRetry={() => setTransactionsRetry(value => value + 1)} />
         ) : transactions.length === 0 ? (
           <View className="bg-white rounded-3xl p-8 items-center border border-slate-100">
-            <Text className="font-sans text-3xl mb-3">💳</Text>
+            <CreditCard size={30} color="#3906D2" style={{ marginBottom: 12 }} />
             <Text className="text-sm font-display font-black text-slate-600 text-center">
               No transactions yet
             </Text>

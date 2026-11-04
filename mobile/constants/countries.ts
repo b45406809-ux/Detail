@@ -4,17 +4,7 @@ export interface Country {
   name: string;
   code: CountryCode;
   dialCode: string;
-  flag: string;
   placeholder?: string;
-}
-
-// Convert 2-letter ISO country code into emoji flag safely
-export function getFlagEmoji(countryCode: string): string {
-  const codePoints = countryCode
-    .toUpperCase()
-    .split('')
-    .map((char) => 127397 + char.charCodeAt(0));
-  return String.fromCodePoint(...codePoints);
 }
 
 // Country display names using standard Intl.DisplayNames where available with fallback
@@ -39,12 +29,10 @@ export const COUNTRIES: Country[] = libCountries
     try {
       const dialCode = `+${getCountryCallingCode(code)}`;
       const name = getCountryName(code);
-      const flag = getFlagEmoji(code);
       return {
         name,
         code,
         dialCode,
-        flag,
       };
     } catch {
       return null;
@@ -68,5 +56,4 @@ export const DEFAULT_COUNTRY: Country =
     name: 'Zimbabwe',
     code: 'ZW' as CountryCode,
     dialCode: '+263',
-    flag: '🇿🇼',
   };

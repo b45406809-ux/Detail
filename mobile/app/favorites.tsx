@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../components/LoadingList';
 import { LoadingError } from '../components/LoadingError';
 import { router } from 'expo-router';
-import { ArrowLeft, Heart, MessageCircle, Star } from 'lucide-react-native';
+import { ArrowLeft, Heart, MessageCircle, Star, Brush } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { db, collection, query, where, onSnapshot, doc, deleteDoc, orderBy } from '../services/supabase';
 import { Favorite } from '../types';
@@ -76,7 +76,7 @@ export default function FavoritesScreen() {
                 {item.cleanerPhoto ? (
                   <Image source={{ uri: item.cleanerPhoto }} style={{ width: 56, height: 56 }} />
                 ) : (
-                  <Text className="font-sans text-2xl">🧹</Text>
+                  <Brush size={24} color="#3906D2" />
                 )}
               </View>
               <View className="flex-1">

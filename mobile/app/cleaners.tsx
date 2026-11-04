@@ -4,7 +4,7 @@ import { Alert, FlatList, Image, Text, TextInput, TouchableOpacity, View } from 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../components/LoadingList';
 import { router } from 'expo-router';
-import { ArrowLeft, Heart, Search, Star } from 'lucide-react-native';
+import { ArrowLeft, Heart, Search, Star, Brush } from 'lucide-react-native';
 import { MapPin } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import { useAuth } from '../context/AuthContext';
@@ -81,7 +81,7 @@ export default function CleanersScreen() {
       renderItem={({ item }) => {
         const saved = favorites.some((favorite) => favorite.cleanerId === item.uid);
         return <View className="bg-white rounded-3xl p-4 flex-row items-center gap-3 border border-ink/5">
-          <View className="w-14 h-14 rounded-2xl bg-accent/10 items-center justify-center overflow-hidden">{item.photoURL ? <Image source={{ uri: item.photoURL }} style={{ width: 56, height: 56 }} /> : <Text className="font-sans text-2xl">🧹</Text>}</View>
+          <View className="w-14 h-14 rounded-2xl bg-accent/10 items-center justify-center overflow-hidden">{item.photoURL ? <Image source={{ uri: item.photoURL }} style={{ width: 56, height: 56 }} /> : <Brush size={24} color="#3906D2" />}</View>
           <View className="flex-1">
             <Text className="text-sm font-display font-black text-ink">{item.displayName || 'Detail cleaner'}</Text>
             <View className="flex-row items-center gap-1 mt-1"><Star size={12} color="#f59e0b" fill="#f59e0b" /><Text className="font-sans text-xs font-bold text-ink/60">{item.ratingAverage ? item.ratingAverage.toFixed(1) : 'New'}{item.ratingCount ? ` · ${item.ratingCount} reviews` : ''}</Text></View>

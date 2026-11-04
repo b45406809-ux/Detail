@@ -32,6 +32,7 @@ import {
   CalendarDays,
   DollarSign,
   Sparkles,
+  Check,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { db, addDoc, collection, serverTimestamp, Timestamp } from '../../services/supabase';
@@ -431,7 +432,7 @@ export default function CreateBookingScreen() {
 
               <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest mb-2">Special Instructions (Optional)</Text>
               <TouchableOpacity onPress={()=>setSuppliesRequired(value=>!value)} className="flex-row items-center gap-3 p-4 rounded-2xl border border-ink/10 bg-white mb-5">
-                <View className={`w-5 h-5 rounded border-2 items-center justify-center ${suppliesRequired?'bg-accent border-accent':'border-ink/30'}`}>{suppliesRequired&&<Text className="text-white text-xs font-black">✓</Text>}</View>
+                <View className={`w-5 h-5 rounded border-2 items-center justify-center ${suppliesRequired?'bg-accent border-accent':'border-ink/30'}`}>{suppliesRequired&&<Check size={13} color="#fff" strokeWidth={3} />}</View>
                 <View className="flex-1"><Text className="font-display font-black text-ink">Cleaner should bring supplies</Text></View>
               </TouchableOpacity>
               <Text className="font-sans text-xs text-ink/60 mb-2">These notes are shared with the assigned cleaner after a booking is accepted.</Text>
@@ -893,7 +894,7 @@ function ServiceChecklist({ category, serviceId, setServiceId, selections, setGr
 
 function MultiSelectGroup({ title, options, selected, onToggle, onSelectAll }: { title: string; options: string[]; selected: string[]; onToggle: (value: string) => void; onSelectAll: (values: string[]) => void }) {
   const allSelected = options.length > 0 && selected.length === options.length;
-  const checkbox = (checked: boolean) => <View className={`w-5 h-5 rounded-md border-2 items-center justify-center ${checked ? 'border-accent bg-accent' : 'border-ink/25 bg-white'}`}>{checked && <Text className="text-[11px] font-display font-black text-white">✓</Text>}</View>;
+  const checkbox = (checked: boolean) => <View className={`w-5 h-5 rounded-md border-2 items-center justify-center ${checked ? 'border-accent bg-accent' : 'border-ink/25 bg-white'}`}>{checked && <Check size={12} color="#fff" strokeWidth={3} />}</View>;
   return <View>
     <Text className="text-sm font-display font-black text-ink mb-2">{title}</Text>
     <View className="rounded-2xl border border-ink/10 overflow-hidden">

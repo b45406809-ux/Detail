@@ -32,6 +32,8 @@ import {
   Car,
   Heart,
   Search,
+  Brush,
+  Image as ImageIcon,
 } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
@@ -583,7 +585,7 @@ function CleanerPanel({
       <View className="flex-row gap-3 mb-5">
         {[
           { label: 'Jobs', value: profile.jobsCompleted ?? 0, icon: CheckCircle },
-          { label: 'Rating', value: `${profile.ratingAverage?.toFixed(1) ?? '—'}★`, icon: Star },
+          { label: 'Rating', value: profile.ratingAverage?.toFixed(1) ?? '—', icon: Star },
           { label: 'Earned', value: `$${profile.balance?.toFixed(0) ?? 0}`, icon: DollarSign },
         ].map(({ label, value, icon: Icon }) => (
           <View key={label} className="flex-1 bg-white rounded-2xl p-3 items-center border border-slate-100">
@@ -685,7 +687,7 @@ function CleanerPanel({
                           </Text>
                         </View>
                         {Array.isArray(job.photos) && job.photos.length > 0 && (
-                          <Text className="font-sans text-[10px] font-bold text-slate-400">📷 {job.photos.length}</Text>
+                          <View className="flex-row items-center gap-1"><ImageIcon size={11} color="#94a3b8" /><Text className="font-sans text-[10px] font-bold text-slate-400">{job.photos.length}</Text></View>
                         )}
                       </View>
                     </View>
@@ -713,7 +715,7 @@ function JobCard({ job }: { job: Job }) {
   return (
     <View className="bg-white/70 rounded-3xl p-4 border border-white flex-row items-center gap-4">
       <View className="w-11 h-11 bg-accent/10 rounded-2xl items-center justify-center">
-        <Text className="font-sans text-lg">{job.category === 'CAR' ? '🚗' : '🧹'}</Text>
+        {job.category === 'CAR' ? <Car size={19} color="#3906D2" /> : <Brush size={19} color="#3906D2" />}
       </View>
       <View className="flex-1">
         <Text className="text-sm font-display font-black text-ink">{job.serviceType}</Text>

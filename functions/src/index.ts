@@ -584,7 +584,7 @@ export const acceptBid = onCall(async (request) => {
       newState: 'ASSIGNED', idempotencyKey, metadata: { bidId, paymentMethod, amount } });
   });
   if (cleanerId) await Promise.all([
-    notifyUser(cleanerId, { type: 'BID_ACCEPTED', title: 'Quote accepted! 🎉', body: 'The customer accepted your quote.', jobId }),
+    notifyUser(cleanerId, { type: 'BID_ACCEPTED', title: 'Quote accepted', body: 'The customer accepted your quote.', jobId }),
     notifyUser(uid, { type: 'BID_ACCEPTED', title: 'Cleaner assigned', body: `${cleanerName} is assigned to your booking.`, jobId }),
   ]);
   return { success: true, state: 'ASSIGNED', payment: { status: paymentMethod === 'WALLET' ? 'CAPTURED' : 'AUTHORIZED', amount } };
@@ -1012,7 +1012,7 @@ export const onJobCreated = onDocumentCreated('jobs/{jobId}', async (event) => {
     targetCleanerIds.map((cleanerId) =>
       notifyUser(cleanerId, {
         type: 'JOB_UPDATE',
-        title: 'New job posted 🧹',
+        title: 'New job posted',
         body: `${job.serviceType ?? 'A new job'} near ${job.location?.address ?? 'you'} — $${job.budget ?? '—'}${photoNote}${regNote}`,
         jobId: event.params.jobId,
         imageUrl: firstPhoto,

@@ -122,7 +122,9 @@ export function CountryPickerModal({
                   }`}
                 >
                   <View className="flex-row items-center gap-3.5 flex-1 pr-3">
-                    <Text style={{ fontSize: 24 }}>{item.flag}</Text>
+                    <View className="h-9 w-9 items-center justify-center rounded-xl bg-accent/10">
+                      <Text className="font-display text-[10px] font-black text-accent">{item.code}</Text>
+                    </View>
                     <View className="flex-1">
                       <Text
                         numberOfLines={1}

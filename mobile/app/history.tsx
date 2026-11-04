@@ -16,7 +16,7 @@ import { LoadingList } from '../components/LoadingList';
 import { LoadingError } from '../components/LoadingError';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { ArrowLeft, MapPin, Flag, X, ImagePlus } from 'lucide-react-native';
+import { ArrowLeft, MapPin, Flag, X, ImagePlus, ClipboardList, Brush } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import {
   db,
@@ -118,7 +118,7 @@ export default function HistoryScreen() {
         <LoadingError message="Could not load your service history. Check your connection and try again." onRetry={() => setRetry(value => value + 1)} />
       ) : jobs.length === 0 ? (
         <View className="flex-1 items-center justify-center px-6">
-          <Text className="font-sans text-4xl mb-4">📋</Text>
+          <ClipboardList size={36} color="#3906D2" style={{ marginBottom: 16 }} />
           <Text className="text-lg font-display font-black text-slate-700 text-center">No history yet</Text>
           <Text className="font-sans text-sm text-slate-400 font-medium text-center mt-2">
             Your completed and cancelled jobs will appear here
@@ -173,7 +173,7 @@ export default function HistoryScreen() {
                 {profile?.role === 'CUSTOMER' && job.cleanerName && (
                   <View className="flex-row items-center gap-2 mt-4 pt-4 border-t border-slate-50">
                     <View className="w-8 h-8 bg-accent/10 rounded-xl items-center justify-center">
-                      <Text className="font-sans text-sm">🧹</Text>
+                      <Brush size={16} color="#3906D2" />
                     </View>
                     <Text className="font-sans text-xs font-bold text-slate-700 flex-1">
                       {job.cleanerName}

@@ -71,7 +71,7 @@ export default function SignInScreen() {
       pathname: '/(auth)/verify',
       params: {
         phone: fullPhoneNumber,
-        displayPhone: `${selectedCountry.flag} ${selectedCountry.dialCode} ${phone.trim()}`,
+        displayPhone: `${selectedCountry.code} ${selectedCountry.dialCode} ${phone.trim()}`,
       },
     });
   };
@@ -221,7 +221,7 @@ export default function SignInScreen() {
                           activeOpacity={0.7}
                           className="flex-row items-center gap-1.5 px-3.5 py-4 border-r border-white/40 bg-ink/[0.02]"
                         >
-                          <Text style={{ fontSize: 18 }}>{selectedCountry.flag}</Text>
+                          <Text className="font-display text-[10px] font-black text-accent">{selectedCountry.code}</Text>
                           <Text className="font-sans text-sm font-bold text-ink">{selectedCountry.dialCode}</Text>
                           <ChevronDown size={14} color="rgba(21,2,86,0.5)" />
                         </TouchableOpacity>

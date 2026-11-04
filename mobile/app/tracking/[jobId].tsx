@@ -41,6 +41,10 @@ import {
   CalendarDays,
   RotateCcw,
   ChevronRight,
+  Wallet,
+  Banknote,
+  Smartphone,
+  Brush,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -661,10 +665,10 @@ export default function TrackingScreen() {
       );
     }
     const PAYMENT_OPTIONS = [
-      { id: 'WALLET', label: 'Detail Wallet', emoji: '👛', sub: `Balance: $${profile?.balance?.toFixed(2) ?? '0.00'} · top up in Wallet` },
-      { id: 'CASH', label: 'Cash', emoji: '💵', sub: 'Pay cleaner directly' },
-      { id: 'ECOCASH', label: 'EcoCash', emoji: '📱', sub: 'Transfer directly to cleaner' },
-      { id: 'INNBUCKS', label: 'InnBucks', emoji: '📱', sub: 'Transfer directly to cleaner' },
+      { id: 'WALLET', label: 'Detail Wallet', icon: Wallet, sub: `Balance: $${profile?.balance?.toFixed(2) ?? '0.00'} · top up in Wallet` },
+      { id: 'CASH', label: 'Cash', icon: Banknote, sub: 'Pay cleaner directly' },
+      { id: 'ECOCASH', label: 'EcoCash', icon: Smartphone, sub: 'Transfer directly to cleaner' },
+      { id: 'INNBUCKS', label: 'InnBucks', icon: Smartphone, sub: 'Transfer directly to cleaner' },
     ] as const;
 
     return (
@@ -677,7 +681,7 @@ export default function TrackingScreen() {
 
           <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest mb-3">Payment Method</Text>
           <View className="gap-3 mb-8">
-            {PAYMENT_OPTIONS.map(({ id, label, emoji, sub }) => (
+            {PAYMENT_OPTIONS.map(({ id, label, icon: PaymentIcon, sub }) => (
               <TouchableOpacity
                 key={id}
                 onPress={() => setSelectedPayment(id)}
@@ -686,7 +690,7 @@ export default function TrackingScreen() {
                   selectedPayment === id ? 'border-accent bg-accent/5' : 'border-ink/10 bg-ink/[0.02]'
                 }`}
               >
-                <Text className="font-sans text-3xl">{emoji}</Text>
+                <PaymentIcon size={26} color={selectedPayment === id ? '#3906D2' : '#150256'} />
                 <View className="flex-1">
                   <Text className={`text-sm font-black ${selectedPayment === id ? 'text-accent' : 'text-ink'}`}>{label}</Text>
                   <Text className="font-sans text-xs text-ink/40 font-medium mt-0.5">{sub}</Text>
@@ -818,7 +822,7 @@ export default function TrackingScreen() {
         <View className="flex-row items-center gap-4 bg-white/60 rounded-3xl p-4 mb-4 border border-white">
           <View className="relative">
             <View className="w-14 h-14 bg-accent/10 rounded-[22px] items-center justify-center">
-              <Text className="font-sans text-2xl">🧹</Text>
+              <Brush size={24} color="#3906D2" />
             </View>
             <View className="absolute -bottom-1.5 -right-1.5 w-7 h-7 bg-accent rounded-lg items-center justify-center border-2 border-white">
               <ShieldCheck size={12} color="#fff" />
@@ -1125,7 +1129,7 @@ export default function TrackingScreen() {
                         >
                           <Image source={{ uri: url }} style={{ width: '100%', height: '100%' }} />
                           <View className="absolute bottom-2 left-2 bg-emerald-700/85 px-2 py-1 rounded-lg">
-                            <Text className="text-[10px] font-display font-black text-white uppercase">✨ Clean / Done</Text>
+                            <View className="flex-row items-center gap-1"><CheckCircle size={11} color="#fff" /><Text className="text-[10px] font-display font-black text-white uppercase">Clean / Done</Text></View>
                           </View>
                         </TouchableOpacity>
                       ))}

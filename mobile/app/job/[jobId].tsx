@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MapPin, Clock, DollarSign, MessageSquare, Hash, Home, Layers, Sparkles, X, CheckCircle2 } from 'lucide-react-native';
+import { ArrowLeft, MapPin, Clock, DollarSign, MessageSquare, Hash, Home, Layers, Sparkles, X, CheckCircle2, Car, Image as ImageIcon } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { db, doc, collection, onSnapshot, query, where, getDocs, limit } from '../../services/supabase';
 import { callFunction } from '../../services/functions';
@@ -145,9 +145,12 @@ export default function CleanerJobDetailScreen() {
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
           <View className="mx-5 bg-white rounded-3xl p-5 border border-ink/5 mb-4">
-            <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest mb-3">
-              {job.category === 'CAR' ? '🚗 Car Cleaning' : '🏠 House Cleaning'}
-            </Text>
+            <View className="flex-row items-center gap-2 mb-3">
+              {job.category === 'CAR' ? <Car size={14} color="#3906D2" /> : <Home size={14} color="#3906D2" />}
+              <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest">
+                {job.category === 'CAR' ? 'Car Cleaning' : 'House Cleaning'}
+              </Text>
+            </View>
 
             <View className="gap-3">
               <DetailRow icon={MapPin} title="Location" value={job.location?.address ?? 'Address not provided'} accent={distance ?? undefined} />
@@ -194,9 +197,10 @@ export default function CleanerJobDetailScreen() {
             {job.photos?.length > 0 && (
               <View className="mt-4 pt-4 border-t border-ink/5">
                 <View className="flex-row items-center justify-between mb-2">
-                  <Text className="text-xs font-display font-black text-ink/60 uppercase tracking-wider">
-                    📸 Photos of What Needs Cleaning ({job.photos.length})
-                  </Text>
+                  <View className="flex-row items-center gap-1.5">
+                    <ImageIcon size={13} color="#3906D2" />
+                    <Text className="text-xs font-display font-black text-ink/60 uppercase tracking-wider">Photos of What Needs Cleaning ({job.photos.length})</Text>
+                  </View>
                   <Text className="font-sans text-[10px] font-bold text-accent">Tap to enlarge</Text>
                 </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
@@ -220,9 +224,10 @@ export default function CleanerJobDetailScreen() {
             {job.completionPhotos && job.completionPhotos.length > 0 && (
               <View className="mt-4 pt-4 border-t border-ink/5">
                 <View className="flex-row items-center justify-between mb-2">
-                  <Text className="text-xs font-display font-black text-emerald-700 uppercase tracking-wider">
-                    ✨ Photos When Done ({job.completionPhotos.length})
-                  </Text>
+                  <View className="flex-row items-center gap-1.5">
+                    <CheckCircle2 size={13} color="#047857" />
+                    <Text className="text-xs font-display font-black text-emerald-700 uppercase tracking-wider">Photos When Done ({job.completionPhotos.length})</Text>
+                  </View>
                   <Text className="font-sans text-[10px] font-bold text-emerald-700">Completed</Text>
                 </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
