@@ -101,8 +101,8 @@ export default function OffersScreen() {
   const rankedBids = rankBidsByRating(bids);
 
   const acceptBid = (bid: Bid) => {
-    const total=Number(bid.bidPrice)+(job?.bookingMode==='INSTANT'?0:job?.suppliesRequired?Number(job.suppliesFee??0):0);
-    Alert.alert('Accept Offer?', `Accept ${bid.cleanerName ?? 'this cleaner'}'s quote? Total including supplies: $${total.toFixed(2)}.`, [
+    const quote = Number(bid.bidPrice);
+    Alert.alert('Accept Offer?', `Accept ${bid.cleanerName ?? 'this cleaner'}'s quote of $${quote.toFixed(2)}?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Choose payment', onPress: () => setPaymentChoiceBid(bid) },
     ]);
@@ -305,13 +305,13 @@ export default function OffersScreen() {
           )}
           renderItem={({ item: bid }) => (
             <View className="bg-white rounded-[28px] p-5 border border-ink/5 shadow-sm">
-              <View className="flex-row items-center gap-4 mb-4">
+              <View className="flex-row items-center gap-4">
                 <View className="w-14 h-14 bg-accent/10 rounded-3xl items-center justify-center">
                   <Brush size={24} color="#3906D2" />
                 </View>
-                <View className="flex-1">
+                <View className="min-w-0 flex-1">
                   <View className="flex-row items-center gap-2">
-                    <Text className="text-base font-display font-black text-ink">{bid.cleanerName ?? 'Professional Cleaner'}</Text>
+                    <Text numberOfLines={2} className="min-w-0 flex-1 text-base font-display font-black text-ink">{bid.cleanerName ?? 'Professional Cleaner'}</Text>
                     {bid.cleanerEliteVerified && <ShieldCheck size={14} color="#3906D2" />}
                   </View>
                   <View className="flex-row items-center gap-3 mt-1">
@@ -324,8 +324,11 @@ export default function OffersScreen() {
                     <Text className="font-sans text-xs text-ink/40 font-medium">{bid.cleanerJobsCompleted ?? 0} jobs</Text>
                   </View>
                 </View>
-                <Text className="text-xl font-display font-black text-accent">${(Number(bid.bidPrice)+(job?.bookingMode==='INSTANT'?0:job?.suppliesRequired?Number(job.suppliesFee??0):0)).toFixed(2)}</Text>
-                {job?.suppliesRequired&&job.bookingMode!=='INSTANT'&&<Text className="font-sans text-[10px] text-ink/45">includes ${Number(job.suppliesFee??0).toFixed(2)} supplies</Text>}
+              </View>
+
+              <View className="mt-4 mb-4 flex-row items-center justify-between rounded-2xl bg-accent/[0.04] px-4 py-3">
+                <Text className="font-sans text-xs font-bold text-ink/50">Cleaner quote</Text>
+                <Text className="text-xl font-display font-black text-accent">${Number(bid.bidPrice).toFixed(2)}</Text>
               </View>
 
               <View className="flex-row items-center gap-2 bg-ink/[0.03] rounded-2xl px-4 py-3 mb-4">
@@ -376,7 +379,7 @@ export default function OffersScreen() {
         <View className="flex-1 justify-end bg-black/50"><View className="rounded-t-[32px] bg-white px-5 pb-9 pt-6">
           <View className="mb-5 h-1 w-12 self-center rounded-full bg-slate-200" />
           <Text className="text-2xl font-display font-black text-ink">{paynowConfigured || IS_MOCK ? 'Choose how to pay' : 'Payment isn’t available in Detail yet'}</Text>
-          <Text className="mt-1 mb-5 font-sans text-sm leading-5 text-slate-500">Cleaner quote: ${Number(paymentChoiceBid?.bidPrice ?? 0).toFixed(2)}{job?.suppliesRequired&&job.bookingMode!=='INSTANT'?` + $${Number(job.suppliesFee??0).toFixed(2)} supplies`:''}. Total: ${(Number(paymentChoiceBid?.bidPrice??0)+(job?.bookingMode==='INSTANT'?0:job?.suppliesRequired?Number(job.suppliesFee??0):0)).toFixed(2)}. {paynowConfigured || IS_MOCK ? 'Pay through Paynow; available mobile money and other methods appear in its checkout.' : 'You can still confirm this booking. Arrange payment directly with your cleaner. Detail will not collect, verify, refund, or protect that payment, and commission is not processed by Detail during this pause.'}</Text>
+          <Text className="mt-1 mb-5 font-sans text-sm leading-5 text-slate-500">Cleaner quote and booking total: ${Number(paymentChoiceBid?.bidPrice ?? 0).toFixed(2)}. {paynowConfigured || IS_MOCK ? 'Pay through Paynow; available mobile money and other methods appear in its checkout.' : 'You can still confirm this booking. Arrange payment directly with your cleaner. Detail will not collect, verify, refund, or protect that payment, and commission is not processed by Detail during this pause.'}</Text>
           <TouchableOpacity disabled={!!busyBidId} onPress={() => { const bid = paymentChoiceBid; setPaymentChoiceBid(null); if (bid) void submitAcceptance(bid, IS_MOCK ? 'WALLET' : paynowConfigured ? 'PAYNOW' : 'DIRECT_OFFLINE'); }} activeOpacity={0.85} className="rounded-3xl border border-violet-100 bg-[#F7F4FF] p-4">
             <View className="flex-row items-center"><View className="mr-3 h-12 w-12 items-center justify-center rounded-2xl bg-accent">{paynowConfigured || IS_MOCK ? <CreditCard size={22} color="#fff" /> : <Banknote size={22} color="#fff" />}</View><View className="flex-1"><Text className="font-display text-base font-black text-ink">{IS_MOCK ? 'Detail Wallet (test)' : paynowConfigured ? 'Paynow BuySafe' : 'Confirm and arrange payment directly'}</Text><Text className="mt-0.5 font-sans text-xs text-ink/60">{paynowConfigured || IS_MOCK ? 'Protected checkout • payment status updates in Detail' : 'Booking is confirmed; payment stays unpaid in Detail'}</Text></View><ChevronRight size={20} color="#3906D2"/></View>
             {(paynowConfigured || IS_MOCK) && <View className="mt-4 rounded-2xl bg-white/80 px-3 py-2.5"><Text className="font-sans text-xs leading-4 text-ink/70">Paynow opens in a secure checkout. BuySafe holds eligible payments; after the clean, confirm delivery in Paynow. Detail never asks for your payment PIN.</Text></View>}
