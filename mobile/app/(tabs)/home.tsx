@@ -400,19 +400,6 @@ export default function HomeScreen() {
 function CustomerPanel({ favorites, recentJobs }: { favorites: Favorite[]; recentJobs: Job[] }) {
   return (
     <View className="pb-6">
-      <TouchableOpacity
-        onPress={() => router.push('/booking/create')}
-        activeOpacity={0.88}
-        className="bg-accent rounded-3xl py-4 px-5 flex-row items-center gap-3 mb-4"
-        style={{ shadowColor: '#3906D2', shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 8 } }}
-      >
-        <View className="w-9 h-9 bg-white/20 rounded-xl items-center justify-center">
-          <Plus size={18} color="#fff" />
-        </View>
-        <Text className="text-white font-display font-black text-sm uppercase tracking-widest flex-1">Request Cleaning</Text>
-        <ChevronRight size={18} color="rgba(255,255,255,0.8)" />
-      </TouchableOpacity>
-
       <View className="flex-row gap-3 mb-5">
         <TouchableOpacity
           onPress={() => router.push({ pathname: '/booking/create', params: { category: 'HOUSE' } })}
@@ -484,6 +471,19 @@ function CustomerPanel({ favorites, recentJobs }: { favorites: Favorite[]; recen
           </View>
         </View>
       )}
+
+      <TouchableOpacity
+        onPress={() => router.push('/booking/create')}
+        activeOpacity={0.88}
+        className="bg-accent rounded-3xl py-4 px-5 flex-row items-center gap-3 mt-5"
+        style={{ shadowColor: '#3906D2', shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 8 } }}
+      >
+        <View className="w-9 h-9 bg-white/20 rounded-xl items-center justify-center">
+          <Plus size={18} color="#fff" />
+        </View>
+        <Text className="text-white font-display font-black text-sm uppercase tracking-widest flex-1">Request Cleaning</Text>
+        <ChevronRight size={18} color="rgba(255,255,255,0.8)" />
+      </TouchableOpacity>
     </View>
   );
 }

@@ -39,6 +39,8 @@ import {
   X,
   Layers,
   CalendarDays,
+  RotateCcw,
+  ChevronRight,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -106,6 +108,7 @@ export default function TrackingScreen() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [favoriteDocId, setFavoriteDocId] = useState<string | null>(null);
   const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
+  const [isRebooking, setIsRebooking] = useState(false);
   const [showPhotosModal, setShowPhotosModal] = useState(false);
   const [selectedPhotoModal, setSelectedPhotoModal] = useState<string | null>(null);
   const [isUploadingDonePhoto, setIsUploadingDonePhoto] = useState(false);
@@ -267,6 +270,33 @@ export default function TrackingScreen() {
       Alert.alert('Error', 'Could not update favorites. Please try again.');
     } finally {
       setIsTogglingFavorite(false);
+    }
+  };
+
+  const requestRebook = async () => {
+    if (!user || !job?.cleanerId || !job.price || isRebooking) return;
+    if (IS_DEMO) {
+      Alert.alert('Rebooking unavailable', 'Rebooking is not available in demo mode.');
+      return;
+    }
+    setIsRebooking(true);
+    const storageKey = `detail:rebook-intent:${user.uid}:${job.id}`;
+    try {
+      let idempotencyKey = await AsyncStorage.getItem(storageKey);
+      if (!idempotencyKey) {
+        idempotencyKey = Crypto.randomUUID();
+        await AsyncStorage.setItem(storageKey, idempotencyKey);
+      }
+      const result = await callFunction<{ sourceJobId: string; idempotencyKey: string }, { jobId: string }>(
+        'createFavoriteRebook',
+        { sourceJobId: job.id, idempotencyKey },
+      );
+      await AsyncStorage.removeItem(storageKey);
+      router.replace({ pathname: '/booking/offers', params: { jobId: result.jobId } });
+    } catch (error) {
+      Alert.alert('Could not request rebooking', error instanceof Error ? error.message : 'Check your connection and try again.');
+    } finally {
+      setIsRebooking(false);
     }
   };
 
@@ -811,6 +841,8 @@ export default function TrackingScreen() {
             <TouchableOpacity
               onPress={toggleFavorite}
               disabled={isTogglingFavorite}
+              accessibilityRole="button"
+              accessibilityLabel={isFavorite ? 'Remove cleaner from favorites' : 'Add cleaner to favorites'}
               className="w-10 h-10 bg-accent/10 rounded-2xl items-center justify-center mr-2"
             >
               <Heart size={16} color="#E5484D" fill={isFavorite ? '#E5484D' : 'transparent'} />
@@ -823,6 +855,28 @@ export default function TrackingScreen() {
             <MessageSquare size={18} color="#3906D2" />
           </TouchableOpacity>
         </View>
+
+        {isCustomer && job.status === JobStatus.COMPLETED && job.cleanerId && Number(job.price) > 0
+          && (!job.completionSubmittedAt || job.customerResponseAt) && (
+          <TouchableOpacity
+            onPress={() => void requestRebook()}
+            disabled={isRebooking}
+            accessibilityRole="button"
+            accessibilityLabel={`Ask ${job.cleanerName ?? 'your previous cleaner'} to repeat this job for a target of $${Number(job.price).toFixed(2)}`}
+            activeOpacity={0.85}
+            className="flex-row items-center gap-3 bg-white rounded-2xl border border-accent/20 p-4 mb-4"
+          >
+            <View className="w-10 h-10 rounded-2xl bg-accent/10 items-center justify-center">
+              {isRebooking ? <ActivityIndicator color="#3906D2" /> : <RotateCcw size={18} color="#3906D2" />}
+            </View>
+            <View className="flex-1">
+              <Text className="font-display text-sm font-black text-ink">{isRebooking ? 'Sending rebooking request…' : 'Book this cleaner again'}</Text>
+              <Text className="font-sans text-xs text-ink/50 mt-1">Same job details · target ${Number(job.price).toFixed(2)}</Text>
+              <Text className="font-sans text-[10px] text-ink/40 mt-0.5">Your cleaner must confirm the request and final price.</Text>
+            </View>
+            {!isRebooking && <ChevronRight size={17} color="#9C94C4" />}
+          </TouchableOpacity>
+        )}
 
         {/* Live progress stepper */}
         <View className="flex-row items-center justify-between mb-4 px-1">

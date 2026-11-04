@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MapPin, Bell, Shield } from 'lucide-react-native';
+import { MapPin, Bell, Shield, Camera, Images } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
 import { registerCurrentPushDevice } from '../../services/pushRegistration';
 import { GlassCard } from '../../components/glass';
@@ -24,6 +25,20 @@ const PERMISSIONS = [
     sub: 'Receive updates about your job status, cleaner arrival, and messages',
     required: false,
   },
+  {
+    id: 'camera',
+    icon: Camera,
+    title: 'Camera',
+    sub: 'Take photos of the areas or vehicle you want cleaned, so cleaners can quote accurately.',
+    required: false,
+  },
+  {
+    id: 'photos',
+    icon: Images,
+    title: 'Photos',
+    sub: 'Choose job photos from your library and attach evidence to a support request.',
+    required: false,
+  },
 ];
 
 export default function PermissionsScreen() {
@@ -33,9 +48,14 @@ export default function PermissionsScreen() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([Location.getForegroundPermissionsAsync(), Notifications.getPermissionsAsync()]).then(async ([location, notifications]) => {
+    Promise.all([
+      Location.getForegroundPermissionsAsync(),
+      Notifications.getPermissionsAsync(),
+      ImagePicker.getCameraPermissionsAsync(),
+      ImagePicker.getMediaLibraryPermissionsAsync(),
+    ]).then(async ([location, notifications, camera, photos]) => {
       if (!active) return;
-      setGranted({ location: location.granted, notifications: notifications.granted });
+      setGranted({ location: location.granted, notifications: notifications.granted, camera: camera.granted, photos: photos.granted });
       if (notifications.granted) {
         if (active) await registerCurrentPushDevice().catch((error) => console.warn('Could not save this device notification registration:', error));
       }
@@ -67,10 +87,34 @@ export default function PermissionsScreen() {
     }
   };
 
+  const requestCamera = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    setGranted((prev) => ({ ...prev, camera: permission.granted }));
+    if (!permission.granted && !permission.canAskAgain) {
+      Alert.alert('Camera access is off', 'You can still use Detail. Open device settings if you want to take job photos.', [
+        { text: 'Later', style: 'cancel' },
+        { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+      ]);
+    }
+  };
+
+  const requestPhotos = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    setGranted((prev) => ({ ...prev, photos: permission.granted }));
+    if (!permission.granted && !permission.canAskAgain) {
+      Alert.alert('Photo access is off', 'You can still use Detail. Open device settings if you want to attach photos from your library.', [
+        { text: 'Later', style: 'cancel' },
+        { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+      ]);
+    }
+  };
+
   const handlePermissionRequest = async (id: string) => {
     try {
       if (id === 'location') await requestLocation();
       else if (id === 'notifications') await requestNotifications();
+      else if (id === 'camera') await requestCamera();
+      else if (id === 'photos') await requestPhotos();
     } catch {
       Alert.alert('Permission unavailable', 'You can change this permission later in your device settings.');
     }
@@ -91,7 +135,7 @@ export default function PermissionsScreen() {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <View className="flex-1 px-6 pt-8 pb-8 justify-between">
-        <View>
+        <ScrollView className="flex-1 mb-4" showsVerticalScrollIndicator={false}>
           <View className="flex-row gap-2 mb-8">
             {[1, 2, 3].map((step) => (
               <View key={step} className="h-1.5 flex-1 rounded-full" style={{ backgroundColor: '#3906D2' }} />
@@ -145,7 +189,7 @@ export default function PermissionsScreen() {
               </GlassCard>
             ))}
           </View>
-        </View>
+        </ScrollView>
 
         <TouchableOpacity
           onPress={handleContinue}

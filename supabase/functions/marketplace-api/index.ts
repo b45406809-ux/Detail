@@ -441,6 +441,115 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if (error) throw error;
       return { ok: true };
     }
+    case 'createFavoriteRebook': {
+      const actor = authed();
+      await requireActiveMarketplaceAccount(actor);
+      const sourceJobId = text(input.sourceJobId, 80);
+      const idempotencyKey = requireKey(input.idempotencyKey);
+      if (!sourceJobId) fail(400, 'A completed booking is required to rebook.');
+      await enforceRateLimit(request, actor, 'create_favorite_rebook', 4, 3600);
+
+      const { data: sourceJob, error: sourceError } = await admin.from('jobs')
+        .select('*').eq('id', sourceJobId).eq('customerId', actor).maybeSingle();
+      if (sourceError) throw sourceError;
+      if (!sourceJob || sourceJob.status !== 'COMPLETED' || !sourceJob.cleanerId) {
+        fail(409, 'Only a completed job with an assigned cleaner can be rebooked.');
+      }
+      const targetPrice = Number(sourceJob.price);
+      if (!Number.isFinite(targetPrice) || targetPrice <= 0 || targetPrice > 10000) {
+        fail(409, 'This completed job does not have a confirmed price to reuse.');
+      }
+      const [{ data: cleaner, error: cleanerError }, { data: config, error: configError }, { data: operations, error: operationsError }] = await Promise.all([
+        admin.from('users').select('id,displayName,role,verificationStatus,cleanerAgreementAccepted,isSuspended,isBanned,accountDeletedAt').eq('id', sourceJob.cleanerId).maybeSingle(),
+        admin.from('configuration').select('value').eq('key', 'beta').maybeSingle(),
+        admin.from('configuration').select('value').eq('key', 'operations').maybeSingle(),
+      ]);
+      if (cleanerError) throw cleanerError;
+      if (configError) throw configError;
+      if (operationsError) throw operationsError;
+      if (!cleaner || cleaner.role !== 'CLEANER' || cleaner.verificationStatus !== 'VERIFIED'
+        || !cleaner.cleanerAgreementAccepted || cleaner.isSuspended || cleaner.isBanned || cleaner.accountDeletedAt) {
+        fail(409, 'The previous cleaner is no longer eligible. Start a regular booking to find another cleaner.');
+      }
+      const switches = operations?.value?.switches ?? {};
+      if (config?.value?.bookingEnabled !== true || config?.value?.maintenanceMode === true
+        || config?.value?.disableNewBookings === true || switches.maintenance === true || switches.bookingCreation === true) {
+        fail(503, 'Bookings are not open in this area yet. Please try again when booking is available.');
+      }
+
+      const previousData = sourceJob.data && typeof sourceJob.data === 'object' ? sourceJob.data : {};
+      if (!['HOUSE', 'CAR'].includes(sourceJob.category) || !text(sourceJob.serviceType, 120)
+        || !sourceJob.checklist || typeof sourceJob.checklist !== 'object'
+        || !text(sourceJob.location?.address, 300)) {
+        fail(409, 'This completed job no longer has enough details to rebook.');
+      }
+      const now = new Date();
+      const booking = {
+        ...previousData,
+        customerId: actor,
+        customerName: sourceJob.customerName,
+        customerPhoto: sourceJob.customerPhoto,
+        category: sourceJob.category,
+        serviceType: sourceJob.serviceType,
+        checklist: sourceJob.checklist,
+        description: sourceJob.description ?? '',
+        location: sourceJob.location,
+        scheduledTime: 'ASAP',
+        timePreference: 'ASAP',
+        scheduledDateTime: now.toISOString(),
+        bookingMode: 'SCHEDULED',
+        status: 'PENDING',
+        pricingStrategy: 'RECEIVE_BIDS',
+        budget: targetPrice,
+        biddingExpiresAt: new Date(now.getTime() + 30 * 60_000).toISOString(),
+        reminderSent: false,
+        photos: Array.isArray(sourceJob.photos) ? sourceJob.photos : [],
+        suppliesRequired: sourceJob.suppliesRequired === true,
+        suppliesFee: Number(sourceJob.suppliesFee) || 0,
+        estimatedDuration: Number(sourceJob.estimatedDuration) || 120,
+        isFavoriteRebook: true,
+        preferredCleanerId: cleaner.id,
+        previousJobId: sourceJob.id,
+      };
+      const { data: newJobId, error: createError } = await admin.rpc('create_booking', {
+        p_actor_id: actor,
+        p_idempotency_key: `rebook_${idempotencyKey}`,
+        p_booking: booking,
+      });
+      if (createError) throw createError;
+      const { error: markError } = await admin.from('jobs').update({ isFavoriteRebook: true })
+        .eq('id', newJobId).eq('customerId', actor).eq('status', 'PENDING');
+      if (markError) throw markError;
+      const notificationHash = await hash(`favorite-rebook:${actor}:${idempotencyKey}`);
+      const notificationId = `${notificationHash.slice(0, 8)}-${notificationHash.slice(8, 12)}-${notificationHash.slice(12, 16)}-${notificationHash.slice(16, 20)}-${notificationHash.slice(20, 32)}`;
+      const { data: notification, error: notificationError } = await admin.rpc('create_notification_outbox_with_id', {
+        p_notification_id: notificationId,
+        p_user_id: cleaner.id,
+        p_title: 'Rebooking request',
+        p_body: `A customer would like to book you again for the same cleaning. Target budget: $${targetPrice.toFixed(2)}. Review the job and confirm your quote in Detail.`,
+        p_type: 'NEW_SCHEDULED_JOB',
+        p_job_id: newJobId,
+        p_data: { isFavoriteRebook: true, previousJobId: sourceJob.id },
+      });
+      if (notificationError) throw notificationError;
+      if (notification?.hasDeliveries) {
+        const schedulerSecret = Deno.env.get('CRON_SECRET') ?? '';
+        if (schedulerSecret) {
+          try {
+            const dispatched = await fetch(`${url}/functions/v1/delivery-worker`, {
+              method: 'POST',
+              headers: { 'x-scheduler-secret': schedulerSecret, 'content-type': 'application/json' },
+              body: '{}',
+              signal: AbortSignal.timeout(5000),
+            });
+            if (!dispatched.ok) console.warn('Rebooking notification deferred to scheduler', dispatched.status);
+          } catch (error) {
+            console.warn('Rebooking notification deferred to scheduler', String(error));
+          }
+        }
+      }
+      return { success: true, jobId: newJobId, cleanerName: cleaner.displayName, targetPrice };
+    }
     case 'createBooking': {
       const actor = authed(); await requireActiveMarketplaceAccount(actor); const key = requireKey(input.idempotencyKey); const booking = input.booking ?? {};
       await enforceRateLimit(request, actor, 'create_booking', 8, 3600);
