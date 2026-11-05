@@ -1232,6 +1232,25 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(error)throw error;
       return {inviteUrl:`https://dashboard.detail.co.zw/admin/accept-invite?token=${encodeURIComponent(token)}`};
     }
+    case 'revokeAdminInvite': {
+      const actor=authed(); await requireAdmin(actor,'admins.manage'); await requireRecentAdminAuth(actor);
+      const inviteId=text(input.inviteId,80); if(!inviteId)fail(400,'Select an invitation to revoke.');
+      const {data:invite,error:inviteError}=await admin.from('admininvites').select('id,email,status').eq('id',inviteId).maybeSingle();
+      if(inviteError)throw inviteError; if(!invite)fail(404,'Invitation not found.');
+      if(invite.status==='REVOKED')return {success:true,status:'REVOKED'};
+      if(invite.status==='ACCEPTED'){
+        const {data:profile,error:profileError}=await admin.from('users').select('id').eq('email',invite.email).maybeSingle();
+        if(profileError)throw profileError; if(!profile)fail(404,'Accepted administrator account was not found.');
+        if(profile.id===actor)fail(409,'You cannot revoke your own administrator access. Ask another administrator to do that.');
+        const {error:roleError}=await admin.from('adminroles').delete().eq('userid',profile.id);if(roleError)throw roleError;
+        const {data:authUser,error:authReadError}=await admin.auth.admin.getUserById(profile.id);if(authReadError)throw authReadError;
+        const metadata={...(authUser.user.app_metadata??{})}; delete metadata.admin; delete metadata.elevated; delete metadata.permissions;
+        const {error:authUpdateError}=await admin.auth.admin.updateUserById(profile.id,{app_metadata:metadata});if(authUpdateError)throw authUpdateError;
+      }
+      const {error:updateError}=await admin.from('admininvites').update({status:'REVOKED'}).eq('id',inviteId);if(updateError)throw updateError;
+      const {error:auditError}=await admin.from('adminauditevents').insert({action:'admin_invite_revoked',actorid:actor,targetid:inviteId,reason:`Revoked invitation/access for ${invite.email}`,data:{email:invite.email,previousStatus:invite.status}});if(auditError)throw auditError;
+      return {success:true,status:'REVOKED'};
+    }
     case 'acceptAdminInvite': {
       const actor=authed();const token=text(input.token,200);const {data:invite}=await admin.from('admininvites').select('*').eq('tokenhash',await hash(token)).eq('status','PENDING').gt('expiresat',new Date().toISOString()).maybeSingle();
       if(!invite||invite.email!==String(user?.email??'').toLowerCase())fail(403,'Invitation is invalid, expired, or belongs to another email.');
