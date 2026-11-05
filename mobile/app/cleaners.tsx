@@ -1,3 +1,4 @@
+import { showPermissionDenied } from '@/utils/permissionPrompt';
 import { appAlert } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -43,7 +44,7 @@ export default function CleanersScreen() {
   const findNearby = async () => {
     if(nearby){setNearby(null);return;}
     const permission=await Location.requestForegroundPermissionsAsync();
-    if(!permission.granted){appAlert('Location permission needed','Allow location access to find verified cleaners within 25 km. You can still search by name or area.');return;}
+    if(!permission.granted){showPermissionDenied('Allow location access to find nearby cleaners. You can still search by name or area.', permission.canAskAgain);return;}
     try{const position=await Location.getCurrentPositionAsync({accuracy:Location.Accuracy.Balanced});setNearby({lat:position.coords.latitude,lng:position.coords.longitude});}
     catch{appAlert('Location unavailable','Try again or search by city and area.');}
   };

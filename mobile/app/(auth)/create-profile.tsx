@@ -1,3 +1,4 @@
+import { showPermissionDenied } from '@/utils/permissionPrompt';
 import { appAlert } from '@/components/AppDialog';
 import React, { useState } from 'react';
 import {
@@ -46,7 +47,7 @@ export default function CreateProfileScreen() {
         ? await ImagePicker.requestCameraPermissionsAsync()
         : await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        appAlert('Permission needed', 'Please allow camera/photo access to add your profile photo.');
+        showPermissionDenied('Allow camera or photo access to add your profile photo.', permission.canAskAgain);
         return;
       }
       const result = fromCamera

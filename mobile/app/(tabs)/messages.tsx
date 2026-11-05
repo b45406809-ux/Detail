@@ -1,3 +1,4 @@
+import { showPermissionDenied } from '@/utils/permissionPrompt';
 import { appAlert } from '@/components/AppDialog';
 import React, { useEffect, useState, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -234,14 +235,14 @@ export default function MessagesScreen() {
 
     const pickFromLibrary = async () => {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) { appAlert('Permission needed', 'Allow access to your photo library.'); return; }
+      if (!perm.granted) { showPermissionDenied('Allow access to your photo library.', perm.canAskAgain); return; }
       const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
       if (!result.canceled && result.assets?.[0]) uploadAndSend(result.assets[0].uri);
     };
 
     const takePhoto = async () => {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (!perm.granted) { appAlert('Permission needed', 'Allow camera access to take photos.'); return; }
+      if (!perm.granted) { showPermissionDenied('Allow camera access to take photos.', perm.canAskAgain); return; }
       const result = await ImagePicker.launchCameraAsync({ quality: 0.7 });
       if (!result.canceled && result.assets?.[0]) uploadAndSend(result.assets[0].uri);
     };

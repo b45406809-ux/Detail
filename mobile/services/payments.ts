@@ -55,16 +55,3 @@ export async function addFundsToWallet(amountUSD: number): Promise<PaymentResult
   // because the user may have dismissed the hosted checkout before paying.
   return { success: true, referenceNumber: data.referenceNumber, pending: true };
 }
-
-/**
- * Payment methods shown in the wallet UI. The processor handles the actual
- * method selection on its hosted checkout page, so this list is
- * informational only. Deliberately excludes OneMoney — not a supported
- * method for Detail.
- */
-export function getPaymentMethods(): Array<{ id: string; label: string; sub: string }> {
-  return [
-    { id: 'ecocash', label: 'EcoCash', sub: 'Pay via EcoCash mobile money' },
-    { id: 'card', label: 'Visa / Mastercard', sub: 'Pay with your debit or credit card' },
-  ];
-}

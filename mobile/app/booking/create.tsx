@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Linking,
 
   Image,
 } from 'react-native';
@@ -171,7 +172,7 @@ export default function CreateBookingScreen() {
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
       if (!permission.granted) {
-        appAlert('Location permission needed', 'Allow location access in your device settings, or enter the address manually.');
+        appAlert('Location permission needed', 'Allow location access to find your address, or enter it manually.', [{ text: 'Not now', style: 'cancel' }, ...(!permission.canAskAgain ? [{ text: 'Open settings', onPress: () => void Linking.openSettings() }] : [])]);
         return;
       }
       const position = await Promise.race([
@@ -202,7 +203,7 @@ export default function CreateBookingScreen() {
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      appAlert('Permission needed', 'Please allow access to add photos.');
+      appAlert('Permission needed', 'Allow access to add photos.', [{ text: 'Not now', style: 'cancel' }, ...(!permission.canAskAgain ? [{ text: 'Open settings', onPress: () => void Linking.openSettings() }] : [])]);
       return;
     }
     const result = fromCamera

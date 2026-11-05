@@ -91,7 +91,11 @@ export default function RootLayout() {
   const [startupReady, setStartupReady] = React.useState(false);
   const [, setFontsLoaded] = React.useState(false);
   const [pendingNotification, setPendingNotification] = useState<Notifications.NotificationResponse | null>(null);
-  const [activeNotification, setActiveNotification] = useState<DynamicNotification | null>(null);
+  const [notificationQueue, setNotificationQueue] = useState<DynamicNotification[]>([]);
+  const activeNotification = notificationQueue[0] ?? null;
+  const dismissForegroundNotification = useCallback(() => {
+    setNotificationQueue(queue => queue.slice(1));
+  }, []);
   const notificationKey = useRef('');
   const consumeNotification = useCallback(() => {
     notificationKey.current = '';
@@ -126,11 +130,11 @@ export default function RootLayout() {
       notificationSubscription = Notifications.addNotificationResponseReceivedListener(queueNotification);
       foregroundNotificationSubscription = Notifications.addNotificationReceivedListener(notification => {
         const content = notification.request.content;
-        setActiveNotification({
+        setNotificationQueue(queue => [...queue, {
           title: content.title?.trim() || 'New Detail update',
           body: content.body?.trim() || 'Open Detail to see the latest update.',
           data: content.data as DynamicNotification['data'],
-        });
+        }]);
       });
       Notifications.getLastNotificationResponseAsync().then(response => response && queueNotification(response));
     }
@@ -177,10 +181,10 @@ export default function RootLayout() {
             <EnvironmentIndicator />
             <DynamicNotificationBanner
               notification={activeNotification}
-              onDismiss={() => setActiveNotification(null)}
+              onDismiss={dismissForegroundNotification}
               onPress={() => {
                 const target = resolveNotificationTarget(activeNotification?.data ?? {});
-                setActiveNotification(null);
+                dismissForegroundNotification();
                 if (target) router.push(target);
                 else router.push('/notifications');
               }}

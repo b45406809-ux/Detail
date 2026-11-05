@@ -43,6 +43,7 @@ const CATEGORY_OPTIONS: { id: ServiceCategory; label: string; icon: any }[] = [
 
 export default function RegisterCleanerScreen() {
   const { profile } = useAuth();
+  const [introStep, setIntroStep] = useState(0);
   const [fullName, setFullName] = useState(profile?.displayName ?? '');
   const [phone, setPhone] = useState(profile?.phone ?? '');
   const [address, setAddress] = useState('');
@@ -163,6 +164,24 @@ export default function RegisterCleanerScreen() {
       setIsSubmitting(false);
     }
   };
+
+  const introSlides = [
+    { title: 'Work with Detail', body: 'Choose the cleaning services and areas you offer. Complete identity verification and the cleaner agreement before accepting bookings.' },
+    { title: 'Your earnings', body: 'Detail currently charges a 10% platform commission. For example, on a $30 job the commission is $3 and your share is $27. Changes are communicated in advance.' },
+    { title: 'When you get paid', body: 'For Paynow BuySafe bookings, the customer confirms delivery in Paynow. After Paynow releases funds following its 24-hour dispute window, Detail credits your 90% share to your in-app balance.' },
+    { title: 'Direct payments', body: 'For eligible cash or mobile-money bookings, prepaid commission credit may be required before acceptance. Reserved credit is returned if the booking is cancelled before travel or work begins. Review the payment terms for each booking.' },
+    { title: 'Deliver with care', body: 'Keep your availability accurate, arrive on time, communicate through Detail and provide the required completion photos. Review the full cleaner agreement before joining.' },
+  ];
+  if (introStep < introSlides.length) {
+    const slide = introSlides[introStep];
+    return <SafeAreaView className="flex-1 bg-white"><View className="flex-1 px-6 pt-10 pb-8 justify-between">
+      <ScrollView showsVerticalScrollIndicator={false}><TouchableOpacity onPress={() => introStep > 0 ? setIntroStep(introStep - 1) : goBackSafely()} accessibilityRole="button" accessibilityLabel="Back" className="w-10 h-10 rounded-2xl bg-slate-50 items-center justify-center mb-6"><ArrowLeft size={18} color="#150256" /></TouchableOpacity><View className="flex-row gap-2 mb-12">{introSlides.map((_, index) => <View key={index} className={`h-1.5 flex-1 rounded-full ${index <= introStep ? 'bg-accent' : 'bg-slate-100'}`} />)}</View>
+        <View className="w-20 h-20 rounded-3xl bg-accent/10 items-center justify-center mb-8"><ShieldCheck size={36} color="#3906D2" /></View>
+        <Text className="text-3xl font-display font-black text-ink mb-4">{slide.title}</Text>
+        <Text className="font-sans text-base leading-7 text-ink/70">{slide.body}</Text>
+      </ScrollView><View><TouchableOpacity accessibilityRole="button" onPress={() => setIntroStep(introStep + 1)} className="bg-accent rounded-3xl py-5 items-center"><Text className="text-white font-display font-black">{introStep === introSlides.length - 1 ? 'Start registration' : 'Continue'}</Text></TouchableOpacity>{introStep > 0 && <TouchableOpacity onPress={() => setIntroStep(introStep - 1)} className="items-center pt-5"><Text className="text-accent font-display font-black">Back</Text></TouchableOpacity>}</View>
+    </View></SafeAreaView>;
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-white">

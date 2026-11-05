@@ -1,3 +1,5 @@
+// Animation sequence adapted for Expo 52 from expo-dynamic-notifications (MIT).
+// See third-party/expo-dynamic-notifications-LICENSE.txt.
 import React, { useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,19 +22,30 @@ export function DynamicNotificationBanner({
 }) {
   const insets = useSafeAreaInsets();
   const progress = useRef(new Animated.Value(0)).current;
+  const reveal = useRef(new Animated.Value(0)).current;
+  const dismissRef = useRef(onDismiss);
+  dismissRef.current = onDismiss;
 
   useEffect(() => {
     if (!notification) return;
     progress.stopAnimation();
+    reveal.stopAnimation();
     progress.setValue(0);
-    Animated.spring(progress, { toValue: 1, damping: 18, stiffness: 190, mass: 0.8, useNativeDriver: true }).start();
+    reveal.setValue(0);
+    // The reference library drops the island, expands it, then reveals content.
+    const enter = Animated.sequence([
+      Animated.spring(progress, { toValue: 1, damping: 18, stiffness: 190, mass: 0.8, useNativeDriver: true }),
+      Animated.timing(reveal, { toValue: 1, duration: 160, useNativeDriver: true }),
+    ]);
+    enter.start();
     const timer = setTimeout(() => {
-      Animated.timing(progress, { toValue: 0, duration: 180, useNativeDriver: true }).start(({ finished }) => {
-        if (finished) onDismiss();
-      });
+      Animated.parallel([
+        Animated.timing(reveal, { toValue: 0, duration: 120, useNativeDriver: true }),
+        Animated.timing(progress, { toValue: 0, duration: 180, useNativeDriver: true }),
+      ]).start(({ finished }) => { if (finished) dismissRef.current(); });
     }, 5200);
-    return () => clearTimeout(timer);
-  }, [notification, onDismiss, progress]);
+    return () => { clearTimeout(timer); enter.stop(); };
+  }, [notification, progress, reveal]);
 
   if (!notification) return null;
 
@@ -45,15 +58,15 @@ export function DynamicNotificationBanner({
         <View style={styles.card}>
           <Pressable accessibilityRole="button" accessibilityLabel={`${notification.title}. ${notification.body}. Open notification`} onPress={onPress} style={styles.contentButton}>
             <View style={styles.brandMark}><Text style={styles.brandD}>D</Text></View>
-            <View style={styles.copy}>
+            <Animated.View style={[styles.copy, { opacity: reveal }]}>
               <View style={styles.brandRow}>
                 <Text style={styles.brand}>DETAIL</Text>
                 <View style={styles.dot} />
-                <Text style={styles.update}>BOOKING UPDATE</Text>
+                <Text style={styles.update}>UPDATE</Text>
               </View>
               <Text numberOfLines={1} style={styles.title}>{notification.title}</Text>
               <Text numberOfLines={2} style={styles.body}>{notification.body}</Text>
-            </View>
+            </Animated.View>
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Dismiss notification" hitSlop={12} onPress={onDismiss} style={styles.dismiss}>
             <X size={16} color="#70698B" />

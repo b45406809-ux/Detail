@@ -1,3 +1,4 @@
+import { showPermissionDenied } from '@/utils/permissionPrompt';
 import { appAlert } from '@/components/AppDialog';
 // Home tab — Uber-style live map with a floating glass control panel.
 // Customer mode: map + "Request Cleaning" sheet + service shortcuts + favorites.
@@ -55,7 +56,7 @@ import { MapPlaceholder } from '../../components/MapPlaceholder';
 import { IS_DEMO } from '../../utils/env';
 import { callFunction } from '../../services/functions';
 import { Mapbox, IS_MAPBOX_AVAILABLE } from '../../services/mapbox';
-import { completeCleanerPresenceStart, startCleanerLocationUpdates, stopCleanerLocationUpdates } from '../../services/locationTracking';
+import { CleanerLocationPermissionError, completeCleanerPresenceStart, startCleanerLocationUpdates, stopCleanerLocationUpdates } from '../../services/locationTracking';
 
 export default function HomeScreen() {
   const { user, profile, locationTrackingError } = useAuth();
@@ -244,7 +245,8 @@ export default function HomeScreen() {
         await stopCleanerLocationUpdates().catch(()=>{});
         await callFunction('updateCleanerPresence',{status:'OFFLINE'}).catch(()=>{});
       }
-      appAlert('Location permission needed',error?.message||'Detail needs background location permission while you are online.');
+      if (error instanceof CleanerLocationPermissionError) showPermissionDenied(error.message, error.canAskAgain);
+      else appAlert('Could not go online', error?.message || 'Please try again.');
     }
   };
 
@@ -349,7 +351,7 @@ export default function HomeScreen() {
               if (!location) {
                 const permission = await Location.requestForegroundPermissionsAsync();
                 if (!permission.granted) {
-                  appAlert('Location permission needed', 'Allow location access in your device settings to show your position on the map.');
+                  showPermissionDenied('Allow location access to show your position on the map.', permission.canAskAgain);
                   return;
                 }
                 setCanUseForegroundLocation(true);

@@ -1,3 +1,4 @@
+import { showPermissionDenied } from '@/utils/permissionPrompt';
 import { appAlert, AppDialogHost } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState } from 'react';
@@ -54,7 +55,7 @@ export default function HistoryScreen() {
   const chooseEvidence = async () => {
     if (evidenceUris.length >= 3) { appAlert('Photo limit', 'Attach up to three photos.'); return; }
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) { appAlert('Permission needed', 'Allow photo library access to attach evidence.'); return; }
+    if (!permission.granted) { showPermissionDenied('Allow photo library access to attach evidence.', permission.canAskAgain); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7, allowsMultipleSelection: false });
     if (!result.canceled && result.assets?.[0]) setEvidenceUris(current => current.length < 3 ? [...current, result.assets[0].uri] : current);
   };

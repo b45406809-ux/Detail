@@ -632,7 +632,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const { data, error } = await admin.rpc('transition_booking', { p_job_id: jobId, p_actor_id: actor, p_new_status: state, p_idempotency_key: key, p_reason: text(input.reason,500) || null });
       if (error) throw error;
       const recipient = job.customerid;
-      if (recipient && recipient !== actor) await notify(recipient,{ type: state, title: `Booking ${state.toLowerCase().replace('_',' ')}`, body: 'Your booking has a new update.', jobId });
+      if (recipient && recipient !== actor) await notify(recipient,{ type: state, title: state === 'EN_ROUTE' ? 'Your cleaner is on the way' : 'Your cleaning has started', body: state === 'EN_ROUTE' ? 'Your cleaner is travelling to your booking. Open Detail to follow their progress.' : 'Your cleaner has started the job.', jobId });
       return { success: true, state: data.status };
     }
     case 'respondInstantOffer': {

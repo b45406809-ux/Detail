@@ -173,7 +173,7 @@ export default function TrackingScreen() {
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      appAlert('Permission needed', 'Please allow camera / gallery access to add completion photos.');
+      appAlert('Permission needed', 'Allow camera or photo access to add completion photos.', [{ text: 'Not now', style: 'cancel' }, ...(!permission.canAskAgain ? [{ text: 'Open settings', onPress: () => void Linking.openSettings() }] : [])]);
       return;
     }
     const result = fromCamera

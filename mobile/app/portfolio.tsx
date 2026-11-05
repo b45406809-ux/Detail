@@ -1,3 +1,4 @@
+import { showPermissionDenied } from '@/utils/permissionPrompt';
 import { appAlert } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -22,7 +23,7 @@ export default function CleanerPortfolioScreen() {
   const addPhoto = async () => {
     if (photos.length >= 12) { appAlert('Portfolio full', 'Remove a photo before adding another.'); return; }
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) { appAlert('Photo access needed', 'Allow photo library access to add a portfolio image.'); return; }
+    if (!permission.granted) { showPermissionDenied('Allow photo library access to add a portfolio image.', permission.canAskAgain); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [4, 3], quality: 0.82 });
     if (result.canceled || !result.assets[0]) return;
     setBusy(true);

@@ -1,3 +1,4 @@
+import { showPermissionDenied } from '@/utils/permissionPrompt';
 import { appAlert } from '@/components/AppDialog';
 import React, { useEffect, useState } from 'react';
 import {
@@ -53,7 +54,7 @@ export default function ProfileScreen() {
       return;
     }
     const permission = await Notifications.requestPermissionsAsync();
-    if (!permission.granted) { appAlert('Allow notifications', 'Enable notifications in your device settings to receive booking and payment updates.'); return; }
+    if (!permission.granted) { showPermissionDenied('Allow notifications to receive booking and payment updates.', permission.canAskAgain); return; }
     try {
       if (!await registerCurrentPushDevice()) { appAlert('Notifications unavailable', 'Push notifications require a supported physical device and working notification services. On an emulator they may be unavailable; check your device settings and try again.'); return; }
       setNotificationsOn(true);
@@ -96,7 +97,7 @@ export default function ProfileScreen() {
         ? await ImagePicker.requestCameraPermissionsAsync()
         : await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        appAlert('Permission needed', 'Please allow camera/photo access to update your profile picture.');
+        showPermissionDenied('Allow camera or photo access to update your profile picture.', permission.canAskAgain);
         return;
       }
       const result = fromCamera

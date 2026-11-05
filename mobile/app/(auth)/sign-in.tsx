@@ -295,16 +295,6 @@ export default function SignInScreen() {
                         </TouchableOpacity>
                       ))}
                     </View>
-                    <View className="flex-row items-center justify-between mb-1">
-                      <Text className="font-sans text-sm font-bold text-ink/70">
-                        {isNewAccount ? 'Create a new account' : 'Sign in to existing account'}
-                      </Text>
-                      <TouchableOpacity onPress={() => setIsNewAccount(!isNewAccount)}>
-                        <Text className="text-sm font-display font-black text-accent">
-                          {isNewAccount ? 'Sign in' : 'Register'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
 
                     <View>
                       <Text className="text-xs font-display font-black text-ink/50 uppercase tracking-widest mb-2">Email</Text>

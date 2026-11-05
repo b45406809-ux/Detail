@@ -3,6 +3,10 @@ import * as TaskManager from 'expo-task-manager';
 import { Platform } from 'react-native';
 import { callFunction } from './functions';
 
+export class CleanerLocationPermissionError extends Error {
+  constructor(message: string, public canAskAgain: boolean) { super(message); }
+}
+
 export const CLEANER_LOCATION_TASK='detail-cleaner-location';
 let cleanerPresenceStarting = false;
 
@@ -31,9 +35,9 @@ export async function startCleanerLocationUpdates(){
   cleanerPresenceStarting = true;
   try {
     const foreground=await Location.requestForegroundPermissionsAsync();
-    if(!foreground.granted)throw new Error('Allow location while using Detail to go online.');
+    if(!foreground.granted)throw new CleanerLocationPermissionError('Allow location while using Detail to go online.', foreground.canAskAgain);
     const background=await Location.requestBackgroundPermissionsAsync();
-    if(!background.granted)throw new Error('Allow background location while online so nearby customers can receive accurate availability and active-job updates.');
+    if(!background.granted)throw new CleanerLocationPermissionError('Allow background location while online so nearby customers can receive accurate availability and active-job updates.', background.canAskAgain);
     await registerCleanerLocationUpdates();
   } catch (error) {
     cleanerPresenceStarting = false;

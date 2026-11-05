@@ -10,6 +10,7 @@ import {
   Modal,
   TextInput,
   ActivityIndicator,
+  Image,
 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,7 +21,6 @@ import {
   ArrowDownLeft,
   Plus,
   X,
-  Smartphone,
   CreditCard,
   Wallet,
 } from 'lucide-react-native';
@@ -34,15 +34,10 @@ import {
   orderBy,
   limit,
 } from '../../services/supabase';
-import { addFundsToWallet, getPaymentMethods } from '../../services/payments';
+import { addFundsToWallet } from '../../services/payments';
 import { callFunction } from '../../services/functions';
 import { WalletTransaction } from '../../types';
 import { formatDate } from '../../utils/date';
-
-const METHOD_ICONS: Record<string, any> = {
-  ecocash: Smartphone,
-  card: CreditCard,
-};
 
 export default function WalletScreen() {
   const { user, profile } = useAuth();
@@ -60,7 +55,6 @@ export default function WalletScreen() {
   const [payoutName, setPayoutName] = useState('');
   const [payoutDestination, setPayoutDestination] = useState('');
 
-  const paymentMethods = getPaymentMethods();
 
   // Real-time transaction feed from Firestore
   useEffect(() => {
@@ -195,31 +189,15 @@ export default function WalletScreen() {
         </TouchableOpacity>
       )}
 
-      {/* Payment methods (informational — the processor handles selection on its hosted page) */}
       <View className="mx-5 mb-6">
-        <Text className="text-xs font-display font-black text-slate-400 uppercase tracking-widest mb-3">
-          Accepted Payment Methods
-        </Text>
-        <View className="bg-white rounded-3xl border border-slate-100 overflow-hidden">
-          {paymentMethods.map(({ id, label, sub }, idx) => {
-            const Icon = METHOD_ICONS[id] ?? CreditCard;
-            return (
-              <View
-                key={id}
-                className={`flex-row items-center gap-4 px-5 py-4 ${
-                  idx < paymentMethods.length - 1 ? 'border-b border-slate-50' : ''
-                }`}
-              >
-                <View className="w-10 h-10 bg-accent/10 rounded-2xl items-center justify-center">
-                  <Icon size={18} color="#3906d2" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-sm font-display font-black text-slate-900">{label}</Text>
-                  <Text className="font-sans text-xs text-slate-400 font-medium mt-0.5">{sub}</Text>
-                </View>
-              </View>
-            );
-          })}
+        <Text className="text-xs font-display font-black text-slate-400 uppercase tracking-widest mb-3">PAYING WITH PAYNOW</Text>
+        <View className="bg-white rounded-3xl border border-slate-100 p-4">
+          <View className="flex-row items-center gap-3 mb-3">
+            <Image source={require('../../assets/payment/ecocash.png')} resizeMode="contain" style={{ width: 68, height: 38 }} accessibilityLabel="EcoCash" />
+            <Image source={require('../../assets/payment/zimswitch.png')} resizeMode="contain" style={{ width: 68, height: 38 }} accessibilityLabel="Zimswitch" />
+          </View>
+          <Text className="text-sm font-display font-black text-slate-900">Choose your payment method at checkout</Text>
+          <Text className="font-sans text-xs text-slate-500 mt-1 leading-5">Paynow shows the methods currently enabled for Detail, including any available mobile money and banking options.</Text>
         </View>
       </View>
 
@@ -303,7 +281,7 @@ export default function WalletScreen() {
               {isCleaner ? 'Prepaid credit for direct-payment booking commissions' : 'Add USD credit to your Detail wallet'}
             </Text>
 
-            <View className="mb-5 flex-row items-center gap-3 rounded-2xl border border-violet-100 bg-[#F7F4FF] p-3.5"><View className="h-10 w-10 items-center justify-center rounded-xl bg-accent"><Text className="font-display text-lg font-black text-white">P</Text></View><View className="flex-1"><Text className="font-display text-sm font-black text-ink">Paynow secure checkout</Text><Text className="font-sans text-[11px] text-ink/55">Choose EcoCash, mobile money, or card on Paynow</Text></View></View>
+            <View className="mb-5 flex-row items-center gap-3 rounded-2xl border border-violet-100 bg-[#F7F4FF] p-3.5"><View className="h-10 w-10 items-center justify-center rounded-xl bg-accent"><Text className="font-display text-lg font-black text-white">P</Text></View><View className="flex-1"><Text className="font-display text-sm font-black text-ink">Paynow secure checkout</Text><Text className="font-sans text-[11px] text-ink/55">Choose from the methods available on Paynow</Text></View></View>
 
             <Text className="text-xs font-display font-black text-slate-500 uppercase tracking-widest mb-2">
               Amount (USD)
