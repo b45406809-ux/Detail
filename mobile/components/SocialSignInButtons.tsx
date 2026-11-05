@@ -1,6 +1,7 @@
+import { appAlert } from '@/components/AppDialog';
 // Google and Apple ID token sign-in for Supabase Auth.
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Platform, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import GoogleSignInButton from './GoogleSignInButton';
@@ -26,7 +27,7 @@ export function SocialSignInButtons() {
       await ensureProfileExists(data.user.id, data.user.email ?? null);
     } catch (err: any) {
       if (err.code !== 'ERR_REQUEST_CANCELED') {
-        Alert.alert('Apple Sign-In Failed', err.message || 'Please try again.');
+        appAlert('Apple Sign-In Failed', err.message || 'Please try again.');
       }
     } finally {
       setIsAppleLoading(false);

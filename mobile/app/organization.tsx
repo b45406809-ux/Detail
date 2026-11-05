@@ -1,6 +1,7 @@
+import { appAlert } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Share, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, Share, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../components/LoadingList';
 import { LoadingError } from '../components/LoadingError';
@@ -51,38 +52,38 @@ export default function OrganizationScreen() {
 
   const register = async () => {
     if (!name.trim() || !registrationNumber.trim() || !phone.trim() || !country.trim() || !city.trim()) {
-      Alert.alert('Complete organization details', 'Enter the organization name, registration number, phone, country, and city.');
+      appAlert('Complete organization details', 'Enter the organization name, registration number, phone, country, and city.');
       return;
     }
     setSaving(true);
     try {
       await callFunction('registerOrganization', { name, registrationNumber, phone, country, city });
     } catch (error) {
-      Alert.alert('Could not register organization', (error as Error).message || 'Please try again.');
+      appAlert('Could not register organization', (error as Error).message || 'Please try again.');
     } finally { setSaving(false); }
   };
 
   const invite = async () => {
     if (!cleanerName.trim() || !cleanerEmail.trim()) {
-      Alert.alert('Cleaner details required', 'Enter the cleaner’s name and email address.');
+      appAlert('Cleaner details required', 'Enter the cleaner’s name and email address.');
       return;
     }
     setSaving(true);
     try {
       const result = await callFunction<{ cleanerName: string; email: string }, { code: string }>('createOrganizationCleanerInvite', { cleanerName, email: cleanerEmail });
       setCleanerName(''); setCleanerEmail('');
-      Alert.alert('Invitation code created', `Share this code with ${cleanerEmail}. They must register using that email and complete Didit identity verification.`, [
+      appAlert('Invitation code created', `Share this code with ${cleanerEmail}. They must register using that email and complete Didit identity verification.`, [
         { text: 'Share code', onPress: () => { void Share.share({ message: `Detail organization invitation code: ${result.code}. Register with ${cleanerEmail}, complete identity verification, then enter this code in cleaner registration.` }); } },
         { text: 'Done', style: 'cancel' },
       ]);
     } catch (error) {
-      Alert.alert('Could not invite cleaner', (error as Error).message || 'Please try again.');
+      appAlert('Could not invite cleaner', (error as Error).message || 'Please try again.');
     } finally { setSaving(false); }
   };
 
-  const removeMember = (member: Member) => Alert.alert('Remove cleaner?', `${member.cleanerName} will no longer be linked to this organization. Their Detail account and KYC remain theirs.`, [
+  const removeMember = (member: Member) => appAlert('Remove cleaner?', `${member.cleanerName} will no longer be linked to this organization. Their Detail account and KYC remain theirs.`, [
     { text: 'Keep', style: 'cancel' },
-    { text: 'Remove', style: 'destructive', onPress: async () => { setSaving(true); try { await callFunction('removeOrganizationCleaner', { memberId: member.id }); } catch (error) { Alert.alert('Could not remove cleaner', (error as Error).message || 'Please try again.'); } finally { setSaving(false); } } },
+    { text: 'Remove', style: 'destructive', onPress: async () => { setSaving(true); try { await callFunction('removeOrganizationCleaner', { memberId: member.id }); } catch (error) { appAlert('Could not remove cleaner', (error as Error).message || 'Please try again.'); } finally { setSaving(false); } } },
   ]);
 
   return <SafeAreaView className="flex-1 bg-[#F3F1FC]">

@@ -1,3 +1,4 @@
+import { appAlert } from '@/components/AppDialog';
 import React, { useState } from 'react';
 import {
   View,
@@ -8,7 +9,7 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  Alert,
+
   Image,
 } from 'react-native';
 import { router } from 'expo-router';
@@ -31,7 +32,7 @@ export default function CreateProfileScreen() {
   const [isLoading, setIsLoading] = useState(false);
 
   const handlePickPhoto = async () => {
-    Alert.alert('Profile Photo', 'Add a photo so people recognize you', [
+    appAlert('Profile Photo', 'Add a photo so people recognize you', [
       { text: 'Take Photo', onPress: () => chooseImage(true) },
       { text: 'Choose from Gallery', onPress: () => chooseImage(false) },
       ...(photoURL ? [{ text: 'Remove Photo', style: 'destructive' as const, onPress: () => setPhotoURL('') }] : []),
@@ -45,7 +46,7 @@ export default function CreateProfileScreen() {
         ? await ImagePicker.requestCameraPermissionsAsync()
         : await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Permission needed', 'Please allow camera/photo access to add your profile photo.');
+        appAlert('Permission needed', 'Please allow camera/photo access to add your profile photo.');
         return;
       }
       const result = fromCamera
@@ -58,7 +59,7 @@ export default function CreateProfileScreen() {
       const url = await uploadProfilePhoto(result.assets[0].uri);
       setPhotoURL(url);
     } catch {
-      Alert.alert('Upload Failed', 'Could not upload photo. You can still proceed or try again.');
+      appAlert('Upload Failed', 'Could not upload photo. You can still proceed or try again.');
     } finally {
       setIsUploadingPhoto(false);
     }
@@ -66,7 +67,7 @@ export default function CreateProfileScreen() {
 
   const handleContinue = async () => {
     if (!name.trim()) {
-      Alert.alert('Name required', 'Please enter your full name.');
+      appAlert('Name required', 'Please enter your full name.');
       return;
     }
     if (!user) return;
@@ -94,7 +95,7 @@ export default function CreateProfileScreen() {
       await refreshProfile();
       router.replace(role === 'CLEANER' ? '/register-cleaner' : '/(auth)/permissions');
     } catch (err: any) {
-      Alert.alert('Error', 'Failed to save profile. Please try again.');
+      appAlert('Error', 'Failed to save profile. Please try again.');
     } finally {
       setIsLoading(false);
     }

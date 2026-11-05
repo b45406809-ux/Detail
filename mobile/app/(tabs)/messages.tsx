@@ -1,3 +1,4 @@
+import { appAlert } from '@/components/AppDialog';
 import React, { useEffect, useState, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
@@ -11,8 +12,7 @@ import {
   Platform,
   ActivityIndicator,
   Image,
-  ActionSheetIOS,
-  Alert,
+
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../../components/LoadingList';
@@ -204,7 +204,7 @@ export default function MessagesScreen() {
       if (!override) setInputText('');
     } catch (error) {
       console.error('Could not send message:', error);
-      Alert.alert('Message not sent', 'Check your connection and try again.');
+      appAlert('Message not sent', 'Check your connection and try again.');
     }
   };
 
@@ -223,7 +223,7 @@ export default function MessagesScreen() {
       await clearPendingMessageIntent(intent, pending);
     } catch (error) {
       console.error('Could not send chat photo:', error);
-      Alert.alert('Photo not sent', 'Check your connection and try again.');
+      appAlert('Photo not sent', 'Check your connection and try again.');
     } finally {
       setIsSendingPhoto(false);
     }
@@ -234,31 +234,23 @@ export default function MessagesScreen() {
 
     const pickFromLibrary = async () => {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) { Alert.alert('Permission needed', 'Allow access to your photo library.'); return; }
+      if (!perm.granted) { appAlert('Permission needed', 'Allow access to your photo library.'); return; }
       const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
       if (!result.canceled && result.assets?.[0]) uploadAndSend(result.assets[0].uri);
     };
 
     const takePhoto = async () => {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (!perm.granted) { Alert.alert('Permission needed', 'Allow camera access to take photos.'); return; }
+      if (!perm.granted) { appAlert('Permission needed', 'Allow camera access to take photos.'); return; }
       const result = await ImagePicker.launchCameraAsync({ quality: 0.7 });
       if (!result.canceled && result.assets?.[0]) uploadAndSend(result.assets[0].uri);
     };
 
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Cancel', 'Take Photo', 'Choose from Library'], cancelButtonIndex: 0 },
-        (idx) => { if (idx === 1) takePhoto(); else if (idx === 2) pickFromLibrary(); }
-      );
-    } else {
-      // Android: simple Alert-based picker
-      Alert.alert('Send Photo', undefined, [
-        { text: 'Take Photo', onPress: takePhoto },
-        { text: 'Choose from Library', onPress: pickFromLibrary },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-    }
+    appAlert('Send Photo', undefined, [
+      { text: 'Take Photo', onPress: takePhoto },
+      { text: 'Choose from Library', onPress: pickFromLibrary },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   const openConversation = (jobId: string) => {

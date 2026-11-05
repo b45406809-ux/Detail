@@ -1,3 +1,4 @@
+import { appAlert } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState } from 'react';
 import {
@@ -7,7 +8,7 @@ import {
   ScrollView,
   TextInput,
   ActivityIndicator,
-  Alert,
+
   KeyboardAvoidingView,
   Platform,
   Image,
@@ -69,16 +70,16 @@ export default function CleanerJobDetailScreen() {
     const eta = parseInt(estimatedArrival, 10);
 
     if (isNaN(price) || price < 1) {
-      Alert.alert('Invalid Price', 'Please enter a valid bid price.');
+      appAlert('Invalid Price', 'Please enter a valid bid price.');
       return;
     }
     if (isNaN(eta) || eta < 1 || eta > 120) {
-      Alert.alert('Invalid ETA', 'Please enter an estimated arrival time in minutes (1–120).');
+      appAlert('Invalid ETA', 'Please enter an estimated arrival time in minutes (1–120).');
       return;
     }
     if (!user || !profile) return;
     if (job?.status !== JobStatus.PENDING) {
-      Alert.alert('Too Late', 'This job is no longer accepting bids.');
+      appAlert('Too Late', 'This job is no longer accepting bids.');
       return;
     }
 
@@ -91,9 +92,9 @@ export default function CleanerJobDetailScreen() {
         message: message.trim() || undefined,
       });
       setAlreadyBid(true);
-      Alert.alert('Bid Placed!', "Your offer has been sent to the customer. You'll be notified if they accept.");
+      appAlert('Bid Placed!', "Your offer has been sent to the customer. You'll be notified if they accept.");
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to submit bid. Please try again.');
+      appAlert('Error', err.message || 'Failed to submit bid. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

@@ -1,3 +1,4 @@
+import { appAlert } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useRef, useState } from 'react';
 import {
@@ -9,7 +10,7 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  Alert,
+
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -45,11 +46,11 @@ export default function SignInScreen() {
   const handlePhoneContinue = () => {
     const cleanDigits = phone.replace(/[^\d]/g, '');
     if (!cleanDigits) {
-      Alert.alert('Phone required', 'Please enter your phone number.');
+      appAlert('Phone required', 'Please enter your phone number.');
       return;
     }
     if (!hasAcceptedTerms) {
-      Alert.alert(
+      appAlert(
         'Accept Terms & Conditions',
         'Please review and accept Detail’s Terms of Service and Privacy Policy to continue.',
         [
@@ -79,12 +80,12 @@ export default function SignInScreen() {
   const handleEmailAuth = async () => {
     if (isLoading) return;
     if (!email.trim()) {
-      Alert.alert('Email required', 'Please enter your email address.');
+      appAlert('Email required', 'Please enter your email address.');
       return;
     }
     if (emailAuthMode === 'CODE') {
       if (isNewAccount && !hasAcceptedTerms) {
-        Alert.alert(
+        appAlert(
           'Accept Terms & Conditions',
           'Please review and accept Detail’s Terms of Service and Privacy Policy to create an account.',
           [
@@ -99,11 +100,11 @@ export default function SignInScreen() {
       return;
     }
     if (!password.trim()) {
-      Alert.alert('Password required', 'Please enter your password.');
+      appAlert('Password required', 'Please enter your password.');
       return;
     }
     if (isNewAccount && !hasAcceptedTerms) {
-      Alert.alert(
+      appAlert(
         'Accept Terms & Conditions',
         'Please review and accept Detail’s Terms of Service and Privacy Policy to create an account.',
         [
@@ -124,7 +125,7 @@ export default function SignInScreen() {
       await sendEmailLoginCode(email, intent, hasAcceptedTerms || isNewAccount);
       router.push({ pathname: '/(auth)/verify-email', params: { email: email.trim().toLowerCase(), intent } });
     } catch (err: any) {
-      Alert.alert('Could not send code', authErrorMessage(err, 'Please check the email address and try again.'));
+      appAlert('Could not send code', authErrorMessage(err, 'Please check the email address and try again.'));
     } finally {
       setIsLoading(false);
     }
@@ -145,7 +146,7 @@ export default function SignInScreen() {
         router.replace('/home');
       }
     } catch (err: any) {
-      Alert.alert(isNewAccount ? 'Account Creation Failed' : 'Sign In Failed', authErrorMessage(err));
+      appAlert(isNewAccount ? 'Account Creation Failed' : 'Sign In Failed', authErrorMessage(err));
     } finally {
       setIsLoading(false);
     }

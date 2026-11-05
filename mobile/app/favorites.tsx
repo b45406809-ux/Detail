@@ -1,6 +1,7 @@
+import { appAlert } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Image, Alert } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../components/LoadingList';
 import { LoadingError } from '../components/LoadingError';
@@ -35,7 +36,7 @@ export default function FavoritesScreen() {
   }, [userId, retry]);
 
   const removeFavorite = (fav: Favorite) => {
-    Alert.alert('Remove favorite?', `Remove ${fav.cleanerName ?? 'this cleaner'} from your favorites.`, [
+    appAlert('Remove favorite?', `Remove ${fav.cleanerName ?? 'this cleaner'} from your favorites.`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: () => deleteDoc(doc(db, 'favorites', fav.id)).catch(() => {}) },
     ]);

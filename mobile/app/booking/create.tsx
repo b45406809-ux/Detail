@@ -1,3 +1,4 @@
+import { appAlert } from '@/components/AppDialog';
 import { callFunction } from '../../services/functions';
 // Booking wizard — branches into a House or Car cleaning checklist, matching
 // the "Book House Cleaning" / "Book Car Cleaning" step-by-step flows.
@@ -11,7 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
+
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -170,7 +171,7 @@ export default function CreateBookingScreen() {
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Location permission needed', 'Allow location access in your device settings, or enter the address manually.');
+        appAlert('Location permission needed', 'Allow location access in your device settings, or enter the address manually.');
         return;
       }
       const position = await Promise.race([
@@ -185,7 +186,7 @@ export default function CreateBookingScreen() {
         setAddress([place.streetNumber, place.street, place.city, place.region].filter(Boolean).join(', '));
       }
     } catch {
-      Alert.alert('Location unavailable', 'Check that location services are enabled and try again, or enter the address manually. Emulators may need a simulated location.');
+      appAlert('Location unavailable', 'Check that location services are enabled and try again, or enter the address manually. Emulators may need a simulated location.');
     } finally {
       setIsFetchingLocation(false);
     }
@@ -193,7 +194,7 @@ export default function CreateBookingScreen() {
 
   const pickPhoto = async (fromCamera: boolean) => {
     if (photoUris.length >= 6) {
-      Alert.alert('Limit reached', 'You can add up to 6 photos.');
+      appAlert('Limit reached', 'You can add up to 6 photos.');
       return;
     }
     try {
@@ -201,7 +202,7 @@ export default function CreateBookingScreen() {
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission needed', 'Please allow access to add photos.');
+      appAlert('Permission needed', 'Please allow access to add photos.');
       return;
     }
     const result = fromCamera
@@ -214,12 +215,15 @@ export default function CreateBookingScreen() {
       const url = await uploadJobPhoto(result.assets[0].uri);
       setPhotoUris((prev) => [...prev, url]);
     } catch {
-      Alert.alert('Upload failed', 'Could not upload that photo. Please try again.');
+      appAlert('Upload failed', 'Could not upload that photo. Please try again.');
     } finally {
       setIsUploadingPhoto(false);
     }
     } catch {
-      Alert.alert('Photo unavailable', fromCamera ? 'The camera could not be opened. Check camera permissions or try the photo library.' : 'The photo library could not be opened. Check permissions and try again.');
+      appAlert('Photo unavailable', fromCamera ? 'The camera could not be opened. Check camera permissions or try the photo library.' : 'The photo library could not be opened. Check permissions and try again.', fromCamera ? [
+        { text: 'Choose from library', onPress: () => { void pickPhoto(false); } },
+        { text: 'OK', style: 'cancel' },
+      ] : undefined);
     }
   };
 
@@ -266,15 +270,15 @@ export default function CreateBookingScreen() {
 
   const handleSubmit = async () => {
     if (bookingConfigStatus === 'loading') {
-      Alert.alert('Checking booking availability', 'Please wait while Detail checks whether bookings are open in your area.');
+      appAlert('Checking booking availability', 'Please wait while Detail checks whether bookings are open in your area.');
       return;
     }
     if (bookingConfigStatus === 'error') {
-      Alert.alert('Could not check booking availability', 'Check your internet connection and try again. Your request has not been submitted.');
+      appAlert('Could not check booking availability', 'Check your internet connection and try again. Your request has not been submitted.');
       return;
     }
     if(!bookingEnabled){
-      Alert.alert('Bookings are not open in your area yet','Your booking details have not been submitted. Join the Detail waitlist for an update when bookings open in your area.');
+      appAlert('Bookings are not open in your area yet','Your booking details have not been submitted. Join the Detail waitlist for an update when bookings open in your area.');
       return;
     }
     if (!user || !category) return;
@@ -286,7 +290,7 @@ export default function CreateBookingScreen() {
 
       const scheduledDateTime = bookingMode==='INSTANT' ? null : resolveScheduledDate(timePreference, customDateTime);
       if (bookingMode==='SCHEDULED' && timePreference==='CUSTOM' && (!customDateTime || customDateTime.getTime() < Date.now()+MIN_CUSTOM_BOOKING_LEAD_MS || customDateTime.getTime() > Date.now()+MAX_CUSTOM_BOOKING_HORIZON_MS)) {
-        Alert.alert('Choose a valid time', 'Custom bookings must be at least 30 minutes from now and within the next 180 days.');
+        appAlert('Choose a valid time', 'Custom bookings must be at least 30 minutes from now and within the next 180 days.');
         setIsSubmitting(false);
         return;
       }
@@ -305,7 +309,7 @@ export default function CreateBookingScreen() {
       if (!resolvedCoordinates || !Number.isFinite(resolvedCoordinates.lat) || !Number.isFinite(resolvedCoordinates.lng)
         || Math.abs(resolvedCoordinates.lat) > 90 || Math.abs(resolvedCoordinates.lng) > 180
         || (resolvedCoordinates.lat === 0 && resolvedCoordinates.lng === 0)) {
-        Alert.alert('Confirm the job location', 'We could not map that address. Use your current location or enter a more specific address before continuing.');
+        appAlert('Confirm the job location', 'We could not map that address. Use your current location or enter a more specific address before continuing.');
         return;
       }
 
@@ -350,7 +354,7 @@ export default function CreateBookingScreen() {
       if(bookingMode==='INSTANT')router.replace({pathname:'/tracking/[jobId]',params:{jobId:result.jobId}});
       else router.replace({ pathname: '/booking/offers', params: { jobId: result.jobId } });
     } catch (err) {
-      Alert.alert('Could not post booking', err instanceof Error ? err.message : 'Check your connection and try again.');
+      appAlert('Could not post booking', err instanceof Error ? err.message : 'Check your connection and try again.');
     } finally {
       setIsSubmitting(false);
     }

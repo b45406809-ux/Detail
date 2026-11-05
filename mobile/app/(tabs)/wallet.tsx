@@ -1,3 +1,4 @@
+import { appAlert, AppDialogHost } from '@/components/AppDialog';
 import React, { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
@@ -9,7 +10,7 @@ import {
   Modal,
   TextInput,
   ActivityIndicator,
-  Alert,
+
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../../components/LoadingList';
@@ -82,7 +83,7 @@ export default function WalletScreen() {
   const handleAddFunds = async () => {
     const value = parseFloat(amount);
     if (isNaN(value) || value < 1) {
-      Alert.alert('Invalid amount', 'Minimum top-up is $1.00');
+      appAlert('Invalid amount', 'Minimum top-up is $1.00');
       return;
     }
     setIsLoading(true);
@@ -92,14 +93,14 @@ export default function WalletScreen() {
       setAmount('');
 
       if (result.pending) {
-        Alert.alert(
+        appAlert(
           'Payment Processing',
           'Your payment is being confirmed. Your balance will update automatically once the transaction is complete.'
         );
       }
     } catch (err: any) {
       if (err.message !== 'CANCELED') {
-        Alert.alert('Payment Failed', err.message || 'Please try again.');
+        appAlert('Payment Failed', err.message || 'Please try again.');
       }
     } finally {
       setIsLoading(false);
@@ -130,9 +131,9 @@ export default function WalletScreen() {
       await callFunction('requestCleanerPayout', { ...request, idempotencyKey });
       await AsyncStorage.removeItem(storageKey);
       setIsPayoutOpen(false); setPayoutAmount(''); setPayoutName(''); setPayoutDestination('');
-      Alert.alert('Payout requested', 'Your cleared earnings are reserved. Detail will send the transfer and update the request status.');
+      appAlert('Payout requested', 'Your cleared earnings are reserved. Detail will send the transfer and update the request status.');
     } catch (error: any) {
-      Alert.alert('Could not request payout', error?.message ?? 'Please check the amount and payout details.');
+      appAlert('Could not request payout', error?.message ?? 'Please check the amount and payout details.');
     } finally { setIsLoading(false); }
   };
 
@@ -164,7 +165,7 @@ export default function WalletScreen() {
             <Text className="text-white font-display font-black text-xs uppercase tracking-wider">{isCleaner ? 'Top up commission' : 'Add Funds'}</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => isCleaner ? setIsPayoutOpen(true) : Alert.alert('Withdraw', 'Withdrawals are available for cleaner earnings.')}
+            onPress={() => isCleaner ? setIsPayoutOpen(true) : appAlert('Withdraw', 'Withdrawals are available for cleaner earnings.')}
             className="flex-1 bg-white/20 py-3 rounded-2xl flex-row items-center justify-center gap-2"
             activeOpacity={0.8}
           >
@@ -285,12 +286,13 @@ export default function WalletScreen() {
 
       {/* Add Funds Modal */}
       <Modal visible={isAddFundsOpen} transparent animationType="slide">
-        <View className="flex-1 justify-end">
+        {isAddFundsOpen && <AppDialogHost />}
+        <View className="flex-1 justify-center bg-[#150256]/55 px-5">
           <TouchableOpacity
-            className="flex-1 bg-black/50"
+            className="absolute inset-0"
             onPress={() => setIsAddFundsOpen(false)}
           />
-          <View className="bg-white rounded-t-[32px] p-6 pb-10">
+          <View className="bg-white rounded-[28px] p-6">
             <View className="flex-row items-center justify-between mb-1">
               <Text className="text-xl font-display font-black text-slate-900">{isCleaner ? 'Top up commission credit' : 'Add Funds'}</Text>
               <TouchableOpacity onPress={() => setIsAddFundsOpen(false)}>
@@ -355,7 +357,8 @@ export default function WalletScreen() {
         </View>
       </Modal>
       <Modal visible={isPayoutOpen} transparent animationType="slide">
-        <View className="flex-1 justify-end bg-black/50"><View className="bg-white rounded-t-[32px] p-6 pb-10">
+        {isPayoutOpen && <AppDialogHost />}
+        <View className="flex-1 justify-center bg-[#150256]/55 px-5"><View className="bg-white rounded-[28px] p-6 pb-10">
           <View className="flex-row justify-between items-center mb-4"><Text className="text-xl font-display font-black">Request payout</Text><TouchableOpacity onPress={() => setIsPayoutOpen(false)}><X size={22} color="#94a3b8" /></TouchableOpacity></View>
           <Text className="font-sans text-sm text-slate-500 mb-3">Available cleared earnings: ${availableEarnings.toFixed(2)}. Minimum payout $5. Transfers are sent manually while payout integrations are unavailable.</Text>
           <TextInput className="font-sans border border-slate-200 rounded-xl p-4 mb-3" placeholder="Amount in USD" keyboardType="decimal-pad" value={payoutAmount} onChangeText={setPayoutAmount} />

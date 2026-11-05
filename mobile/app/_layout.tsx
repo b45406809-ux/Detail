@@ -1,9 +1,10 @@
+import { appAlert } from '@/components/AppDialog';
 import '../global.css';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Stack, router, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Alert, Platform, Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
 import * as Notifications from 'expo-notifications';
@@ -15,6 +16,7 @@ import { DMSans_400Regular, DMSans_500Medium, DMSans_600SemiBold, DMSans_700Bold
 import { Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrope';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { AppDialogHost } from '../components/AppDialog';
 import { LoadingList } from '../components/LoadingList';
 import { handleAuthCallback, supabase } from '../services/supabase';
 import { APP_ENVIRONMENT } from '../utils/env';
@@ -103,7 +105,7 @@ export default function RootLayout() {
       if (!url || (!url.startsWith('detail://auth/callback') && !url.startsWith('detail://reset-password'))) return;
       void handleAuthCallback(url).catch(error => {
         console.warn('Could not complete the authentication link:', error instanceof Error ? error.message : 'unknown error');
-        Alert.alert('Link could not be completed', 'This sign-in or recovery link may have expired or already been used. Return to Detail and request a new code or recovery link.');
+        appAlert('Link could not be completed', 'This sign-in or recovery link may have expired or already been used. Return to Detail and request a new code or recovery link.');
       });
     };
     Linking.getInitialURL().then(consumeAuthUrl).catch(() => undefined);
@@ -169,6 +171,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <ErrorBoundary>
           <AuthProvider>
+            <AppDialogHost />
             <AuthGuard />
             <NotificationRouter response={pendingNotification} onConsumed={consumeNotification} />
             <EnvironmentIndicator />

@@ -1,3 +1,4 @@
+import { appAlert, AppDialogHost } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 // "Bids Received" — the client vets every bid (no instant-book, no
 // negotiate). Ranked by cleaner rating so the strongest pros surface first.
@@ -13,7 +14,7 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
+
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -102,7 +103,7 @@ export default function OffersScreen() {
 
   const acceptBid = (bid: Bid) => {
     const quote = Number(bid.bidPrice);
-    Alert.alert('Accept Offer?', `Accept ${bid.cleanerName ?? 'this cleaner'}'s quote of $${quote.toFixed(2)}?`, [
+    appAlert('Accept Offer?', `Accept ${bid.cleanerName ?? 'this cleaner'}'s quote of $${quote.toFixed(2)}?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Choose payment', onPress: () => setPaymentChoiceBid(bid) },
     ]);
@@ -124,7 +125,7 @@ export default function OffersScreen() {
             acceptedLocally.current = true;
             router.replace({ pathname: '/booking/confirmation', params: { jobId: jobId! } });
           } catch (err: any) {
-            Alert.alert('Error', err.message || 'Failed to accept offer. Please try again.');
+            appAlert('Error', err.message || 'Failed to accept offer. Please try again.');
           } finally {
             setBusyBidId(null);
           }
@@ -135,7 +136,7 @@ export default function OffersScreen() {
     try {
       await callFunction('rejectBid', { jobId, bidId: bid.id });
     } catch {
-      Alert.alert('Error', 'Could not decline this offer. Please try again.');
+      appAlert('Error', 'Could not decline this offer. Please try again.');
     } finally {
       setBusyBidId(null);
     }
@@ -145,11 +146,11 @@ export default function OffersScreen() {
     const value = parseFloat(newBudgetValue);
     const currentBudget = Number(job?.budget ?? 0);
     if (isNaN(value) || value <= 0) {
-      Alert.alert('Invalid amount', 'Please enter a positive budget amount.');
+      appAlert('Invalid amount', 'Please enter a positive budget amount.');
       return;
     }
     if (currentBudget > 0 && value <= currentBudget) {
-      Alert.alert('Invalid amount', `Enter an amount higher than your current budget ($${currentBudget}).`);
+      appAlert('Invalid amount', `Enter an amount higher than your current budget ($${currentBudget}).`);
       return;
     }
     setIsSavingBudget(true);
@@ -158,14 +159,14 @@ export default function OffersScreen() {
       setIsIncreasingBudget(false);
       setNewBudgetValue('');
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Could not update the budget.');
+      appAlert('Error', err.message || 'Could not update the budget.');
     } finally {
       setIsSavingBudget(false);
     }
   };
 
   const cancelJob = async () => {
-    Alert.alert('Cancel Job?', 'Are you sure you want to cancel this job?', [
+    appAlert('Cancel Job?', 'Are you sure you want to cancel this job?', [
       { text: 'Keep Job', style: 'cancel' },
       {
         text: 'Cancel Job',
@@ -173,9 +174,9 @@ export default function OffersScreen() {
         onPress: async () => {
           try {
             const result = await callFunction<{jobId:string;reason:string;idempotencyKey:string},{refund?:{status?:string}}>('cancelBooking', { jobId, reason: 'Cancelled before assignment', idempotencyKey: `cancel-${jobId}-${Date.now()}` });
-            if(result.refund?.status==='REVIEW_REQUIRED'){Alert.alert('Review opened','Paynow BuySafe needs support review before this booking can be cancelled. We have opened a case for you.');return;}
+            if(result.refund?.status==='REVIEW_REQUIRED'){appAlert('Review opened','Paynow BuySafe needs support review before this booking can be cancelled. We have opened a case for you.');return;}
             router.replace('/home');
-          } catch(error:any) { Alert.alert('Could not cancel booking',error.message||'Please try again.'); }
+          } catch(error:any) { appAlert('Could not cancel booking',error.message||'Please try again.'); }
         },
       },
     ]);
@@ -376,7 +377,8 @@ export default function OffersScreen() {
         />
       )}
       <Modal visible={!!paymentChoiceBid} transparent animationType="slide" onRequestClose={() => setPaymentChoiceBid(null)}>
-        <View className="flex-1 justify-end bg-black/50"><View className="rounded-t-[32px] bg-white px-5 pb-9 pt-6">
+        {!!paymentChoiceBid && <AppDialogHost />}
+        <View className="flex-1 justify-center bg-[#150256]/55 px-5"><View className="rounded-[28px] bg-white px-5 pb-9 pt-6">
           <View className="mb-5 h-1 w-12 self-center rounded-full bg-slate-200" />
           <Text className="text-2xl font-display font-black text-ink">{paynowConfigured || IS_MOCK ? 'Choose how to pay' : 'Payment isn’t available in Detail yet'}</Text>
           <Text className="mt-1 mb-5 font-sans text-sm leading-5 text-slate-500">Cleaner quote and booking total: ${Number(paymentChoiceBid?.bidPrice ?? 0).toFixed(2)}. {paynowConfigured || IS_MOCK ? 'Pay through Paynow; available mobile money and other methods appear in its checkout.' : 'You can still confirm this booking. Arrange payment directly with your cleaner. Detail will not collect, verify, refund, or protect that payment, and commission is not processed by Detail during this pause.'}</Text>

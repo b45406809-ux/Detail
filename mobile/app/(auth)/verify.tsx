@@ -1,3 +1,4 @@
+import { appAlert } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
@@ -8,7 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
+
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -35,7 +36,7 @@ export default function VerifyScreen() {
       await sendPhoneOTP(normalizedPhone);
       setResendTimer(60);
     } catch (err: any) {
-      Alert.alert('Failed to Send Code', err.message ?? 'Please try again.');
+      appAlert('Failed to Send Code', err.message ?? 'Please try again.');
     } finally {
       setIsSending(false);
     }
@@ -80,7 +81,7 @@ export default function VerifyScreen() {
       const msg = err.message?.toLowerCase().includes('session')
         ? 'Your session expired. Tap "Resend Code" to get a new one.'
         : 'The code you entered is incorrect. Please try again.';
-      Alert.alert('Verification Failed', msg);
+      appAlert('Verification Failed', msg);
       setOtp(Array(OTP_LENGTH).fill(''));
       inputRefs.current[0]?.focus();
     } finally {

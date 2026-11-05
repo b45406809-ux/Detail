@@ -1,3 +1,4 @@
+import { appAlert, AppDialogHost } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState } from 'react';
 import {
@@ -8,7 +9,7 @@ import {
   Image,
   Modal,
   TextInput,
-  Alert,
+
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -51,16 +52,16 @@ export default function HistoryScreen() {
   const [evidenceUris, setEvidenceUris] = useState<string[]>([]);
 
   const chooseEvidence = async () => {
-    if (evidenceUris.length >= 3) { Alert.alert('Photo limit', 'Attach up to three photos.'); return; }
+    if (evidenceUris.length >= 3) { appAlert('Photo limit', 'Attach up to three photos.'); return; }
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) { Alert.alert('Permission needed', 'Allow photo library access to attach evidence.'); return; }
+    if (!permission.granted) { appAlert('Permission needed', 'Allow photo library access to attach evidence.'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7, allowsMultipleSelection: false });
     if (!result.canceled && result.assets?.[0]) setEvidenceUris(current => current.length < 3 ? [...current, result.assets[0].uri] : current);
   };
 
   const submitReport = async () => {
     if (!reportingJob || !reportReason.trim()) {
-      Alert.alert('Tell us what happened', 'Please describe the issue before submitting.');
+      appAlert('Tell us what happened', 'Please describe the issue before submitting.');
       return;
     }
     setIsSubmittingReport(true);
@@ -71,10 +72,10 @@ export default function HistoryScreen() {
       setReportingJob(null);
       setReportReason('');
       setEvidenceUris([]);
-      Alert.alert('Report submitted', "We'll review this and follow up with you.");
+      appAlert('Report submitted', "We'll review this and follow up with you.");
     } catch (err: any) {
       if (uploadedEvidence.length) await removeSupportEvidence(uploadedEvidence).catch(() => {});
-      Alert.alert('Error', err.message || 'Could not submit your report. Please try again.');
+      appAlert('Error', err.message || 'Could not submit your report. Please try again.');
     } finally {
       setIsSubmittingReport(false);
     }
@@ -201,9 +202,10 @@ export default function HistoryScreen() {
 
       {/* Report an issue modal */}
       <Modal visible={!!reportingJob} transparent animationType="slide">
-        <View className="flex-1 justify-end">
-          <TouchableOpacity className="flex-1 bg-black/50" onPress={() => { setReportingJob(null); setReportReason(''); setEvidenceUris([]); }} />
-          <View className="bg-white rounded-t-[32px] p-6 pb-10">
+        {!!reportingJob && <AppDialogHost />}
+        <View className="flex-1 justify-center bg-[#150256]/55 px-5">
+          <TouchableOpacity className="absolute inset-0" onPress={() => { setReportingJob(null); setReportReason(''); setEvidenceUris([]); }} />
+          <View className="bg-white rounded-[28px] p-6">
             <View className="flex-row items-center justify-between mb-1">
               <Text className="text-xl font-display font-black text-slate-900">Report an Issue</Text>
               <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close issue report" onPress={() => { setReportingJob(null); setReportReason(''); setEvidenceUris([]); }}>

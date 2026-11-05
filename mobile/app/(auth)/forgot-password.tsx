@@ -1,3 +1,4 @@
+import { appAlert } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useState } from 'react';
 import {
@@ -9,7 +10,7 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  Alert,
+
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,7 +26,7 @@ export default function ForgotPasswordScreen() {
   const handleSendResetEmail = async () => {
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
-      Alert.alert('Email Required', 'Please enter the email address associated with your account.');
+      appAlert('Email Required', 'Please enter the email address associated with your account.');
       return;
     }
 
@@ -42,7 +43,7 @@ export default function ForgotPasswordScreen() {
       } else if (err.code === 'auth/too-many-requests') {
         message = 'Too many requests. Please wait a few moments and try again.';
       }
-      Alert.alert('Reset Failed', message);
+      appAlert('Reset Failed', message);
     } finally {
       setIsLoading(false);
     }

@@ -1,6 +1,7 @@
+import { appAlert } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Image, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../components/LoadingList';
 import { router } from 'expo-router';
@@ -42,9 +43,9 @@ export default function CleanersScreen() {
   const findNearby = async () => {
     if(nearby){setNearby(null);return;}
     const permission=await Location.requestForegroundPermissionsAsync();
-    if(!permission.granted){Alert.alert('Location permission needed','Allow location access to find verified cleaners within 25 km. You can still search by name or area.');return;}
+    if(!permission.granted){appAlert('Location permission needed','Allow location access to find verified cleaners within 25 km. You can still search by name or area.');return;}
     try{const position=await Location.getCurrentPositionAsync({accuracy:Location.Accuracy.Balanced});setNearby({lat:position.coords.latitude,lng:position.coords.longitude});}
-    catch{Alert.alert('Location unavailable','Try again or search by city and area.');}
+    catch{appAlert('Location unavailable','Try again or search by city and area.');}
   };
 
   useEffect(() => {

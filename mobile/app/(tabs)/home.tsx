@@ -1,3 +1,4 @@
+import { appAlert } from '@/components/AppDialog';
 // Home tab — Uber-style live map with a floating glass control panel.
 // Customer mode: map + "Request Cleaning" sheet + service shortcuts + favorites.
 // Cleaner mode: map + online/offline sheet + live incoming job requests.
@@ -12,7 +13,7 @@ import {
   Animated,
   Image,
   Platform,
-  Alert,
+
   AppState,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -101,7 +102,7 @@ export default function HomeScreen() {
         && profile?.cleanerAgreementAccepted
         && profile?.verificationStatus === 'VERIFIED';
       if (!isRegistered) {
-        Alert.alert(
+        appAlert(
           'Cleaner Registration Required',
           'To start earning and accept cleaning jobs, please complete your cleaner registration first.',
           [
@@ -115,13 +116,13 @@ export default function HomeScreen() {
         );
         return;
       }
-      callFunction('setActiveRole', { role: 'CLEANER' }).then(() => setViewRole('CLEANER')).catch((e:any) => Alert.alert('Could not switch role', e.message ?? 'Try again.'));
+      callFunction('setActiveRole', { role: 'CLEANER' }).then(() => setViewRole('CLEANER')).catch((e:any) => appAlert('Could not switch role', e.message ?? 'Try again.'));
     } else {
       callFunction('setActiveRole', { role: 'CUSTOMER' }).then(async () => {
         setViewRole('CUSTOMER');
         setCleanerStatus('OFFLINE');
         await stopCleanerLocationUpdates().catch((error) => console.warn('[location] could not stop after role switch:', error));
-      }).catch((e:any) => Alert.alert('Could not switch role', e.message ?? 'Try again.'));
+      }).catch((e:any) => appAlert('Could not switch role', e.message ?? 'Try again.'));
     }
   };
 
@@ -243,7 +244,7 @@ export default function HomeScreen() {
         await stopCleanerLocationUpdates().catch(()=>{});
         await callFunction('updateCleanerPresence',{status:'OFFLINE'}).catch(()=>{});
       }
-      Alert.alert('Location permission needed',error?.message||'Detail needs background location permission while you are online.');
+      appAlert('Location permission needed',error?.message||'Detail needs background location permission while you are online.');
     }
   };
 
@@ -348,7 +349,7 @@ export default function HomeScreen() {
               if (!location) {
                 const permission = await Location.requestForegroundPermissionsAsync();
                 if (!permission.granted) {
-                  Alert.alert('Location permission needed', 'Allow location access in your device settings to show your position on the map.');
+                  appAlert('Location permission needed', 'Allow location access in your device settings to show your position on the map.');
                   return;
                 }
                 setCanUseForegroundLocation(true);
@@ -361,7 +362,7 @@ export default function HomeScreen() {
               }
               mapRef.current?.setCamera({ centerCoordinate: [location.lng, location.lat], zoomLevel: 15, animationDuration: 400 });
             } catch {
-              Alert.alert('Location unavailable', 'Check that location services are enabled and try again. Emulators may need a simulated location.');
+              appAlert('Location unavailable', 'Check that location services are enabled and try again. Emulators may need a simulated location.');
             }
           }}
         >

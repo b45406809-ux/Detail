@@ -1,3 +1,4 @@
+import { appAlert } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 // Cleaner registration — collects the identity/verification info required by
 // the Cleaner Agreement §4 (full name, phone, physical address) plus service details, and proves email ownership via Firebase's
@@ -15,7 +16,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
+
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -64,9 +65,9 @@ export default function RegisterCleanerScreen() {
     try {
       await sendEmailVerification(auth.currentUser);
       setVerificationSent(true);
-      Alert.alert('Check your email', 'We sent a verification link to confirm this is your email.');
+      appAlert('Check your email', 'We sent a verification link to confirm this is your email.');
     } catch {
-      Alert.alert('Error', 'Could not send the verification email. Please try again.');
+      appAlert('Error', 'Could not send the verification email. Please try again.');
     }
   };
 
@@ -74,10 +75,10 @@ export default function RegisterCleanerScreen() {
     try {
       await auth.currentUser?.reload();
       if (!auth.currentUser?.emailVerified) {
-        Alert.alert('Not verified yet', 'Open the link in the email we sent, then try again.');
+        appAlert('Not verified yet', 'Open the link in the email we sent, then try again.');
       }
     } catch {
-      Alert.alert('Error', 'Could not check verification status.');
+      appAlert('Error', 'Could not check verification status.');
     }
   };
 
@@ -88,18 +89,18 @@ export default function RegisterCleanerScreen() {
     setIsCheckingIdentity(true);
     try {
       const result = await callFunction<undefined, { status: string }>('refreshCleanerIdentityVerification');
-      if (result.status === 'VERIFIED') Alert.alert('Identity verified', 'Your identity check is complete.');
-      else if (result.status === 'REJECTED') Alert.alert('Verification needs attention', 'Didit could not verify your identity. You can try again.');
-      else Alert.alert('Verification pending', 'Your check is still being reviewed.');
+      if (result.status === 'VERIFIED') appAlert('Identity verified', 'Your identity check is complete.');
+      else if (result.status === 'REJECTED') appAlert('Verification needs attention', 'Didit could not verify your identity. You can try again.');
+      else appAlert('Verification pending', 'Your check is still being reviewed.');
     } catch (error) {
-      Alert.alert('Could not check status', (error as { message?: string })?.message || 'Please try again.');
+      appAlert('Could not check status', (error as { message?: string })?.message || 'Please try again.');
     } finally {
       setIsCheckingIdentity(false);
     }
   };
 
   const startIdentityCheck = async () => {
-    Alert.alert(
+    appAlert(
       'Identity check with Didit',
       'Didit will ask you to provide identity information and documents. Didit processes that information under its privacy policy; Detail receives the verification result. Continue only if you agree.',
       [
@@ -118,7 +119,7 @@ export default function RegisterCleanerScreen() {
       await WebBrowser.openBrowserAsync(session.sessionUrl);
       await refreshIdentityCheck();
     } catch (error) {
-      Alert.alert('Identity check unavailable', (error as { message?: string })?.message || 'Please try again later.');
+      appAlert('Identity check unavailable', (error as { message?: string })?.message || 'Please try again later.');
     } finally {
       setIsCheckingIdentity(false);
     }
@@ -126,19 +127,19 @@ export default function RegisterCleanerScreen() {
 
   const handleSubmit = async () => {
     if (!fullName.trim() || !phone.trim() || !address.trim()) {
-      Alert.alert('Missing info', 'Please fill in your full name, phone, and physical address.');
+      appAlert('Missing info', 'Please fill in your full name, phone, and physical address.');
       return;
     }
     if (categories.length === 0) {
-      Alert.alert('Pick a service', 'Choose at least one service you want to offer.');
+      appAlert('Pick a service', 'Choose at least one service you want to offer.');
       return;
     }
     if (!isIdentityVerified) {
-      Alert.alert('Identity check required', 'Complete your Didit identity check before continuing.');
+      appAlert('Identity check required', 'Complete your Didit identity check before continuing.');
       return;
     }
     if (!emailVerified) {
-      Alert.alert('Verify your email', 'Please verify your email before continuing.');
+      appAlert('Verify your email', 'Please verify your email before continuing.');
       return;
     }
 
@@ -157,7 +158,7 @@ export default function RegisterCleanerScreen() {
       }
       router.push('/cleaner-agreement');
     } catch {
-      Alert.alert('Error', 'Failed to submit your registration. Please try again.');
+      appAlert('Error', 'Failed to submit your registration. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

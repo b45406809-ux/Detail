@@ -1,5 +1,6 @@
+import { appAlert } from '@/components/AppDialog';
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, Linking, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MapPin, Bell, Shield, Camera, Images } from 'lucide-react-native';
@@ -67,7 +68,7 @@ export default function PermissionsScreen() {
     const permission = await Location.requestForegroundPermissionsAsync();
     setGranted((prev) => ({ ...prev, location: permission.granted }));
     if (!permission.granted) {
-      Alert.alert('Location not enabled', 'You can still search by area. Enable location later if you want nearby results and live tracking.', [
+      appAlert('Location not enabled', 'You can still search by area. Enable location later if you want nearby results and live tracking.', [
         { text: 'Continue without location', style: 'cancel' },
         ...(!permission.canAskAgain ? [{ text: 'Open Settings', onPress: () => void Linking.openSettings() }] : []),
       ]);
@@ -80,7 +81,7 @@ export default function PermissionsScreen() {
     if (permission.granted) {
       await registerCurrentPushDevice();
     } else if (!permission.canAskAgain) {
-      Alert.alert('Notifications are off', 'You can still use Detail. Open device settings whenever you want booking alerts.', [
+      appAlert('Notifications are off', 'You can still use Detail. Open device settings whenever you want booking alerts.', [
         { text: 'Later', style: 'cancel' },
         { text: 'Open Settings', onPress: () => void Linking.openSettings() },
       ]);
@@ -91,7 +92,7 @@ export default function PermissionsScreen() {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     setGranted((prev) => ({ ...prev, camera: permission.granted }));
     if (!permission.granted && !permission.canAskAgain) {
-      Alert.alert('Camera access is off', 'You can still use Detail. Open device settings if you want to take job photos.', [
+      appAlert('Camera access is off', 'You can still use Detail. Open device settings if you want to take job photos.', [
         { text: 'Later', style: 'cancel' },
         { text: 'Open Settings', onPress: () => void Linking.openSettings() },
       ]);
@@ -102,7 +103,7 @@ export default function PermissionsScreen() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     setGranted((prev) => ({ ...prev, photos: permission.granted }));
     if (!permission.granted && !permission.canAskAgain) {
-      Alert.alert('Photo access is off', 'You can still use Detail. Open device settings if you want to attach photos from your library.', [
+      appAlert('Photo access is off', 'You can still use Detail. Open device settings if you want to attach photos from your library.', [
         { text: 'Later', style: 'cancel' },
         { text: 'Open Settings', onPress: () => void Linking.openSettings() },
       ]);
@@ -116,7 +117,7 @@ export default function PermissionsScreen() {
       else if (id === 'camera') await requestCamera();
       else if (id === 'photos') await requestPhotos();
     } catch {
-      Alert.alert('Permission unavailable', 'You can change this permission later in your device settings.');
+      appAlert('Permission unavailable', 'You can change this permission later in your device settings.');
     }
   };
 
@@ -126,7 +127,7 @@ export default function PermissionsScreen() {
       await updateProfile({ hasSetupPermissions: true });
       router.replace('/home');
     } catch {
-      Alert.alert('Error', 'Failed to save settings. Please try again.');
+      appAlert('Error', 'Failed to save settings. Please try again.');
     } finally {
       setIsLoading(false);
     }

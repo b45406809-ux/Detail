@@ -1,6 +1,7 @@
+import { appAlert } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
@@ -25,7 +26,7 @@ export default function VerifyEmailScreen() {
 
   const verify = async () => {
     if (!/^\d{6}$/.test(code)) {
-      Alert.alert('Enter your code', 'Type the six-digit code sent to your email.');
+      appAlert('Enter your code', 'Type the six-digit code sent to your email.');
       return;
     }
     setBusy(true);
@@ -33,7 +34,7 @@ export default function VerifyEmailScreen() {
       await confirmEmailLoginCode(email, code, intent);
       router.replace('/home');
     } catch (error) {
-      Alert.alert('Code not accepted', (error as Error).message || 'The code is incorrect or expired. Request a new code and try again.');
+      appAlert('Code not accepted', (error as Error).message || 'The code is incorrect or expired. Request a new code and try again.');
       setCode('');
     } finally { setBusy(false); }
   };
@@ -43,9 +44,9 @@ export default function VerifyEmailScreen() {
     try {
       await sendEmailLoginCode(email, intent, intent === 'REGISTER');
       setCode(''); setResendSeconds(60);
-      Alert.alert('Code sent', `Check ${email} for a new sign-in code.`);
+      appAlert('Code sent', `Check ${email} for a new sign-in code.`);
     } catch (error) {
-      Alert.alert('Could not resend code', (error as Error).message || 'Please try again shortly.');
+      appAlert('Could not resend code', (error as Error).message || 'Please try again shortly.');
     } finally { setBusy(false); }
   };
 

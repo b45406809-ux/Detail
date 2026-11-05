@@ -1,5 +1,6 @@
+import { appAlert } from '@/components/AppDialog';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyRound } from 'lucide-react-native';
@@ -13,22 +14,22 @@ export default function ResetPasswordScreen() {
 
   const savePassword = async () => {
     if (password.length < 8) {
-      Alert.alert('Password too short', 'Choose a password with at least 8 characters.');
+      appAlert('Password too short', 'Choose a password with at least 8 characters.');
       return;
     }
     if (password !== confirmation) {
-      Alert.alert('Passwords do not match', 'Enter the same new password in both fields.');
+      appAlert('Passwords do not match', 'Enter the same new password in both fields.');
       return;
     }
     setIsSaving(true);
     try {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
-      Alert.alert('Password updated', 'You can now sign in with your new password.', [
+      appAlert('Password updated', 'You can now sign in with your new password.', [
         { text: 'Continue', onPress: () => router.replace('/home') },
       ]);
     } catch (error) {
-      Alert.alert('Could not update password', error instanceof Error ? error.message : 'Request a new reset link and try again.');
+      appAlert('Could not update password', error instanceof Error ? error.message : 'Request a new reset link and try again.');
     } finally {
       setIsSaving(false);
     }

@@ -1,5 +1,6 @@
+import { appAlert } from '@/components/AppDialog';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
 import {
   GoogleOneTapSignIn,
   isCancelledResponse,
@@ -57,7 +58,7 @@ export default function GoogleSignInButton() {
       await ensureProfileExists(data.user.id, data.user.email ?? null);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Please try again.';
-      Alert.alert('Google Sign-In Failed', message);
+      appAlert('Google Sign-In Failed', message);
     } finally {
       setIsLoading(false);
     }

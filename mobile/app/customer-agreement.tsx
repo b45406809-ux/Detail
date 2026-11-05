@@ -1,6 +1,7 @@
+import { appAlert } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useState } from 'react';
-import { Alert, ActivityIndicator, View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
@@ -87,7 +88,7 @@ export default function CustomerAgreementScreen() {
       else if (!profile.hasSetupPermissions) router.replace('/(auth)/permissions');
       else router.replace('/home');
     } catch (error) {
-      Alert.alert('Could not save your agreement', error instanceof Error ? error.message : 'Please try again.');
+      appAlert('Could not save your agreement', error instanceof Error ? error.message : 'Please try again.');
     } finally { setIsAccepting(false); }
   };
   return (

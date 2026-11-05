@@ -1,5 +1,6 @@
+import { appAlert } from '@/components/AppDialog';
 import React from 'react';
-import { ActivityIndicator, Alert, Text, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, Text, TouchableOpacity } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { handleAuthCallback, supabase } from '../services/supabase';
 import { GoogleLogo } from './GoogleLogo';
@@ -22,7 +23,7 @@ export default function GoogleSignInButton() {
       await handleAuthCallback(result.url);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Please try again.';
-      Alert.alert('Google Sign-In Failed', message);
+      appAlert('Google Sign-In Failed', message);
     } finally {
       setIsLoading(false);
     }

@@ -1,3 +1,4 @@
+import { appAlert } from '@/components/AppDialog';
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -5,7 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Switch,
-  Alert,
+
   Image,
   ActivityIndicator,
 } from 'react-native';
@@ -48,20 +49,20 @@ export default function ProfileScreen() {
   const setPushNotifications = async (enabled: boolean) => {
     if (!enabled) {
       try { await unregisterCurrentPushDevice(); setNotificationsOn(false); }
-      catch { Alert.alert('Could not update notification settings', 'Please try again.'); }
+      catch { appAlert('Could not update notification settings', 'Please try again.'); }
       return;
     }
     const permission = await Notifications.requestPermissionsAsync();
-    if (!permission.granted) { Alert.alert('Allow notifications', 'Enable notifications in your device settings to receive booking and payment updates.'); return; }
+    if (!permission.granted) { appAlert('Allow notifications', 'Enable notifications in your device settings to receive booking and payment updates.'); return; }
     try {
-      if (!await registerCurrentPushDevice()) { Alert.alert('Notifications unavailable', 'Push notifications require a supported physical device and working notification services. On an emulator they may be unavailable; check your device settings and try again.'); return; }
+      if (!await registerCurrentPushDevice()) { appAlert('Notifications unavailable', 'Push notifications require a supported physical device and working notification services. On an emulator they may be unavailable; check your device settings and try again.'); return; }
       setNotificationsOn(true);
     }
-    catch { Alert.alert('Could not enable notifications', 'Please try again.'); }
+    catch { appAlert('Could not enable notifications', 'Please try again.'); }
   };
 
   const handlePickProfilePhoto = async () => {
-    Alert.alert('Update Profile Picture', 'Choose how you would like to set your photo', [
+    appAlert('Update Profile Picture', 'Choose how you would like to set your photo', [
       {
         text: 'Take Photo',
         onPress: () => pickImage(true),
@@ -79,7 +80,7 @@ export default function ProfileScreen() {
                 try {
                   await updateProfile({ photoURL: '' });
                 } catch {
-                  Alert.alert('Error', 'Failed to remove photo.');
+                  appAlert('Error', 'Failed to remove photo.');
                 }
               },
             },
@@ -95,7 +96,7 @@ export default function ProfileScreen() {
         ? await ImagePicker.requestCameraPermissionsAsync()
         : await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Permission needed', 'Please allow camera/photo access to update your profile picture.');
+        appAlert('Permission needed', 'Please allow camera/photo access to update your profile picture.');
         return;
       }
       const result = fromCamera
@@ -116,7 +117,7 @@ export default function ProfileScreen() {
       const photoUrl = await uploadProfilePhoto(result.assets[0].uri);
       await updateProfile({ photoURL: photoUrl });
     } catch {
-      Alert.alert('Upload failed', 'Could not upload profile picture. Please try again.');
+      appAlert('Upload failed', 'Could not upload profile picture. Please try again.');
     } finally {
       setIsUploadingPhoto(false);
     }
@@ -130,19 +131,19 @@ export default function ProfileScreen() {
     if (profile?.role === 'CUSTOMER') {
       if (profile.cleanerOnboardingComplete && profile.hasAgreedToTerms
         && profile.cleanerAgreementAccepted && profile.verificationStatus === 'VERIFIED') {
-        callFunction('setActiveRole', { role: 'CLEANER' }).catch((e:any) => Alert.alert('Could not switch role', e.message ?? 'Try again.'));
+        callFunction('setActiveRole', { role: 'CLEANER' }).catch((e:any) => appAlert('Could not switch role', e.message ?? 'Try again.'));
       } else {
         router.push('/register-cleaner');
       }
     } else if (profile?.role === 'CLEANER') {
       callFunction('setActiveRole', { role: 'CUSTOMER' }).then(() => {
         stopCleanerLocationUpdates().catch((error) => console.warn('[location] could not stop after role switch:', error));
-      }).catch((e:any) => Alert.alert('Could not switch role', e.message ?? 'Try again.'));
+      }).catch((e:any) => appAlert('Could not switch role', e.message ?? 'Try again.'));
     }
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert('Delete account?', 'You must have signed in recently. Active bookings or unresolved payments must be completed first. This cannot be undone.', [
+    appAlert('Delete account?', 'You must have signed in recently. Active bookings or unresolved payments must be completed first. This cannot be undone.', [
       { text: 'Keep account', style: 'cancel' },
       { text: 'Delete permanently', style: 'destructive', onPress: async () => {
         try {
@@ -153,18 +154,18 @@ export default function ProfileScreen() {
         }
         catch (error: any) {
           if (error?.message === 'RECENT_LOGIN_REQUIRED') {
-            Alert.alert('Sign in again to continue', 'Account deletion requires a recent sign-in. Sign out, sign in again, then retry deletion.', [
+            appAlert('Sign in again to continue', 'Account deletion requires a recent sign-in. Sign out, sign in again, then retry deletion.', [
               { text: 'Cancel', style: 'cancel' },
               { text: 'Sign in again', onPress: async () => { await signOut(auth); router.replace('/(auth)/sign-in'); } },
             ]);
-          } else Alert.alert('Cannot delete account', error?.message ?? 'Please sign in again and retry.');
+          } else appAlert('Cannot delete account', error?.message ?? 'Please sign in again and retry.');
         }
       } },
     ]);
   };
 
   const handleSignOut = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+    appAlert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Sign Out',

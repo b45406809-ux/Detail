@@ -1,3 +1,4 @@
+import { appAlert, AppDialogHost } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState, useRef } from 'react';
 import {
@@ -5,7 +6,7 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Alert,
+
   ActivityIndicator,
   Animated,
   Image,
@@ -165,14 +166,14 @@ export default function TrackingScreen() {
     if (!jobId) return;
     const currentCount = job?.completionPhotos?.length ?? 0;
     if (currentCount >= 6) {
-      Alert.alert('Limit Reached', 'You can upload up to 6 completion photos.');
+      appAlert('Limit Reached', 'You can upload up to 6 completion photos.');
       return;
     }
     const permission = fromCamera
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission needed', 'Please allow camera / gallery access to add completion photos.');
+      appAlert('Permission needed', 'Please allow camera / gallery access to add completion photos.');
       return;
     }
     const result = fromCamera
@@ -186,9 +187,9 @@ export default function TrackingScreen() {
       const url = await uploadCompletionPhoto(result.assets[0].uri, jobId);
       await callFunction('addCompletionPhoto', { jobId, url });
       setPhotoTab('AFTER');
-      Alert.alert('Photo Uploaded', 'Completion proof photo added to the job.');
+      appAlert('Photo Uploaded', 'Completion proof photo added to the job.');
     } catch {
-      Alert.alert('Upload Failed', 'Could not upload completion photo. Please try again.');
+      appAlert('Upload Failed', 'Could not upload completion photo. Please try again.');
     } finally {
       setIsUploadingDonePhoto(false);
     }
@@ -271,7 +272,7 @@ export default function TrackingScreen() {
         setFavoriteDocId(ref.id);
       }
     } catch {
-      Alert.alert('Error', 'Could not update favorites. Please try again.');
+      appAlert('Error', 'Could not update favorites. Please try again.');
     } finally {
       setIsTogglingFavorite(false);
     }
@@ -280,7 +281,7 @@ export default function TrackingScreen() {
   const requestRebook = async () => {
     if (!user || !job?.cleanerId || !job.price || isRebooking) return;
     if (IS_DEMO) {
-      Alert.alert('Rebooking unavailable', 'Rebooking is not available in demo mode.');
+      appAlert('Rebooking unavailable', 'Rebooking is not available in demo mode.');
       return;
     }
     setIsRebooking(true);
@@ -298,7 +299,7 @@ export default function TrackingScreen() {
       await AsyncStorage.removeItem(storageKey);
       router.replace({ pathname: '/booking/offers', params: { jobId: result.jobId } });
     } catch (error) {
-      Alert.alert('Could not request rebooking', error instanceof Error ? error.message : 'Check your connection and try again.');
+      appAlert('Could not request rebooking', error instanceof Error ? error.message : 'Check your connection and try again.');
     } finally {
       setIsRebooking(false);
     }
@@ -342,7 +343,7 @@ export default function TrackingScreen() {
   }, []);
 
   const handleCancelJob = () => {
-    Alert.alert('Cancel Job?', 'Are you sure you want to cancel this job?', [
+    appAlert('Cancel Job?', 'Are you sure you want to cancel this job?', [
       { text: 'Keep Job', style: 'cancel' },
       {
         text: 'Cancel',
@@ -350,16 +351,16 @@ export default function TrackingScreen() {
         onPress: async () => {
           try {
             const result=await callFunction<{jobId:string;reason:string;idempotencyKey:string},{refund?:{status?:string}}>('cancelBooking', { jobId, reason: 'Cancelled by participant', idempotencyKey: `cancel-${jobId}-${Date.now()}` });
-            if(result.refund?.status==='REVIEW_REQUIRED'){Alert.alert('Review opened','Paynow BuySafe needs support review before this booking can be cancelled. We have opened a case for you.');return;}
+            if(result.refund?.status==='REVIEW_REQUIRED'){appAlert('Review opened','Paynow BuySafe needs support review before this booking can be cancelled. We have opened a case for you.');return;}
             router.replace('/home');
-          } catch(error:any) { Alert.alert('Could not cancel booking',error.message||'Please try again.'); }
+          } catch(error:any) { appAlert('Could not cancel booking',error.message||'Please try again.'); }
         },
       },
     ]);
   };
 
   const handleSOS = () => {
-    Alert.alert(
+    appAlert(
       'Emergency SOS',
       'This sends an urgent safety report to Detail for review. If anyone is in immediate danger, contact local emergency services as well.',
       [
@@ -368,8 +369,8 @@ export default function TrackingScreen() {
           setIsSubmitting(true);
           try {
             await callFunction('reportEmergency', { jobId, description: 'Emergency alert sent from the active booking safety control.' });
-            Alert.alert('Safety report recorded', 'Your urgent report has been saved for Detail to review. If you are in immediate danger, contact local emergency services too.');
-          } catch (error: any) { Alert.alert('Could not send alert', error.message || 'Try again or contact Detail support directly.'); }
+            appAlert('Safety report recorded', 'Your urgent report has been saved for Detail to review. If you are in immediate danger, contact local emergency services too.');
+          } catch (error: any) { appAlert('Could not send alert', error.message || 'Try again or contact Detail support directly.'); }
           finally { setIsSubmitting(false); }
         } },
       ]
@@ -381,8 +382,8 @@ export default function TrackingScreen() {
     try {
       await callFunction('rescheduleBooking', { jobId, scheduledDateTime: rescheduleDate.toISOString(), idempotencyKey: `reschedule-${jobId}-${rescheduleDate.toISOString()}` });
       setShowRescheduleModal(false);
-      Alert.alert('Request sent', `The other participant must accept ${rescheduleDate.toLocaleString()} before the booking time changes.`);
-    } catch (error: any) { Alert.alert('Could not reschedule', error.message || 'Please try again.'); }
+      appAlert('Request sent', `The other participant must accept ${rescheduleDate.toLocaleString()} before the booking time changes.`);
+    } catch (error: any) { appAlert('Could not reschedule', error.message || 'Please try again.'); }
     finally { setIsSubmitting(false); }
   };
 
@@ -395,9 +396,9 @@ export default function TrackingScreen() {
         accept,
         idempotencyKey: `reschedule-response-${rescheduleProposal.id}-${accept?'accept':'decline'}`,
       });
-      Alert.alert(accept ? 'Time updated' : 'Proposal declined', accept ? 'Both participants agreed to the new booking time.' : 'The existing booking time remains in place.');
+      appAlert(accept ? 'Time updated' : 'Proposal declined', accept ? 'Both participants agreed to the new booking time.' : 'The existing booking time remains in place.');
     } catch (error: any) {
-      Alert.alert('Could not respond', error?.message || 'Refresh the booking and try again.');
+      appAlert('Could not respond', error?.message || 'Refresh the booking and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -414,7 +415,7 @@ export default function TrackingScreen() {
       }
       else await callFunction(next.status === JobStatus.COMPLETED ? 'completeBooking' : 'transitionBooking', { jobId, newState: next.status, idempotencyKey: `status-${jobId}-${next.status}` });
     } catch(error:any) {
-      Alert.alert('Could not update booking', error?.message||'Please try again.');
+      appAlert('Could not update booking', error?.message||'Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -426,8 +427,8 @@ export default function TrackingScreen() {
       await callFunction('respondToCompletion',{jobId,response,reason:response==='DISPUTED'?problemDescription.trim():''});
       setShowCompletionDispute(false);setProblemDescription('');
       if(response==='CONFIRMED')setStep('PAYMENT');
-      Alert.alert(response==='DISPUTED'?'Support case opened':'Completion confirmed',response==='DISPUTED'?'Detail support will review the booking.':'Thank you for confirming the cleaning.');
-    }catch(error:any){Alert.alert('Could not send response',error.message||'Try again shortly.');}
+      appAlert(response==='DISPUTED'?'Support case opened':'Completion confirmed',response==='DISPUTED'?'Detail support will review the booking.':'Thank you for confirming the cleaning.');
+    }catch(error:any){appAlert('Could not send response',error.message||'Try again shortly.');}
     finally{setIsSubmitting(false);}
   };
 
@@ -438,7 +439,7 @@ export default function TrackingScreen() {
       await callFunction('settleJobPayment', { jobId, paymentMethod: selectedPayment });
       setStep('RATING');
     } catch (err: any) {
-      Alert.alert('Payment Failed', err.message || 'Please try again.');
+      appAlert('Payment Failed', err.message || 'Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -449,9 +450,9 @@ export default function TrackingScreen() {
     setIsSubmitting(true);
     try {
       const result = await callFunction<{ jobId: string }, { success: boolean; status: string }>('refreshPaynowBookingPayment', { jobId });
-      Alert.alert('Paynow status', `Current status: ${result.status.replace(/_/g, ' ')}.`);
+      appAlert('Paynow status', `Current status: ${result.status.replace(/_/g, ' ')}.`);
     } catch (err: any) {
-      Alert.alert('Could not refresh', err.message || 'Please try again shortly.');
+      appAlert('Could not refresh', err.message || 'Please try again shortly.');
     } finally {
       setIsSubmitting(false);
     }
@@ -465,7 +466,7 @@ export default function TrackingScreen() {
       await WebBrowser.openBrowserAsync(result.redirectUrl, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET });
       await handlePaynowRefresh();
     } catch (err: any) {
-      Alert.alert('Could not resume Paynow', err.message || 'Refresh the payment status and try again.');
+      appAlert('Could not resume Paynow', err.message || 'Refresh the payment status and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -487,7 +488,7 @@ export default function TrackingScreen() {
       if (result.redirectUrl) await WebBrowser.openBrowserAsync(result.redirectUrl, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET });
     } catch (err: any) {
       if (keyStorage && String(err?.message ?? '').includes('already failed')) await AsyncStorage.removeItem(keyStorage).catch(() => undefined);
-      Alert.alert('Paynow unavailable', err.message || 'Could not start payment. Please try again.');
+      appAlert('Paynow unavailable', err.message || 'Could not start payment. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -495,17 +496,17 @@ export default function TrackingScreen() {
 
   const handleRating = async () => {
     if (rating === 0) {
-      Alert.alert('Rate your cleaner', 'Please select a star rating before submitting.');
+      appAlert('Rate your cleaner', 'Please select a star rating before submitting.');
       return;
     }
-    if (rating < 3 && !problemDescription.trim()) { Alert.alert('Tell us what happened', 'A problem description is required for ratings below three stars.'); return; }
+    if (rating < 3 && !problemDescription.trim()) { appAlert('Tell us what happened', 'A problem description is required for ratings below three stars.'); return; }
     if (!job?.cleanerId || !user) return;
     setIsSubmitting(true);
     try {
       await callFunction('submitRating', { jobId, rating, problemDescription });
       setStep('SUCCESS');
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to submit rating. Please try again.');
+      appAlert('Error', err.message || 'Failed to submit rating. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -654,7 +655,7 @@ export default function TrackingScreen() {
             {status === 'PENDING' && <TouchableOpacity onPress={handlePaynowResume} disabled={isSubmitting} className="border border-accent/20 bg-accent/5 py-4 rounded-[32px] items-center mb-3">
               <Text className="font-display font-black text-sm uppercase tracking-widest text-accent">Resume Paynow Checkout</Text>
             </TouchableOpacity>}
-            <TouchableOpacity onPress={() => Linking.openURL('https://www.paynow.co.zw/').catch(() => Alert.alert('Could not open Paynow', 'Open paynow.co.zw in your browser.'))} className="py-4 items-center">
+            <TouchableOpacity onPress={() => Linking.openURL('https://www.paynow.co.zw/').catch(() => appAlert('Could not open Paynow', 'Open paynow.co.zw in your browser.'))} className="py-4 items-center">
               <Text className="font-sans text-accent font-bold">Open Paynow Customer Portal</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setStep('RATING')} className="mt-auto py-4 items-center">
@@ -1012,8 +1013,8 @@ export default function TrackingScreen() {
             ...(['PENDING','CONFIRMED','ASSIGNED'].includes(job.status) ? [{ id: 'reschedule', label: 'Reschedule', icon: CalendarDays, color: '#0B8F65', action: () => { setRescheduleDate(new Date(Date.now() + 24 * 60 * 60 * 1000)); setShowRescheduleModal(true); } }] : []),
             { id: 'call', label: 'Call', icon: Phone, color: '#0FB77A', action: () => {
               const phone = isCleaner ? job.customerPhone : job.cleanerPhone;
-              if (!phone) { Alert.alert('Phone unavailable', 'This account has not added a phone number.'); return; }
-              Linking.openURL(`tel:${phone}`).catch(() => Alert.alert('Call unavailable', 'Your device could not start a phone call.'));
+              if (!phone) { appAlert('Phone unavailable', 'This account has not added a phone number.'); return; }
+              Linking.openURL(`tel:${phone}`).catch(() => appAlert('Call unavailable', 'Your device could not start a phone call.'));
             } },
             { id: 'cancel', label: 'Abort', icon: ShieldAlert, color: '#E5484D', action: handleCancelJob },
           ].map(({ id, label, icon: Icon, color, action }) => (
@@ -1041,8 +1042,8 @@ export default function TrackingScreen() {
         transparent
         onRequestClose={() => setShowPhotosModal(false)}
       >
-        <View className="flex-1 justify-end bg-black/50">
-          <View className="bg-white rounded-t-[36px] px-6 pt-6 pb-10 max-h-[85%]">
+        <View className="flex-1 justify-center bg-[#150256]/55 px-5">
+          <View className="bg-white rounded-[28px] px-6 pt-6 pb-6 max-h-[85%]">
             <View className="flex-row items-center justify-between mb-4">
               <Text className="text-xl font-display font-black text-ink">Job Photos</Text>
               <TouchableOpacity
@@ -1158,7 +1159,8 @@ export default function TrackingScreen() {
       </Modal>
 
       <Modal visible={showRescheduleModal} transparent animationType="slide" onRequestClose={() => setShowRescheduleModal(false)}>
-        <View className="flex-1 justify-end bg-black/50"><View className="rounded-t-[32px] bg-white p-5 pb-9">
+        {showRescheduleModal && <AppDialogHost />}
+        <View className="flex-1 justify-center bg-[#150256]/55 px-5"><View className="rounded-[28px] bg-white p-5 pb-9">
           <Text className="font-display text-xl font-black text-ink">Reschedule booking</Text>
           <Text className="mt-1 font-sans text-sm text-ink/55">Choose a new date and time. The other participant will be notified.</Text>
           <View className="mt-4 flex-row gap-3"><TouchableOpacity onPress={() => { setShowDatePicker(true); setShowTimePicker(false); }} className="flex-1 rounded-2xl border border-violet-100 bg-[#F7F4FF] p-4"><Text className="font-sans text-xs text-ink/45">DATE</Text><Text className="mt-1 font-display font-black text-ink">{rescheduleDate.toLocaleDateString()}</Text></TouchableOpacity><TouchableOpacity onPress={() => { setShowTimePicker(true); setShowDatePicker(false); }} className="flex-1 rounded-2xl border border-violet-100 bg-[#F7F4FF] p-4"><Text className="font-sans text-xs text-ink/45">TIME</Text><Text className="mt-1 font-display font-black text-ink">{rescheduleDate.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</Text></TouchableOpacity></View>
@@ -1170,7 +1172,8 @@ export default function TrackingScreen() {
       </Modal>
 
       <Modal visible={showCompletionDispute} transparent animationType="slide" onRequestClose={()=>setShowCompletionDispute(false)}>
-        <View className="flex-1 justify-end bg-black/50"><View className="rounded-t-[32px] bg-white p-5 pb-9"><Text className="font-display text-xl font-black text-ink">Report a problem</Text><Text className="font-sans text-sm text-ink/55 mt-1">Tell Detail what needs review. Your cleaner will be notified that support is reviewing the booking.</Text><TextInput value={problemDescription} onChangeText={setProblemDescription} multiline textAlignVertical="top" placeholder="Describe what was missed or damaged…" placeholderTextColor="#9C94C4" className="mt-4 min-h-28 rounded-2xl border border-ink/10 bg-ink/[0.02] p-4 font-sans text-sm text-ink"/><TouchableOpacity disabled={isSubmitting||problemDescription.trim().length<5} onPress={()=>void submitCompletionResponse('DISPUTED')} className="mt-4 items-center rounded-2xl bg-rose-600 py-4">{isSubmitting?<ActivityIndicator color="white"/>:<Text className="font-display font-black text-white">Send to support</Text>}</TouchableOpacity><TouchableOpacity onPress={()=>setShowCompletionDispute(false)} className="pt-4"><Text className="text-center font-sans font-bold text-ink/40">Cancel</Text></TouchableOpacity></View></View>
+        {showCompletionDispute && <AppDialogHost />}
+        <View className="flex-1 justify-center bg-[#150256]/55 px-5"><View className="rounded-[28px] bg-white p-5 pb-9"><Text className="font-display text-xl font-black text-ink">Report a problem</Text><Text className="font-sans text-sm text-ink/55 mt-1">Tell Detail what needs review. Your cleaner will be notified that support is reviewing the booking.</Text><TextInput value={problemDescription} onChangeText={setProblemDescription} multiline textAlignVertical="top" placeholder="Describe what was missed or damaged…" placeholderTextColor="#9C94C4" className="mt-4 min-h-28 rounded-2xl border border-ink/10 bg-ink/[0.02] p-4 font-sans text-sm text-ink"/><TouchableOpacity disabled={isSubmitting||problemDescription.trim().length<5} onPress={()=>void submitCompletionResponse('DISPUTED')} className="mt-4 items-center rounded-2xl bg-rose-600 py-4">{isSubmitting?<ActivityIndicator color="white"/>:<Text className="font-display font-black text-white">Send to support</Text>}</TouchableOpacity><TouchableOpacity onPress={()=>setShowCompletionDispute(false)} className="pt-4"><Text className="text-center font-sans font-bold text-ink/40">Cancel</Text></TouchableOpacity></View></View>
       </Modal>
 
       {/* Full screen photo zoom modal */}

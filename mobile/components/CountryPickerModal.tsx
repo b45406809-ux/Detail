@@ -54,11 +54,12 @@ export function CountryPickerModal({
   return (
     <Modal
       visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
+      animationType="fade"
+      transparent
       onRequestClose={handleClose}
     >
-      <SafeAreaView className="flex-1 bg-white" edges={['top', 'bottom']}>
+      <View className="flex-1 items-center justify-center bg-[#150256]/55 px-5">
+      <SafeAreaView className="h-[80%] w-full max-w-[400px] overflow-hidden rounded-[28px] bg-white" edges={[]}>
         <KeyboardAvoidingView
           className="flex-1"
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -172,6 +173,7 @@ export function CountryPickerModal({
           />
         </KeyboardAvoidingView>
       </SafeAreaView>
+      </View>
     </Modal>
   );
 }

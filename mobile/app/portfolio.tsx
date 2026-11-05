@@ -1,6 +1,7 @@
+import { appAlert } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Camera, Plus, Trash2 } from 'lucide-react-native';
@@ -14,14 +15,14 @@ export default function CleanerPortfolioScreen() {
   const [busy, setBusy] = useState(false);
   const load = useCallback(async () => {
     try { const response = await callFunction<Record<string, never>, { photos: Photo[] }>('getCleanerPortfolio', {}); setPhotos(response.photos.filter(p => !!p.url)); }
-    catch (error: any) { Alert.alert('Portfolio unavailable', error.message || 'Please try again.'); }
+    catch (error: any) { appAlert('Portfolio unavailable', error.message || 'Please try again.'); }
   }, []);
   useEffect(() => { void load(); }, [load]);
 
   const addPhoto = async () => {
-    if (photos.length >= 12) { Alert.alert('Portfolio full', 'Remove a photo before adding another.'); return; }
+    if (photos.length >= 12) { appAlert('Portfolio full', 'Remove a photo before adding another.'); return; }
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) { Alert.alert('Photo access needed', 'Allow photo library access to add a portfolio image.'); return; }
+    if (!permission.granted) { appAlert('Photo access needed', 'Allow photo library access to add a portfolio image.'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [4, 3], quality: 0.82 });
     if (result.canceled || !result.assets[0]) return;
     setBusy(true);
@@ -29,12 +30,12 @@ export default function CleanerPortfolioScreen() {
       const imagePath = await uploadCleanerPortfolioPhoto(result.assets[0].uri);
       await callFunction('addCleanerPortfolioPhoto', { imagePath, caption: '' });
       await load();
-    } catch (error: any) { Alert.alert('Could not add photo', error.message || 'Please try again.'); }
+    } catch (error: any) { appAlert('Could not add photo', error.message || 'Please try again.'); }
     finally { setBusy(false); }
   };
-  const removePhoto = (photo: Photo) => Alert.alert('Remove photo?', 'This image will no longer appear in your portfolio.', [
+  const removePhoto = (photo: Photo) => appAlert('Remove photo?', 'This image will no longer appear in your portfolio.', [
     { text: 'Keep', style: 'cancel' },
-    { text: 'Remove', style: 'destructive', onPress: async () => { setBusy(true); try { await callFunction('removeCleanerPortfolioPhoto', { photoId: photo.id }); setPhotos(current => current.filter(item => item.id !== photo.id)); } catch (error: any) { Alert.alert('Could not remove photo', error.message || 'Please try again.'); } finally { setBusy(false); } } },
+    { text: 'Remove', style: 'destructive', onPress: async () => { setBusy(true); try { await callFunction('removeCleanerPortfolioPhoto', { photoId: photo.id }); setPhotos(current => current.filter(item => item.id !== photo.id)); } catch (error: any) { appAlert('Could not remove photo', error.message || 'Please try again.'); } finally { setBusy(false); } } },
   ]);
 
   return <SafeAreaView className="flex-1 bg-[#F8F7FC]">

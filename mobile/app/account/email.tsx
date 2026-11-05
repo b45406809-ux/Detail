@@ -1,6 +1,7 @@
+import { appAlert } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Mail, ShieldCheck } from 'lucide-react-native';
@@ -37,7 +38,7 @@ export default function AccountEmailScreen() {
   const sendVerification = async () => {
     const normalized = email.trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(normalized)) {
-      Alert.alert('Enter a valid email', 'Use an address you can open to confirm ownership.');
+      appAlert('Enter a valid email', 'Use an address you can open to confirm ownership.');
       return;
     }
     setIsSending(true);
@@ -45,9 +46,9 @@ export default function AccountEmailScreen() {
       const { error } = await supabase.auth.updateUser({ email: normalized }, { emailRedirectTo: 'detail://account/email' });
       if (error) throw error;
       setPending(true);
-      Alert.alert('Check your email', 'Open the confirmation link on this device. Your email is linked only after Supabase confirms it.');
+      appAlert('Check your email', 'Open the confirmation link on this device. Your email is linked only after Supabase confirms it.');
     } catch (error) {
-      Alert.alert('Could not send confirmation', error instanceof Error ? error.message : 'Check the address and try again.');
+      appAlert('Could not send confirmation', error instanceof Error ? error.message : 'Check the address and try again.');
     } finally { setIsSending(false); }
   };
 

@@ -1,5 +1,6 @@
+import { appAlert } from '@/components/AppDialog';
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { CheckCircle, ArrowRight } from 'lucide-react-native';
@@ -14,7 +15,7 @@ export default function BookingConfirmationScreen() {
   const isPaynow=job?.paymentMethod==='PAYNOW';
   const isDirectOffline=job?.paymentMethod==='DIRECT_OFFLINE';
   const isFunded=['ESCROWED','DELIVERED','PAID'].includes(String(job?.paymentStatus??''));
-  const refreshPayment=async()=>{setRefreshing(true);try{const result=await callFunction<{jobId:string},{success:boolean;status:string}>('refreshPaynowBookingPayment',{jobId});Alert.alert('Paynow status',`Current status: ${result.status.replaceAll('_',' ')}.`);}catch(error:any){Alert.alert('Status not updated',error.message||'Paynow is still processing this payment.');}finally{setRefreshing(false);}};
+  const refreshPayment=async()=>{setRefreshing(true);try{const result=await callFunction<{jobId:string},{success:boolean;status:string}>('refreshPaynowBookingPayment',{jobId});appAlert('Paynow status',`Current status: ${result.status.replaceAll('_',' ')}.`);}catch(error:any){appAlert('Status not updated',error.message||'Paynow is still processing this payment.');}finally{setRefreshing(false);}};
 
   return (
     <SafeAreaView className="flex-1 bg-white">

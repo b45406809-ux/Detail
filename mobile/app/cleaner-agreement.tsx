@@ -1,6 +1,7 @@
+import { appAlert } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft, CheckCircle } from 'lucide-react-native';
@@ -96,7 +97,7 @@ export default function CleanerAgreementScreen() {
       await callFunction('acceptCleanerAgreement');
       setAccepted(true);
     } catch (error) {
-      Alert.alert('Could not activate cleaner account', (error as { message?: string })?.message || 'Complete identity verification and try again.');
+      appAlert('Could not activate cleaner account', (error as { message?: string })?.message || 'Complete identity verification and try again.');
     } finally {
       setIsAccepting(false);
     }
