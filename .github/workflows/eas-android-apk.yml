@@ -86,10 +86,11 @@ jobs:
             build_id="$(node -e 'const fs=require("node:fs");try{const d=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/eas-apk-build.json","utf8"));const b=Array.isArray(d)?d.at(-1):d;process.stdout.write(b?.id||"")}catch{}')"
             if [[ -n "$build_id" ]]; then
               echo "Fetching detailed Gradle logs for EAS build $build_id"
-              npx eas-cli@latest build:view "$build_id" --json --non-interactive > "$RUNNER_TEMP/eas-build-details.json" || true
+              npx eas-cli@latest build:view "$build_id" --json > "$RUNNER_TEMP/eas-build-details.json" || true
               log_url="$(node -e 'const d=require(process.env.RUNNER_TEMP+"/eas-build-details.json");process.stdout.write(d.logFiles?.[0]||"")' 2>/dev/null || true)"
               if [[ -n "$log_url" ]]; then
                 curl --fail --location --silent --show-error "$log_url" --output "$RUNNER_TEMP/eas-gradle.log" || true
+                node -e 'const fs=require("node:fs");const zlib=require("node:zlib");const p=process.env.RUNNER_TEMP+"/eas-gradle.log";const b=fs.readFileSync(p);try{fs.writeFileSync(p,zlib.brotliDecompressSync(b))}catch{}'
                 echo 'Gradle log error context:'
                 rg -in -C 3 'error|failed|exception|could not|cannot|manifest merger' "$RUNNER_TEMP/eas-gradle.log" | tail -160 || tail -120 "$RUNNER_TEMP/eas-gradle.log"
               fi
