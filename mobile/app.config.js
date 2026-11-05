@@ -37,6 +37,7 @@ const iosUrlScheme = iosClientId.endsWith(iosClientIdSuffix)
 
 expo.plugins = [
   ...(expo.plugins || []),
+  './plugins/withAndroidKotlinVersion',
   './plugins/withMapboxDownloadToken',
   ['react-native-nitro-google-signin', { iosUrlScheme }],
 ];
