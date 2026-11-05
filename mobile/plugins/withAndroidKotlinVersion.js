@@ -32,7 +32,7 @@ module.exports = function withAndroidKotlinVersion(config) {
     // evaluation and otherwise fall back to Kotlin 1.9.25.
     config.modResults.contents = config.modResults.contents.replace(
       /kotlinVersion\s*=\s*findProperty\('android\.kotlinVersion'\)\s*\?:\s*'[^']+'/,
-      `kotlinVersion = findProperty('android.kotlinVersion') ?: '${KOTLIN_VERSION}'`,
+      `kotlinVersion = '${KOTLIN_VERSION}'`,
     );
     return config;
   });
