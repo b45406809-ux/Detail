@@ -2,6 +2,13 @@ name: Build Detail Android APK on EAS
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - codex/separate-dashboard-into-routed-modules-fl7jlh
+    paths:
+      - '.easignore'
+      - '.github/workflows/eas-android-apk.yml'
+      - 'mobile/**'
 
 permissions:
   contents: read

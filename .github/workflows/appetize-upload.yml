@@ -10,18 +10,26 @@ on:
         description: GitHub EAS-build workflow run to fetch and upload its APK
         required: false
         type: string
+  workflow_run:
+    workflows:
+      - Build Detail Android APK on EAS
+    types:
+      - completed
+    branches:
+      - codex/separate-dashboard-into-routed-modules-fl7jlh
 permissions:
   actions: read
   contents: read
 jobs:
   upload:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 80
     steps:
       - name: Validate source run input
         env:
           SOURCE_RUN_ID: ${{ inputs.source_run_id }}
-          EAS_SOURCE_RUN_ID: ${{ inputs.eas_source_run_id }}
+          EAS_SOURCE_RUN_ID: ${{ inputs.eas_source_run_id || github.event.workflow_run.id }}
         run: |
           set -euo pipefail
           [[ -n "$SOURCE_RUN_ID" || -n "$EAS_SOURCE_RUN_ID" ]] || { echo 'Provide source_run_id or eas_source_run_id.'; exit 1; }
@@ -54,22 +62,22 @@ jobs:
           run-id: ${{ inputs.source_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@v4
-        if: ${{ inputs.eas_source_run_id != '' }}
+        if: ${{ inputs.eas_source_run_id != '' || github.event_name == 'workflow_run' }}
       - name: Set up Node for EAS download
-        if: ${{ inputs.eas_source_run_id != '' }}
+        if: ${{ inputs.eas_source_run_id != '' || github.event_name == 'workflow_run' }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Install app config dependencies
-        if: ${{ inputs.eas_source_run_id != '' }}
+        if: ${{ inputs.eas_source_run_id != '' || github.event_name == 'workflow_run' }}
         run: npm ci --prefix mobile --no-audit --no-fund
 
       - name: Resolve APK from the EAS source run
-        if: ${{ inputs.eas_source_run_id != '' }}
+        if: ${{ inputs.eas_source_run_id != '' || github.event_name == 'workflow_run' }}
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN || secrets.EAS_BOT_ACCESS_TOKEN || secrets.EXPO_EAS_BOT_ACCESS_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EAS_SOURCE_RUN_ID: ${{ inputs.eas_source_run_id }}
+          EAS_SOURCE_RUN_ID: ${{ inputs.eas_source_run_id || github.event.workflow_run.id }}
           REPO: ${{ github.repository }}
         working-directory: mobile
         run: |
@@ -89,7 +97,7 @@ jobs:
           NODE
 
       - name: Download resolved EAS APK
-        if: ${{ inputs.eas_source_run_id != '' }}
+        if: ${{ inputs.eas_source_run_id != '' || github.event_name == 'workflow_run' }}
         run: curl --fail --location --silent --show-error "$DETAIL_EAS_APK_URL" --output "$RUNNER_TEMP/detail-eas-build.apk"
 
       - name: Find APK
@@ -112,7 +120,7 @@ jobs:
           apiToken: ${{ secrets.APPETIZE_API_TOKEN }}
           platform: android
           appFile: ${{ steps.apk.outputs.path }}
-          note: Detail APK from GitHub run ${{ inputs.eas_source_run_id || inputs.source_run_id }}
+          note: Detail APK from GitHub run ${{ inputs.eas_source_run_id || inputs.source_run_id || github.event.workflow_run.id }}
       - name: Record Appetize link
         env:
           APP_KEY: ${{ steps.upload.outputs.publicKey }}
