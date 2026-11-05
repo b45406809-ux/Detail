@@ -75,7 +75,17 @@ jobs:
         working-directory: mobile
         run: |
           set -euo pipefail
+          set +e
           npx eas-cli@latest build --platform android --profile production-apk --non-interactive --wait --json > "$RUNNER_TEMP/eas-apk-build.json"
+          build_status=$?
+          set -e
+          if [[ "$build_status" -ne 0 ]]; then
+            echo 'EAS build command failed; response captured below for diagnosis:'
+            cat "$RUNNER_TEMP/eas-apk-build.json"
+            echo 'Recent EAS builds for this project:'
+            npx eas-cli@latest build:list --platform android --limit 3 --json --non-interactive || true
+            exit "$build_status"
+          fi
           node <<'NODE' >> "$GITHUB_STEP_SUMMARY"
           const fs = require('node:fs');
           const parsed = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/eas-apk-build.json', 'utf8'));
