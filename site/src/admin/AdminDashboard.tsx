@@ -46,6 +46,10 @@ export function AdminDashboard() {
   const [claims, setClaims] = useState<AdminClaims>();
   const [error, setError] = useState('');
   const [menu, setMenu] = useState(false);
+  const signOut = async () => {
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
+    window.location.replace('/admin');
+  };
 
   useEffect(() => { verifiedAdminClaims(true).then(setClaims).catch(error => setError(error.message)); }, []);
   useEffect(() => {
@@ -72,13 +76,13 @@ export function AdminDashboard() {
     window.history.pushState(null, '', `/admin/${next}${id ? `/${encodeURIComponent(id)}` : ''}`);
   };
 
-  if (error) return <main className="admin-denied"><h1>Admin access denied</h1><p>{error}</p><p>Only a server-assigned administrator role grants access.</p><button onClick={() => supabase.auth.signOut()}>Sign out</button></main>;
+  if (error) return <main className="admin-denied"><h1>Admin access denied</h1><p>{error}</p><p>Only a server-assigned administrator role grants access.</p><button onClick={() => void signOut()}>Sign out</button></main>;
   if (!claims) return <main className="admin-denied"><p>Verifying administrator role…</p></main>;
   return <main className="admin-root">
     <aside className={menu ? 'open' : ''}>
       <div className="brand">DETAIL.<small>ADMIN COMMAND CENTER</small></div>
       <nav>{visibleRoutes.map(([id, label, Icon]) => <button key={id} className={route === id ? 'active' : ''} onClick={() => go(id)}><Icon size={17}/>{label}</button>)}</nav>
-      <footer><span>Verified admin · {claims.elevated ? 'Elevated' : 'Standard'}</span><button onClick={() => supabase.auth.signOut()}><LogOut size={14}/> Sign out</button></footer>
+      <footer><span>Verified admin · {claims.elevated ? 'Elevated' : 'Standard'}</span><button onClick={() => void signOut()}><LogOut size={14}/> Sign out</button></footer>
     </aside>
     <div className="admin-content"><button className="menu-button" onClick={() => setMenu(!menu)}>{menu ? <X/> : <Menu/>}</button>{route === 'overview' ? <Overview navigate={go}/> : route === 'settings' ? <Settings/> : route === 'waitlist' ? <Waitlist/> : route === 'admins' ? <Admins/> : route === 'blog' ? <BlogManager/> : <DataModule key={`${route}:${focus ?? ''}`} kind={route} focusId={focus} navigate={go}/>}</div>
   </main>;
