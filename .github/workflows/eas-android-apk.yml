@@ -71,6 +71,15 @@ jobs:
             npx eas-cli@latest env:set production --scope project --name EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID --value "$EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID" --visibility plaintext --non-interactive
           fi
 
+      - name: Generate Android project with the pinned Kotlin toolchain
+        working-directory: mobile
+        run: |
+          set -euo pipefail
+          CI=1 npx expo prebuild --platform android --no-install --clean
+          git checkout -- package.json
+          grep -F "kotlinVersion = '2.1.21'" android/build.gradle
+          grep -F 'android.kotlinVersion=2.1.21' android/gradle.properties
+
       - name: Build installable Android APK on EAS
         working-directory: mobile
         run: |
