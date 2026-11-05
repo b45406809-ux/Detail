@@ -34,6 +34,14 @@ module.exports = function withAndroidKotlinVersion(config) {
       /kotlinVersion\s*=\s*findProperty\('android\.kotlinVersion'\)\s*\?:\s*'[^']+'/,
       `kotlinVersion = '${KOTLIN_VERSION}'`,
     );
+    // The generated root script declares the Kotlin Gradle plugin without a
+    // version. Its old Expo default can then win even though the Kotlin
+    // property above has been upgraded, causing Expo Modules Core to request
+    // the Compose compiler plugin for Kotlin 1.9.25.
+    config.modResults.contents = config.modResults.contents.replace(
+      /classpath\(['"]org\.jetbrains\.kotlin:kotlin-gradle-plugin['"]\)/,
+      `classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:${KOTLIN_VERSION}")`,
+    );
     return config;
   });
 };

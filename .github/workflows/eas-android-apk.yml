@@ -85,6 +85,7 @@ jobs:
           CI=1 npx expo prebuild --platform android --no-install --clean
           git checkout -- package.json
           grep -F "kotlinVersion = '2.1.21'" android/build.gradle
+          grep -F 'kotlin-gradle-plugin:2.1.21' android/build.gradle
           grep -F 'android.kotlinVersion=2.1.21' android/gradle.properties
 
       - name: Build installable Android APK on EAS
