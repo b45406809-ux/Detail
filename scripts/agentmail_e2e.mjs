@@ -9,6 +9,24 @@ async function request(url, headers) {
   if (!result.ok) throw new Error(`Provider request failed with HTTP ${result.status}.`);
   return result.json();
 }
+async function backend(path, method = 'GET', body) {
+  const result = await fetch(`${supabase}${path}`, {
+    method,
+    headers: {
+      apikey: service,
+      authorization: `Bearer ${service}`,
+      'content-type': 'application/json',
+      ...(method === 'DELETE' ? { Prefer: 'return=minimal' } : {}),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    signal: AbortSignal.timeout(20000),
+  });
+  const text = await result.text();
+  let value = null;
+  try { value = text ? JSON.parse(text) : null; } catch { /* status is sufficient for cleanup */ }
+  if (!result.ok) throw new Error(`Test account cleanup failed with HTTP ${result.status}.`);
+  return value;
+}
 if (process.argv[2] === 'check') {
   for (let page = 1; page <= 100; page++) {
     const data = await request(`${supabase}/auth/v1/admin/users?page=${page}&per_page=100`, { apikey: service });
@@ -41,5 +59,38 @@ if (process.argv[2] === 'code') {
     await new Promise(resolve => setTimeout(resolve, 5000));
   }
   throw new Error('No new verification email arrived within two minutes.');
+}
+if (process.argv[2] === 'cleanup') {
+  let account = null;
+  for (let page = 1; page <= 100; page++) {
+    const data = await backend(`/auth/v1/admin/users?page=${page}&per_page=100`);
+    const users = data.users || [];
+    account = users.find(user => user.email?.toLowerCase() === email) ?? account;
+    if (account || users.length < 100) break;
+  }
+  if (!account) {
+    console.log('AGENTMAIL_TEST_ACCOUNT_ALREADY_ABSENT');
+    process.exit(0);
+  }
+  const id = encodeURIComponent(account.id);
+  const [jobs, payments] = await Promise.all([
+    backend(`/rest/v1/jobs?select=id&or=(customerid.eq.${id},cleanerid.eq.${id})`),
+    backend(`/rest/v1/payments?select=id&or=(customerid.eq.${id},cleanerid.eq.${id})`),
+  ]);
+  if (jobs.length || payments.length) {
+    throw new Error(`AgentMail account cleanup stopped: ${jobs.length} job and ${payments.length} payment records require review.`);
+  }
+  const closed = await backend('/rest/v1/rpc/close_account', 'POST', { p_user_id: account.id });
+  if (closed !== true) throw new Error('AgentMail account privacy close did not confirm.');
+  await backend(`/rest/v1/legaldocumentacceptances?userid=eq.${id}`, 'DELETE');
+  await backend(`/auth/v1/admin/users/${id}`, 'DELETE');
+  const [profile, login] = await Promise.all([
+    backend(`/rest/v1/users?select=id,email,displayname,accountdeletedat&id=eq.${id}`),
+    fetch(`${supabase}/auth/v1/admin/users/${id}`, { headers: { apikey: service }, signal: AbortSignal.timeout(20000) }),
+  ]);
+  const sanitized = profile.length === 0 || (profile[0].email === '' && profile[0].displayname === 'Deleted user' && !!profile[0].accountdeletedat);
+  if (!sanitized || login.status !== 404) throw new Error('AgentMail account cleanup could not verify profile sanitization and login removal.');
+  console.log('AGENTMAIL_TEST_ACCOUNT_CLEANED_AND_VERIFIED');
+  process.exit(0);
 }
 throw new Error('Use check or code.');

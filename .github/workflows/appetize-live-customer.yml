@@ -1,9 +1,19 @@
 name: Appetize live customer journey
 on:
-  push:
-    branches: [codex/separate-dashboard-into-routed-modules-fl7jlh]
-    paths: [.github/workflows/appetize-live-customer.yml]
   workflow_dispatch:
+    inputs:
+      appetize_build_id:
+        description: Immutable Android Appetize target ID
+        required: true
+        type: string
+      eas_build_id:
+        description: EAS build ID represented by the selected Appetize target
+        required: true
+        type: string
+      source_commit:
+        description: Full 40-character source commit for the selected EAS build
+        required: true
+        type: string
 permissions:
   contents: read
 jobs:
@@ -12,6 +22,9 @@ jobs:
     timeout-minutes: 12
     env:
       APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+      APPETIZE_BUILD_ID: ${{ inputs.appetize_build_id }}
+      EAS_BUILD_ID: ${{ inputs.eas_build_id }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE }}
     steps:
@@ -21,14 +34,37 @@ jobs:
           node-version: 22
       - name: Check live booking gate
         run: node scripts/live_mobile_ui_e2e.mjs preflight
+      - run: npm install --global @appetize/cli@0.25.1 --no-audit --no-fund
+      - name: Validate pinned Android artifact
+        run: |
+          set -euo pipefail
+          [[ "$APPETIZE_BUILD_ID" =~ ^[a-z0-9]{20,32}$ ]]
+          [[ "$EAS_BUILD_ID" =~ ^[0-9a-f-]{36}$ ]]
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          git cat-file -e "$SOURCE_COMMIT^{commit}"
+          appetize build list --app com.detail.app --limit 200 --json --quiet > "$RUNNER_TEMP/appetize-builds.json"
+          APPETIZE_BUILD_ID="$APPETIZE_BUILD_ID" node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises';
+          const { builds = [] } = JSON.parse(await readFile(`${process.env.RUNNER_TEMP}/appetize-builds.json`, 'utf8'));
+          const target = builds.find(build => build.id === process.env.APPETIZE_BUILD_ID);
+          if (!target) throw new Error('The requested Appetize build ID is unavailable for com.detail.app.');
+          if (target.platform !== 'android') throw new Error('The requested Appetize target is not Android.');
+          console.log(`PINNED_APPETIZE_TARGET: ${target.id}`);
+          NODE
+          {
+            echo '## Pinned Android Appetize customer journey'
+            echo
+            echo "- Appetize build ID: \`$APPETIZE_BUILD_ID\`"
+            echo "- EAS build ID: \`$EAS_BUILD_ID\`"
+            echo "- Source commit: \`$SOURCE_COMMIT\`"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Create confirmed disposable accounts
         run: node scripts/live_mobile_ui_e2e.mjs create
-      - run: npm install --global @appetize/cli@0.25.1 --no-audit --no-fund
       - name: Sign in through Android UI
         run: |
           set -euo pipefail
           mkdir -p appetize-results
-          target=$(appetize build list --app com.detail.app --json --quiet | jq -er '.builds[0].id')
+          target="$APPETIZE_BUILD_ID"
           trap 'appetize inspect appetize-results/final.json --json --quiet || true; appetize screenshot appetize-results/final.png --json --quiet || true; appetize session stop --json --quiet || true' EXIT
           appetize session start pixel7 --target "$target" --json --quiet >/dev/null
           appetize inspect --select-test-id welcome-skip --timeout 25000 --json --quiet
