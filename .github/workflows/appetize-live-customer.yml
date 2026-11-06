@@ -61,6 +61,7 @@ jobs:
             echo "- Source commit: \`$SOURCE_COMMIT\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Create confirmed disposable accounts
+        id: test-users
         run: node scripts/live_mobile_ui_e2e.mjs create
       - name: Sign in through Android UI
         run: |
@@ -163,6 +164,9 @@ jobs:
           appetize open 'detail:///tracking/00000000-0000-4000-8000-000000000001' --json --quiet
           appetize inspect --select-text 'Booking unavailable' --timeout 12000 --json --quiet
           echo 'LIVE_CUSTOMER_ADDITIONAL_ROUTES_RENDERED'
+      - name: Verify persisted customer onboarding state
+        if: steps.test-users.outcome == 'success'
+        run: node scripts/live_mobile_ui_e2e.mjs verify-customer
       - name: Clean up disposable accounts
         if: always()
         run: node scripts/live_mobile_ui_e2e.mjs cleanup

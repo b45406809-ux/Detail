@@ -62,6 +62,7 @@ jobs:
             echo "- Source commit: \`$SOURCE_COMMIT\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Create confirmed disposable accounts
+        id: test-users
         run: node scripts/live_mobile_ui_e2e.mjs create
       - name: Verify live backend rejects unverified cleaner actions
         run: |
@@ -153,6 +154,9 @@ jobs:
           appetize tap --select-text '/^Continue to Agreement$/i' --timeout 10000 --json --quiet
           appetize inspect --select-text 'Identity check required' --timeout 10000 --json --quiet
           echo 'LIVE_CLEANER_DIDIT_GATE_REACHED'
+      - name: Verify persisted cleaner gate state
+        if: steps.test-users.outcome == 'success'
+        run: node scripts/live_mobile_ui_e2e.mjs verify-cleaner
       - name: Clean up disposable accounts
         if: always()
         run: node scripts/live_mobile_ui_e2e.mjs cleanup

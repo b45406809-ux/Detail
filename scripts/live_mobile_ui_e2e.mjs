@@ -119,8 +119,35 @@ async function cleanupAccounts() {
   console.log(`LIVE_UI_TEST_ACCOUNTS_CLEANED: ${users.length}`);
 }
 
+async function verifyProfileState(expectedRole) {
+  requireBackend();
+  const users = JSON.parse(await readFile(usersPath, 'utf8'));
+  const user = users.find(candidate => candidate.role === expectedRole);
+  if (!user) throw new Error(`Missing disposable ${expectedRole} account manifest entry.`);
+  const [profiles, jobs, payments] = await Promise.all([
+    request(`/rest/v1/users?select=id,role,displayname,hascompletedprofile,hasagreedtoterms,hassetuppermissions,verificationstatus,cleaneragreementaccepted,cleaneronboardingcomplete&id=eq.${encodeURIComponent(user.id)}`),
+    request(`/rest/v1/jobs?select=id&or=(customerid.eq.${encodeURIComponent(user.id)},cleanerid.eq.${encodeURIComponent(user.id)})`),
+    request(`/rest/v1/payments?select=id&or=(customerid.eq.${encodeURIComponent(user.id)},cleanerid.eq.${encodeURIComponent(user.id)})`),
+  ]);
+  const profile = profiles[0];
+  const expectedName = expectedRole === 'customer' ? 'E2E Live Customer' : 'E2E Live Cleaner';
+  if (profiles.length !== 1 || profile.displayname !== expectedName
+    || profile.role !== 'CUSTOMER' || profile.hascompletedprofile !== true
+    || profile.hasagreedtoterms !== true || profile.hassetuppermissions !== true
+    || jobs.length || payments.length) {
+    throw new Error(`Persisted ${expectedRole} onboarding state did not match the expected test state.`);
+  }
+  if (expectedRole === 'cleaner' && (profile.verificationstatus !== 'NOT_STARTED'
+    || profile.cleaneragreementaccepted === true || profile.cleaneronboardingcomplete === true)) {
+    throw new Error('Cleaner gate state changed before verified identity and cleaner agreement.');
+  }
+  console.log(`LIVE_UI_TEST_${expectedRole.toUpperCase()}_PERSISTED_STATE_VERIFIED`);
+}
+
 const mode = process.argv[2];
 if (mode === 'preflight') await preflight();
 else if (mode === 'create') await createAccounts();
 else if (mode === 'cleanup') await cleanupAccounts();
+else if (mode === 'verify-customer') await verifyProfileState('customer');
+else if (mode === 'verify-cleaner') await verifyProfileState('cleaner');
 else throw new Error('Use preflight, create, or cleanup.');

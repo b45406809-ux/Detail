@@ -156,6 +156,9 @@ jobs:
           appetize open 'detail:///privacy-policy' --json --quiet
           appetize inspect --select-text 'Privacy Policy' --timeout 12000 --json --quiet
           echo 'LIVE_EMAIL_SIGNUP_ONBOARDING_CUSTOMER_ROUTES_AND_BOOKING_FORM_VERIFIED'
+      - name: Verify persisted Auth and customer onboarding state
+        if: steps.registration.outcome == 'success'
+        run: node scripts/agentmail_e2e.mjs verify
       - name: Save screenshot
         if: always()
         uses: actions/upload-artifact@v4

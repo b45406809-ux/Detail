@@ -93,4 +93,29 @@ if (process.argv[2] === 'cleanup') {
   console.log('AGENTMAIL_TEST_ACCOUNT_CLEANED_AND_VERIFIED');
   process.exit(0);
 }
+if (process.argv[2] === 'verify') {
+  let account = null;
+  for (let page = 1; page <= 100; page++) {
+    const data = await backend(`/auth/v1/admin/users?page=${page}&per_page=100`);
+    const users = data.users || [];
+    account = users.find(user => user.email?.toLowerCase() === email) ?? account;
+    if (account || users.length < 100) break;
+  }
+  if (!account?.email_confirmed_at) throw new Error('AgentMail signup did not persist a confirmed Auth user.');
+  const id = encodeURIComponent(account.id);
+  const [profiles, jobs, payments] = await Promise.all([
+    backend(`/rest/v1/users?select=id,role,displayname,hascompletedprofile,hasagreedtoterms,hassetuppermissions&id=eq.${id}`),
+    backend(`/rest/v1/jobs?select=id&or=(customerid.eq.${id},cleanerid.eq.${id})`),
+    backend(`/rest/v1/payments?select=id&or=(customerid.eq.${id},cleanerid.eq.${id})`),
+  ]);
+  const profile = profiles[0];
+  if (profiles.length !== 1 || profile.role !== 'CUSTOMER'
+    || profile.displayname !== 'E2E AgentMail Customer'
+    || profile.hascompletedprofile !== true || profile.hasagreedtoterms !== true
+    || profile.hassetuppermissions !== true || jobs.length || payments.length) {
+    throw new Error('AgentMail profile/agreement persistence did not match the expected synthetic customer state.');
+  }
+  console.log('AGENTMAIL_SIGNUP_PROFILE_AGREEMENT_AND_PERMISSION_STATE_VERIFIED');
+  process.exit(0);
+}
 throw new Error('Use check or code.');
