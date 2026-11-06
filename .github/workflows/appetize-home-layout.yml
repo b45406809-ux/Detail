@@ -110,7 +110,7 @@ jobs:
           appetize tap --session-id "$session_id" --select-text '/^I have read and accept$/i' --timeout 10000 --json --quiet
           appetize inspect --session-id "$session_id" --select-text 'Set up your profile' --timeout 20000 --json --quiet
           appetize tap --session-id "$session_id" --select-text 'Your full name' --json --quiet
-          appetize type --session-id "$session_id" 'E2E Home Layout Customer' --json --quiet
+          appetize type --session-id "$session_id" 'E2E Live Customer' --json --quiet
           appetize press --session-id "$session_id" back --json --quiet
           appetize tap --session-id "$session_id" --select-text '/^Continue$/i' --timeout 10000 --json --quiet
           appetize inspect --session-id "$session_id" --select-text 'Allow permissions' --timeout 20000 --json --quiet
