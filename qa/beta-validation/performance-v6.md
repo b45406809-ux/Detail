@@ -1,6 +1,6 @@
 # Beta validation performance report v6
 
-Run: `2026-11-06-follow-up-5`
+Run: `2026-11-06-follow-up-6`
 
 No app performance measurements have been taken. The recent Appetize journeys checked UI behavior and route states; they did not measure launch or API latency.
 

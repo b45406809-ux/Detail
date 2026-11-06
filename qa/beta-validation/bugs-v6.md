@@ -1,6 +1,6 @@
 # Beta validation bug register v6
 
-Run: `2026-11-06-follow-up-5`. The customer and cleaner Appetize journeys exposed stale automation selectors. Screenshots showed the current home action and cleaner introduction steps; the journeys were corrected and passed. No product defect was reproduced in these runs.
+Run: `2026-11-06-follow-up-6`. The customer and cleaner Appetize journeys exposed stale automation selectors. Screenshots showed the current home action and cleaner introduction steps; the journeys were corrected and passed. Persisted Auth/profile assertions also passed on the pinned Android APK. No product defect was reproduced in these runs.
 
 | ID | Severity | Platform/build | Scenario / reproduction | Expected | Actual | Evidence / record IDs | Owner | Fix commit | Retest |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |

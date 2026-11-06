@@ -1,6 +1,6 @@
 # Beta validation matrix v6
 
-Run: `2026-11-06-follow-up-5`
+Run: `2026-11-06-follow-up-6`
 
 ## Pinned test targets
 
@@ -16,7 +16,7 @@ Run: `2026-11-06-follow-up-5`
 | Production payment state | `operationsPayments=OFF`; Paynow credentials absent | No payment action was attempted; no sandbox provider credentials are configured |
 | Isolated backend | No staging URL/key configured | Not required for the bounded screens/auth checks; needed for the full booking-to-completion lifecycle without reaching real cleaners |
 | iOS candidate | No iOS Appetize target in inventory run `42177217588` | Not run |
-| Test harness source | Current branch through `2b06cc3` | Pinned AgentMail, synthetic customer and cleaner journeys; full local authenticated dashboard and backend contract checks |
+| Test harness source | Current branch through `e8a0eef` | Pinned AgentMail, synthetic customer and cleaner journeys; full local authenticated dashboard and backend contract checks |
 
 ## Scenario matrix
 
@@ -24,12 +24,12 @@ Every row describes one area; case details follow the approved plan. Evidence an
 
 | ID | Area and required checks | Android | iOS | Web dashboard | Backend evidence required |
 | --- | --- | --- | --- | --- | --- |
-|  AUTH-01  |  Customer and cleaner registration, email verification, password/code login, wrong/expired/reused codes, recovery, logout, restore/expiry, Google/Apple where offered  |  Pass, AgentMail signup/code verification and customer onboarding; remaining auth cases not run  |  Blocked  | Not run |  Auth account created, OTP verified, then login removed by cleanup; see EV-018  |
+|  AUTH-01  |  Customer and cleaner registration, email verification, password/code login, wrong/expired/reused codes, recovery, logout, restore/expiry, Google/Apple where offered  |  Blocked; AgentMail signup/code verification and customer onboarding passed, while other required auth cases were not run  |  Blocked  | Not run |  Auth account created, OTP verified, then login removed by cleanup; see EV-025  |
 |  AUTH-00  |  Welcome, sign-in and create-account screens; email/password controls visible on exact baseline target  |  Pass, screen smoke plus successful AgentMail signup  |  Not run  | Pass, screen and synthetic sign-in only |  Customer registration and profile onboarding persisted before cleanup  |
-|  ONB-01  |  Splash, customer/cleaner onboarding, commission configuration agreement  |  Pass, customer profile/permissions step and five cleaner info slides; Didit and final cleaner agreement not completed  |  Blocked  | Not run |  Customer auth was cleaned; cleaner account remains unverified and was cleaned  |
+|  ONB-01  |  Splash, customer/cleaner onboarding, commission configuration agreement  |  Blocked; customer profile/permissions step and five cleaner info slides passed; Didit and final cleaner agreement were not completed  |  Blocked  | Not run |  Customer auth was cleaned; cleaner account remains unverified and was cleaned  |
 |  PERM-01  |  Camera, library, location, notification allow/deny/permanent denial/settings recovery  |  Blocked  |  Blocked  | Not run |  Permission-dependent action state; physical device evidence  |
-|  NAV-01  |  Tabs, controls, dialogs, back, keyboard, empty/loading/error, deep links, long names, small/large text  |  Pass, customer route screens and invalid booking/job/tracking states; remaining controls and layout cases not run  |  Blocked  | Pass, all 12 dashboard routes and bookings reload only |  Customer auth/profile setup persisted; route reads only after setup  |
-|  BOOK-01  |  House/car scheduling, address/map, options, notes, photos, supplies, date/price, submit  |  Pass, house flow through Details & Condition; submit and car flow not run  |  Blocked  | Not run |  No booking row created; submitting would notify real eligible cleaners  |
+|  NAV-01  |  Tabs, controls, dialogs, back, keyboard, empty/loading/error, deep links, long names, small/large text  |  Blocked; customer tabs/account/legal routes and invalid booking/job/tracking states passed; remaining controls and layout cases were not run  |  Blocked  | Blocked; all 12 dashboard routes and bookings reload passed locally, but the full route interaction scope was not run |  Customer auth/profile setup persisted; route reads only after setup  |
+|  BOOK-01  |  House/car scheduling, address/map, options, notes, photos, supplies, date/price, submit  |  Blocked; house flow reached Details & Condition; submit and car flow were not run  |  Blocked  | Not run |  No booking row created; submitting would notify real eligible cleaners  |
 |  BID-01  |  Multiple bids, compare/decline/accept, eligibility, expiry, unavailable cleaner, races/double taps/overlap  |  Blocked  |  Blocked  | Not run |  One valid assignment; losers and expired actions rejected atomically  |
 |  JOB-01  |  Request → bid/accept → payment choice → en route → arrival → start → evidence → completion → review; house/car and supported modes  |  Blocked  |  Blocked  | Not run |  Server state and money invariants at every transition  |
 |  CHAT-01  |  Two-way assigned-participant messaging, order/time/unread/reconnect/background/attachments  |  Blocked  |  Blocked  | Not run |  Messages persist once; unauthorized third-party reads/writes rejected  |
@@ -38,8 +38,8 @@ Every row describes one area; case details follow the approved plan. Evidence an
 |  PAY-01  |  Paynow official method/icon/handoff; sandbox success/pending/failure/cancel/interruption/retry; direct payment  |  Blocked  |  Blocked  | Not run |  Provider sandbox evidence and reconciled amount/fees/commission/balance  |
 |  FIN-01  |  Duplicate/out-of-order/invalid callbacks, poll, refund, payout and replay protection  |  Blocked  |  Blocked  | Not run |  Ledger invariants; mocked provider runs labeled simulations only  |
 |  NOTIF-01  |  Bid, acceptance, chat, cancel, reschedule, en route, arrival, completion; foreground/background/denied/expired token  |  Blocked  |  Blocked  | Not run |  Correct recipient, single event, delivery state and route  |
-|  CLEAN-01  |  Registration, agreement, verification handoff/return/reject/retry, approval, role switch, availability, portfolio, earnings/payout  |  Pass, intro/form and Didit gate reached; protected application/role actions rejected HTTP 409  |  Blocked  | Not run |  No Didit session or identity success; synthetic cleaner account cleaned  |
-|  ADMIN-01  |  Two admins with distinct permissions; sessions, invites, booking/support/dispute/payout actions and audit trail  |  Blocked  |  Blocked  | Pass, admin subset only |  Local Supabase CI proves elevated and restricted admin login, 12 modules, invite create/revoke with persisted audit, and denied restricted invite with no partial write. Booking/support/dispute/payout actions remain untested.  |
+|  CLEAN-01  |  Registration, agreement, verification handoff/return/reject/retry, approval, role switch, availability, portfolio, earnings/payout  |  Blocked; intro/form and Didit gate reached; protected application/role actions rejected HTTP 409  |  Blocked  | Not run |  No Didit session or identity success; synthetic cleaner account cleaned  |
+|  ADMIN-01  |  Two admins with distinct permissions; sessions, invites, booking/support/dispute/payout actions and audit trail  |  Blocked  |  Blocked  | Blocked; local admin subset passed |  Local Supabase CI proves elevated and restricted admin login, 12 modules, invite create/revoke with persisted audit, and denied restricted invite with no partial write. Booking/support/dispute/payout actions remain untested.  |
 |  PRIV-01  |  Third-party booking/chat/photo/location access; account switch/logout; recovery/deletion restrictions  |  Blocked  |  Blocked  | Not run |  RLS/function denial and no prior-account data leak  |
 |  RES-01  |  Offline before/after submit, kill/relaunch during booking/chat/checkout/progress, slow/error/expired session/upload  |  Blocked  |  Blocked  | Not run |  Retry recovers authoritative state without duplicates  |
 |  PERF-01  |  10 cold + 10 warm launches/platform; API p95, event p95, action feedback, spinner/crash and 30-minute soak  |  Not run  |  Not run  | Not run |  Measurements carry platform, device, network, sample size, median/p95  |
@@ -56,6 +56,9 @@ Every row describes one area; case details follow the approved plan. Evidence an
 | [Appetize build inventory](https://github.com/b45406809-ux/Detail/actions/runs/42177217588) | Pass | Read-only inventory returned Android targets only; no iOS Appetize build is available |
 | [Current configuration gates](https://github.com/b45406809-ux/Detail/actions/runs/42173675079) | Pass, read-only | Booking is currently enabled and production create requests can dispatch to verified available cleaners; no sandbox payment credentials are configured |
 | [Full CI and local backend/dashboard suite](https://github.com/b45406809-ux/Detail/actions/runs/42169969403) | Pass | Mobile lint/type checks, local Supabase security/Edge Function tests, fixture setup/cleanup, site checks and local dashboard journeys |
+| [AgentMail registration with persisted-state verification](https://github.com/b45406809-ux/Detail/actions/runs/42177965237) | Pass | On the pinned Android APK, AgentMail email confirmation and customer onboarding persisted with expected role/profile fields; zero jobs/payments were present, then the account was cleaned |
+| [Synthetic customer journey with persisted-state verification](https://github.com/b45406809-ux/Detail/actions/runs/42178257016) | Pass | On the pinned Android APK, customer UI journey and persisted profile assertions passed; zero jobs/payments were present, then both accounts were cleaned |
+| [Synthetic cleaner journey with persisted-state verification](https://github.com/b45406809-ux/Detail/actions/runs/42178527205) | Pass | Pinned Android APK; cleaner profile stayed CUSTOMER with identity NOT_STARTED, no jobs/payments were present, and cleanup completed |
 
 ## Baseline evidence
 

@@ -1,6 +1,6 @@
 # Beta validation evidence index v6
 
-Run: `2026-11-06-follow-up-5`
+Run: `2026-11-06-follow-up-6`
 
 | Evidence ID | Link / artifact | Pinned target | Result | What it proves |
 | --- | --- | --- | --- | --- |
@@ -28,5 +28,6 @@ Run: `2026-11-06-follow-up-5`
 | EV-022 | [Synthetic customer Appetize journey](https://github.com/b45406809-ux/Detail/actions/runs/42175327533) | Same pinned Android target as EV-020 | Pass, bounded journey | Customer sign-in/onboarding, house form through details, tabs/account/legal routes and invalid booking/job/tracking states passed. Two synthetic accounts were cleaned up and verified. |
 | EV-023 | [Synthetic cleaner Appetize journey](https://github.com/b45406809-ux/Detail/actions/runs/42176505491) | Same pinned Android target as EV-020 | Pass, bounded journey | Five cleaner introduction slides, registration form, Didit gate and server rejection (HTTP 409) for unverified application/role changes passed. No Didit session was started; synthetic accounts were cleaned. |
 | EV-024 | Cleaner selector debugging runs | [42175583288](https://github.com/b45406809-ux/Detail/actions/runs/42175583288), [42175890302](https://github.com/b45406809-ux/Detail/actions/runs/42175890302), [42176201624](https://github.com/b45406809-ux/Detail/actions/runs/42176201624) | Fail, test harness | Screenshots exposed the cleaner intro sequence and final “Start registration” action. Workflow selectors were corrected; final retest is EV-023. |
+| EV-025 | [Persisted-state Appetize journeys](https://github.com/b45406809-ux/Detail/actions/runs/42177965237), [customer journey](https://github.com/b45406809-ux/Detail/actions/runs/42178257016), [cleaner journey](https://github.com/b45406809-ux/Detail/actions/runs/42178527205) | Appetize `du2xyaxoiakaw57cecgor2jfd4`; EAS `1858f342-02c5-41ad-9672-255b9b22b9e6`; APK source `dedbb98c7fc71d442d4cad47c9178a4c989189e3`; harness source `e8a0eef83d2c691350ce85843932ddd9b540c06f` | Pass | Persisted customer Auth/profile fields matched signup/onboarding; cleaner profile stayed CUSTOMER with identity NOT_STARTED; all inspected accounts had zero jobs/payments before cleanup. Cleanup removed Auth logins and anonymized profile data. No booking, bid, message, notification, identity or financial transaction was created. |
 
 Screenshots and inspect trees are retained as GitHub artifacts for seven days. Test accounts are synthetic; Auth logins were removed and profile data anonymized during cleanup. No booking-triggered notifications, bids, messages, identity results or financial transactions were created. Store future evidence only in short-retention artifacts and redact personal data, auth codes, tokens and provider references.

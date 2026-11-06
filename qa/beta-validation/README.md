@@ -1,6 +1,6 @@
 # Beta validation records
 
-Current run: `2026-11-06-follow-up-5`
+Current run: `2026-11-06-follow-up-6`
 
 - [Test matrix v6](matrix-v6.md)
 - [Bug register v6](bugs-v6.md)
