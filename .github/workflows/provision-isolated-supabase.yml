@@ -1,0 +1,84 @@
+name: Provision isolated Detail QA backend
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+    steps:
+      - name: Create one isolated project using the existing project organization and region
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          node --input-type=module <<'NODE'
+          import { randomBytes } from 'node:crypto';
+          import { appendFileSync } from 'node:fs';
+          const headers = {
+            authorization: `Bearer ${process.env.SUPABASE_ACCESS_TOKEN}`,
+            'content-type': 'application/json',
+          };
+          async function response(path, init = {}) {
+            return fetch(`https://api.supabase.com/v1${path}`, { ...init, headers: { ...headers, ...init.headers } });
+          }
+          const projectResponse = await response('/projects');
+          if (!projectResponse.ok) throw new Error(`Project inventory failed (HTTP ${projectResponse.status}).`);
+          const projects = await projectResponse.json();
+          const production = projects.find(project => project.id === process.env.SUPABASE_PROJECT_REF);
+          if (!production) throw new Error('Configured production project was not found; no project was created.');
+          const name = 'Detail Isolated Marketplace QA';
+          if (projects.some(project => project.name === name)) {
+            throw new Error('An isolated QA project with this name already exists; refusing to create a duplicate.');
+          }
+          const organizationSlug = production.organization_slug ?? production.organizationSlug ?? production.organization_id ?? production.organizationId;
+          const region = production.region;
+          if (!organizationSlug || !region) throw new Error('Organization slug or region was unavailable; no project was created.');
+          const password = randomBytes(36).toString('base64url');
+          const created = await response('/projects', {
+            method: 'POST',
+            body: JSON.stringify({
+              name,
+              organization_slug: organizationSlug,
+              db_pass: password,
+              region_selection: { type: 'specific', code: region },
+              desired_instance_size: 'nano',
+            }),
+          });
+          if (!created.ok) {
+            throw new Error(`Isolated project creation was rejected (HTTP ${created.status}); no response body or credential was logged.`);
+          }
+          const result = await created.json();
+          const ref = result.ref ?? result.id;
+          if (!ref || ref === process.env.SUPABASE_PROJECT_REF) throw new Error('Supabase did not return a distinct isolated project reference.');
+          let status = 'provisioning';
+          for (let attempt = 0; attempt < 45; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 15000));
+            const ready = await response(`/projects/${encodeURIComponent(ref)}`);
+            if (!ready.ok) continue;
+            const details = await ready.json();
+            status = details.status ?? status;
+            if (status === 'ACTIVE_HEALTHY') break;
+            if (/FAILED|INACTIVE|REMOVED/.test(status)) throw new Error(`Isolated project provisioning stopped in status ${status}.`);
+          }
+          if (status !== 'ACTIVE_HEALTHY') throw new Error(`Isolated project is not ready (status ${status}).`);
+          const output = [
+            '## Isolated Supabase backend', '',
+            `- Project: ${name}`,
+            `- Project ref: \`${ref}\``,
+            `- Region: ${region}`,
+            `- Status: ${status}`,
+            '- Created in the existing Supabase organization with the smallest requested instance size.',
+            '- Database password was randomly generated for the provisioning process and was not logged or saved.',
+            '- No production data was copied.',
+          ].join('\n') + '\n';
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, output);
+          console.log(`ISOLATED_QA_PROJECT_READY: ${ref}`);
+          NODE
