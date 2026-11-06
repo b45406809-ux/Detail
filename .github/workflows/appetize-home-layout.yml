@@ -61,7 +61,7 @@ jobs:
 
       - name: Build release APK with the JavaScript bundle
         working-directory: mobile/android
-        run: ./gradlew --no-daemon assembleRelease
+        run: ./gradlew --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" assembleRelease
 
       - name: Upload this commit to Appetize
         id: appetize
