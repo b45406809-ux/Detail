@@ -1,0 +1,143 @@
+name: Appetize home panel layout screenshot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  home-panel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      EAS_BUILD_PROFILE: production
+      EXPO_PUBLIC_APP_BUILD_PROFILE: production
+      EXPO_PUBLIC_DEMO_MODE: 'false'
+      MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
+      EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || secrets.MAPBOX_PUBLIC_TOKEN }}
+      EXPO_PUBLIC_SUPABASE_URL: ${{ vars.SUPABASE_URL || vars.EXPO_PUBLIC_SUPABASE_URL || secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_PUBLIC_ANON || secrets.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_ANON_KEY || secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE }}
+      APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0 ndk;26.1.10909125 cmake;3.22.1'
+
+      - name: Validate build and test credentials are configured
+        run: |
+          set -euo pipefail
+          test -n "$MAPBOX_DOWNLOADS_TOKEN"
+          test -n "$EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN"
+          test -n "$EXPO_PUBLIC_SUPABASE_URL"
+          test -n "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_SECRET_KEY"
+          test -n "$APPETIZE_API_TOKEN"
+
+      - run: npm ci --prefix mobile --no-audit --no-fund
+
+      - name: Generate Android project from this commit
+        working-directory: mobile
+        run: |
+          set -euo pipefail
+          CI=1 npx expo prebuild --platform android --no-install --clean
+          git checkout -- package.json
+
+      - name: Build debug APK on the GitHub Android runner
+        working-directory: mobile/android
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Upload this commit to Appetize
+        id: appetize
+        uses: appetizeio/github-action-appetize@v1.1.0
+        with:
+          apiToken: ${{ secrets.APPETIZE_API_TOKEN }}
+          platform: android
+          appFile: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          note: Home panel layout check from ${{ github.sha }}
+
+      - name: Install Appetize CLI and check production booking safety
+        run: |
+          npm install --global @appetize/cli@0.25.1 --no-audit --no-fund
+          node scripts/live_mobile_ui_e2e.mjs preflight
+
+      - name: Create disposable UI accounts
+        id: test-users
+        run: node scripts/live_mobile_ui_e2e.mjs create
+
+      - name: Sign in and capture the home panel
+        env:
+          APPETIZE_TARGET: ${{ steps.appetize.outputs.publicKey }}
+        run: |
+          set -euo pipefail
+          mkdir -p appetize-results
+          test -n "$APPETIZE_TARGET"
+          session_id="detail-home-layout-${GITHUB_RUN_ID}"
+          trap 'appetize inspect appetize-results/final.json --session-id "$session_id" --json --quiet || true; appetize screenshot appetize-results/final.png --session-id "$session_id" --json --quiet || true; appetize session stop --session-id "$session_id" --json --quiet || true' EXIT
+          appetize session start pixel7 --target "$APPETIZE_TARGET" --session-id "$session_id" --json --quiet > appetize-results/session.json
+          appetize inspect --session-id "$session_id" --select-test-id welcome-skip --timeout 30000 --json --quiet
+          appetize tap --session-id "$session_id" --select-test-id welcome-skip --json --quiet
+          appetize inspect --session-id "$session_id" --select-test-id auth-email-tab --timeout 20000 --json --quiet
+          appetize tap --session-id "$session_id" --select-test-id auth-email-tab --json --quiet
+          appetize tap --session-id "$session_id" --select-test-id auth-email-mode-password --json --quiet
+          appetize tap --session-id "$session_id" --select-test-id auth-email-input --json --quiet
+          appetize type --session-id "$session_id" "$E2E_CUSTOMER_EMAIL" --json --quiet
+          appetize tap --session-id "$session_id" --select-test-id auth-password-input --json --quiet
+          appetize type --session-id "$session_id" "$E2E_CUSTOMER_PASSWORD" --json --quiet
+          appetize press --session-id "$session_id" back --json --quiet
+          appetize tap --session-id "$session_id" --select-test-id auth-email-submit --json --quiet
+          appetize inspect --session-id "$session_id" --select-text 'Customer Agreement' --timeout 30000 --json --quiet
+          for attempt in $(seq 1 12); do
+            if appetize inspect --session-id "$session_id" --select-text '/^I have read and accept$/i' --timeout 500 --json --quiet >/dev/null 2>&1; then break; fi
+            appetize swipe --session-id "$session_id" --direction up --json --quiet
+          done
+          appetize tap --session-id "$session_id" --select-text '/^I have read and accept$/i' --timeout 10000 --json --quiet
+          appetize inspect --session-id "$session_id" --select-text 'Set up your profile' --timeout 20000 --json --quiet
+          appetize tap --session-id "$session_id" --select-text 'Your full name' --json --quiet
+          appetize type --session-id "$session_id" 'E2E Home Layout Customer' --json --quiet
+          appetize press --session-id "$session_id" back --json --quiet
+          appetize tap --session-id "$session_id" --select-text '/^Continue$/i' --timeout 10000 --json --quiet
+          appetize inspect --session-id "$session_id" --select-text 'Allow permissions' --timeout 20000 --json --quiet
+          appetize tap --session-id "$session_id" --select-text '/^Continue to App$/i' --json --quiet
+          appetize inspect appetize-results/home.json --session-id "$session_id" --select-text '/^House$/i' --timeout 30000 --json --quiet
+          appetize inspect --session-id "$session_id" --select-text '/^Car$/i' --timeout 10000 --json --quiet
+          appetize inspect --session-id "$session_id" --select-text 'Find a cleaner' --timeout 10000 --json --quiet
+          appetize screenshot appetize-results/home-panel.png --session-id "$session_id" --json --quiet
+          echo "## Home panel screenshot" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "- Source commit: `$GITHUB_SHA`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Appetize target: `$APPETIZE_TARGET`" >> "$GITHUB_STEP_SUMMARY"
+          echo '- Booking submit was not used.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify persisted customer onboarding state
+        if: steps.test-users.outcome == 'success'
+        run: node scripts/live_mobile_ui_e2e.mjs verify-customer
+
+      - name: Clean up disposable accounts
+        if: always()
+        run: node scripts/live_mobile_ui_e2e.mjs cleanup
+
+      - name: Save home screenshot and Appetize evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appetize-home-panel-${{ github.run_id }}
+          path: appetize-results/
+          if-no-files-found: ignore
+          retention-days: 7
