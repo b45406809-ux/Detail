@@ -6,5 +6,6 @@ Current run: `2026-11-06-follow-up`
 - [Bug register v2](bugs-v2.md)
 - [Evidence index v2](evidence-v2.md)
 - [Performance report v2](performance-v2.md)
+- [Guided Android/iPhone device checklist v1](physical-device-checklist-v1.md)
 
 The v1 files preserve the initial baseline snapshot.

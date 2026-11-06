@@ -135,6 +135,14 @@ jobs:
         run: |
           supabase start
           supabase db reset --local
+      - name: Run database security invariant tests
+        run: supabase test db --local
+      - name: Lint local database schema
+        run: supabase db lint --local --schema public --fail-on error
+      - name: Type-check Edge Functions
+        run: deno check --config supabase/functions/deno.json supabase/functions/*/index.ts
+      - name: Test Supabase session authentication checks
+        run: deno test --config supabase/functions/deno.json supabase/functions/_shared/*_test.ts
       - name: Create and verify the synthetic QA fixture pool
         env:
           QA_RUN_ID: ${{ github.run_id }}
@@ -161,14 +169,6 @@ jobs:
           done
           curl --fail --silent http://127.0.0.1:4173/admin >/dev/null
           node site/scripts/local_dashboard_qa.mjs
-      - name: Run database security invariant tests
-        run: supabase test db --local
-      - name: Lint local database schema
-        run: supabase db lint --local --schema public --fail-on error
-      - name: Type-check Edge Functions
-        run: deno check --config supabase/functions/deno.json supabase/functions/*/index.ts
-      - name: Test Supabase session authentication checks
-        run: deno test --config supabase/functions/deno.json supabase/functions/_shared/*_test.ts
       - name: Clean up local QA fixture pool
         if: always()
         env:

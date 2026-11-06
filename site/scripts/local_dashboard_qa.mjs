@@ -27,7 +27,13 @@ async function signIn(page, email, password) {
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await page.getByRole('heading', { name: 'Overview', exact: true }).waitFor({ state: 'visible', timeout: 20000 });
+  try {
+    await page.getByRole('heading', { name: 'Overview', exact: true }).waitFor({ state: 'visible', timeout: 20000 });
+  } catch {
+    const message = await page.locator('main').innerText().catch(() => 'No dashboard content rendered.');
+    const redacted = message.replace(/\S+@\S+/g, '[email]').replace(/\b\d{6,}\b/g, '[redacted number]').slice(0, 500);
+    throw new Error(`Admin sign-in did not reach Overview. Visible page: ${redacted}`);
+  }
 }
 
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });

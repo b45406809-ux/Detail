@@ -173,9 +173,9 @@ async function create() {
       if (!user?.id) throw new Error(`Could not create QA fixture ${fixture.key}.`);
       const entry = { id: user.id, role: fixture.role, key: fixture.key };
       manifest.created.push(entry);
+      await writeFile(manifestPath, JSON.stringify(manifest, null, 2), { mode: 0o600 });
       created.push({ ...entry, email, password });
       await writeProfile(user, fixture);
-      await writeFile(manifestPath, JSON.stringify(manifest, null, 2), { mode: 0o600 });
     }
     const ids = created.map(user => user.id);
     const profiles = await request(`/rest/v1/users?select=id,role,verificationstatus,cleaneragreementaccepted,cleaneronboardingcomplete,hasagreedtoterms&id=in.(${ids.join(',')})`);
