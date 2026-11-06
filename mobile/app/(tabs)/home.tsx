@@ -373,9 +373,14 @@ export default function HomeScreen() {
       </View>
 
       {/* Bottom glass sheet */}
-      <View className="absolute bottom-0 left-0 right-0" pointerEvents="box-none">
-        <GlassSheet style={{ maxHeight: '62%' }}>
+      <View
+        className="absolute bottom-0 left-0 right-0"
+        style={{ top: '60%' }}
+        pointerEvents="box-none"
+      >
+        <GlassSheet style={{ flex: 1 }}>
           <ScrollView
+            style={{ flex: 1 }}
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor="#3906D2" />}
           >
