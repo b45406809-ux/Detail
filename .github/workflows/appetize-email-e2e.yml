@@ -1,9 +1,19 @@
 name: Appetize real email registration
 on:
-  push:
-    branches: [codex/separate-dashboard-into-routed-modules-fl7jlh]
-    paths: [.github/workflows/appetize-email-e2e.yml, scripts/agentmail_e2e.mjs]
   workflow_dispatch:
+    inputs:
+      appetize_build_id:
+        description: Immutable Android Appetize target ID
+        required: true
+        type: string
+      eas_build_id:
+        description: EAS build ID represented by the selected Appetize target
+        required: true
+        type: string
+      source_commit:
+        description: Full 40-character source commit for the selected EAS build
+        required: true
+        type: string
 permissions:
   contents: read
 jobs:
@@ -12,18 +22,47 @@ jobs:
     timeout-minutes: 10
     env:
       APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+      APPETIZE_BUILD_ID: ${{ inputs.appetize_build_id }}
+      EAS_BUILD_ID: ${{ inputs.eas_build_id }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
       AGENTMAIL_API_KEY: ${{ secrets.AGENTMAIL_API_KEY }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - run: npm install --global @appetize/cli@0.25.1 --no-audit --no-fund
+      - name: Validate pinned Android artifact
+        run: |
+          set -euo pipefail
+          [[ "$APPETIZE_BUILD_ID" =~ ^[a-z0-9]{20,32}$ ]]
+          [[ "$EAS_BUILD_ID" =~ ^[0-9a-f-]{36}$ ]]
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          git cat-file -e "$SOURCE_COMMIT^{commit}"
+          appetize build list --app com.detail.app --limit 200 --json --quiet > "$RUNNER_TEMP/appetize-builds.json"
+          APPETIZE_BUILD_ID="$APPETIZE_BUILD_ID" node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises';
+          const { builds = [] } = JSON.parse(await readFile(`${process.env.RUNNER_TEMP}/appetize-builds.json`, 'utf8'));
+          const target = builds.find(build => build.id === process.env.APPETIZE_BUILD_ID);
+          if (!target) throw new Error('The requested Appetize build ID is unavailable for com.detail.app.');
+          if (target.platform !== 'android') throw new Error('The requested Appetize target is not Android.');
+          console.log(`PINNED_APPETIZE_TARGET: ${target.id}`);
+          NODE
+          {
+            echo '## Pinned Android AgentMail registration'
+            echo
+            echo "- Appetize build ID: \`$APPETIZE_BUILD_ID\`"
+            echo "- EAS build ID: \`$EAS_BUILD_ID\`"
+            echo "- Source commit: \`$SOURCE_COMMIT\`"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Ensure inbox does not already have a user
         run: node scripts/agentmail_e2e.mjs check
-      - run: npm install --global @appetize/cli@0.25.1 --no-audit --no-fund
       - name: Register and confirm using a real email
+        id: registration
         run: |
           set -euo pipefail
           mkdir -p appetize-results
@@ -38,7 +77,7 @@ jobs:
             rm -f "$RUNNER_TEMP/detail-email-code"
           }
           trap finish EXIT
-          appetize session start pixel7 --target 4c6fwy7cgb4ac7pn67nsu2fb4i --json --quiet >/dev/null
+          appetize session start pixel7 --target "$APPETIZE_BUILD_ID" --json --quiet >/dev/null
           appetize inspect --select-test-id welcome-skip --timeout 25000 --json --quiet
           appetize tap --select-test-id welcome-skip --json --quiet
           appetize tap --select-test-id auth-account-mode-toggle --timeout 15000 --json --quiet
@@ -57,7 +96,66 @@ jobs:
           appetize press back --json --quiet
           appetize tap --select-text '/^Verify & Continue$/i' --json --quiet
           appetize inspect --select-text 'Customer Agreement' --timeout 25000 --json --quiet
-          echo 'LIVE_EMAIL_REGISTRATION_VERIFIED'
+          for attempt in $(seq 1 12); do
+            if appetize inspect --select-text '/^I have read and accept$/i' --timeout 500 --json --quiet >/dev/null 2>&1; then break; fi
+            appetize swipe --direction up --json --quiet
+          done
+          appetize tap --select-text '/^I have read and accept$/i' --timeout 10000 --json --quiet
+          appetize inspect --select-text 'Set up your profile' --timeout 20000 --json --quiet
+          appetize tap --select-text 'Your full name' --timeout 10000 --json --quiet
+          appetize type 'E2E AgentMail Customer' --json --quiet
+          appetize press back --json --quiet
+          appetize tap --select-text '/^Continue$/i' --timeout 10000 --json --quiet
+          appetize inspect --select-text 'Allow permissions' --timeout 20000 --json --quiet
+          appetize tap --select-text '/^Continue to App$/i' --timeout 10000 --json --quiet
+          appetize inspect --select-text '/^Request Cleaning$/i' --timeout 25000 --json --quiet
+          appetize tap --select-text '/^Request Cleaning$/i' --json --quiet
+          appetize tap --select-text 'House Cleaning' --json --quiet
+          appetize tap --select-text '/^Next$/i' --json --quiet
+          appetize inspect --select-text 'Specific Room / Part' --timeout 15000 --json --quiet
+          appetize tap --select-text 'Specific Room / Part' --json --quiet
+          for label in 'Kitchen' 'Under 10 m²'; do
+            for attempt in $(seq 1 8); do
+              if appetize inspect --select-text "$label" --timeout 500 --json --quiet >/dev/null 2>&1; then break; fi
+              appetize swipe --direction up --json --quiet
+            done
+            appetize tap --select-text "$label" --timeout 10000 --json --quiet
+          done
+          appetize tap --select-text '/^Next$/i' --timeout 10000 --json --quiet
+          appetize inspect --select-text 'Details & Condition' --timeout 15000 --json --quiet
+          appetize open 'detail:///activity' --json --quiet
+          appetize inspect --select-text 'Your bookings' --timeout 12000 --json --quiet
+          appetize open 'detail:///messages' --json --quiet
+          appetize inspect --select-text 'Messages' --timeout 12000 --json --quiet
+          appetize open 'detail:///wallet' --json --quiet
+          appetize inspect --select-text 'Wallet' --timeout 12000 --json --quiet
+          appetize open 'detail:///profile' --json --quiet
+          appetize inspect --select-text 'Profile' --timeout 12000 --json --quiet
+          appetize open 'detail:///history' --json --quiet
+          appetize inspect --select-text 'Service History' --timeout 12000 --json --quiet
+          appetize open 'detail:///favorites' --json --quiet
+          appetize inspect --select-text 'Favorites' --timeout 12000 --json --quiet
+          appetize open 'detail:///cleaners' --json --quiet
+          appetize inspect --select-text 'Find Cleaners' --timeout 12000 --json --quiet
+          appetize open 'detail:///notifications' --json --quiet
+          appetize inspect --select-text 'Notifications' --timeout 12000 --json --quiet
+          appetize open 'detail:///reviews' --json --quiet
+          appetize inspect --select-text 'My Reviews' --timeout 12000 --json --quiet
+          appetize open 'detail:///help' --json --quiet
+          appetize inspect --select-text 'Help & Support' --timeout 12000 --json --quiet
+          appetize open 'detail:///support' --json --quiet
+          appetize inspect --select-text 'Support requests' --timeout 12000 --json --quiet
+          appetize open 'detail:///organization' --json --quiet
+          appetize inspect --select-text 'Organization' --timeout 12000 --json --quiet
+          appetize open 'detail:///account/email' --json --quiet
+          appetize inspect --select-text 'Email address' --timeout 12000 --json --quiet
+          appetize open 'detail:///portfolio' --json --quiet
+          appetize inspect --select-text 'My portfolio' --timeout 12000 --json --quiet
+          appetize open 'detail:///instant-offers' --json --quiet
+          appetize inspect --select-text 'Instant offers' --timeout 12000 --json --quiet
+          appetize open 'detail:///privacy-policy' --json --quiet
+          appetize inspect --select-text 'Privacy Policy' --timeout 12000 --json --quiet
+          echo 'LIVE_EMAIL_SIGNUP_ONBOARDING_CUSTOMER_ROUTES_AND_BOOKING_FORM_VERIFIED'
       - name: Save screenshot
         if: always()
         uses: actions/upload-artifact@v4
@@ -66,3 +164,6 @@ jobs:
           path: appetize-results/final.png
           if-no-files-found: ignore
           retention-days: 7
+      - name: Clean up AgentMail test account
+        if: always() && steps.registration.outcome != 'skipped'
+        run: node scripts/agentmail_e2e.mjs cleanup
