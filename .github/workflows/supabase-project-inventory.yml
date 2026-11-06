@@ -34,6 +34,14 @@ jobs:
           const configuredRef = process.env.SUPABASE_PROJECT_REF;
           const configured = configuredRef ? listed.find(project => project.id === configuredRef) : null;
           const detail = configured ? await read(`/projects/${encodeURIComponent(configuredRef)}`) : null;
+          let regionAvailability = null;
+          let regionAvailabilityStatus = 'unavailable';
+          const organizationSlug = detail?.organization_slug ?? detail?.organizationSlug ?? configured?.organization_slug ?? configured?.organizationSlug ?? configured?.organization_id ?? configured?.organizationId;
+          if (organizationSlug) {
+            const response = await fetch(`https://api.supabase.com/v1/projects/available-regions?organization_slug=${encodeURIComponent(organizationSlug)}`, { headers });
+            regionAvailabilityStatus = String(response.status);
+            if (response.ok) regionAvailability = await response.json();
+          }
           const rows = [
             '## Supabase account inventory (names and public project references only)',
             '',
@@ -44,6 +52,7 @@ jobs:
             ...listed.map(project => `| ${String(project.name ?? '').replace(/[\r\n|]/g, ' ')} | \`${String(project.id ?? '')}\` | \`${String(project.organization_slug ?? project.organizationSlug ?? '')}\` | \`${String(project.organization_id ?? project.organizationId ?? '')}\` | ${String(project.region ?? 'unknown')} | ${String(project.plan ?? 'unknown')} | ${String(project.status ?? 'unknown')} |`),
             '',
             `Configured project details: ${detail ? `slug \`${String(detail.organization_slug ?? detail.organizationSlug ?? 'not returned')}\`, plan \`${String(detail.plan ?? 'not returned')}\`, status \`${String(detail.status ?? detail.status ?? 'not returned')}\`` : 'not available'}.`,
+            `Organization region availability: HTTP ${regionAvailabilityStatus}; ${Array.isArray(regionAvailability) ? `${regionAvailability.length} options returned` : regionAvailability ? 'response returned' : 'no options returned'}.`,
           ];
           if (!orgs.length) rows.push('| No organizations visible | — | — |');
           if (!listed.length) rows.push('| No projects visible | — | — | — | — | — | — |');
