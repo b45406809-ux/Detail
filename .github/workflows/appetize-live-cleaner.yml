@@ -122,8 +122,10 @@ jobs:
           appetize tap --select-text 'Cleaner' --json --quiet
           appetize inspect --select-text 'Cleaner Registration Required' --timeout 15000 --json --quiet
           appetize tap --select-text '/^Register Now$/i' --json --quiet
-          appetize inspect --select-text 'Work with Detail' --timeout 20000 --json --quiet
-          appetize tap --select-text '/^Continue$/i' --timeout 10000 --json --quiet
+          for slide in 'Work with Detail' 'Your earnings' 'When you get paid' 'Direct payments' 'Deliver with care'; do
+            appetize inspect --select-text "$slide" --timeout 15000 --json --quiet
+            appetize tap --select-text '/^Continue$/i' --timeout 10000 --json --quiet
+          done
           appetize inspect --select-text 'Become a Cleaner' --timeout 20000 --json --quiet
           appetize tap --select-text '+263 7X XXX XXXX' --timeout 10000 --json --quiet
           appetize type '0712345678' --json --quiet
