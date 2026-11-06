@@ -37,7 +37,12 @@ jobs:
           let regionAvailability = null;
           let regionAvailabilityStatus = 'unavailable';
           const organizationSlug = detail?.organization_slug ?? detail?.organizationSlug ?? configured?.organization_slug ?? configured?.organizationSlug ?? configured?.organization_id ?? configured?.organizationId;
+          let organizationDetails = null;
+          let organizationDetailsStatus = 'unavailable';
           if (organizationSlug) {
+            const orgResponse = await fetch(`https://api.supabase.com/v1/organizations/${encodeURIComponent(organizationSlug)}`, { headers });
+            organizationDetailsStatus = String(orgResponse.status);
+            if (orgResponse.ok) organizationDetails = await orgResponse.json();
             const response = await fetch(`https://api.supabase.com/v1/projects/available-regions?organization_slug=${encodeURIComponent(organizationSlug)}`, { headers });
             regionAvailabilityStatus = String(response.status);
             if (response.ok) regionAvailability = await response.json();
@@ -52,6 +57,7 @@ jobs:
             ...listed.map(project => `| ${String(project.name ?? '').replace(/[\r\n|]/g, ' ')} | \`${String(project.id ?? '')}\` | \`${String(project.organization_slug ?? project.organizationSlug ?? '')}\` | \`${String(project.organization_id ?? project.organizationId ?? '')}\` | ${String(project.region ?? 'unknown')} | ${String(project.plan ?? 'unknown')} | ${String(project.status ?? 'unknown')} |`),
             '',
             `Configured project details: ${detail ? `slug \`${String(detail.organization_slug ?? detail.organizationSlug ?? 'not returned')}\`, plan \`${String(detail.plan ?? 'not returned')}\`, status \`${String(detail.status ?? detail.status ?? 'not returned')}\`` : 'not available'}.`,
+            `Organization details: HTTP ${organizationDetailsStatus}; ${organizationDetails ? `plan \`${String(organizationDetails.plan ?? organizationDetails.subscription_plan ?? 'not returned')}\`, name \`${String(organizationDetails.name ?? 'not returned').replace(/[\r\n|]/g, ' ')}\`` : 'no organization details returned'}.`,
             `Organization region availability: HTTP ${regionAvailabilityStatus}; ${Array.isArray(regionAvailability) ? `${regionAvailability.length} options returned` : regionAvailability ? 'response returned' : 'no options returned'}.`,
           ];
           if (!orgs.length) rows.push('| No organizations visible | — | — |');
