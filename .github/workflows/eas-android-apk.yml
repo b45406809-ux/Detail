@@ -87,6 +87,7 @@ jobs:
           grep -F "kotlinVersion = '2.1.21'" android/build.gradle
           grep -F 'kotlin-gradle-plugin:2.1.21' android/build.gradle
           grep -F 'android.kotlinVersion=2.1.21' android/gradle.properties
+          grep -F 'kotlin = "2.1.21"' node_modules/@react-native/gradle-plugin/gradle/libs.versions.toml
 
       - name: Build installable Android APK on EAS
         working-directory: mobile
