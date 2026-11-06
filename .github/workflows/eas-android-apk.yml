@@ -88,6 +88,7 @@ jobs:
           grep -F 'kotlin-gradle-plugin:2.1.21' android/build.gradle
           grep -F 'android.kotlinVersion=2.1.21' android/gradle.properties
           grep -F 'kotlin = "2.1.21"' node_modules/@react-native/gradle-plugin/gradle/libs.versions.toml
+          grep -F 'return facebook::react::RawPropsParser();' node_modules/react-native-nitro-modules/cpp/views/RawPropsCompat.cpp
 
       - name: Build installable Android APK on EAS
         working-directory: mobile
