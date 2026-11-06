@@ -179,14 +179,30 @@ async function diditE2E() {
       headers: { 'content-type': 'application/json', 'x-api-key': key },
       body: JSON.stringify({ workflow_id: workflow, vendor_data: `detail-e2e-${runId}-${randomUUID()}` }),
     });
-    if (!response?.ok) return false;
+    if (!response) {
+      console.log('DIDIT_HTTP: NETWORK');
+      return false;
+    }
+    console.log(`DIDIT_HTTP: ${response.status}`);
     const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const safeDetails = [result.code, result.error, result.message, result.detail]
+        .filter((value) => typeof value === 'string')
+        .map((value) => value.replaceAll(key, '[redacted]')
+          .replaceAll(workflow, '[redacted]')
+          .replace(/[\r\n]+/g, ' ').slice(0, 180));
+      if (safeDetails.length) console.log(`DIDIT_ERROR: ${safeDetails.join(' | ')}`);
+      return false;
+    }
     const sessionUrl = result.session_url ?? result.url;
     try {
       const parsed = new URL(sessionUrl);
-      return Boolean(result.session_id) && parsed.protocol === 'https:'
+      const validSession = Boolean(result.session_id) && parsed.protocol === 'https:'
         && (parsed.hostname === 'didit.me' || parsed.hostname.endsWith('.didit.me'));
+      if (!validSession) console.log(`DIDIT_SESSION_FIELDS: id=${Boolean(result.session_id)} url=${Boolean(sessionUrl)} host=${parsed.hostname}`);
+      return validSession;
     } catch {
+      console.log(`DIDIT_SESSION_FIELDS: id=${Boolean(result.session_id)} url=${Boolean(sessionUrl)} host=INVALID`);
       return false;
     }
   });
