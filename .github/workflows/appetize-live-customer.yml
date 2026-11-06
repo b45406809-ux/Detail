@@ -94,9 +94,9 @@ jobs:
           appetize tap --select-text '/^Continue$/i' --timeout 10000 --json --quiet
           appetize inspect --select-text 'Allow permissions' --timeout 20000 --json --quiet
           appetize tap --select-text '/^Continue to App$/i' --timeout 10000 --json --quiet
-          appetize inspect appetize-results/home.json --select-text '/^Request Cleaning$/i' --timeout 25000 --json --quiet
+          appetize inspect appetize-results/home.json --select-text '/^House$/i' --timeout 25000 --json --quiet
           appetize screenshot appetize-results/home.png --json --quiet
-          appetize tap --select-text '/^Request Cleaning$/i' --json --quiet
+          appetize tap --select-text '/^House$/i' --json --quiet
           appetize inspect --select-text 'What do you need cleaned?' --timeout 15000 --json --quiet
           appetize tap --select-text 'House Cleaning' --json --quiet
           appetize tap --select-text '/^Next$/i' --json --quiet

@@ -101,7 +101,7 @@ jobs:
           appetize tap --select-text '/^Continue$/i' --timeout 10000 --json --quiet
           appetize inspect --select-text 'Allow permissions' --timeout 20000 --json --quiet
           appetize tap --select-text '/^Continue to App$/i' --timeout 10000 --json --quiet
-          appetize inspect --select-text '/^Request Cleaning$/i' --timeout 25000 --json --quiet
+          appetize inspect --select-text '/^House$/i' --timeout 25000 --json --quiet
           appetize open 'detail:///activity' --json --quiet
           appetize inspect --select-text 'Your bookings' --timeout 12000 --json --quiet
           appetize open 'detail:///messages' --json --quiet

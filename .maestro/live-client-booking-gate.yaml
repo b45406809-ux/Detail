@@ -58,9 +58,12 @@ appId: com.detail.app
     timeout: 20000
 - tapOn: "Continue to App"
 - extendedWaitUntil:
-    visible: "Request Cleaning"
+    visible: "House"
     timeout: 20000
-- tapOn: "Request Cleaning"
+- tapOn: "House"
+- extendedWaitUntil:
+    visible: "What do you need cleaned?"
+    timeout: 15000
 - tapOn: "House Cleaning"
 - tapOn: "Next"
 - scrollUntilVisible:
