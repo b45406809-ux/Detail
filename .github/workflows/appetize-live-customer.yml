@@ -148,6 +148,20 @@ jobs:
           appetize inspect --select-text 'Instant offers' --timeout 12000 --json --quiet
           appetize open 'detail:///privacy-policy' --json --quiet
           appetize inspect --select-text 'Privacy Policy' --timeout 12000 --json --quiet
+          appetize open 'detail:///customer-agreement' --json --quiet
+          appetize inspect --select-text 'Customer Agreement' --timeout 12000 --json --quiet
+          appetize open 'detail:///cleaner-agreement' --json --quiet
+          appetize inspect --select-text 'Cleaner Agreement' --timeout 12000 --json --quiet
+          appetize open 'detail:///booking/create' --json --quiet
+          appetize inspect --select-text 'What do you need cleaned?' --timeout 12000 --json --quiet
+          appetize open 'detail:///booking/offers?jobId=00000000-0000-4000-8000-000000000001' --json --quiet
+          appetize inspect --select-text 'Bids Received' --timeout 12000 --json --quiet
+          appetize open 'detail:///booking/confirmation?jobId=00000000-0000-4000-8000-000000000001' --json --quiet
+          appetize inspect --select-text 'Booking accepted' --timeout 12000 --json --quiet
+          appetize open 'detail:///job/00000000-0000-4000-8000-000000000001' --json --quiet
+          appetize inspect --select-text 'Job not found' --timeout 12000 --json --quiet
+          appetize open 'detail:///tracking/00000000-0000-4000-8000-000000000001' --json --quiet
+          appetize inspect --select-text 'Booking unavailable' --timeout 12000 --json --quiet
           echo 'LIVE_CUSTOMER_ADDITIONAL_ROUTES_RENDERED'
       - name: Clean up disposable accounts
         if: always()
