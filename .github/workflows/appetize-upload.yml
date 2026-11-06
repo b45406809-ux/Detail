@@ -10,6 +10,10 @@ on:
         description: GitHub EAS-build workflow run to fetch and upload its APK
         required: false
         type: string
+      appetize_target:
+        description: Existing Appetize app/build key to inspect without uploading another APK
+        required: false
+        type: string
   workflow_run:
     workflows:
       - Build Detail Android APK on EAS
@@ -30,10 +34,14 @@ jobs:
         env:
           SOURCE_RUN_ID: ${{ inputs.source_run_id }}
           EAS_SOURCE_RUN_ID: ${{ inputs.eas_source_run_id || github.event.workflow_run.id }}
+          APPETIZE_TARGET: ${{ inputs.appetize_target }}
         run: |
           set -euo pipefail
-          [[ -n "$SOURCE_RUN_ID" || -n "$EAS_SOURCE_RUN_ID" ]] || { echo 'Provide source_run_id or eas_source_run_id.'; exit 1; }
-          [[ -z "$SOURCE_RUN_ID" || -z "$EAS_SOURCE_RUN_ID" ]] || { echo 'Use only one APK source.'; exit 1; }
+          configured_sources=0
+          [[ -z "$SOURCE_RUN_ID" ]] || ((configured_sources+=1))
+          [[ -z "$EAS_SOURCE_RUN_ID" ]] || ((configured_sources+=1))
+          [[ -z "$APPETIZE_TARGET" ]] || ((configured_sources+=1))
+          [[ "$configured_sources" -eq 1 ]] || { echo 'Provide exactly one of source_run_id, eas_source_run_id, or appetize_target.'; exit 1; }
 
       - name: Wait for the requested APK artifact
         if: ${{ inputs.source_run_id != '' }}
@@ -102,6 +110,7 @@ jobs:
 
       - name: Find APK
         id: apk
+        if: ${{ inputs.appetize_target == '' }}
         env:
           SOURCE_RUN_ID: ${{ inputs.source_run_id }}
         run: |
@@ -114,6 +123,7 @@ jobs:
           test "${#apks[@]}" -eq 1
           echo "path=${apks[0]}" >> "$GITHUB_OUTPUT"
       - name: Upload APK to Appetize
+        if: ${{ inputs.appetize_target == '' }}
         id: upload
         uses: appetizeio/github-action-appetize@v1.1.0
         with:
@@ -123,7 +133,7 @@ jobs:
           note: Detail APK from GitHub run ${{ inputs.eas_source_run_id || inputs.source_run_id || github.event.workflow_run.id }}
       - name: Record Appetize link
         env:
-          APP_KEY: ${{ steps.upload.outputs.publicKey }}
+          APP_KEY: ${{ inputs.appetize_target || steps.upload.outputs.publicKey }}
         run: |
           test -n "$APP_KEY"
           echo "Appetize build: https://appetize.io/app/$APP_KEY" >> "$GITHUB_STEP_SUMMARY"
@@ -132,14 +142,27 @@ jobs:
       - name: Inspect the app on an Android device
         env:
           APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
-          APP_TARGET: ${{ steps.upload.outputs.publicKey }}
+          APP_TARGET: ${{ inputs.appetize_target || steps.upload.outputs.publicKey }}
         run: |
           set -euo pipefail
           mkdir -p appetize-results
-          trap 'appetize session stop --json --quiet || true' EXIT
-          appetize session start pixel7 --target "$APP_TARGET" --json --quiet > appetize-results/session.json
-          appetize inspect --json --quiet > appetize-results/inspect-result.json
-          appetize screenshot appetize-results/launch --json --quiet > appetize-results/screenshot-result.json
+          SESSION_ID="detail-${GITHUB_RUN_ID}"
+          trap 'appetize session stop --session-id "$SESSION_ID" --json --quiet || true' EXIT
+          appetize session start pixel7 --target "$APP_TARGET" --session-id "$SESSION_ID" --no-wait --json --quiet > appetize-results/session.json
+          ready=0
+          for attempt in $(seq 1 24); do
+            if appetize inspect --session-id "$SESSION_ID" --json --quiet > appetize-results/inspect-result.json 2> appetize-results/inspect-error.log; then
+              ready=1
+              break
+            fi
+            sleep 5
+          done
+          if [[ "$ready" -ne 1 ]]; then
+            cat appetize-results/inspect-error.log >&2
+            echo 'Appetize device did not become inspectable within two minutes.' >&2
+            exit 1
+          fi
+          appetize screenshot appetize-results/launch --session-id "$SESSION_ID" --json --quiet > appetize-results/screenshot-result.json
       - name: Save Appetize inspection evidence
         if: always()
         uses: actions/upload-artifact@v4
