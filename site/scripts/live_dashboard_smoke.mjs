@@ -1,12 +1,11 @@
 import { chromium } from 'playwright';
-import { mkdir } from 'node:fs/promises';
 
 const dashboardUrl = process.env.DASHBOARD_URL || 'https://dashboard.detailapp.co.zw/admin';
 const publicUrl = process.env.PUBLIC_SITE_URL || 'https://detailapp.co.zw';
 const blogUrl = process.env.BLOG_URL || 'https://blog.detailapp.co.zw';
 const email = process.env.E2E_ADMIN_EMAIL;
 const password = process.env.E2E_ADMIN_PASSWORD;
-if (!email || !password) throw new Error('Set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD in the workflow secrets.');
+if (!!email !== !!password) throw new Error('Provide both administrator credentials or neither.');
 
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
@@ -60,14 +59,21 @@ try {
     }
   });
 
-  const loginOk = await check('admin password sign-in without MFA', async () => {
+  const loginPageOk = await check('admin sign-in screen', async () => {
     await page.goto(dashboardUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
     await page.getByRole('heading', { name: 'Admin sign in', exact: true }).waitFor({ state: 'visible', timeout: 30000 });
+    await page.getByLabel('Email').waitFor({ state: 'visible' });
+    await page.getByLabel('Password').waitFor({ state: 'visible' });
+  });
+
+  let loginOk = false;
+  if (email && password && loginPageOk) loginOk = await check('admin password sign-in without MFA', async () => {
     await page.getByLabel('Email').fill(email);
     await page.getByLabel('Password').fill(password);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await page.getByRole('heading', { name: 'Overview', exact: true }).waitFor({ state: 'visible', timeout: 45000 });
   });
+  else if (loginPageOk) console.log('BLOCKED authenticated dashboard journeys require isolated administrator fixtures; production credentials are not submitted.');
 
   if (loginOk) {
     const routes = [
@@ -102,8 +108,6 @@ try {
 
   if (runtimeErrors.length) failures.push(`browser runtime errors: ${runtimeErrors.slice(0, 5).join(' | ')}`);
   if (failures.length) {
-    await mkdir('test-results', { recursive: true });
-    await page.screenshot({ path: 'test-results/dashboard-failure.png', fullPage: true }).catch(() => undefined);
     console.error(`LIVE_DASHBOARD_SMOKE_FAILED (${failures.length}):\n- ${failures.join('\n- ')}`);
     process.exitCode = 1;
   } else {

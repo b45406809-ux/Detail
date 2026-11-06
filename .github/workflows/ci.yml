@@ -28,35 +28,20 @@ jobs:
           cache-dependency-path: site/package-lock.json
       - name: Validate waitlist migration utility
         run: python -c "compile(open('scripts/migrate_cloudflare_waitlist_to_supabase.py').read(), 'scripts/migrate_cloudflare_waitlist_to_supabase.py', 'exec')"
+      - name: Test QA fixture isolation and pool definitions
+        run: node --test qa/qa-fixture-pool.test.mjs
       - run: npm ci --prefix site --no-audit --no-fund
       - run: npm run build --prefix site
         env:
           VITE_SUPABASE_URL: https://example.supabase.co
           VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
           VITE_TURNSTILE_SITE_KEY: ci-placeholder-turnstile-key
-      - name: Install Playwright for read-only production UI checks
-        run: npm install --prefix site --no-save --package-lock=false --no-audit --no-fund playwright
       - name: Install Chromium for Playwright
         working-directory: site
         run: npx playwright install --with-deps chromium
-      - name: Smoke-test public site, blog, and every dashboard module
+      - name: Smoke-test public pages and dashboard sign-in screen
         working-directory: site
-        env:
-          E2E_ADMIN_EMAIL: ${{ secrets.INITIAL_ADMIN_EMAIL }}
-          E2E_ADMIN_PASSWORD: ${{ secrets.INITIAL_ADMIN_PASSWORD }}
-        run: |
-          set -euo pipefail
-          test -n "$E2E_ADMIN_EMAIL"
-          test -n "$E2E_ADMIN_PASSWORD"
-          node scripts/live_dashboard_smoke.mjs
-      - name: Upload dashboard failure screenshot
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: dashboard-playwright-failure-${{ github.run_id }}
-          path: site/test-results/dashboard-failure.png
-          if-no-files-found: ignore
-          retention-days: 7
+        run: node scripts/live_dashboard_smoke.mjs
       - name: Verify link preview and routing artifacts
         run: |
           test -f site/dist/index.html
@@ -135,6 +120,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
@@ -145,6 +135,32 @@ jobs:
         run: |
           supabase start
           supabase db reset --local
+      - name: Create and verify the synthetic QA fixture pool
+        env:
+          QA_RUN_ID: ${{ github.run_id }}
+          RUNNER_TEMP: ${{ runner.temp }}
+        run: node scripts/run_local_qa_fixture_pool.mjs create
+      - name: Install dashboard browser test dependencies
+        run: |
+          npm ci --prefix site --no-audit --no-fund
+          (cd site && npx playwright install --with-deps chromium)
+      - name: Build dashboard against the isolated local Supabase backend
+        run: VITE_SUPABASE_URL="$SUPABASE_TEST_URL" VITE_SUPABASE_ANON_KEY="$SUPABASE_TEST_ANON_KEY" npm run build --prefix site
+      - name: Run authenticated dashboard journeys against synthetic local fixtures
+        env:
+          QA_RUN_ID: ${{ github.run_id }}
+          LOCAL_DASHBOARD_URL: http://127.0.0.1:4173
+        run: |
+          set -euo pipefail
+          npm run preview --prefix site -- --host 127.0.0.1 --port 4173 > "$RUNNER_TEMP/detail-dashboard-preview.log" 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:4173/admin >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:4173/admin >/dev/null
+          node site/scripts/local_dashboard_qa.mjs
       - name: Run database security invariant tests
         run: supabase test db --local
       - name: Lint local database schema
@@ -153,6 +169,20 @@ jobs:
         run: deno check --config supabase/functions/deno.json supabase/functions/*/index.ts
       - name: Test Supabase session authentication checks
         run: deno test --config supabase/functions/deno.json supabase/functions/_shared/*_test.ts
+      - name: Clean up local QA fixture pool
+        if: always()
+        env:
+          QA_RUN_ID: ${{ github.run_id }}
+          RUNNER_TEMP: ${{ runner.temp }}
+        run: node scripts/run_local_qa_fixture_pool.mjs cleanup
       - name: Stop local Supabase
         if: always()
         run: supabase stop --no-backup
+      - name: Save redacted fixture cleanup report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-fixture-cleanup-${{ github.run_id }}
+          path: ${{ runner.temp }}/detail-qa-fixtures-${{ github.run_id }}-cleanup.json
+          if-no-files-found: ignore
+          retention-days: 3

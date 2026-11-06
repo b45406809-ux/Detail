@@ -1,0 +1,20 @@
+# Beta validation evidence index v2
+
+Run: `2026-11-06-follow-up`
+
+| Evidence ID | Link / artifact | Pinned target | Result | What it proves |
+| --- | --- | --- | --- | --- |
+| EV-001 | [EAS APK](https://expo.dev/artifacts/eas/BPJYOZS0HFlY2eLZg3fvgdIhh7EJGpp80gXpxmrstXU.apk) | Build `1858f342-02c5-41ad-9672-255b9b22b9e6`, commit `dedbb98c7fc71d442d4cad47c9178a4c989189e3` | Available | Exact baseline APK supplied for reuse; does not prove functionality. |
+| EV-002 | [Appetize build target](https://appetize.io/app/du2xyaxoiakaw57cecgor2jfd4) | Build target `du2xyaxoiakaw57cecgor2jfd4`; uploaded from the exact EAS build in EV-001 | Pass | Inventory returned this target; upload run `42151995163` resolved EAS build `1858f342-02c5-41ad-9672-255b9b22b9e6` before upload. |
+| EV-003 | [Appetize inspection](https://github.com/b45406809-ux/Detail/actions/runs/42152586430) | Workflow commit `795265bc4e1d2391a0d57bf6b73487149761a5d8` | Limited pass | Device became inspectable and screenshot was captured. No business flow was exercised. |
+| EV-004 | [Validate Detail](https://github.com/b45406809-ux/Detail/actions/runs/42152571405) | Commit `795265bc4e1d2391a0d57bf6b73487149761a5d8` | Fail | Mobile checks, SQL/Edge Function checks and public pages pass; admin dashboard sign-in check fails before Overview. |
+| EV-005 | [Redacted configuration presence/gates](https://github.com/b45406809-ux/Detail/actions/runs/42156279990) | Commit `795265bc4e1d2391a0d57bf6b73487149761a5d8` | Pass, read-only | The staging public URL/key are absent, production booking is enabled, and current production booking-creation, bid-acceptance and payment operation switches are off. |
+| EV-006 | [Appetize build inventory](https://github.com/b45406809-ux/Detail/actions/runs/42156904686) | Commit `b59de76bb7256e55aefe43cc54c93139e7896b59` | Pass | Retrieved the exact Android target ID and creation time without starting a device. |
+| EV-007 | [Pinned Android baseline UI smoke](https://github.com/b45406809-ux/Detail/actions/runs/42157557370) | Appetize `du2xyaxoiakaw57cecgor2jfd4`, EAS `1858f342-02c5-41ad-9672-255b9b22b9e6`, source `dedbb98c7fc71d442d4cad47c9178a4c989189e3` | Pass, screen smoke only | Welcome, sign-in and create-account form controls rendered on the pinned APK. No account or backend record was created. Screenshots and inspect trees are in the run artifact. |
+| EV-008 | Read-only local Playwright run | Branch commit pending push; pinned script `site/scripts/live_dashboard_smoke.mjs`, Playwright `1.65.0` | Pass, limited | Homepage, privacy page, terms page, public blog listing and production admin sign-in screen passed. Run explicitly reported authenticated dashboard journeys blocked and did not submit production credentials. No screenshot or personal data artifact was created. |
+| EV-009 | QA isolation and staging profile tests | Current branch worktree; Node test runner | Pass, 10/10 | Five QA fixture isolation/pool tests and five staging/production EAS profile guard tests passed. |
+| EV-010 | Site build | Current branch worktree; `site/package-lock.json` | Pass | TypeScript and Vite production build completed with CI placeholder credentials. Vite reported the dashboard bundle exceeds 500 kB; no performance measurement was taken. |
+| EV-011 | Authenticated local dashboard journey harness | `site/scripts/local_dashboard_qa.mjs`; local Supabase only | Not run | Wired into the Supabase CI job; awaiting run on this commit. It creates/revokes an invite, checks persistence and audit rows, and confirms a restricted admin is denied without a partial invite. |
+| EV-012 | Isolated Supabase project provision attempt | [GitHub Actions run 42158264488](https://github.com/b45406809-ux/Detail/actions/runs/42158264488) | Blocked | Supabase management API returned HTTP 403. No project was created. Production database was not modified. |
+
+Store screenshots, recordings and logs only as GitHub artifacts with short retention. Redact names, email addresses, phones, precise locations, auth codes, tokens and provider references before indexing.
