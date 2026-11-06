@@ -1,5 +1,5 @@
 diff --git a/node_modules/react-native-nitro-google-signin/android/build.gradle b/node_modules/react-native-nitro-google-signin/android/build.gradle
-index 80c8715..94346a3 100644
+index 80c8715..1cf87f0 100644
 --- a/node_modules/react-native-nitro-google-signin/android/build.gradle
 +++ b/node_modules/react-native-nitro-google-signin/android/build.gradle
 @@ -153,7 +153,7 @@ dependencies {
@@ -33,3 +33,71 @@ index b681a41..f3f0db3 100644
 +    }
    }
  }
+diff --git a/node_modules/react-native-nitro-google-signin/nitrogen/generated/android/NitroGoogleSignin+autolinking.cmake b/node_modules/react-native-nitro-google-signin/nitrogen/generated/android/NitroGoogleSignin+autolinking.cmake
+index 64ff5a9..337de68 100644
+--- a/node_modules/react-native-nitro-google-signin/nitrogen/generated/android/NitroGoogleSignin+autolinking.cmake
++++ b/node_modules/react-native-nitro-google-signin/nitrogen/generated/android/NitroGoogleSignin+autolinking.cmake
+@@ -33,12 +33,8 @@ target_sources(
+   # Autolinking Setup
+   ../nitrogen/generated/android/NitroGoogleSigninOnLoad.cpp
+   # Shared Nitrogen C++ sources
+-  ../nitrogen/generated/shared/c++/HybridGoogleSignInButtonSpec.cpp
+-  ../nitrogen/generated/shared/c++/views/HybridGoogleSignInButtonComponent.cpp
+   ../nitrogen/generated/shared/c++/HybridNitroGoogleSigninSpec.cpp
+   # Android-specific Nitrogen C++ sources
+-  ../nitrogen/generated/android/c++/JHybridGoogleSignInButtonSpec.cpp
+-  ../nitrogen/generated/android/c++/views/JHybridGoogleSignInButtonStateUpdater.cpp
+   ../nitrogen/generated/android/c++/JHybridNitroGoogleSigninSpec.cpp
+   ../nitrogen/generated/android/c++/JVariant_NullType_OneTapSuccessData.cpp
+   ../nitrogen/generated/android/c++/JVariant_NullType_String.cpp
+diff --git a/node_modules/react-native-nitro-google-signin/nitrogen/generated/android/NitroGoogleSigninOnLoad.cpp b/node_modules/react-native-nitro-google-signin/nitrogen/generated/android/NitroGoogleSigninOnLoad.cpp
+index d9c94f7..3e296a3 100644
+--- a/node_modules/react-native-nitro-google-signin/nitrogen/generated/android/NitroGoogleSigninOnLoad.cpp
++++ b/node_modules/react-native-nitro-google-signin/nitrogen/generated/android/NitroGoogleSigninOnLoad.cpp
+@@ -15,9 +15,7 @@
+ #include <fbjni/fbjni.h>
+ #include <NitroModules/HybridObjectRegistry.hpp>
+ 
+-#include "JHybridGoogleSignInButtonSpec.hpp"
+ #include "JFunc_void.hpp"
+-#include "views/JHybridGoogleSignInButtonStateUpdater.hpp"
+ #include "JHybridNitroGoogleSigninSpec.hpp"
+ #include <NitroModules/DefaultConstructableObject.hpp>
+ 
+@@ -37,23 +35,13 @@ struct JHybridNitroGoogleSigninSpecImpl: public jni::JavaClass<JHybridNitroGoogl
+     return javaPart->getJHybridNitroGoogleSigninSpec();
+   }
+ };
+-struct JHybridGoogleSignInButtonSpecImpl: public jni::JavaClass<JHybridGoogleSignInButtonSpecImpl, JHybridGoogleSignInButtonSpec::JavaPart> {
+-  static constexpr auto kJavaDescriptor = "Lcom/nitrogooglesignin/HybridGoogleSignInButton;";
+-  static std::shared_ptr<JHybridGoogleSignInButtonSpec> create() {
+-    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridGoogleSignInButtonSpecImpl::javaobject()>();
+-    jni::local_ref<JHybridGoogleSignInButtonSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+-    return javaPart->getJHybridGoogleSignInButtonSpec();
+-  }
+-};
+ 
+ void registerAllNatives() {
+   using namespace margelo::nitro;
+   using namespace margelo::nitro::nitrogooglesignin;
+ 
+   // Register native JNI methods
+-  margelo::nitro::nitrogooglesignin::JHybridGoogleSignInButtonSpec::CxxPart::registerNatives();
+   margelo::nitro::nitrogooglesignin::JFunc_void_cxx::registerNatives();
+-  margelo::nitro::nitrogooglesignin::views::JHybridGoogleSignInButtonStateUpdater::registerNatives();
+   margelo::nitro::nitrogooglesignin::JHybridNitroGoogleSigninSpec::CxxPart::registerNatives();
+ 
+   // Register Nitro Hybrid Objects
+@@ -63,12 +51,6 @@ void registerAllNatives() {
+       return JHybridNitroGoogleSigninSpecImpl::create();
+     }
+   );
+-  HybridObjectRegistry::registerHybridObjectConstructor(
+-    "GoogleSignInButton",
+-    []() -> std::shared_ptr<HybridObject> {
+-      return JHybridGoogleSignInButtonSpecImpl::create();
+-    }
+-  );
+ }
+ 
+ } // namespace margelo::nitro::nitrogooglesignin

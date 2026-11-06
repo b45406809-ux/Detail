@@ -89,6 +89,7 @@ jobs:
           grep -F 'android.kotlinVersion=2.1.21' android/gradle.properties
           grep -F 'kotlin = "2.1.21"' node_modules/@react-native/gradle-plugin/gradle/libs.versions.toml
           grep -F 'return facebook::react::RawPropsParser();' node_modules/react-native-nitro-modules/cpp/views/RawPropsCompat.cpp
+          ! grep -F 'HybridGoogleSignInButtonComponent.cpp' node_modules/react-native-nitro-google-signin/nitrogen/generated/android/NitroGoogleSignin+autolinking.cmake
 
       - name: Build installable Android APK on EAS
         working-directory: mobile
