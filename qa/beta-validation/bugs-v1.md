@@ -12,7 +12,7 @@ Run: `2026-11-06-baseline`. Status is **Open** until a fix commit and a passing 
 | --- | --- | --- | --- |
 | BLK-001 | Open | Current production Supabase is not proven test-only; booking creation is ON. | Configuration check `42156279990`. Do not use it for marketplace writes. Provision or verify a separate backend. |
 | BLK-002 | Open | No staging Supabase URL or public key is configured in the protected GitHub production environment. | Configuration check `42156279990`; inspect available Supabase management access and provision a separate project. |
-| BLK-003 | Open | The supplied Appetize identifier is an app key; its immutable build ID is not in the inspection evidence. | Inventory existing Appetize builds, map to EAS `1858f342-02c5-41ad-9672-255b9b22b9e6`, and pin test sessions to that build ID. |
+| BLK-003 | Resolved | The supplied Appetize target was verified against the EAS APK upload workflow. | Inventory `42156904686`; upload run `42151995163` resolved EAS `1858f342-02c5-41ad-9672-255b9b22b9e6` then uploaded it as target `du2xyaxoiakaw57cecgor2jfd4`. |
 | BLK-004 | Open | No iOS simulator or signed physical-device candidate is pinned. | Create simulator EAS profile; confirm signing/device access for the guided iPhone checks. |
 | BLK-005 | Open | Paynow sandbox credentials are not configured in the production GitHub environment. | Configuration check `42156279990`; obtain sandbox credentials or keep provider lifecycle blocked. Never use live payment credentials. |
 

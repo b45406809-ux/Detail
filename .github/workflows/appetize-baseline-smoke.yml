@@ -1,0 +1,86 @@
+name: Pinned Android baseline UI smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      appetize_build_id:
+        description: Immutable Appetize target ID; never select the newest build implicitly
+        required: true
+        type: string
+      eas_build_id:
+        description: EAS build ID represented by this immutable Appetize target
+        required: true
+        type: string
+      source_commit:
+        description: Full 40-character source commit used for that EAS build
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  android-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+      APPETIZE_BUILD_ID: ${{ inputs.appetize_build_id }}
+      EAS_BUILD_ID: ${{ inputs.eas_build_id }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --global @appetize/cli@0.25.1 --no-audit --no-fund
+      - name: Validate the explicitly pinned Android target
+        run: |
+          set -euo pipefail
+          test -n "$APPETIZE_API_TOKEN"
+          [[ "$APPETIZE_BUILD_ID" =~ ^[a-z0-9]{20,32}$ ]]
+          [[ "$EAS_BUILD_ID" =~ ^[0-9a-f-]{36}$ ]]
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          appetize build list --app com.detail.app --limit 200 --json --quiet > "$RUNNER_TEMP/appetize-builds.json"
+          APPETIZE_BUILD_ID="$APPETIZE_BUILD_ID" node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises';
+          const { builds = [] } = JSON.parse(await readFile(`${process.env.RUNNER_TEMP}/appetize-builds.json`, 'utf8'));
+          const target = builds.find(build => build.id === process.env.APPETIZE_BUILD_ID);
+          if (!target) throw new Error('The requested Appetize build ID is not available for com.detail.app.');
+          if (target.platform !== 'android') throw new Error('The requested Appetize target is not Android.');
+          console.log(`PINNED_APPETIZE_TARGET: ${target.id}`);
+          console.log(`PINNED_APPETIZE_CREATED: ${target.createdAt || target.created || 'unknown'}`);
+          NODE
+          {
+            echo '## Pinned Android baseline UI smoke'
+            echo
+            echo "- Appetize build ID: \`$APPETIZE_BUILD_ID\`"
+            echo "- EAS build ID: \`$EAS_BUILD_ID\`"
+            echo "- Source commit: \`$SOURCE_COMMIT\`"
+            echo '- Backend writes: none; this smoke stops before sign-in or submission.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Inspect welcome, sign-in, and create-account forms without submitting
+        run: |
+          set -euo pipefail
+          mkdir -p appetize-results
+          SESSION_ID="detail-baseline-${GITHUB_RUN_ID}"
+          trap 'appetize session stop --session-id "$SESSION_ID" --json --quiet || true' EXIT
+          appetize session start pixel7 --target "$APPETIZE_BUILD_ID" --session-id "$SESSION_ID" --json --quiet > appetize-results/session.json
+          appetize inspect appetize-results/01-welcome.json --session-id "$SESSION_ID" --select-test-id welcome-skip --timeout 25000 --json --quiet
+          appetize screenshot appetize-results/01-welcome.png --session-id "$SESSION_ID" --json --quiet
+          appetize tap --session-id "$SESSION_ID" --select-test-id welcome-skip --json --quiet
+          appetize inspect appetize-results/02-sign-in.json --session-id "$SESSION_ID" --select-text 'Welcome back' --timeout 20000 --json --quiet
+          appetize screenshot appetize-results/02-sign-in.png --session-id "$SESSION_ID" --json --quiet
+          appetize tap --session-id "$SESSION_ID" --select-test-id auth-account-mode-toggle --timeout 15000 --json --quiet
+          appetize inspect appetize-results/03-create-account.json --session-id "$SESSION_ID" --select-text 'Join Detail' --timeout 15000 --json --quiet
+          appetize inspect appetize-results/04-email-input.json --session-id "$SESSION_ID" --select-test-id auth-email-input --timeout 10000 --json --quiet
+          appetize inspect appetize-results/05-password-input.json --session-id "$SESSION_ID" --select-test-id auth-password-input --timeout 10000 --json --quiet
+          appetize screenshot appetize-results/03-create-account.png --session-id "$SESSION_ID" --json --quiet
+          echo 'ANDROID_BASELINE_AUTH_FORMS_VISIBLE; NO ACCOUNT SUBMITTED' >> "$GITHUB_STEP_SUMMARY"
+      - name: Save redacted baseline UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-baseline-${{ github.run_id }}
+          path: appetize-results/
+          if-no-files-found: ignore
+          retention-days: 7

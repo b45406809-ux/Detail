@@ -1,0 +1,52 @@
+name: Supabase project inventory (read only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+    steps:
+      - name: List organizations and projects without reading user data
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+          const headers = { authorization: `Bearer ${process.env.SUPABASE_ACCESS_TOKEN}` };
+          async function read(path) {
+            const response = await fetch(`https://api.supabase.com/v1${path}`, { headers });
+            if (!response.ok) throw new Error(`Supabase Management API failed (HTTP ${response.status}) at ${path}.`);
+            return response.json();
+          }
+          const organizations = await read('/organizations');
+          const projects = await read('/projects');
+          const orgs = Array.isArray(organizations) ? organizations : organizations.data ?? [];
+          const listed = Array.isArray(projects) ? projects : projects.data ?? [];
+          const rows = [
+            '## Supabase account inventory (names and public project references only)',
+            '',
+            '| Organization | Organization ID | Plan |', '| --- | --- | --- |',
+            ...orgs.map(org => `| ${String(org.name ?? '').replace(/[\r\n|]/g, ' ')} | \`${String(org.id ?? '')}\` | ${String(org.plan ?? 'unknown')} |`),
+            '',
+            '| Project | Project ref | Organization ID | Region | Status |', '| --- | --- | --- | --- | --- |',
+            ...listed.map(project => `| ${String(project.name ?? '').replace(/[\r\n|]/g, ' ')} | \`${String(project.id ?? '')}\` | \`${String(project.organization_id ?? project.organizationId ?? '')}\` | ${String(project.region ?? 'unknown')} | ${String(project.status ?? 'unknown')} |`),
+          ];
+          if (!orgs.length) rows.push('| No organizations visible | — | — |');
+          if (!listed.length) rows.push('| No projects visible | — | — | — | — |');
+          const output = rows.join('\n') + '\n';
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, output);
+          process.stdout.write(output);
+          const target = process.env.SUPABASE_PROJECT_REF;
+          if (target && !listed.some(project => project.id === target)) {
+            throw new Error('Configured production project reference was not found in the accessible project inventory.');
+          }
+          NODE

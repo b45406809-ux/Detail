@@ -10,8 +10,7 @@ Run: `2026-11-06-baseline`
 | Baseline source commit | `dedbb98c7fc71d442d4cad47c9178a4c989189e3` | Pass |
 | Baseline Android EAS build | `1858f342-02c5-41ad-9672-255b9b22b9e6` | Pass; artifact URL supplied by owner |
 | Baseline Android APK | `https://expo.dev/artifacts/eas/BPJYOZS0HFlY2eLZg3fvgdIhh7EJGpp80gXpxmrstXU.apk` | Pass; existing artifact |
-| Appetize app | `du2xyaxoiakaw57cecgor2jfd4` | Pass; app key, not immutable build ID |
-| Appetize build ID | Pending inventory from Appetize API | Blocked; no functional run may select “latest” |
+| Appetize Android build target | `du2xyaxoiakaw57cecgor2jfd4` | Pass; inventory run `42156904686`; upload run `42151995163` resolved the exact EAS build before upload |
 | Backend | Production Supabase | Blocked for writes; booking is enabled and no test-only boundary is configured |
 | Isolated backend | No staging URL/key configured | Blocked pending isolated project provisioning |
 | iOS candidate | None pinned | Not run |
@@ -47,7 +46,8 @@ Every row describes one area; case details follow the approved plan. Evidence an
 
 | Evidence | Result | Scope |
 | --- | --- | --- |
-| [Appetize inspection workflow](https://github.com/b45406809-ux/Detail/actions/runs/42152586430) | Pass, limited | Device became inspectable and captured a screenshot on the app key; not a functional flow and not pinned to a retrieved Appetize build ID |
+| [Appetize build inventory](https://github.com/b45406809-ux/Detail/actions/runs/42156904686) | Pass | Target `du2xyaxoiakaw57cecgor2jfd4` was created by the upload run for the exact EAS build; no device session or backend write |
+| [Appetize inspection workflow](https://github.com/b45406809-ux/Detail/actions/runs/42152586430) | Pass, limited | Device became inspectable and captured a screenshot. No business flow was exercised. |
 | [Validate Detail CI](https://github.com/b45406809-ux/Detail/actions/runs/42152571405) | Fail | Mobile checks and Supabase database/Edge Function checks passed; public site passed; dashboard admin password sign-in did not reach Overview |
 | [Configuration check](https://github.com/b45406809-ux/Detail/actions/runs/42156279990) | Pass, read-only | Staging URL/key absent; production booking gate ON; write/payment operations gated OFF |
 
