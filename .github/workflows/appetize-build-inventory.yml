@@ -1,0 +1,38 @@
+name: Appetize build inventory
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: List immutable Appetize targets without starting a device
+        run: |
+          set -euo pipefail
+          test -n "$APPETIZE_API_TOKEN"
+          npm install --global @appetize/cli@0.25.1 --no-audit --no-fund
+          appetize build list --app com.detail.app --json --quiet > "$RUNNER_TEMP/appetize-builds.json"
+          node --input-type=module <<'NODE'
+          import { readFile, appendFile } from 'node:fs/promises';
+          const parsed = JSON.parse(await readFile(`${process.env.RUNNER_TEMP}/appetize-builds.json`, 'utf8'));
+          const builds = parsed.builds ?? [];
+          const rows = ['## Appetize immutable build targets', '', 'No device sessions were started. Choose a build ID explicitly for every subsequent test.', '', '| Build ID | Created | Platform | Package | Note |', '| --- | --- | --- | --- | --- |'];
+          for (const build of builds) {
+            const clean = (value, max = 100) => String(value ?? '').replace(/[\r\n|]/g, ' ').slice(0, max);
+            rows.push(`| \`${clean(build.id, 120)}\` | ${clean(build.createdAt || build.created || build.updatedAt, 40)} | ${clean(build.platform, 20)} | ${clean(build.packageName || build.bundleId, 60)} | ${clean(build.note)} |`);
+          }
+          if (!builds.length) rows.push('| — | — | — | — | No builds returned |');
+          const out = rows.join('\n') + '\n';
+          await appendFile(process.env.GITHUB_STEP_SUMMARY, out);
+          process.stdout.write(out);
+          NODE
