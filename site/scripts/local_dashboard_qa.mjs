@@ -1,6 +1,6 @@
 import { chromium } from 'playwright';
 
-const baseUrl = process.env.LOCAL_DASHBOARD_URL || 'http://127.0.0.1:4173';
+const baseUrl = process.env.LOCAL_DASHBOARD_URL || 'http://localhost:4173';
 const supabaseUrl = process.env.SUPABASE_TEST_URL?.replace(/\/+$/, '');
 const anonKey = process.env.SUPABASE_TEST_ANON_KEY;
 const serviceKey = process.env.SUPABASE_TEST_SERVICE_ROLE_KEY;
