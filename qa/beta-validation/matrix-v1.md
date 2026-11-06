@@ -22,6 +22,7 @@ Every row describes one area; case details follow the approved plan. Evidence an
 | ID | Area and required checks | Android | iOS | Backend evidence required |
 | --- | --- | --- | --- | --- |
 | AUTH-01 | Customer and cleaner registration, email verification, password/code login, wrong/expired/reused codes, recovery, logout, restore/expiry, Google/Apple where offered | Blocked | Blocked | Auth users, verified status, session/revocation state |
+| AUTH-00 | Welcome, sign-in and create-account screens; email/password controls visible on exact baseline target | Pass, screen smoke only | Not run | No account submitted; does not establish registration, login or persistence |
 | ONB-01 | Splash, customer/cleaner onboarding, commission configuration agreement | Not run | Not run | Persisted profile/role and matching commission setting |
 | PERM-01 | Camera, library, location, notification allow/deny/permanent denial/settings recovery | Blocked | Blocked | Permission-dependent action state; physical device evidence |
 | NAV-01 | Tabs, controls, dialogs, back, keyboard, empty/loading/error, deep links, long names, small/large text | Blocked | Blocked | State after navigation and account-switch isolation |

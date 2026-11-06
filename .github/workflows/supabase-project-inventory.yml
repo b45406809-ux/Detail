@@ -31,17 +31,22 @@ jobs:
           const projects = await read('/projects');
           const orgs = Array.isArray(organizations) ? organizations : organizations.data ?? [];
           const listed = Array.isArray(projects) ? projects : projects.data ?? [];
+          const configuredRef = process.env.SUPABASE_PROJECT_REF;
+          const configured = configuredRef ? listed.find(project => project.id === configuredRef) : null;
+          const detail = configured ? await read(`/projects/${encodeURIComponent(configuredRef)}`) : null;
           const rows = [
             '## Supabase account inventory (names and public project references only)',
             '',
             '| Organization | Organization ID | Plan |', '| --- | --- | --- |',
             ...orgs.map(org => `| ${String(org.name ?? '').replace(/[\r\n|]/g, ' ')} | \`${String(org.id ?? '')}\` | ${String(org.plan ?? 'unknown')} |`),
             '',
-            '| Project | Project ref | Organization ID | Region | Status |', '| --- | --- | --- | --- | --- |',
-            ...listed.map(project => `| ${String(project.name ?? '').replace(/[\r\n|]/g, ' ')} | \`${String(project.id ?? '')}\` | \`${String(project.organization_id ?? project.organizationId ?? '')}\` | ${String(project.region ?? 'unknown')} | ${String(project.status ?? 'unknown')} |`),
+            '| Project | Project ref | Organization slug | Organization ID | Region | Plan | Status |', '| --- | --- | --- | --- | --- | --- | --- |',
+            ...listed.map(project => `| ${String(project.name ?? '').replace(/[\r\n|]/g, ' ')} | \`${String(project.id ?? '')}\` | \`${String(project.organization_slug ?? project.organizationSlug ?? '')}\` | \`${String(project.organization_id ?? project.organizationId ?? '')}\` | ${String(project.region ?? 'unknown')} | ${String(project.plan ?? 'unknown')} | ${String(project.status ?? 'unknown')} |`),
+            '',
+            `Configured project details: ${detail ? `slug \`${String(detail.organization_slug ?? detail.organizationSlug ?? 'not returned')}\`, plan \`${String(detail.plan ?? 'not returned')}\`, status \`${String(detail.status ?? detail.status ?? 'not returned')}\`` : 'not available'}.`,
           ];
           if (!orgs.length) rows.push('| No organizations visible | — | — |');
-          if (!listed.length) rows.push('| No projects visible | — | — | — | — |');
+          if (!listed.length) rows.push('| No projects visible | — | — | — | — | — | — |');
           const output = rows.join('\n') + '\n';
           appendFileSync(process.env.GITHUB_STEP_SUMMARY, output);
           process.stdout.write(output);

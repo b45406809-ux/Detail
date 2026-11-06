@@ -14,6 +14,24 @@ const mapboxAccessToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
 const mapboxDownloadsToken = process.env.MAPBOX_DOWNLOADS_TOKEN;
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabasePublicKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const stagingUrl = process.env.EXPO_PUBLIC_STAGING_SUPABASE_URL;
+const stagingPublicKey = process.env.EXPO_PUBLIC_STAGING_SUPABASE_ANON_KEY;
+const isStagingProfile = process.env.EXPO_PUBLIC_APP_BUILD_PROFILE === 'staging';
+const isProductionProfile = process.env.EAS_BUILD_PROFILE === 'production'
+  || process.env.EXPO_PUBLIC_APP_BUILD_PROFILE === 'production';
+if (isProductionProfile && process.env.EXPO_PUBLIC_USE_STAGING_AUTH === 'true') {
+  throw new Error('Production EAS profiles cannot enable staging auth.');
+}
+if (isStagingProfile && process.env.EXPO_PUBLIC_USE_STAGING_AUTH !== 'true') {
+  throw new Error('Staging EAS profiles must enable EXPO_PUBLIC_USE_STAGING_AUTH.');
+}
+if (isStagingProfile && (!stagingUrl || !stagingPublicKey)) {
+  throw new Error('Staging EAS profiles require EXPO_PUBLIC_STAGING_SUPABASE_URL and EXPO_PUBLIC_STAGING_SUPABASE_ANON_KEY.');
+}
+const normalizeSupabaseUrl = (value) => value?.replace(/\/+$/, '').toLowerCase();
+if (isStagingProfile && normalizeSupabaseUrl(stagingUrl) === normalizeSupabaseUrl(supabaseUrl)) {
+  throw new Error('Staging EAS profiles must use a Supabase project separate from the production URL.');
+}
 if (process.env.EAS_BUILD_PROFILE && (!mapboxAccessToken || !mapboxDownloadsToken)) {
   throw new Error('EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN and MAPBOX_DOWNLOADS_TOKEN are required for EAS builds.');
 }
@@ -22,6 +40,12 @@ if (process.env.EAS_BUILD_PROFILE && (!supabaseUrl || !supabasePublicKey)) {
 }
 if (supabaseUrl && !/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(supabaseUrl)) {
   throw new Error('EXPO_PUBLIC_SUPABASE_URL must be the HTTPS URL of the Supabase project.');
+}
+if (stagingUrl && !/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(stagingUrl)) {
+  throw new Error('EXPO_PUBLIC_STAGING_SUPABASE_URL must be the HTTPS URL of an isolated Supabase project.');
+}
+if (stagingPublicKey && !/^(sb_publishable_[A-Za-z0-9_-]+|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/.test(stagingPublicKey)) {
+  throw new Error('EXPO_PUBLIC_STAGING_SUPABASE_ANON_KEY must be a Supabase publishable or legacy anon key.');
 }
 if (supabasePublicKey && !/^(sb_publishable_[A-Za-z0-9_-]+|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/.test(supabasePublicKey)) {
   throw new Error('EXPO_PUBLIC_SUPABASE_ANON_KEY must be a Supabase publishable or legacy anon key.');

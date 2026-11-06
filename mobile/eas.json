@@ -22,6 +22,20 @@
         "simulator": false
       }
     },
+    "staging-android": {
+      "extends": "preview",
+      "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_APP_BUILD_PROFILE": "staging",
+        "EXPO_PUBLIC_USE_STAGING_AUTH": "true"
+      },
+      "distribution": "internal",
+      "android": { "buildType": "apk" }
+    },
+    "staging-ios-simulator": {
+      "extends": "staging-android",
+      "ios": { "simulator": true }
+    },
     "production": {
       "env": { "EXPO_PUBLIC_APP_BUILD_PROFILE": "production" },
       "android": {
