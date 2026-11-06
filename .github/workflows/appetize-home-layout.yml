@@ -59,9 +59,9 @@ jobs:
           CI=1 npx expo prebuild --platform android --no-install --clean
           git checkout -- package.json
 
-      - name: Build debug APK on the GitHub Android runner
+      - name: Build release APK with the JavaScript bundle
         working-directory: mobile/android
-        run: ./gradlew --no-daemon assembleDebug
+        run: ./gradlew --no-daemon assembleRelease
 
       - name: Upload this commit to Appetize
         id: appetize
@@ -69,7 +69,7 @@ jobs:
         with:
           apiToken: ${{ secrets.APPETIZE_API_TOKEN }}
           platform: android
-          appFile: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          appFile: mobile/android/app/build/outputs/apk/release/app-release.apk
           note: Home panel layout check from ${{ github.sha }}
 
       - name: Install Appetize CLI and check production booking safety
