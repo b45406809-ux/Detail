@@ -233,7 +233,6 @@ export default function SignInScreen() {
                           keyboardType="phone-pad"
                           value={phone}
                           onChangeText={setPhone}
-                          autoFocus
                         />
                       </View>
                       <Text className="font-sans text-xs text-ink/50 font-medium mt-2 px-1">
@@ -395,8 +394,7 @@ export default function SignInScreen() {
                 )}
               </View>
 
-              <View className="mt-6 flex-row items-center gap-3"><View className="h-px bg-ink/10 flex-1" /><Text className="font-sans text-xs text-ink/50">or continue with</Text><View className="h-px bg-ink/10 flex-1" /></View>
-              <View className="mt-4">
+              <View className="mt-6">
                 <SocialSignInButtons />
               </View>
 
