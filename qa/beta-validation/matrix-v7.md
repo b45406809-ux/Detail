@@ -6,7 +6,7 @@ This supplements [matrix v6](matrix-v6.md). Android test APK build: source `f4f3
 | --- | --- | --- |
 | Google sign-in | Blocked | Nonce exchange corrected in source; actual Google login on Android and iOS remains unverified. |
 | SMS OTP | Blocked | Hook deployed and provider test accepted and received; actual Auth OTP send and verification remain unverified. |
-| Email OTP | Blocked | Code handling distinguishes signup from email OTP; reproduction and verification on the new app build remain outstanding. |
+| Email OTP | Partial pass | A disposable user registered with a real email code on the pinned Android APK; persisted onboarding and cleanup passed. The reported account-specific failure and sign-in code remain to be reproduced. |
 | Android push | Blocked | Firebase file variable supported in app configuration; configured Firebase credentials, device token registration and notification delivery are not verified. |
 | iOS push | Not run | Physical iPhone, APNs setup and delivery evidence required. |
 
