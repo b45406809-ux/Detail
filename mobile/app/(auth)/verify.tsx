@@ -16,7 +16,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
 import { IS_MOCK } from '../../utils/env';
 import { sendPhoneOTP, confirmPhoneOTP } from '../../services/phoneAuth';
-import { GlassCard } from '../../components/glass';
 
 const OTP_LENGTH = 6;
 
@@ -25,7 +24,8 @@ export default function VerifyScreen() {
   const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(''));
   const [isVerifying, setIsVerifying] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [resendTimer, setResendTimer] = useState(60);
+  const [resendTimer, setResendTimer] = useState(0);
+  const [codeSent, setCodeSent] = useState(false);
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
   const sendCode = useCallback(async () => {
@@ -34,6 +34,7 @@ export default function VerifyScreen() {
     try {
       const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`;
       await sendPhoneOTP(normalizedPhone);
+      setCodeSent(true);
       setResendTimer(60);
     } catch (err: any) {
       appAlert('Failed to Send Code', err.message ?? 'Please try again.');
@@ -108,8 +109,8 @@ export default function VerifyScreen() {
 
         <Text className="text-3xl font-display font-black text-ink tracking-tight mb-2">Enter the code</Text>
         <Text className="font-sans text-base text-ink/50 font-medium mb-10">
-          {IS_MOCK ? 'DEV mode — enter any 6 digits to continue' : `We sent a 6-digit code to\n`}
-          {!IS_MOCK && <Text className="text-ink font-display font-black">{displayPhone || phone}</Text>}
+          {IS_MOCK ? 'Enter any 6 digits to continue' : codeSent ? 'We sent a 6-digit code to\n' : 'Request a code to continue\n'}
+          {!IS_MOCK && <Text className="text-ink font-sans-bold">{displayPhone?.split(' ')[0] ?? ''} ••• {phone?.replace(/\D/g, '').slice(-4)}</Text>}
         </Text>
 
         {isSending && (
@@ -119,15 +120,15 @@ export default function VerifyScreen() {
           </View>
         )}
 
-        <GlassCard style={{ paddingVertical: 24, paddingHorizontal: 16 }}>
-          <View className="flex-row gap-3 justify-center">
+        <View className="py-5">
+          <View className="flex-row gap-2 justify-center">
             {otp.map((digit, index) => (
               <TextInput
                 key={index}
                 ref={(ref) => {
                   inputRefs.current[index] = ref;
                 }}
-                className="w-12 h-14 rounded-2xl text-center text-xl font-display font-black text-ink"
+                className="flex-1 max-w-[48px] h-14 rounded-2xl text-center text-xl font-sans-bold text-ink"
                 style={{
                   backgroundColor: digit ? 'rgba(57,6,210,0.12)' : 'rgba(15,11,46,0.03)',
                   borderWidth: 2,
@@ -143,23 +144,23 @@ export default function VerifyScreen() {
               />
             ))}
           </View>
-        </GlassCard>
+        </View>
 
         <TouchableOpacity
           onPress={() => handleVerify(otp.join(''))}
           disabled={isVerifying || !isComplete || isSending}
           activeOpacity={0.85}
-          className="w-full py-5 rounded-[28px] items-center mt-8"
+          className="w-full py-4 rounded-full items-center mt-4"
           style={{ backgroundColor: isComplete && !isSending ? '#3906D2' : 'rgba(15,11,46,0.08)' }}
         >
           {isVerifying ? (
             <ActivityIndicator color="#fff" />
           ) : (
             <Text
-              className="font-display font-black text-sm uppercase tracking-widest"
+              className="font-sans-bold text-base"
               style={{ color: isComplete && !isSending ? '#fff' : 'rgba(15,11,46,0.3)' }}
             >
-              Verify Code
+              Verify code
             </Text>
           )}
         </TouchableOpacity>

@@ -100,8 +100,16 @@ jobs:
           trap 'appetize inspect appetize-results/final.json --session-id "$session_id" --json --quiet || true; appetize screenshot appetize-results/final.png --session-id "$session_id" --json --quiet || true; appetize session stop --session-id "$session_id" --json --quiet || true' EXIT
           appetize session start pixel7 --target "$APPETIZE_TARGET" --session-id "$session_id" --json --quiet > appetize-results/session.json
           appetize inspect --session-id "$session_id" --select-test-id welcome-skip --timeout 30000 --json --quiet
-          appetize tap --session-id "$session_id" --select-test-id welcome-skip --json --quiet
+          appetize screenshot appetize-results/onboarding-1.png --session-id "$session_id" --json --quiet
+          appetize tap --session-id "$session_id" --select-test-id welcome-next --json --quiet
+          appetize inspect --session-id "$session_id" --select-text 'Compare quotes with ease' --timeout 10000 --json --quiet
+          appetize screenshot appetize-results/onboarding-2.png --session-id "$session_id" --json --quiet
+          appetize tap --session-id "$session_id" --select-test-id welcome-next --json --quiet
+          appetize inspect --session-id "$session_id" --select-text 'Stay in the loop' --timeout 10000 --json --quiet
+          appetize screenshot appetize-results/onboarding-3.png --session-id "$session_id" --json --quiet
+          appetize tap --session-id "$session_id" --select-test-id welcome-next --json --quiet
           appetize inspect --session-id "$session_id" --select-test-id auth-email-tab --timeout 20000 --json --quiet
+          appetize screenshot appetize-results/sign-in.png --session-id "$session_id" --json --quiet
           appetize tap --session-id "$session_id" --select-test-id auth-email-tab --json --quiet
           appetize tap --session-id "$session_id" --select-test-id auth-email-mode-password --json --quiet
           appetize tap --session-id "$session_id" --select-test-id auth-email-input --json --quiet

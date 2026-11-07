@@ -67,10 +67,10 @@ export default function GoogleSignInButton() {
       onPress={handleGoogleSignIn}
       disabled={isLoading}
       activeOpacity={0.85}
-      className="w-full bg-white flex-row items-center justify-center gap-3 py-4 rounded-[24px] border-2 border-ink/10"
+      className="w-full bg-white flex-row items-center justify-center gap-3 py-4 rounded-full border border-ink/20"
     >
       {isLoading ? <ActivityIndicator color="#3906D2" /> : <GoogleLogo size={18} />}
-      <Text className="font-display font-black text-sm text-ink">Continue with Google</Text>
+      <Text className="font-sans-bold text-base text-ink">Continue with Google</Text>
     </TouchableOpacity>
   );
 }

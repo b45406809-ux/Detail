@@ -369,10 +369,10 @@ export default function CreateBookingScreen() {
             <ArrowLeft size={18} color="#150256" />
           </TouchableOpacity>
           <View className="flex-1">
-            <Text className="text-xl font-display font-black text-ink">
-              Book {category === 'CAR' ? 'Car' : 'House'} Cleaning
+            <Text className="text-base font-sans-bold text-ink">
+              {step === 'CATEGORY' ? 'Book a cleaner' : `Book ${category === 'CAR' ? 'Car' : 'House'} Cleaning`}
             </Text>
-            <Text className="font-sans text-[11px] font-bold text-ink/40 uppercase tracking-widest">
+            <Text className="font-sans text-xs text-ink/50">
               Step {stepIndex + 1} of {STEPS.length}
             </Text>
           </View>
@@ -380,7 +380,7 @@ export default function CreateBookingScreen() {
 
         <View className="flex-row gap-1.5 px-5 py-3">
           {STEPS.map((s, i) => (
-            <View key={s} className={`h-1.5 flex-1 rounded-full ${stepIndex >= i ? 'bg-accent' : 'bg-ink/10'}`} />
+            <View key={s} className={`h-1 flex-1 rounded-full ${stepIndex >= i ? 'bg-accent' : 'bg-ink/10'}`} />
           ))}
         </View>
 
@@ -401,24 +401,25 @@ export default function CreateBookingScreen() {
                     onPress={() => { setCategory(id); setServiceId(''); resetDetails(); }}
                     activeOpacity={0.85}
                     className={`flex-row items-center gap-4 p-5 rounded-3xl border-2 ${
-                      category === id ? 'border-accent bg-accent/5' : 'border-ink/10 bg-ink/[0.02]'
+                      category === id ? 'border-accent bg-white' : 'border-transparent bg-ink/5'
                     }`}
                   >
                     <View className={`w-14 h-14 rounded-2xl items-center justify-center ${category === id ? 'bg-accent' : 'bg-white border border-ink/10'}`}>
                       <Icon size={26} color={category === id ? '#fff' : '#150256'} />
                     </View>
                     <View className="flex-1">
-                      <Text className={`text-base font-black ${category === id ? 'text-accent' : 'text-ink'}`}>{label}</Text>
+                      <Text className="text-base font-sans-bold text-ink">{label}</Text>
                       <Text className="font-sans text-xs text-ink/50 font-medium mt-0.5">{desc}</Text>
                     </View>
+                    {category === id && <View className="w-6 h-6 rounded-full bg-accent items-center justify-center"><Check size={14} color="#fff" /></View>}
                   </TouchableOpacity>
                 ))}
               </View>
-              <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest mt-7 mb-2">How would you like to book?</Text>
+              <Text className="text-sm font-sans text-ink/60 mt-7 mb-2">How would you like to book?</Text>
               {([
                 {id:'SCHEDULED' as const,title:'Schedule and compare quotes',copy:'Cleaners send a price for you to review.'},
                 ...(instantBookingEnabled?[{id:'INSTANT' as const,title:'Book now',copy:'Find an available nearby cleaner at the listed starting price.'}]:[]),
-              ]).map(option=><TouchableOpacity key={option.id} onPress={()=>setBookingMode(option.id)} className={`p-4 rounded-2xl border-2 mb-2 ${bookingMode===option.id?'border-accent bg-accent/5':'border-ink/10 bg-white'}`}><Text className="font-display font-black text-ink">{option.title}</Text><Text className="font-sans text-xs text-ink/50 mt-1">{option.copy}</Text></TouchableOpacity>)}
+              ]).map(option=><TouchableOpacity key={option.id} onPress={()=>setBookingMode(option.id)} className={`p-4 rounded-2xl border-2 mb-2 flex-row items-center ${bookingMode===option.id?'border-accent bg-white':'border-transparent bg-ink/5'}`}><View className="flex-1"><Text className="font-sans-bold text-ink">{option.title}</Text><Text className="font-sans text-xs text-ink/50 mt-1">{option.copy}</Text></View>{bookingMode===option.id&&<View className="w-6 h-6 rounded-full bg-accent items-center justify-center"><Check size={14} color="#fff" /></View>}</TouchableOpacity>)}
               <Text className="font-sans text-xs text-ink/50 mt-1">{bookingMode === 'SCHEDULED' ? 'Selected. Choose Next to describe the job and schedule it.' : 'Selected. Choose Next to describe the job.'}</Text>
               {!instantBookingEnabled&&<Text className="font-sans text-xs text-ink/50 mt-2">Book Now will open after service pricing and estimated cleaning times are finalized.</Text>}
             </View>
@@ -435,14 +436,14 @@ export default function CreateBookingScreen() {
                 Add notes and photos of dirty areas so cleaners know what needs cleaning and quote accurately
               </Text>
 
-              <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest mb-2">Special Instructions (Optional)</Text>
-              <TouchableOpacity onPress={()=>setSuppliesRequired(value=>!value)} className="flex-row items-center gap-3 p-4 rounded-2xl border border-ink/10 bg-white mb-5">
+              <Text className="text-sm font-sans text-ink/60 mb-2">Special instructions (optional)</Text>
+              <TouchableOpacity onPress={()=>setSuppliesRequired(value=>!value)} className="flex-row items-center gap-3 p-4 rounded-2xl bg-ink/5 mb-3">
                 <View className={`w-5 h-5 rounded border-2 items-center justify-center ${suppliesRequired?'bg-accent border-accent':'border-ink/30'}`}>{suppliesRequired&&<Check size={13} color="#fff" strokeWidth={3} />}</View>
-                <View className="flex-1"><Text className="font-display font-black text-ink">Cleaner should bring supplies</Text></View>
+                <View className="flex-1"><Text className="font-sans-bold text-ink">Cleaner should bring supplies</Text></View>
               </TouchableOpacity>
               <Text className="font-sans text-xs text-ink/60 mb-2">These notes are shared with the assigned cleaner after a booking is accepted.</Text>
               <TextInput
-                className="font-sans border-2 border-ink/10 rounded-2xl px-4 py-4 text-sm font-medium text-ink bg-ink/[0.02] mb-6"
+                className="font-sans rounded-2xl px-4 py-4 text-sm text-ink bg-ink/5 mb-6"
                 placeholder="Gate code, pets, stains to focus on, parking instructions…"
                 placeholderTextColor="#9C94C4"
                 multiline
@@ -453,8 +454,8 @@ export default function CreateBookingScreen() {
               />
 
               <View className="mb-2">
-                <Text className="text-xs font-display font-black text-ink/50 uppercase tracking-widest mb-1">
-                  Photos of What Needs Cleaning (Dirty areas & vehicle)
+                <Text className="text-sm font-sans text-ink/60 mb-1">
+                  Photos of what needs cleaning (dirty areas & vehicle)
                 </Text>
                 <Text className="font-sans text-xs text-ink/50 font-medium mb-3">
                   Upload photos of dirty rooms, stains, surfaces, pet hair, or vehicle condition ({photoUris.length}/6)
@@ -484,14 +485,14 @@ export default function CreateBookingScreen() {
                     onPress={() => pickPhoto(true)}
                     disabled={isUploadingPhoto}
                     activeOpacity={0.8}
-                    className="flex-1 py-3.5 px-4 rounded-2xl border-2 border-dashed border-accent/40 bg-accent/5 flex-row items-center justify-center gap-2"
+                    className="flex-1 py-3.5 px-4 rounded-2xl border border-dashed border-ink/20 bg-white flex-row items-center justify-center gap-2"
                   >
                     {isUploadingPhoto ? (
                       <ActivityIndicator color="#3906D2" size="small" />
                     ) : (
                       <>
                         <Camera size={18} color="#3906D2" />
-                        <Text className="text-xs font-display font-black text-accent uppercase">Take Photo</Text>
+                        <Text className="text-sm font-sans-bold text-accent">Take photo</Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -500,7 +501,7 @@ export default function CreateBookingScreen() {
                     onPress={() => pickPhoto(false)}
                     disabled={isUploadingPhoto}
                     activeOpacity={0.8}
-                    className="flex-1 py-3.5 px-4 rounded-2xl border-2 border-dashed border-ink/20 bg-ink/[0.02] flex-row items-center justify-center gap-2"
+                    className="flex-1 py-3.5 px-4 rounded-2xl border border-dashed border-ink/20 bg-white flex-row items-center justify-center gap-2"
                   >
                     {isUploadingPhoto ? (
                       <ActivityIndicator color="#3906D2" size="small" />
@@ -798,12 +799,12 @@ export default function CreateBookingScreen() {
             onPress={step === 'BUDGET' ? handleSubmit : goNext}
             disabled={!canProceed() || isSubmitting}
             activeOpacity={0.85}
-            className={`py-5 rounded-[28px] items-center ${canProceed() ? 'bg-accent shadow-lg shadow-accent/30' : 'bg-ink/10'}`}
+            className={`py-4 rounded-full items-center ${canProceed() ? 'bg-accent' : 'bg-ink/10'}`}
           >
             {isSubmitting ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text className={`font-black text-sm uppercase tracking-widest ${canProceed() ? 'text-white' : 'text-ink/30'}`}>
+              <Text className={`font-sans-bold text-base ${canProceed() ? 'text-white' : 'text-ink/30'}`}>
                 {step === 'BUDGET' ? bookingConfigStatus === 'loading' ? 'Checking availability…' : 'Submit Request' : 'Next'}
               </Text>
             )}
@@ -852,8 +853,8 @@ function ServiceChecklist({ category, serviceId, setServiceId, selections, setGr
       <Text className="text-2xl font-display font-black text-ink mb-1">{isHouse ? 'House Cleaning' : 'Car Cleaning'}</Text>
       <Text className="font-sans text-sm text-ink/50 font-medium mb-4">Choose one service to get started</Text>
       <View className="gap-3">
-        {packages.map((item) => <TouchableOpacity key={item.id} onPress={() => setServiceId(item.id)} activeOpacity={0.85} className={`p-4 rounded-3xl border-2 ${serviceId === item.id ? 'border-accent bg-accent/5' : 'border-ink/10 bg-ink/[0.02]'}`}>
-          <View className="flex-row items-center justify-between gap-3"><Text className={`flex-1 text-base font-black ${serviceId === item.id ? 'text-accent' : 'text-ink'}`}>{item.label}</Text><Text className="text-sm font-display font-black text-accent">Starting from {item.price}</Text></View>
+        {packages.map((item) => <TouchableOpacity key={item.id} onPress={() => setServiceId(item.id)} activeOpacity={0.85} className={`p-4 rounded-2xl border-2 ${serviceId === item.id ? 'border-accent bg-white' : 'border-transparent bg-ink/5'}`}>
+          <View className="flex-row items-center justify-between gap-3"><Text className="flex-1 text-base font-sans-bold text-ink">{item.label}</Text><Text className="text-sm font-sans-bold text-accent">Starting from {item.price}</Text></View>
           <Text className="font-sans text-xs text-ink/50 font-medium mt-1">{item.description}</Text>
         </TouchableOpacity>)}
       </View>
@@ -901,9 +902,9 @@ function MultiSelectGroup({ title, options, selected, onToggle, onSelectAll }: {
   const allSelected = options.length > 0 && selected.length === options.length;
   const checkbox = (checked: boolean) => <View className={`w-5 h-5 rounded-md border-2 items-center justify-center ${checked ? 'border-accent bg-accent' : 'border-ink/25 bg-white'}`}>{checked && <Check size={12} color="#fff" strokeWidth={3} />}</View>;
   return <View>
-    <Text className="text-sm font-display font-black text-ink mb-2">{title}</Text>
+    <Text className="text-sm font-sans text-ink/60 mb-2">{title}</Text>
     <View className="rounded-2xl border border-ink/10 overflow-hidden">
-      <TouchableOpacity onPress={() => onSelectAll(allSelected ? [] : options)} className="flex-row items-center gap-3 px-4 py-3 bg-accent/5 border-b border-ink/5">{checkbox(allSelected)}<Text className="text-xs font-display font-black text-accent uppercase tracking-wide">Select All</Text></TouchableOpacity>
+      <TouchableOpacity onPress={() => onSelectAll(allSelected ? [] : options)} className="flex-row items-center gap-3 px-4 py-3 bg-ink/5 border-b border-ink/5">{checkbox(allSelected)}<Text className="text-sm font-sans-bold text-accent">Select all</Text></TouchableOpacity>
       {options.map((option, index) => { const checked = selected.includes(option); return <TouchableOpacity key={option} onPress={() => onToggle(option)} className={`flex-row items-center gap-3 px-4 py-3 ${index < options.length - 1 ? 'border-b border-ink/5' : ''}`}>
         {checkbox(checked)}<Text className={`flex-1 text-sm font-medium ${checked ? 'text-ink' : 'text-ink/70'}`}>{option}</Text>
       </TouchableOpacity>; })}
