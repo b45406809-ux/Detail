@@ -62,7 +62,7 @@ jobs:
     environment: production
     timeout-minutes: 10
     env:
-      EXPO_TOKEN: ${{ secrets.EAS_BOT_TOKEN_2 || secrets.EXPO_TOKEN || secrets.EAS_BOT_ACCESS_TOKEN || secrets.EXPO_EAS_BOT_ACCESS_TOKEN }}
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN || secrets.EAS_BOT_ACCESS_TOKEN || secrets.EXPO_EAS_BOT_ACCESS_TOKEN || secrets.EAS_BOT_TOKEN_2 }}
       GITHUB_FIREBASE_FILE: ${{ secrets.GOOGLE_SERVICES_JSON || secrets.GOOGLE_SERVICES_JSON_BASE64 }}
       CI: '1'
     steps:
@@ -79,7 +79,7 @@ jobs:
           if npx --yes eas-cli@latest env:list production --scope project --format short > "$RUNNER_TEMP/detail-expo-env" 2> "$RUNNER_TEMP/detail-expo-env-error"; then
             if grep -q 'GOOGLE_SERVICES_JSON' "$RUNNER_TEMP/detail-expo-env"; then echo 'EAS_ANDROID_FIREBASE_VARIABLE: present'; else echo 'EAS_ANDROID_FIREBASE_VARIABLE: not found'; fi
           else
-            echo 'EAS_ENV_QUERY: failed'; exit 1
+            node -e 'const s=require("fs").readFileSync(process.env.RUNNER_TEMP+"/detail-expo-env-error","utf8"); console.log("EAS_ENV_QUERY: failed ("+(/permission|authoriz|forbidden|access/i.test(s)?"access":/network|fetch|connect|timeout/i.test(s)?"network":"other")+")")'
           fi
           rm -f "$RUNNER_TEMP/detail-expo-env" "$RUNNER_TEMP/detail-expo-env-error"
           node <<'NODE'

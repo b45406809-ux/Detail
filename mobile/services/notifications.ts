@@ -8,6 +8,7 @@
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import { IS_MOCK } from '../utils/env';
 
 export type NotificationTarget =
@@ -51,13 +52,13 @@ export async function getExpoPushToken(): Promise<string | null> {
     const { data } = await Notifications.getExpoPushTokenAsync({ projectId });
     return data;
   } catch (err) {
-    console.warn('Push token registration skipped:', err);
+    console.warn('Push token registration failed:', err instanceof Error ? err.name : 'unknown error');
     return null;
   }
 }
 
 export async function configureNotificationChannels() {
-  if (process.env.EXPO_OS === 'android') {
+  if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('bookings', { name: 'Booking updates', importance: Notifications.AndroidImportance.HIGH, sound: 'booking.wav', vibrationPattern: [0, 250, 150, 250], lightColor: '#3906D2' });
     await Notifications.setNotificationChannelAsync('urgent', { name: 'Payments & urgent', importance: Notifications.AndroidImportance.MAX, sound: 'urgent.wav', vibrationPattern: [0, 500, 200, 500], lightColor: '#E5484D' });
   }

@@ -9,6 +9,7 @@ import * as Notifications from 'expo-notifications';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
 import { registerCurrentPushDevice } from '../../services/pushRegistration';
+import { configureNotificationChannels } from '../../services/notifications';
 import { GlassCard } from '../../components/glass';
 
 const PERMISSIONS = [
@@ -76,6 +77,7 @@ export default function PermissionsScreen() {
   };
 
   const requestNotifications = async () => {
+    await configureNotificationChannels();
     const permission = await Notifications.requestPermissionsAsync();
     setGranted((prev) => ({ ...prev, notifications: permission.granted }));
     if (permission.granted) {

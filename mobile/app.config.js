@@ -12,6 +12,11 @@ generateNotificationSounds();
 const expo = appJson.expo;
 // EAS file variables provide the Firebase configuration without committing it.
 if (process.env.GOOGLE_SERVICES_JSON) {
+  const fs = require('fs');
+  const config = JSON.parse(fs.readFileSync(process.env.GOOGLE_SERVICES_JSON, 'utf8'));
+  if (!config.client?.some((client) => client.client_info?.android_client_info?.package_name === expo.android.package)) {
+    throw new Error('GOOGLE_SERVICES_JSON must contain a Firebase Android app matching the configured package.');
+  }
   expo.android = { ...expo.android, googleServicesFile: process.env.GOOGLE_SERVICES_JSON };
 }
 const mapboxAccessToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
@@ -73,6 +78,7 @@ expo.extra = {
   ...(expo.extra || {}),
   mapboxConfigured: Boolean(mapboxAccessToken),
   mapboxAccessToken: mapboxAccessToken || '',
+  androidPushConfigured: Boolean(process.env.GOOGLE_SERVICES_JSON),
 };
 
 module.exports = expo;

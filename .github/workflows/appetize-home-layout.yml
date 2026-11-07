@@ -20,6 +20,7 @@ jobs:
       EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_PUBLIC_ANON || secrets.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_ANON_KEY || secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
       EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || vars.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
       EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || vars.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID }}
+      FIREBASE_ANDROID_JSON: ${{ secrets.GOOGLE_SERVICES_JSON || secrets.GOOGLE_SERVICES_JSON_BASE64 }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE }}
       APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
@@ -53,6 +54,21 @@ jobs:
           test -n "$APPETIZE_API_TOKEN"
 
       - run: npm ci --prefix mobile --no-audit --no-fund
+
+      - name: Prepare optional Firebase Android configuration
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const value = process.env.FIREBASE_ANDROID_JSON;
+          if (!value) { console.log('Firebase Android configuration is not available in this workflow.'); process.exit(0); }
+          const json = value.trim().startsWith('{') ? value : Buffer.from(value, 'base64').toString('utf8');
+          const config = JSON.parse(json);
+          if (!config.client?.some(client => client.client_info?.android_client_info?.package_name === 'com.detail.app')) throw new Error('Firebase configuration does not match the Android app.');
+          const file = `${process.env.RUNNER_TEMP}/detail-google-services.json`;
+          fs.writeFileSync(file, json, { mode: 0o600 });
+          fs.appendFileSync(process.env.GITHUB_ENV, `GOOGLE_SERVICES_JSON=${file}\n`);
+          console.log('Firebase Android configuration prepared.');
+          NODE
 
       - name: Generate Android project from this commit
         working-directory: mobile

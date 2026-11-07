@@ -32,13 +32,15 @@ import {
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
-import { Linking } from 'react-native';
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { auth, clearLocalSession, signOut } from '../../services/supabase';
 import { callFunction } from '../../services/functions';
 import { stopCleanerLocationUpdates } from '../../services/locationTracking';
 import { uploadProfilePhoto } from '../../services/storage';
 import { hasCurrentPushDevice, registerCurrentPushDevice, unregisterCurrentPushDevice } from '../../services/pushRegistration';
+import { configureNotificationChannels } from '../../services/notifications';
 import { StarRating } from '../../components/StarRating';
 
 export default function ProfileScreen() {
@@ -53,9 +55,14 @@ export default function ProfileScreen() {
       catch { appAlert('Could not update notification settings', 'Please try again.'); }
       return;
     }
-    const permission = await Notifications.requestPermissionsAsync();
-    if (!permission.granted) { showPermissionDenied('Allow notifications to receive booking and payment updates.', permission.canAskAgain); return; }
     try {
+      if (Platform.OS === 'android' && Constants.expoConfig?.extra?.androidPushConfigured === false) {
+        appAlert('Notifications unavailable', 'Notifications are not configured in this version of Detail. Please update the app when an updated version is available.');
+        return;
+      }
+      await configureNotificationChannels();
+      const permission = await Notifications.requestPermissionsAsync();
+      if (!permission.granted) { showPermissionDenied('Allow notifications to receive booking and payment updates.', permission.canAskAgain); return; }
       if (!await registerCurrentPushDevice()) { appAlert('Notifications unavailable', 'Detail could not register this device for push notifications. Check Google Play services and your connection, then try again.'); return; }
       setNotificationsOn(true);
     }
