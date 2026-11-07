@@ -1091,6 +1091,11 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       }
       return {success:true,confirmationEmailSent};
     }
+    case 'adminUsage': {
+      const actor=authed(); await requireAdmin(actor,undefined,true);
+      const {data,error}=await admin.rpc('admin_database_usage'); if(error)throw error;
+      return {asOf:new Date().toISOString(),...data};
+    }
     case 'adminOverview': {
       const actor=authed(); await requireAdmin(actor);
       const period=['7d','30d','12m'].includes(input.period)?input.period:'30d';
