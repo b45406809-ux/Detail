@@ -37,7 +37,13 @@ try {
   fail(error instanceof Error ? error.name : 'network error');
 }
 
-if (!response.ok) fail(`provider HTTP ${response.status}`);
+if (!response.ok) {
+  const body = await response.json().catch(() => null);
+  const allowedFields = new Set(['name', 'message', 'sender_id', 'contact_import_method', 'manual_contacts']);
+  const fields = Object.keys(body?.errors ?? {}).filter((field) => allowedFields.has(field));
+  if (fields.length) console.log(`SMSPOP_VALIDATION_FIELDS: ${fields.join(', ')}`);
+  fail(`provider HTTP ${response.status}`);
+}
 
 let result;
 try {
