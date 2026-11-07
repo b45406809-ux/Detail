@@ -77,6 +77,7 @@ export default function PermissionsScreen() {
   };
 
   const requestNotifications = async () => {
+    try {
     await configureNotificationChannels();
     const permission = await Notifications.requestPermissionsAsync();
     setGranted((prev) => ({ ...prev, notifications: permission.granted }));
@@ -87,6 +88,9 @@ export default function PermissionsScreen() {
         { text: 'Later', style: 'cancel' },
         { text: 'Open Settings', onPress: () => void Linking.openSettings() },
       ]);
+    }
+    } catch {
+      appAlert('Notifications unavailable', 'We could not enable notifications on this device. You can try again from your profile.');
     }
   };
 

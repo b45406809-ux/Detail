@@ -76,12 +76,6 @@ jobs:
           set -euo pipefail
           node -e 'console.log(`GITHUB_ANDROID_FIREBASE_CONFIG: ${process.env.GITHUB_FIREBASE_FILE ? "present" : "not configured"}`)'
           if [ -z "$EXPO_TOKEN" ]; then echo 'EXPO_ACCESS: unavailable'; exit 1; fi
-          if npx --yes eas-cli@latest env:list production --scope project --format short > "$RUNNER_TEMP/detail-expo-env" 2> "$RUNNER_TEMP/detail-expo-env-error"; then
-            if grep -q 'GOOGLE_SERVICES_JSON' "$RUNNER_TEMP/detail-expo-env"; then echo 'EAS_ANDROID_FIREBASE_VARIABLE: present'; else echo 'EAS_ANDROID_FIREBASE_VARIABLE: not found'; fi
-          else
-            node -e 'const s=require("fs").readFileSync(process.env.RUNNER_TEMP+"/detail-expo-env-error","utf8"); console.log("EAS_ENV_QUERY: failed ("+(/permission|authoriz|forbidden|access/i.test(s)?"access":/network|fetch|connect|timeout/i.test(s)?"network":"other")+")")'
-          fi
-          rm -f "$RUNNER_TEMP/detail-expo-env" "$RUNNER_TEMP/detail-expo-env-error"
           node <<'NODE'
           (async () => {
             const query = 'query { app { byFullName(fullName: "@detail-test/detail") { androidAppCredentials(filter: { applicationIdentifier: "com.detail.app" }) { googleServiceAccountKeyForFcmV1 { id } } } } }';
@@ -91,6 +85,11 @@ jobs:
             if (data.errors) { console.log('EXPO_CREDENTIAL_QUERY: unavailable'); process.exitCode = 1; return; }
             const credentials = data.data?.app?.byFullName?.androidAppCredentials;
             console.log(`EXPO_FCM_V1_CREDENTIAL: ${Array.isArray(credentials) && credentials.some(item => item.googleServiceAccountKeyForFcmV1) ? 'present' : 'not configured'}`);
+            const envQuery = 'query { app { byId(appId: "560c0183-2f37-4d7a-8e4f-59b9b0bf9e85") { environmentVariables(filterNames: ["GOOGLE_SERVICES_JSON"], environment: PRODUCTION) { name } } } }';
+            const envResponse = await fetch('https://api.expo.dev/graphql', { method: 'POST', headers: { authorization: `Bearer ${process.env.EXPO_TOKEN}`, 'content-type': 'application/json' }, body: JSON.stringify({ query: envQuery }) });
+            const envData = await envResponse.json();
+            if (!envResponse.ok || envData.errors) console.log('EAS_ANDROID_FIREBASE_VARIABLE: query unavailable');
+            else console.log(`EAS_ANDROID_FIREBASE_VARIABLE: ${envData.data?.app?.byId?.environmentVariables?.some(item => item.name === 'GOOGLE_SERVICES_JSON') ? 'present' : 'not found'}`);
           })().catch(() => { console.log('EXPO_CREDENTIAL_QUERY: failed'); process.exitCode = 1; });
           NODE
   deploy-sms-hook:
