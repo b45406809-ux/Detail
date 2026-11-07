@@ -1,0 +1,10 @@
+# Authentication and notifications evidence v7
+
+| Evidence | Result | Scope |
+| --- | --- | --- |
+| Local mobile type-check and lint | Pass | Type-check passed; lint reported existing warnings and no errors. |
+| SMSPOP helper tests | Pass | Four local Deno tests, including Supabase phone normalization. |
+| [SMS hook deployment](https://github.com/b45406809-ux/Detail/actions/runs/42328876772) | Pass | Deploys only the signed SMS hook; no actual OTP verification. |
+| [Configured SMSPOP sender test](https://github.com/b45406809-ux/Detail/actions/runs/42329137725) | Pass | Provider accepted one test SMS; user supplied a screenshot confirming receipt. This is not an Auth OTP test. |
+| [EAS Android build](https://github.com/b45406809-ux/Detail/actions/runs/42328844702) | Fail | Free Android build quota exhausted. |
+| [GitHub Android test build](https://github.com/b45406809-ux/Detail/actions/runs/42329012207) | In progress | Source `f4f3ca1271772c678752dfb2b161cf4b280b7562`; check run for final result and artifact. |
