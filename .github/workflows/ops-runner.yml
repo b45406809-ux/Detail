@@ -78,13 +78,15 @@ jobs:
           if [ -z "$EXPO_TOKEN" ]; then echo 'EXPO_ACCESS: unavailable'; exit 1; fi
           node <<'NODE'
           (async () => {
-            const query = 'query { app { byFullName(fullName: "@detail-test/detail") { androidAppCredentials(filter: { applicationIdentifier: "com.detail.app" }) { googleServiceAccountKeyForFcmV1 { id } } } } }';
+            const query = 'query { app { byFullName(fullName: "@detail-test/detail") { androidAppCredentials(filter: { applicationIdentifier: "com.detail.app" }) { googleServiceAccountKeyForFcmV1 { id } googleServiceAccountKeyForSubmissions { id } androidAppBuildCredentialsList { isDefault androidKeystore { id } } } } } }';
             const response = await fetch('https://api.expo.dev/graphql', { method: 'POST', headers: { authorization: `Bearer ${process.env.EXPO_TOKEN}`, 'content-type': 'application/json' }, body: JSON.stringify({ query }) });
             if (!response.ok) { console.log(`EXPO_CREDENTIAL_QUERY: HTTP ${response.status}`); process.exitCode = 1; return; }
             const data = await response.json();
             if (data.errors) { console.log('EXPO_CREDENTIAL_QUERY: unavailable'); process.exitCode = 1; return; }
             const credentials = data.data?.app?.byFullName?.androidAppCredentials;
             console.log(`EXPO_FCM_V1_CREDENTIAL: ${Array.isArray(credentials) && credentials.some(item => item.googleServiceAccountKeyForFcmV1) ? 'present' : 'not configured'}`);
+            console.log(`EXPO_PLAY_SUBMISSION_CREDENTIAL: ${Array.isArray(credentials) && credentials.some(item => item.googleServiceAccountKeyForSubmissions) ? 'present' : 'not configured'}`);
+            console.log(`EXPO_ANDROID_SIGNING_KEY: ${Array.isArray(credentials) && credentials.some(item => item.androidAppBuildCredentialsList?.some(build => build.isDefault && build.androidKeystore)) ? 'present' : 'not configured'}`);
             const envQuery = 'query { app { byId(appId: "560c0183-2f37-4d7a-8e4f-59b9b0bf9e85") { environmentVariables(filterNames: ["GOOGLE_SERVICES_JSON"], environment: PRODUCTION) { name } } } }';
             const envResponse = await fetch('https://api.expo.dev/graphql', { method: 'POST', headers: { authorization: `Bearer ${process.env.EXPO_TOKEN}`, 'content-type': 'application/json' }, body: JSON.stringify({ query: envQuery }) });
             const envData = await envResponse.json();
