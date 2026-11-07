@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 5
     env:
       SMSPOP_API_KEY: ${{ secrets.SMSPOP_API_KEY || secrets.SMSPOP_API_TOKEN }}
-      SMSPOP_SENDER_ID: SMSPoP
+      SMSPOP_SENDER_ID: ${{ vars.SMSPOP_SENDER_ID || 'SMSPoP' }}
       LIVE_E2E_SMS_TO: ${{ secrets.LIVE_E2E_SMS_TO }}
       CONFIRM_SIDE_EFFECTS: ${{ inputs.confirm_live_side_effects }}
     steps:
