@@ -1,9 +1,15 @@
 name: Appetize Android inspection
 on:
-  push:
-    branches: [codex/separate-dashboard-into-routed-modules-fl7jlh]
-    paths: [.github/workflows/appetize-smoke.yml]
   workflow_dispatch:
+    inputs:
+      appetize_build_id:
+        description: Explicit Appetize build target
+        required: true
+        type: string
+      source_commit:
+        description: Source commit used to build this target
+        required: true
+        type: string
 permissions:
   contents: read
 jobs:
@@ -12,17 +18,21 @@ jobs:
     timeout-minutes: 10
     env:
       APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+      APPETIZE_BUILD_ID: ${{ inputs.appetize_build_id }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
     steps:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: npm install --global @appetize/cli@0.25.1 --no-audit --no-fund
-      - name: Inspect current uploaded build
+      - name: Inspect pinned uploaded build
         run: |
           set -euo pipefail
           mkdir -p appetize-results
-          appetize build list --app com.detail.app --json --quiet > appetize-results/builds.json
-          target=$(jq -er '.builds[0].id' appetize-results/builds.json)
+          [[ "$APPETIZE_BUILD_ID" =~ ^[a-z0-9]{20,32}$ ]]
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          target="$APPETIZE_BUILD_ID"
+          echo "Source commit: $SOURCE_COMMIT" >> "$GITHUB_STEP_SUMMARY"
           echo "Current Appetize build: https://appetize.io/app/$target" >> "$GITHUB_STEP_SUMMARY"
           echo "Appetize link: https://appetize.io/app/$target"
           trap 'appetize session stop --json --quiet || true' EXIT
