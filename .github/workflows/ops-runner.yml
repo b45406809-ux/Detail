@@ -76,7 +76,7 @@ jobs:
         run: |
           test -n "$SUPABASE_ACCESS_TOKEN"
           test "$SUPABASE_PROJECT_REF" = yiyhmueospjwbaywzusp
-          npx --yes supabase@latest functions deploy auth-sms-smspop --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
+          npx --yes supabase@latest functions deploy auth-sms-smspop --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt --yes
   checks:
     if: github.event_name == 'push' || inputs.task == 'site-checks' || inputs.task == 'mobile-checks' || inputs.task == 'mobile-export-checks' || inputs.task == 'functions-checks' || inputs.task == 'supabase-local-checks' || inputs.task == 'full-checks'
     name: Run selected local checks
