@@ -8,7 +8,11 @@ on:
         type: string
       eas_build_id:
         description: EAS build ID represented by the selected Appetize target
-        required: true
+        required: false
+        type: string
+      github_build_run_id:
+        description: GitHub Actions run that produced the APK (when not built by EAS)
+        required: false
         type: string
       source_commit:
         description: Full 40-character source commit for the selected EAS build
@@ -16,6 +20,7 @@ on:
         type: string
 permissions:
   contents: read
+  actions: read
 jobs:
   registration:
     runs-on: ubuntu-latest
@@ -24,6 +29,8 @@ jobs:
       APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
       APPETIZE_BUILD_ID: ${{ inputs.appetize_build_id }}
       EAS_BUILD_ID: ${{ inputs.eas_build_id }}
+      GITHUB_BUILD_RUN_ID: ${{ inputs.github_build_run_id }}
+      GH_TOKEN: ${{ github.token }}
       SOURCE_COMMIT: ${{ inputs.source_commit }}
       AGENTMAIL_API_KEY: ${{ secrets.AGENTMAIL_API_KEY }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
@@ -40,9 +47,14 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$APPETIZE_BUILD_ID" =~ ^[a-z0-9]{20,32}$ ]]
-          [[ "$EAS_BUILD_ID" =~ ^[0-9a-f-]{36}$ ]]
           [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           git cat-file -e "$SOURCE_COMMIT^{commit}"
+          if [[ -n "$GITHUB_BUILD_RUN_ID" ]]; then
+            [[ "$GITHUB_BUILD_RUN_ID" =~ ^[0-9]+$ ]]
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_BUILD_RUN_ID" --jq '.head_sha' | grep -Fx "$SOURCE_COMMIT" >/dev/null
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_BUILD_RUN_ID/artifacts" --jq '.artifacts[].name' | grep -Fx "detail-test-apk-$SOURCE_COMMIT" >/dev/null
+          else
+          [[ "$EAS_BUILD_ID" =~ ^[0-9a-f-]{36}$ ]]
           appetize build list --app com.detail.app --limit 200 --json --quiet > "$RUNNER_TEMP/appetize-builds.json"
           APPETIZE_BUILD_ID="$APPETIZE_BUILD_ID" node --input-type=module <<'NODE'
           import { readFile } from 'node:fs/promises';
@@ -52,11 +64,13 @@ jobs:
           if (target.platform !== 'android') throw new Error('The requested Appetize target is not Android.');
           console.log(`PINNED_APPETIZE_TARGET: ${target.id}`);
           NODE
+          fi
           {
             echo '## Pinned Android AgentMail registration'
             echo
             echo "- Appetize build ID: \`$APPETIZE_BUILD_ID\`"
             echo "- EAS build ID: \`$EAS_BUILD_ID\`"
+            echo "- GitHub build run ID: \`$GITHUB_BUILD_RUN_ID\`"
             echo "- Source commit: \`$SOURCE_COMMIT\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Ensure inbox does not already have a user
