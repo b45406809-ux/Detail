@@ -42,6 +42,10 @@ if (!response.ok) {
   const allowedFields = new Set(['name', 'message', 'sender_id', 'contact_import_method', 'manual_contacts']);
   const fields = Object.keys(body?.errors ?? {}).filter((field) => allowedFields.has(field));
   if (fields.length) console.log(`SMSPOP_VALIDATION_FIELDS: ${fields.join(', ')}`);
+  const detail = JSON.stringify(body ?? {}).toLowerCase();
+  for (const [label, pattern] of [['sender', /sender/], ['credits', /credit|balance/], ['recipient', /recipient|contact|phone|number/], ['permission', /permission|unauthori[sz]ed|not allowed/]]) {
+    if (pattern.test(detail)) console.log(`SMSPOP_ERROR_CATEGORY: ${label}`);
+  }
   fail(`provider HTTP ${response.status}`);
 }
 
