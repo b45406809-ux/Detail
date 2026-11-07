@@ -137,7 +137,7 @@ export default function SignInScreen() {
       if (isNewAccount) {
         const cred = await createUserWithEmailAndPassword(auth, email.trim(), password, { data: { termsAccepted: true } });
         if (!cred.user.emailVerified) {
-          router.replace({ pathname: '/(auth)/verify-email', params: { email: email.trim().toLowerCase(), intent: 'REGISTER' } });
+          router.replace({ pathname: '/(auth)/verify-email', params: { email: email.trim().toLowerCase(), intent: 'REGISTER', source: 'signup' } });
           return;
         }
         router.replace('/(auth)/create-profile');

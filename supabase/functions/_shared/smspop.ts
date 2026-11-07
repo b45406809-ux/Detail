@@ -25,9 +25,11 @@ export function buildSmsPopCampaign(
   senderId: string,
   campaignName = "Detail verification",
 ) {
-  const phone = typeof event.user?.phone === "string"
+  const rawPhone = typeof event.user?.phone === "string"
     ? event.user.phone.trim()
     : "";
+  // Supabase Auth stores phone numbers as international digits without '+'.
+  const phone = /^\d+$/.test(rawPhone) ? `+${rawPhone}` : rawPhone;
   const otpValue = event.sms?.otp;
   // Keep OTPs as strings so leading zeroes are preserved.
   const otp = typeof otpValue === "string" ? otpValue : "";

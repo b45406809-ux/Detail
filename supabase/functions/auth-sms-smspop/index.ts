@@ -13,7 +13,8 @@ const json = (body: unknown, status = 200) =>
   });
 
 function errorResponse(message: string, status: number) {
-  return json({ error: { http_code: status, message } }, status);
+  // Auth reads structured hook errors from successful HTTP responses.
+  return json({ error: { http_code: status, message } });
 }
 
 Deno.serve(async (request) => {
@@ -38,7 +39,7 @@ Deno.serve(async (request) => {
       Object.fromEntries(request.headers.entries()),
     ) as SupabaseSmsHookEvent;
   } catch {
-    return errorResponse("Invalid Auth hook signature.", 401);
+    return json({ error: { http_code: 401, message: "Invalid Auth hook signature." } }, 401);
   }
 
   let campaign: ReturnType<typeof buildSmsPopCampaign>;

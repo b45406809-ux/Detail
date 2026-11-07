@@ -10,6 +10,10 @@ if (process.env.EAS_BUILD_PROFILE === 'production' && process.env.EXPO_PUBLIC_DE
 generateNotificationSounds();
 
 const expo = appJson.expo;
+// EAS file variables provide the Firebase configuration without committing it.
+if (process.env.GOOGLE_SERVICES_JSON) {
+  expo.android = { ...expo.android, googleServicesFile: process.env.GOOGLE_SERVICES_JSON };
+}
 const mapboxAccessToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
 const mapboxDownloadsToken = process.env.MAPBOX_DOWNLOADS_TOKEN;
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;

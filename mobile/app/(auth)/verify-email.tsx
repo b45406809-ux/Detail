@@ -1,7 +1,7 @@
 import { appAlert } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Text, TextInput, TouchableOpacity } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
@@ -11,12 +11,13 @@ import { confirmEmailLoginCode, sendEmailLoginCode } from '../../services/emailA
 type Intent = 'SIGN_IN' | 'REGISTER';
 
 export default function VerifyEmailScreen() {
-  const params = useLocalSearchParams<{ email?: string; intent?: string }>();
+  const params = useLocalSearchParams<{ email?: string; intent?: string; source?: string }>();
   const email = String(params.email ?? '').trim().toLowerCase();
   const intent: Intent = params.intent === 'REGISTER' ? 'REGISTER' : 'SIGN_IN';
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [resendSeconds, setResendSeconds] = useState(60);
+  const [source, setSource] = useState<'signup' | 'email'>(params.source === 'signup' ? 'signup' : 'email');
 
   useEffect(() => {
     if (resendSeconds <= 0) return;
@@ -31,10 +32,10 @@ export default function VerifyEmailScreen() {
     }
     setBusy(true);
     try {
-      await confirmEmailLoginCode(email, code, intent);
+      await confirmEmailLoginCode(email, code, source);
       router.replace('/home');
-    } catch (error) {
-      appAlert('Code not accepted', (error as Error).message || 'The code is incorrect or expired. Request a new code and try again.');
+    } catch {
+      appAlert('Code not accepted', 'The code is incorrect or expired. Request a new code and use the most recent email.');
       setCode('');
     } finally { setBusy(false); }
   };
@@ -43,6 +44,7 @@ export default function VerifyEmailScreen() {
     setBusy(true);
     try {
       await sendEmailLoginCode(email, intent, intent === 'REGISTER');
+      setSource('email');
       setCode(''); setResendSeconds(60);
       appAlert('Code sent', `Check ${email} for a new sign-in code.`);
     } catch (error) {

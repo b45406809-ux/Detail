@@ -44,6 +44,11 @@ Deno.test("rejects malformed destinations, OTPs, and sender IDs", () => {
   );
 });
 
+Deno.test("accepts the international digits returned by Supabase Auth", () => {
+  const campaign = buildSmsPopCampaign({ user: { phone: "263787213818" }, sms: { otp: "012345" } }, "Detail");
+  assertEquals(campaign.manual_contacts, "+263787213818");
+});
+
 Deno.test("accepts only a successful response for the requested recipient", () => {
   const good = {
     success: true,

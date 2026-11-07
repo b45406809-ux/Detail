@@ -1,6 +1,7 @@
 import { appAlert } from '@/components/AppDialog';
 import React, { useState } from 'react';
-import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, Text, TouchableOpacity, View } from 'react-native';
+import * as Crypto from 'expo-crypto';
 import {
   GoogleOneTapSignIn,
   isCancelledResponse,
@@ -12,13 +13,7 @@ import { ensureProfileExists } from './authProfiles';
 import { GoogleLogo } from './GoogleLogo';
 
 const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-let configuredClientId: string | null = null;
-
-function configureGoogle(webId: string) {
-  if (configuredClientId === webId) return;
-  GoogleOneTapSignIn.configure({ webClientId: webId });
-  configuredClientId = webId;
-}
+const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
 
 export default function GoogleSignInButton() {
   const [isLoading, setIsLoading] = useState(false);
@@ -38,10 +33,12 @@ export default function GoogleSignInButton() {
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
-      configureGoogle(webClientId);
+      const nonce = Crypto.randomUUID();
+      const hashedNonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, nonce);
+      GoogleOneTapSignIn.configure({ webClientId, iosClientId, nonce: hashedNonce });
       await GoogleOneTapSignIn.checkPlayServices();
 
-      let result = await GoogleOneTapSignIn.signIn();
+      let result = Platform.OS === 'ios' ? await GoogleOneTapSignIn.createAccount() : await GoogleOneTapSignIn.signIn();
       if (isNoSavedCredentialFoundResponse(result)) {
         result = await GoogleOneTapSignIn.createAccount();
       }
@@ -53,7 +50,7 @@ export default function GoogleSignInButton() {
 
       const idToken = result.data.idToken;
       if (!idToken) throw new Error('No ID token returned from Google.');
-      const { data, error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: idToken });
+      const { data, error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: idToken, nonce });
       if (error) throw error;
       await ensureProfileExists(data.user.id, data.user.email ?? null);
     } catch (err: unknown) {
