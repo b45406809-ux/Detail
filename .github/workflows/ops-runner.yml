@@ -32,6 +32,11 @@ on:
           - live-provider-e2e
           - deploy-sms-hook
           - push-config-readiness
+          - play-internal-bundle
+      android_version_code:
+        description: Unused Google Play Android version code for the internal test bundle.
+        required: false
+        type: string
       confirm_production_access:
         description: Required for read-only access to production Supabase or Cloudflare data.
         type: boolean
@@ -56,6 +61,92 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  play-internal-bundle:
+    if: github.event_name == 'workflow_dispatch' && inputs.task == 'play-internal-bundle' && inputs.confirm_live_access == true && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    env:
+      CI: '1'
+      EAS_BUILD_PROFILE: production
+      EXPO_PUBLIC_APP_BUILD_PROFILE: production
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN || secrets.EAS_BOT_ACCESS_TOKEN || secrets.EXPO_EAS_BOT_ACCESS_TOKEN || secrets.EAS_BOT_TOKEN_2 }}
+      MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
+      EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || secrets.MAPBOX_PUBLIC_TOKEN }}
+      EXPO_PUBLIC_SUPABASE_URL: ${{ vars.SUPABASE_URL || vars.EXPO_PUBLIC_SUPABASE_URL || secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_PUBLIC_ANON || secrets.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_ANON_KEY || secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+      EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || vars.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
+      EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || vars.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID }}
+      FIREBASE_ANDROID_JSON: ${{ secrets.GOOGLE_SERVICES_JSON || secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+      DETAIL_ANDROID_VERSION_CODE: ${{ inputs.android_version_code }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Check release inputs and prepare Firebase config
+        run: |
+          set -euo pipefail
+          [[ "$DETAIL_ANDROID_VERSION_CODE" =~ ^[1-9][0-9]{0,9}$ ]] || { echo 'Supply an unused Play version code.'; exit 1; }
+          test -n "$EXPO_TOKEN" && test -n "$FIREBASE_ANDROID_JSON" && test -n "$MAPBOX_DOWNLOADS_TOKEN" && test -n "$EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN" && test -n "$EXPO_PUBLIC_SUPABASE_URL" && test -n "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
+          node <<'NODE'
+          const fs = require('fs');
+          const value = process.env.FIREBASE_ANDROID_JSON;
+          const json = value.trim().startsWith('{') ? value : Buffer.from(value, 'base64').toString('utf8');
+          const config = JSON.parse(json);
+          if (!config.client?.some(client => client.client_info?.android_client_info?.package_name === 'com.detail.app')) throw new Error('Firebase configuration does not match com.detail.app.');
+          const file = `${process.env.RUNNER_TEMP}/detail-google-services.json`;
+          fs.writeFileSync(file, json, { mode: 0o600 });
+          fs.appendFileSync(process.env.GITHUB_ENV, `GOOGLE_SERVICES_JSON=${file}\n`);
+          console.log('Android Firebase config is ready.');
+          NODE
+      - name: Prepare the existing signing key
+        run: node scripts/prepare-play-signing.mjs
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0 ndk;26.1.10909125 cmake;3.22.1'
+      - name: Install mobile dependencies
+        run: npm ci --prefix mobile --no-audit --no-fund
+      - name: Generate Android project
+        working-directory: mobile
+        run: npx expo prebuild --platform android --no-install --clean
+      - name: Configure signing for the Play bundle
+        working-directory: mobile/android/app
+        run: |
+          cat >> build.gradle <<'GRADLE'
+          def detailSigning = new groovy.json.JsonSlurper().parse(new File(System.getenv('RUNNER_TEMP'), 'detail-play-signing/signing.json'))
+          android {
+            signingConfigs {
+              detailPlay {
+                storeFile file(new File(System.getenv('RUNNER_TEMP'), 'detail-play-signing/upload.jks'))
+                storePassword detailSigning.storePassword
+                keyAlias detailSigning.keyAlias
+                keyPassword detailSigning.keyPassword
+              }
+            }
+            buildTypes { release { signingConfig signingConfigs.detailPlay } }
+          }
+          GRADLE
+      - name: Build signed Android App Bundle on GitHub
+        working-directory: mobile/android
+        run: ./gradlew --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" bundleRelease
+      - name: Verify bundle signature
+        run: jarsigner -verify mobile/android/app/build/outputs/bundle/release/app-release.aab
+      - name: Save Play bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: detail-play-internal-${{ github.sha }}-${{ inputs.android_version_code }}
+          path: mobile/android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 7
+      - name: Remove temporary signing credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/detail-play-signing" "$RUNNER_TEMP/detail-google-services.json"
   push-config-readiness:
     if: github.event_name == 'workflow_dispatch' && inputs.task == 'push-config-readiness' && inputs.confirm_live_access == true && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
     runs-on: ubuntu-latest

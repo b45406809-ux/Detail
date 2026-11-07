@@ -10,6 +10,13 @@ if (process.env.EAS_BUILD_PROFILE === 'production' && process.env.EXPO_PUBLIC_DE
 generateNotificationSounds();
 
 const expo = appJson.expo;
+if (process.env.DETAIL_ANDROID_VERSION_CODE) {
+  const versionCode = Number(process.env.DETAIL_ANDROID_VERSION_CODE);
+  if (!Number.isSafeInteger(versionCode) || versionCode < 1 || versionCode > 2100000000) {
+    throw new Error('DETAIL_ANDROID_VERSION_CODE must be a valid Google Play version code.');
+  }
+  expo.android = { ...expo.android, versionCode };
+}
 // EAS file variables provide the Firebase configuration without committing it.
 if (process.env.GOOGLE_SERVICES_JSON) {
   const fs = require('fs');
