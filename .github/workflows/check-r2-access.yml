@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Check whether the configured token can list R2 buckets
+      - name: Check access to the Detail media bucket
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_R2_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_API_TOKEN }}
@@ -27,8 +27,8 @@ jobs:
               process.exitCode = 1;
               return;
             }
-            const endpoint = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(account)}/r2/buckets`;
-            const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+            const endpoint = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(account)}/r2/buckets/${encodeURIComponent(bucket)}`;
+            const headers = { authorization: `Bearer ${token}` };
             const response = await fetch(endpoint, { headers, signal: AbortSignal.timeout(20000) });
             if (!response.ok) {
               console.log(`R2_ACCESS: denied or unavailable (HTTP ${response.status}); check token permissions and account. No credentials were logged.`);
@@ -36,24 +36,13 @@ jobs:
               return;
             }
             const result = await response.json();
-            if (!result.success || !Array.isArray(result.result)) {
-              console.log('R2_ACCESS: Cloudflare returned an unsuccessful or unexpected response.');
+            if (!result.success || result.result?.name !== bucket) {
+              const safeCodes = Array.isArray(result.errors) ? result.errors.map(error => String(error.code ?? 'unknown')).join(',') : 'none';
+              console.log(`R2_ACCESS: unexpected bucket response; success=${Boolean(result.success)}, resultType=${typeof result.result}, resultKeys=${Object.keys(result.result ?? {}).join(',') || 'none'}, errorCodes=${safeCodes}.`);
               process.exitCode = 1;
               return;
             }
-            const exists = result.result.some(item => item.name === bucket);
-            if (exists) {
-              console.log('R2_ACCESS: allowed; target bucket already exists.');
-              return;
-            }
-            const created = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify({ name: bucket, locationHint: 'weur', storageClass: 'Standard' }), signal: AbortSignal.timeout(20000) });
-            const createdResult = await created.json().catch(() => ({}));
-            if (created.ok && createdResult.success) {
-              console.log('R2_ACCESS: allowed; target bucket created successfully.');
-              return;
-            }
-            console.log(`R2_ACCESS: bucket creation failed (HTTP ${created.status}); check token bucket write permission. No credentials were logged.`);
-            process.exitCode = 1;
+            console.log('R2_ACCESS: allowed; Detail media bucket exists and is readable through Cloudflare management API.');
           })().catch(() => { console.error('R2_ACCESS: request failed; no credential details were logged.'); process.exitCode = 1; });
           function coreError(message) { console.error(message); }
           NODE
