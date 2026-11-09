@@ -6,7 +6,7 @@ import type { OverviewData } from './types';
 const money = (value: number, currency: string) => new Intl.NumberFormat('en-ZW', { style: 'currency', currency }).format(value / 100);
 
 function DatabaseUsage() {
-  const [usage, setUsage] = useState<{asOf:string; databaseBytes:number; chatTableBytes:number; fileStorageBytes:number; fileCount:number; activeUsers30d:number; messages30d:number}>();
+  const [usage, setUsage] = useState<{asOf:string; databaseBytes:number; chatTableBytes:number; fileStorageBytes:number; fileCount:number; activeUsers30d:number; messages30d:number; providerMeters?:Record<string,any>; source?:string}>();
   const [error, setError] = useState('');
   const load = async (force=false) => {
     const key='detail:usage-snapshot:v1';
@@ -19,12 +19,19 @@ function DatabaseUsage() {
   const alerts=rows.filter(row=>row.limit&&row.value/row.limit>=.6);
   return <article className="panel"><div className="panel-title"><h2>Usage and free-tier watch</h2><button onClick={()=>void load(true)}>Refresh usage</button></div>
     {alerts.map(row=><p className="alert-count" role="alert" key={row.name}><AlertTriangle size={14}/>{row.name} is at {(row.value/row.limit!*100).toFixed(1)}% of its Free-plan reference.</p>)}
-    {error?<p className="inline-error">{error}</p>:!usage?<p className="muted">Loading usage…</p>:<><div className="rows">{rows.map(row=><div className="row" key={row.name}><b>{row.name}</b><span>{(row.value/row.divisor).toLocaleString(undefined,{maximumFractionDigits:1})} {row.unit}{row.limit?` / ${(row.limit/row.divisor).toLocaleString()} (${(row.value/row.limit*100).toFixed(1)}%)`:' · no fixed free-plan quota'}</span></div>)}</div><p className="muted">Chat table and indexes: {(usage.chatTableBytes/1_000_000).toFixed(1)} MB. Active users are estimated from sign-in timestamps. Snapshot: {new Date(usage.asOf).toLocaleString()}. Cached for 24 hours; refresh is manual.</p></>}
+    {error?<p className="inline-error">{error}</p>:!usage?<p className="muted">Loading usage…</p>:<><div className="rows">{rows.map(row=><div className="row" key={row.name}><b>{row.name}</b><span>{(row.value/row.divisor).toLocaleString(undefined,{maximumFractionDigits:1})} {row.unit}{row.limit?` / ${(row.limit/row.divisor).toLocaleString()} (${(row.value/row.limit*100).toFixed(1)}%)`:' · no fixed free-plan quota'}</span></div>)}</div><p className="muted">Chat table and indexes: {(usage.chatTableBytes/1_000_000).toFixed(1)} MB. Active users are estimated from sign-in timestamps. {usage.source === 'daily snapshot' ? 'Daily snapshot' : 'Live fallback'}: {new Date(usage.asOf).toLocaleString()}.</p></>}
     <h3>Provider meters</h3><div className="rows">
-      <div className="row"><b>Mapbox</b><span>25,000 monthly map users; 100,000 temporary geocoding and Directions requests each. Account statistics require provider access.</span></div>
-      <div className="row"><b>Cloudflare R2</b><span>10 GB-month, 1M writes, 10M reads; object usage is not yet collected here.</span></div>
-      <div className="row"><b>PostHog</b><span>1M events/month; events are consent-gated. Account usage not yet connected.</span></div>
-      <div className="row"><b>Resend, SMSPOP, Twilio, Didit, Paynow</b><span>Usage is not yet pulled from provider billing APIs. Check provider consoles for invoice-grade totals.</span></div>
+      {usage?.providerMeters?.supabaseApiRequests?.status==='measured' ? <div className="row"><b>Supabase API requests · last 24h</b><span>{Object.entries(usage.providerMeters.supabaseApiRequests.counts??{}).map(([name,value])=>`${name}: ${Number(value).toLocaleString()}`).join(' · ')} · telemetry only, not a billing meter</span></div> : <div className="row"><b>Supabase API requests</b><span>{usage?.providerMeters?.supabaseApiRequests?.note ?? 'Not measured yet; daily Management API telemetry is not connected.'}</span></div>}
+      <div className="row"><b>Mapbox</b><span>Usage not connected. Account statistics need a statistics-enabled token; app map tokens cannot report billing usage.</span></div>
+      <div className="row"><b>Cloudflare R2</b><span>Object count, storage, and Class A/B operations are not connected to account usage reporting.</span></div>
+      <div className="row"><b>PostHog</b><span>Event volume and plan allowance are not connected to the account usage API.</span></div>
+      <div className="row"><b>Resend</b><span>Email sends and monthly free allowance are not connected to provider usage reporting.</span></div>
+      <div className="row"><b>SMSPOP and Twilio</b><span>SMS segment counts, balance, and free allowances are not connected. Message count can exceed send count when messages split into segments.</span></div>
+      <div className="row"><b>Didit</b><span>KYC checks and remaining sandbox/live credits are not connected; no identity checks are triggered by monitoring.</span></div>
+      <div className="row"><b>Paynow</b><span>Transaction volume and fees are not connected; sandbox/production totals must be checked in Paynow.</span></div>
+      <div className="row"><b>Turnstile</b><span>Challenge volume and account quota are not connected.</span></div>
+      <div className="row"><b>Firebase / Expo push</b><span>Push delivery and provider usage are not connected; notification sends are not generated by this monitor.</span></div>
+      <div className="row"><b>Google and Apple sign-in</b><span>OAuth usage and provider quotas are not connected; Supabase monthly active users are only an estimate.</span></div>
     </div><p className="muted">Dashboard checks are cached for 24 hours and do not poll in the background. Free-plan limits shown here are references; confirm the active account plan and exact billing usage with each provider.</p>
     <a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer">Open Supabase dashboard ↗</a>
   </article>;

@@ -1150,8 +1150,10 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     }
     case 'adminUsage': {
       const actor=authed(); await requireAdmin(actor,undefined,true);
+      const {data:snapshot,error:snapshotError}=await admin.from('usage_snapshots').select('captured_at,metrics,provider_meters').order('captured_at',{ascending:false}).limit(1).maybeSingle();
+      if(!snapshotError&&snapshot){return {asOf:snapshot.captured_at,...snapshot.metrics,providerMeters:snapshot.provider_meters,source:'daily snapshot'};}
       const {data,error}=await admin.rpc('admin_database_usage'); if(error)throw error;
-      return {asOf:new Date().toISOString(),...data};
+      return {asOf:new Date().toISOString(),...data,providerMeters:{},source:'live fallback'};
     }
     case 'adminOverview': {
       const actor=authed(); await requireAdmin(actor);
