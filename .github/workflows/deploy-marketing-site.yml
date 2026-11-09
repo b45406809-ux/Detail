@@ -74,3 +74,23 @@ jobs:
           exclude: |
             **/.git*
             **/.git*/**
+
+      - name: Prepare dashboard subdomain artifact
+        run: |
+          mkdir -p site/dashboard-deploy
+          cp -a site/dist/. site/dashboard-deploy/
+          cp site/dist/dashboard.html site/dashboard-deploy/index.html
+
+      - name: Deploy dashboard over explicit FTPS
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          port: 21
+          local-dir: site/dashboard-deploy/
+          server-dir: public_html/dashboard/
+          exclude: |
+            **/.git*
+            **/.git*/**
