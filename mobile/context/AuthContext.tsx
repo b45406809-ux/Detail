@@ -97,6 +97,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [userId]);
 
   useEffect(() => {
+    if (!userId || isLoading) return;
+    let active = true;
+    const record = () => {
+      if (active) callFunction('recordAppActivity').catch((error) => console.warn('Could not record app activity:', error instanceof Error ? error.name : 'unknown error'));
+    };
+    record();
+    const heartbeat = setInterval(record, 6 * 60 * 60 * 1000);
+    const subscription = AppState.addEventListener('change', state => { if (state === 'active') record(); });
+    return () => { active = false; clearInterval(heartbeat); subscription.remove(); };
+  }, [userId, isLoading]);
+
+  useEffect(() => {
     let unsubProfile: (() => void) | null = null;
     let previousUserId: string | null | undefined;
 

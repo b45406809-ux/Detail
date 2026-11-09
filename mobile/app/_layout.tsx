@@ -72,7 +72,7 @@ function NotificationRouter({ response, onConsumed }: { response: Notifications.
     if (!profile.hasAgreedToTerms || !profile.hasCompletedProfile || !profile.hasSetupPermissions) return;
     if (profile.role === 'CLEANER' && profile.verificationStatus === 'VERIFIED' && profile.cleanerOnboardingComplete && !profile.cleanerAgreementAccepted) return;
 
-    const data = response.notification.request.content.data as { jobId?: string; supportCaseId?: string; type?: string };
+    const data = response.notification.request.content.data as { jobId?: string; supportCaseId?: string; type?: string; title?: string; body?: string };
     const target = resolveNotificationTarget(data);
     if (target) router.push(target);
     onConsumed();

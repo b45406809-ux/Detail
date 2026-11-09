@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../components/LoadingList';
 import { LoadingError } from '../components/LoadingError';
 import { router } from 'expo-router';
-import { ArrowLeft, Bell, MessageSquare, DollarSign, Star, Zap, Info } from 'lucide-react-native';
+import { ArrowLeft, Bell, MessageSquare, DollarSign, Star, Zap, Info, Megaphone } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { db, collection, query, where, onSnapshot, doc, updateDoc, orderBy, limit } from '../services/supabase';
 import { AppNotification, NotificationType } from '../types';
@@ -39,6 +39,8 @@ const TYPE_ICON: Partial<Record<NotificationType, any>> = {
   CANCELLATION_REVIEW: Info,
   SUPPORT_CASE: MessageSquare,
   EMERGENCY: Info,
+  ANNOUNCEMENT: Megaphone,
+  INACTIVITY_REMINDER: Bell,
   RATING: Star,
   SYSTEM: Bell,
 };
@@ -69,7 +71,7 @@ export default function NotificationsScreen() {
 
   const openNotification = (n: AppNotification) => {
     if (!n.read) updateDoc(doc(db, 'notifications', n.id), { read: true }).catch(() => {});
-    const target = resolveNotificationTarget({ type: n.type, jobId: n.jobId, supportCaseId: n.data?.supportCaseId });
+    const target = resolveNotificationTarget({ type: n.type, jobId: n.jobId, supportCaseId: n.data?.supportCaseId, title: n.title, body: n.body });
     if (target) router.push(target);
   };
 

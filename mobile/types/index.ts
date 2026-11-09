@@ -300,6 +300,8 @@ export type NotificationType =
   | 'MESSAGE'
   | 'PAYMENT'
   | 'RATING'
+  | 'ANNOUNCEMENT'
+  | 'INACTIVITY_REMINDER'
   | 'SYSTEM';
 
 export interface AppNotification {

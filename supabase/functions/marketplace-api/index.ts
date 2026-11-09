@@ -1352,19 +1352,83 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'adminCampaignControl': {
       const actor=authed(); await requireAdmin(actor,'marketing.send');
       const {data:row,error}=await admin.from('configuration').select('value').eq('key','campaignControls').maybeSingle();if(error)throw error;
-      const current=row?.value??{emailPaused:false};
+      const current=row?.value??{emailPaused:false,pushPaused:false,inAppPaused:false,smsPaused:false,whatsappPaused:false,inactivityPaused:false};
       if(input.paused===undefined)return {controls:current};
       await requireRecentAdminAuth(actor);
+      const channel=text(input.channel,20).toUpperCase()||'EMAIL';
+      const controlKey:Record<string,string>={EMAIL:'emailPaused',PUSH:'pushPaused',IN_APP:'inAppPaused',SMS:'smsPaused',WHATSAPP:'whatsappPaused',INACTIVITY:'inactivityPaused'};
+      if(!controlKey[channel])fail(400,'Unknown campaign channel.');
       const paused=input.paused===true;
-      const controls={...current,emailPaused:paused,updatedAt:new Date().toISOString(),updatedBy:actor};
+      const controls={...current,[controlKey[channel]]:paused,updatedAt:new Date().toISOString(),updatedBy:actor};
       const {error:saveError}=await admin.from('configuration').upsert({key:'campaignControls',value:controls,updatedby:actor,updatedat:new Date().toISOString()},{onConflict:'key'});if(saveError)throw saveError;
-      await admin.from('adminauditevents').upsert({id:`campaign_pause_${Date.now()}_${actor}`,action:'marketing_campaign_channel_paused',actorid:actor,targetid:'email',reason:paused?'Email campaigns paused':'Email campaigns resumed',data:{paused},immutable:true});
+      await admin.from('adminauditevents').upsert({id:`campaign_pause_${channel}_${Date.now()}_${actor}`,action:'marketing_campaign_channel_paused',actorid:actor,targetid:channel,reason:`${channel} campaigns ${paused?'paused':'resumed'}`,data:{paused},immutable:true});
       return {controls};
+    }
+    case 'getCommunicationPreferences': {
+      const actor=authed();await requireActiveMarketplaceAccount(actor);
+      const {data,error}=await admin.from('usermarketingpreferences').select('*').eq('userid',actor).maybeSingle();if(error)throw error;
+      return {preferences:{emailEnabled:data?.emailenabled===true,pushEnabled:data?.pushenabled===true,inAppEnabled:data?.inappenabled===true,smsEnabled:data?.smsenabled===true,whatsappEnabled:data?.whatsappenabled===true,inactivityRemindersEnabled:data?.inactivityremindersenabled===true}};
+    }
+    case 'updateCommunicationPreferences': {
+      const actor=authed();await requireActiveMarketplaceAccount(actor);
+      const allowed=['emailEnabled','pushEnabled','inAppEnabled','smsEnabled','whatsappEnabled','inactivityRemindersEnabled'];
+      const {data:prior,error:priorError}=await admin.from('usermarketingpreferences').select('*').eq('userid',actor).maybeSingle();if(priorError)throw priorError;
+      const values:Json={userid:actor,consentupdatedat:new Date().toISOString()};
+      for(const field of allowed)if(typeof input[field]==='boolean')values[field.toLowerCase()]=input[field];
+      if(Object.keys(values).length===2)fail(400,'Choose at least one communication preference.');
+      const next={emailenabled:prior?.emailenabled===true,pushenabled:prior?.pushenabled===true,inappenabled:prior?.inappenabled===true,smsenabled:prior?.smsenabled===true,whatsappenabled:prior?.whatsappenabled===true,inactivityremindersenabled:prior?.inactivityremindersenabled===true,...values};
+      if(next.inactivityremindersenabled&&!next.pushenabled&&!next.inappenabled)fail(400,'Enable push or in-app announcements before enabling inactivity reminders.');
+      const {data:profile,error:profileError}=await admin.from('users').select('phone,email').eq('id',actor).maybeSingle();if(profileError)throw profileError;
+      if(next.emailenabled){const authEmail=String((user as (User&{email_confirmed_at?:string|null})|null)?.email??'');if(!authEmail||(user as (User&{email_confirmed_at?:string|null})|null)?.email_confirmed_at==null||String(profile?.email??'').trim().toLowerCase()!==authEmail.trim().toLowerCase())fail(400,'Verify the email address on your account before opting in to email campaigns.');}
+      if(next.smsenabled||next.whatsappenabled){const authPhone=String((user as (User&{phone?:string;phone_confirmed_at?:string|null})|null)?.phone??'');const profilePhone=String(profile?.phone??'');const digits=(value:string)=>value.replace(/\D/g,'');if(!/^\+[1-9][0-9]{7,14}$/.test(profilePhone)||!authPhone||!digits(authPhone)||digits(profilePhone)!==digits(authPhone)||(user as (User&{phone_confirmed_at?:string|null})|null)?.phone_confirmed_at==null)fail(400,'Verify the same mobile number on your account before opting in to SMS or WhatsApp.');}
+      const {error}=await admin.from('usermarketingpreferences').upsert(values,{onConflict:'userid'});if(error)throw error;
+      const {data}=await admin.from('usermarketingpreferences').select('*').eq('userid',actor).single();
+      return {preferences:{emailEnabled:data.emailenabled===true,pushEnabled:data.pushenabled===true,inAppEnabled:data.inappenabled===true,smsEnabled:data.smsenabled===true,whatsappEnabled:data.whatsappenabled===true,inactivityRemindersEnabled:data.inactivityremindersenabled===true}};
+    }
+    case 'recordAppActivity': {
+      const actor=authed();
+      const {data:profile,error}=await admin.from('users').select('lastactiveat').eq('id',actor).maybeSingle();if(error)throw error;
+      if(!profile) return {recorded:false};
+      const last=Date.parse(profile.lastactiveat??'');
+      if(!Number.isFinite(last)||Date.now()-last>30*60*1000){const {error:updateError}=await admin.from('users').update({lastactiveat:new Date().toISOString()}).eq('id',actor);if(updateError)throw updateError;return {recorded:true};}
+      return {recorded:false};
+    }
+    case 'adminPreviewOmnichannelCampaign': {
+      const actor=authed();await requireAdmin(actor,'marketing.read');
+      const audience=text(input.audience,30).toUpperCase()||'ALL_USERS';
+      const {data,error}=await admin.rpc('preview_registered_campaign',{p_audience:audience});if(error)throw error;
+      return {counts:data??{},audience,asOf:new Date().toISOString()};
+    }
+    case 'adminSendOmnichannelCampaign': {
+      const actor=authed();await requireAdmin(actor,'marketing.send');
+      await requireRecentAdminAuth(actor);await enforceRateLimit(request,actor,'omnichannel_campaign_send',3,3600);
+      const subject=text(input.subject,140),message=text(input.message,5000),id=requireKey(input.idempotencyKey);
+      const channels=Array.isArray(input.channels)?[...new Set(input.channels.map((v:unknown)=>text(v,20).toUpperCase()).filter((v:string)=>['EMAIL','PUSH','IN_APP','SMS','WHATSAPP'].includes(v)))]:[];
+      if(!subject||!message||!channels.length)fail(400,'Enter a title, message and at least one campaign channel.');
+      const audience=text(input.audience,30).toUpperCase()||'ALL_USERS';
+      if(!['ALL_USERS','CUSTOMERS','CLEANERS','INACTIVE_7'].includes(audience))fail(400,'Choose a supported campaign audience.');
+      const {data:settings,error:settingsError}=await admin.from('configuration').select('value').eq('key','campaignControls').maybeSingle();if(settingsError)throw settingsError;
+      const controls=settings?.value??{};const pauseKeys:Record<string,string>={EMAIL:'emailPaused',PUSH:'pushPaused',IN_APP:'inAppPaused',SMS:'smsPaused',WHATSAPP:'whatsappPaused'};
+      const paused=channels.find((channel:string)=>controls[pauseKeys[channel]]===true);if(paused)fail(423,`${paused} campaigns are paused by an administrator.`);
+      if(channels.includes('EMAIL')&&!secret('RESEND_API_KEY','EXPO_RESEND_API_KEY'))fail(503,'Email campaigns are not configured.');
+      if(channels.includes('SMS')&&(!(secret('SMSPOP_API_KEY','SMSPOP_API_TOKEN'))||!text(Deno.env.get('SMSPOP_SENDER_ID'),13)))fail(503,'SMSPoP campaign delivery is not configured.');
+      if(channels.includes('WHATSAPP')&&(!secret('WHATSAPP_ACCESS_TOKEN','META_WHATSAPP_ACCESS_TOKEN')||!secret('WHATSAPP_PHONE_NUMBER_ID','META_WHATSAPP_PHONE_NUMBER_ID')||!secret('WHATSAPP_TEMPLATE_NAME','META_WHATSAPP_TEMPLATE_NAME')))fail(503,'WhatsApp requires an access token, phone number ID and approved template name.');
+      const {data:existing,error:existingError}=await admin.from('marketingcampaigns').select('createdby,subject,message,status,recipientcount,data').eq('id',id).maybeSingle();if(existingError)throw existingError;
+      if(existing){if(existing.createdby!==actor||existing.subject!==subject||existing.message!==message||JSON.stringify(existing.data?.channels??[])!==JSON.stringify(channels)||existing.data?.audience!==audience)fail(409,'This campaign key is already in use with different content.');if(['QUEUED','SENDING','SENT','PARTIAL','UNCERTAIN','NO_RECIPIENTS'].includes(existing.status))return {queuedCount:Number(existing.recipientcount??0),alreadyQueued:true,status:existing.status};fail(409,'This campaign attempt has an uncertain result and needs operator review.');}
+      const {error:insertError}=await admin.from('marketingcampaigns').insert({id,subject,message,status:'QUEUED',recipientcount:0,createdby:actor,data:{channels,audience}});if(insertError?.code==='23505')fail(409,'This campaign was already submitted. Refresh history before retrying.');if(insertError)throw insertError;
+      const {data:counts,error:queueError}=await admin.rpc('enqueue_registered_marketing_campaign',{p_campaign_id:id,p_channels:channels,p_audience:audience});
+      if(queueError){await admin.from('marketingcampaigns').update({status:'FAILED',data:{channels,audience,failure:'enqueue'}}).eq('id',id);throw queueError;}
+      const queuedCount=Object.values(counts??{}).reduce((sum:number,value:unknown)=>sum+Number(value??0),0);
+      const status=queuedCount?'QUEUED':'NO_RECIPIENTS';
+      const {error:updateError}=await admin.from('marketingcampaigns').update({status,recipientcount:queuedCount,data:{channels,audience,channelCounts:counts??{}}}).eq('id',id);if(updateError)throw updateError;
+      await admin.from('adminauditevents').upsert({id:`campaign_${id}`,action:'marketing_campaign_queued',actorid:actor,targetid:id,reason:`Campaign queued: ${subject}`,data:{channels,audience,recipientCount:queuedCount,channelCounts:counts??{}},immutable:true});
+      return {queuedCount,channelCounts:counts??{},status};
     }
     case 'adminCampaignHistory': {
       const actor=authed();await requireAdmin(actor,'marketing.read');
       const {data,error}=await admin.from('marketingcampaigns').select('id,subject,status,recipientcount,createdat,data').order('createdat',{ascending:false}).limit(50);if(error)throw error;
-      return {campaigns:(data??[]).map((row:Json)=>({id:row.id,subject:row.subject,status:row.status,recipientCount:row.recipientcount,createdAt:row.createdat,filters:row.data?.filters??{}}))};
+      const rows=data??[];const ids=rows.map((row:Json)=>row.id);const {data:summary,error:summaryError}=ids.length?await admin.rpc('marketing_campaign_delivery_summary',{p_campaign_ids:ids}):{data:{},error:null};if(summaryError)throw summaryError;
+      return {campaigns:rows.map((row:Json)=>({id:row.id,subject:row.subject,status:row.status,recipientCount:row.recipientcount,createdAt:row.createdat,filters:row.data?.filters??{},channels:row.data?.channels??[],channelCounts:row.data?.channelCounts??{},deliverySummary:summary?.[row.id]??{}}))};
     }
     case 'adminSendMarketingCampaign': {
       const actor=authed();await requireAdmin(actor,'marketing.send');

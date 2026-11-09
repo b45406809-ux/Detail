@@ -47,7 +47,19 @@ export default function ProfileScreen() {
   const { user, profile, updateProfile } = useAuth();
   const [notificationsOn, setNotificationsOn] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [communication, setCommunication] = useState({emailEnabled:false,pushEnabled:false,inAppEnabled:false,smsEnabled:false,whatsappEnabled:false,inactivityRemindersEnabled:false});
+  const [savingCommunication, setSavingCommunication] = useState(false);
   useEffect(() => { hasCurrentPushDevice().then(setNotificationsOn).catch(() => setNotificationsOn(false)); }, [user?.uid]);
+  useEffect(() => { if(user?.uid) callFunction<{}, {preferences:typeof communication}>('getCommunicationPreferences').then(result=>setCommunication(result.preferences)).catch(()=>undefined); }, [user?.uid]);
+
+  const setCommunicationPreference = async (key:keyof typeof communication,value:boolean) => {
+    const next={...communication,[key]:value};
+    if(value&&key==='inactivityRemindersEnabled'&&!next.pushEnabled&&!next.inAppEnabled){appAlert('Choose a reminder destination','Turn on push or in-app announcements before enabling inactivity reminders.');return;}
+    setSavingCommunication(true);
+    try{const result=await callFunction<Record<string,boolean>,{preferences:typeof communication}>('updateCommunicationPreferences',{[key]:value});setCommunication(result.preferences);}
+    catch(error){appAlert('Could not save communication choices',error instanceof Error?error.message:'Please try again.');}
+    finally{setSavingCommunication(false);}
+  };
 
   const setPushNotifications = async (enabled: boolean) => {
     if (!enabled) {
@@ -401,6 +413,22 @@ export default function ProfileScreen() {
             trackColor={{ false: '#e2e8f0', true: '#3906d2' }}
             thumbColor="#fff"
           />
+        </View>
+
+        <View className="mx-5 mb-4 bg-white rounded-3xl px-5 py-5 border border-slate-100">
+          <Text className="text-sm font-display font-black text-slate-900">Marketing and reminders</Text>
+          <Text className="font-sans text-xs leading-5 text-slate-500 mt-1 mb-3">Choose how Detail may send product news. These choices are separate from booking and payment alerts. You can change them here at any time.</Text>
+          {([
+            ['emailEnabled','Email','Product announcements and offers by email.'],
+            ['pushEnabled','Push announcements','Promotional push notifications on this device. Enable Notifications above too.'],
+            ['inAppEnabled','In-app announcements','Promotional messages in your Detail notifications inbox.'],
+            ['smsEnabled','SMS','Marketing texts from Detail. Carrier charges may apply. Each campaign includes a link to stop these messages.'],
+            ['whatsappEnabled','WhatsApp','Marketing messages from Detail on WhatsApp. Each campaign includes a link to stop these messages.'],
+            ['inactivityRemindersEnabled','Come-back reminders','A reminder after 7 days without opening Detail; at most once per inactive period.'],
+          ] as const).map(([key,title,description])=><View key={key} className="flex-row items-center justify-between gap-4 py-3 border-t border-slate-100">
+            <View className="flex-1"><Text className="font-sans-bold text-sm text-slate-800">{title}</Text><Text className="font-sans text-xs leading-4 text-slate-500 mt-0.5">{description}</Text></View>
+            <Switch disabled={savingCommunication} value={communication[key]} onValueChange={value=>void setCommunicationPreference(key,value)} trackColor={{false:'#e2e8f0',true:'#3906d2'}} thumbColor="#fff" />
+          </View>)}
         </View>
 
         {/* Menu groups */}
