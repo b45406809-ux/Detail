@@ -14,36 +14,45 @@ jobs:
       - name: Check whether the configured token can list R2 buckets
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_R2_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_API_TOKEN }}
+          CLOUDFLARE_R2_BUCKET: ${{ vars.CLOUDFLARE_R2_BUCKET || 'detail-media' }}
         run: |
           node <<'NODE'
           (async () => {
             const account = process.env.CLOUDFLARE_ACCOUNT_ID;
-            const token = process.env.CLOUDFLARE_API_TOKEN;
+            const token = process.env.CLOUDFLARE_R2_API_TOKEN;
+            const bucket = process.env.CLOUDFLARE_R2_BUCKET;
             if (!account || !token) {
-              coreError('Cloudflare account ID or API token is not configured in the production environment.');
+              coreError('Cloudflare account ID or R2 API token is not configured in the production environment.');
               process.exitCode = 1;
               return;
             }
-            const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(account)}/r2/buckets`, {
-              headers: { authorization: `Bearer ${token}` },
-              signal: AbortSignal.timeout(20000),
-            });
-            if (response.ok) {
-              console.log('R2_ACCESS: allowed to list buckets.');
-              return;
-            }
-            if (response.status === 403) {
-              console.log('R2_ACCESS: denied (HTTP 403); token lacks permission or account access.');
+            const endpoint = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(account)}/r2/buckets`;
+            const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+            const response = await fetch(endpoint, { headers, signal: AbortSignal.timeout(20000) });
+            if (!response.ok) {
+              console.log(`R2_ACCESS: denied or unavailable (HTTP ${response.status}); check token permissions and account. No credentials were logged.`);
               process.exitCode = 1;
               return;
             }
-            if (response.status === 401) {
-              console.log('R2_ACCESS: denied (HTTP 401); token is invalid or expired.');
+            const result = await response.json();
+            if (!result.success || !Array.isArray(result.result)) {
+              console.log('R2_ACCESS: Cloudflare returned an unsuccessful or unexpected response.');
               process.exitCode = 1;
               return;
             }
-            console.log(`R2_ACCESS: inconclusive (HTTP ${response.status}); inspect this step's status only.`);
+            const exists = result.result.some(item => item.name === bucket);
+            if (exists) {
+              console.log('R2_ACCESS: allowed; target bucket already exists.');
+              return;
+            }
+            const created = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify({ name: bucket, locationHint: 'weur', storageClass: 'Standard' }), signal: AbortSignal.timeout(20000) });
+            const createdResult = await created.json().catch(() => ({}));
+            if (created.ok && createdResult.success) {
+              console.log('R2_ACCESS: allowed; target bucket created successfully.');
+              return;
+            }
+            console.log(`R2_ACCESS: bucket creation failed (HTTP ${created.status}); check token bucket write permission. No credentials were logged.`);
             process.exitCode = 1;
           })().catch(() => { console.error('R2_ACCESS: request failed; no credential details were logged.'); process.exitCode = 1; });
           function coreError(message) { console.error(message); }
