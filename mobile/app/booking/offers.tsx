@@ -211,6 +211,10 @@ export default function OffersScreen() {
 
       {/* Budget + bidding-window timer card */}
       <View className="mx-5 mb-4 bg-white rounded-3xl p-4 border border-ink/5">
+        {job?.isFavoriteRebook && <View className="mb-3 rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2">
+          <Text className="font-display text-xs font-black text-accent">Rebooking request sent to your previous cleaner</Text>
+          <Text className="mt-1 font-sans text-xs leading-5 text-ink/60">Your previous price is the target budget. The cleaner must send a new quote; review the final total and payment choice before confirming.</Text>
+        </View>}
         <View className="flex-row items-center justify-between mb-1">
           <View>
             <Text className="text-2xl font-display font-black text-ink">
@@ -291,7 +295,7 @@ export default function OffersScreen() {
           </View>
           <Text className="text-lg font-display font-black text-ink text-center mt-2">Waiting for offers…</Text>
           <Text className="font-sans text-sm text-ink/40 font-medium text-center mt-2">
-            Cleaners in your area are reviewing your job and will place bids shortly
+            {job?.isFavoriteRebook ? 'Your previous cleaner has been invited to send a fresh quote. You can confirm the final price and payment after reviewing it.' : 'Cleaners in your area are reviewing your job and will place bids shortly'}
           </Text>
         </View>
       ) : (
