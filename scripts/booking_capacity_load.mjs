@@ -14,6 +14,14 @@ if (!key || !/^[A-Za-z0-9_-]{8,120}$/.test(runId ?? '') || !Number.isInteger(boo
 }
 
 const headers = { apikey: key, authorization: `Bearer ${key}`, 'content-type': 'application/json' };
+async function exactCount(path, filters) {
+  const url = new URL(path, base);
+  url.searchParams.set('select', 'id');
+  for (const [name, value] of Object.entries(filters)) url.searchParams.set(name, value);
+  const response = await fetch(url, { method: 'HEAD', headers: { ...headers, prefer: 'count=exact', range: '0-0' } });
+  if (!response.ok) throw new Error(`Could not verify local benchmark fixture counts (HTTP ${response.status}).`);
+  return Number(response.headers.get('content-range')?.split('/')[1] ?? NaN);
+}
 async function rpc(name, body) {
   const response = await fetch(new URL(`/rest/v1/rpc/${name}`, base), { method: 'POST', headers, body: JSON.stringify(body) });
   if (!response.ok) throw new Error(`${name} failed with HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
@@ -22,6 +30,12 @@ async function rpc(name, body) {
 
 const durations = new Array(bookingTotal);
 const failures = [];
+const notificationDistribution = new Map();
+const eligibleCleaners = await exactCount('/rest/v1/users', {
+  role: 'eq.CLEANER', verificationstatus: 'eq.VERIFIED', cleaneragreementaccepted: 'eq.true',
+  cleaneronboardingcomplete: 'eq.true', status: 'eq.AVAILABLE',
+  locationupdatedat: `gt.${new Date(Date.now() - 300_000).toISOString()}`, locationpoint: 'not.is.null',
+});
 let next = 0;
 let notifiedCleaners = 0;
 const startedAt = performance.now();
@@ -45,7 +59,9 @@ async function worker() {
       });
       const id = Array.isArray(bookingId) ? bookingId[0] : bookingId;
       if (typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id)) throw new Error('create_booking returned no booking ID');
-      notifiedCleaners += Number(await rpc('notify_scheduled_job_cleaners', { p_job_id: id, p_customer_id: actorId, p_limit: 20 })) || 0;
+      const notified = Number(await rpc('notify_scheduled_job_cleaners', { p_job_id: id, p_customer_id: actorId, p_limit: 20 })) || 0;
+      notifiedCleaners += notified;
+      notificationDistribution.set(notified, (notificationDistribution.get(notified) ?? 0) + 1);
       durations[index] = performance.now() - requestStarted;
     } catch (error) {
       failures.push({ index, error: error instanceof Error ? error.message : String(error) });
@@ -68,6 +84,8 @@ const result = {
   runId, target: 'local Supabase PostgREST and booking SQL RPCs',
   requestedBookings: bookingTotal, concurrency, completedBookings: completed,
   failedBookings: failures.length, nearbyCleanerNotifications: notifiedCleaners,
+  eligibleSyntheticCleaners: eligibleCleaners,
+  notificationsPerBooking: Object.fromEntries([...notificationDistribution.entries()].sort((a, b) => a[0] - b[0])),
   persistedBookings,
   elapsedSeconds: Number((elapsedMs / 1000).toFixed(2)),
   bookingsPerSecond: Number((completed / (elapsedMs / 1000)).toFixed(1)),
@@ -83,6 +101,7 @@ if (process.env.GITHUB_STEP_SUMMARY) {
     `- Booking throughput: ${result.bookingsPerSecond}/sec`,
     `- End-to-end DB path latency: p50 ${result.bookingLatencyMs.p50} ms, p95 ${result.bookingLatencyMs.p95} ms, p99 ${result.bookingLatencyMs.p99} ms`,
     `- Nearby cleaner notifications created: ${notifiedCleaners}`,
+    `- Eligible synthetic cleaners: ${eligibleCleaners}`,
     '- Target: local Supabase only; this does not measure hosted plan or Edge Function limits.',
   ].join('\n') + '\n');
 }
