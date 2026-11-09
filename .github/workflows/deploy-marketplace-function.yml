@@ -38,7 +38,7 @@ jobs:
           test -n "$CLOUDFLARE_R2_ACCESS_KEY_ID" || { echo 'Missing R2 access key ID'; exit 1; }
           test -n "$CLOUDFLARE_R2_SECRET_ACCESS_KEY" || { echo 'Missing R2 secret access key'; exit 1; }
           supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-          supabase db push
+          supabase db push --linked
           supabase secrets set CLOUDFLARE_ACCOUNT_ID="$CLOUDFLARE_ACCOUNT_ID" CLOUDFLARE_R2_BUCKET="$CLOUDFLARE_R2_BUCKET" CLOUDFLARE_R2_ACCESS_KEY_ID="$CLOUDFLARE_R2_ACCESS_KEY_ID" CLOUDFLARE_R2_SECRET_ACCESS_KEY="$CLOUDFLARE_R2_SECRET_ACCESS_KEY" --project-ref "$SUPABASE_PROJECT_REF"
       - name: Deploy marketplace Edge Function
         run: |
