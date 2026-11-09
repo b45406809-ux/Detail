@@ -29,6 +29,34 @@ if (process.env.SUPABASE_ACCESS_TOKEN) {
   }
 }
 
+let twilio = { status: 'not connected', note: 'Twilio reporting credentials are not configured.' };
+if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+  try {
+    const credentials = Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
+    const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(process.env.TWILIO_ACCOUNT_SID)}/Usage/Records/LastMonth.json`, {
+      headers: { authorization: `Basic ${credentials}` },
+    });
+    if (!response.ok) {
+      twilio = { status: 'unavailable', note: `Twilio Usage API returned HTTP ${response.status}.` };
+    } else {
+      const payload = await response.json();
+      const records = (payload.usage_records ?? []).filter(record => String(record.category ?? '').toLowerCase().includes('sms'));
+      twilio = {
+        status: 'measured', interval: 'previous calendar month', currency: 'USD',
+        records: records.map(record => ({
+          category: record.category, count: Number(record.count ?? 0), countUnit: record.count_unit,
+          usage: Number(record.usage ?? 0), usageUnit: record.usage_unit,
+          price: Number(record.price ?? 0), priceUnit: record.price_unit,
+        })),
+        note: 'Twilio usage records are provider reported; totals may exclude taxes or pending adjustments.',
+      };
+    }
+  } catch {
+    twilio = { status: 'unavailable', note: 'Twilio Usage API request failed.' };
+  }
+}
+providerMeters.twilio = twilio;
+
 const capturedAt = new Date().toISOString();
 const snapshot = { captured_date: capturedAt.slice(0, 10), captured_at: capturedAt, metrics, provider_meters: providerMeters };
 const upsert = await fetch(`${base}/rest/v1/usage_snapshots?on_conflict=captured_date`, {
@@ -43,6 +71,7 @@ const summary = [
   `Active user sign-in estimate (30d): ${Number(metrics.activeUsers30d ?? 0)}`,
   `Chat messages (30d): ${Number(metrics.messages30d ?? 0)}`,
   `Supabase API request telemetry: ${providerMeters.supabaseApiRequests.status}`,
+  `Twilio SMS usage: ${providerMeters.twilio.status}`,
 ].join('\n');
 if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + '\n');
 console.log('Daily aggregate usage snapshot saved.');
