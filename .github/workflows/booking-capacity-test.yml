@@ -41,7 +41,7 @@ jobs:
           set -euo pipefail
           DB_URL="$(supabase status -o env | sed -n 's/^DB_URL="\(.*\)"$/\1/p')"
           case "$DB_URL" in postgresql://postgres:postgres@127.0.0.1:54322/postgres) ;; *) echo 'Refusing to run benchmark outside local Supabase.'; exit 1;; esac
-          pgbench --no-vacuum --client=100 --jobs=4 --transactions=100 --report-latencies \
+          pgbench --no-vacuum --client=100 --jobs=4 --transactions=100 --progress=10 -r \
             --define="run_id=$RUN_ID" --file=scripts/booking_capacity_pgbench.sql "$DB_URL"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -v run_id="$RUN_ID" -f scripts/booking_capacity_verify.sql
       - name: Stop local Supabase
