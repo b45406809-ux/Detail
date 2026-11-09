@@ -1,11 +1,16 @@
 begin;
-select plan(3);
+select plan(4);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values
   ('1b738e32-e846-40da-9dc6-3c7f5dc66231','authenticated','authenticated','booking-idem-one@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now()),
   ('b4aff413-8c74-4b4b-b3b2-d2918f7555ac','authenticated','authenticated','booking-idem-two@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now())
 on conflict(id) do nothing;
+
+select ok(
+  to_regclass('public.job_events_creation_idempotency_idx') is not null,
+  'booking replay lookup has an actor and idempotency index'
+);
 
 select is(
   public.create_booking('1b738e32-e846-40da-9dc6-3c7f5dc66231','retry-key',
