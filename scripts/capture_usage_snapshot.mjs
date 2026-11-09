@@ -11,11 +11,11 @@ const metrics = await rpc.json();
 
 let providerMeters = { supabaseApiRequests: { status: 'not connected', note: 'Supabase Management API token is not configured.' } };
 if (process.env.SUPABASE_ACCESS_TOKEN) {
-  const url = `https://api.supabase.com/v1/projects/${encodeURIComponent(process.env.SUPABASE_PROJECT_REF)}/analytics/endpoints/usage.api-counts?interval=1d`;
+  const url = `https://api.supabase.com/v1/projects/${encodeURIComponent(process.env.SUPABASE_PROJECT_REF)}/analytics/endpoints/usage.api-counts?interval=1day`;
   try {
     const response = await fetch(url, { headers: { authorization: `Bearer ${process.env.SUPABASE_ACCESS_TOKEN}` } });
     if (!response.ok) {
-      providerMeters.supabaseApiRequests = { status: 'not connected', note: `Management API returned HTTP ${response.status}; analytics permission may be unavailable.` };
+      providerMeters.supabaseApiRequests = { status: 'not connected', note: `Management API returned HTTP ${response.status}.` };
     } else {
       const payload = await response.json();
       const data = Array.isArray(payload) ? payload : (payload.result ?? payload.data ?? []);
