@@ -36,6 +36,7 @@ import { uploadChatPhoto } from '../../services/storage';
 import { ChatMessage } from '../../types';
 
 const QUICK_REPLIES = ['On my way!', 'Sounds good', "I'm here", 'Thank you!'];
+const MESSAGE_RETENTION_MS = 24 * 60 * 60 * 1000;
 const messageTime = (value: any) => value?.toDate?.().getTime?.() ?? new Date(value).getTime();
 
 interface Conversation {
@@ -54,6 +55,7 @@ export default function MessagesScreen() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeJobId, setActiveJobId] = useState<string | null>(params.jobId ?? null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [now, setNow] = useState(Date.now());
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [conversationError, setConversationError] = useState('');
@@ -61,6 +63,10 @@ export default function MessagesScreen() {
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [chatError, setChatError] = useState('');
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
   const flatListRef = useRef<FlatList>(null);
   const preserveChatScrollRef = useRef(false);
   const reachedHistoryStartRef = useRef(false);
@@ -118,7 +124,7 @@ export default function MessagesScreen() {
               ? job.cleanerName ?? 'Cleaner'
               : job.customerName ?? 'Customer',
             otherUserPhoto: isCustomer ? job.cleanerPhoto ?? '' : job.customerPhoto ?? '',
-            lastMessage: job.lastMessage ?? 'No messages yet',
+            lastMessage: job.lastMessageAt && messageTime(job.lastMessageAt) < Date.now() - MESSAGE_RETENTION_MS ? 'No recent messages' : job.lastMessage ?? 'No messages yet',
             lastMessageAt: job.lastMessageAt,
             unreadCount: job[unreadField] ?? 0,
           }));
@@ -142,6 +148,7 @@ export default function MessagesScreen() {
     const q = query(
       collection(db, 'messages'),
       where('jobId', '==', activeJobId),
+      where('createdAt', '>=', new Date(Date.now() - MESSAGE_RETENTION_MS)),
       orderBy('createdAt', 'desc'),
       limit(100)
     );
@@ -151,12 +158,14 @@ export default function MessagesScreen() {
     reachedHistoryStartRef.current = false;
     return onSnapshot(q, (snap) => {
       setChatError('');
-      const page = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChatMessage)).reverse();
-      setHasOlderMessages(snap.size >= 100 && !reachedHistoryStartRef.current);
+      const page = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChatMessage))
+        .filter(message => messageTime(message.createdAt) >= Date.now() - MESSAGE_RETENTION_MS)
+        .reverse();
+      setHasOlderMessages(false);
       setMessages(current => {
         const merged = new Map(current.map(message => [message.id, message]));
         page.forEach(message => merged.set(message.id, message));
-        return [...merged.values()].sort((left, right) => messageTime(left.createdAt) - messageTime(right.createdAt));
+        return [...merged.values()].filter(message => messageTime(message.createdAt) >= Date.now() - MESSAGE_RETENTION_MS).sort((left, right) => messageTime(left.createdAt) - messageTime(right.createdAt));
       });
       // Scroll to bottom on new messages
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
@@ -286,9 +295,13 @@ export default function MessagesScreen() {
 
           {/* Messages */}
           {chatError ? <View className="items-center px-4 py-2"><Text accessibilityRole="alert" className="text-center text-xs text-rose-700">{chatError}</Text><TouchableOpacity accessibilityRole="button" onPress={() => setChatRetry(value => value + 1)} className="mt-1 rounded-full bg-rose-50 px-3 py-1"><Text className="text-xs font-bold text-rose-800">Retry messages</Text></TouchableOpacity></View> : null}
-          <FlatList
+        <View className="mx-4 mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <Text className="text-xs font-bold text-amber-950">Stay safe on Detail</Text>
+          <Text className="mt-1 text-xs leading-5 text-amber-900">Messages disappear from this chat after 24 hours, but remain stored securely. Keep communication and payments in Detail. Don’t share your phone number, verification codes, or send money outside the app.</Text>
+        </View>
+        <FlatList
             ref={flatListRef}
-            data={messages}
+          data={messages.filter(message => messageTime(message.createdAt) >= now - MESSAGE_RETENTION_MS)}
             keyExtractor={(m) => m.id}
             contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 16, gap: 8 }}
             onContentSizeChange={() => { if (preserveChatScrollRef.current) { preserveChatScrollRef.current = false; return; } flatListRef.current?.scrollToEnd({ animated: false }); }}
