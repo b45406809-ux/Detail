@@ -74,5 +74,5 @@ const summary = [
   `Twilio SMS usage: ${providerMeters.twilio.status}`,
 ].join('\n');
 if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + '\n');
-console.log(`Usage provider status: Supabase requests=${providerMeters.supabaseApiRequests.status}; Twilio SMS=${providerMeters.twilio.status}.`);
+console.log(`Usage provider status: Supabase requests=${providerMeters.supabaseApiRequests.status} (${providerMeters.supabaseApiRequests.note}); Twilio SMS=${providerMeters.twilio.status}.`);
 console.log('Daily aggregate usage snapshot saved.');
