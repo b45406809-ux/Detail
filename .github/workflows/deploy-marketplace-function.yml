@@ -43,7 +43,7 @@ jobs:
       - name: Deploy marketplace Edge Function
         run: |
           set -euo pipefail
-          supabase functions deploy marketplace-api --project-ref "$SUPABASE_PROJECT_REF"
+          supabase functions deploy marketplace-api --project-ref "$SUPABASE_PROJECT_REF" --yes
       - name: Create disposable accounts for live verification
         run: node scripts/live_mobile_ui_e2e.mjs create
       - name: Verify deployed backend access guards
