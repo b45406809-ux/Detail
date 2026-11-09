@@ -57,6 +57,34 @@ if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
 }
 providerMeters.twilio = twilio;
 
+let cloudflareR2 = { status: 'not connected', note: 'Cloudflare R2 account metrics credentials are not configured.' };
+if (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_R2_API_TOKEN) {
+  try {
+    const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(process.env.CLOUDFLARE_ACCOUNT_ID)}/r2/metrics`;
+    const response = await fetch(url, { headers: { authorization: `Bearer ${process.env.CLOUDFLARE_R2_API_TOKEN}` } });
+    if (!response.ok) {
+      cloudflareR2 = { status: 'unavailable', note: `Cloudflare R2 metrics API returned HTTP ${response.status}.` };
+    } else {
+      const payload = await response.json();
+      if (!payload.success || !payload.result) {
+        cloudflareR2 = { status: 'unavailable', note: 'Cloudflare did not return account-level R2 metrics.' };
+      } else {
+        const published = ['standard', 'infrequentAccess'].map(name => payload.result[name]?.published ?? {});
+        cloudflareR2 = {
+          status: 'measured', interval: 'current account metrics', scope: 'all buckets',
+          storageBytes: published.reduce((sum, item) => sum + Number(item.payloadSize ?? 0), 0),
+          objectCount: published.reduce((sum, item) => sum + Number(item.objects ?? 0), 0),
+          freeStorageBytes: 10_000_000_000,
+          note: 'Account-level published object metrics; may lag recent changes. Includes all buckets in this Cloudflare account.',
+        };
+      }
+    }
+  } catch {
+    cloudflareR2 = { status: 'unavailable', note: 'Cloudflare R2 metrics API request failed.' };
+  }
+}
+providerMeters.cloudflareR2 = cloudflareR2;
+
 const capturedAt = new Date().toISOString();
 const snapshot = { captured_date: capturedAt.slice(0, 10), captured_at: capturedAt, metrics, provider_meters: providerMeters };
 const upsert = await fetch(`${base}/rest/v1/usage_snapshots?on_conflict=captured_date`, {
@@ -72,7 +100,8 @@ const summary = [
   `Chat messages (30d): ${Number(metrics.messages30d ?? 0)}`,
   `Supabase API request telemetry: ${providerMeters.supabaseApiRequests.status}`,
   `Twilio SMS usage: ${providerMeters.twilio.status}`,
+  `Cloudflare R2 usage: ${providerMeters.cloudflareR2.status}`,
 ].join('\n');
 if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + '\n');
-console.log(`Usage provider status: Supabase requests=${providerMeters.supabaseApiRequests.status} (${providerMeters.supabaseApiRequests.note}); Twilio SMS=${providerMeters.twilio.status}.`);
+console.log(`Usage provider status: Supabase requests=${providerMeters.supabaseApiRequests.status} (${providerMeters.supabaseApiRequests.note}); Twilio SMS=${providerMeters.twilio.status}; Cloudflare R2=${providerMeters.cloudflareR2.status} (${providerMeters.cloudflareR2.note}).`);
 console.log('Daily aggregate usage snapshot saved.');
