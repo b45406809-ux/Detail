@@ -57,6 +57,62 @@ if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
 }
 providerMeters.twilio = twilio;
 
+// SMSPoP's campaign listing is a read-only reporting endpoint. Do not call
+// POST /campaigns here: that endpoint immediately sends real, billable SMS.
+let smspop = { status: 'not connected', note: 'SMSPoP reporting token is not configured.' };
+if (process.env.SMSPOP_API_KEY || process.env.SMSPOP_API_TOKEN) {
+  try {
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const totals = { campaigns: 0, recipients: 0, sent: 0, failed: 0, delivered: 0, undelivered: 0 };
+    let page = 1;
+    let reachedCutoff = false;
+    let lastPage = 1;
+    let reportedLastPage = 1;
+    // Bound API calls if an account has an unexpectedly long history. At
+    // 15 campaigns/page this reads at most 1,500 campaign summaries.
+    while (page <= 100 && page <= lastPage && !reachedCutoff) {
+      const response = await fetch(`https://smspop.co.zw/api/campaigns?page=${page}`, {
+        headers: { authorization: `Bearer ${process.env.SMSPOP_API_KEY || process.env.SMSPOP_API_TOKEN}`, accept: 'application/json' },
+        redirect: 'error', signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok) {
+        smspop = { status: 'unavailable', note: `SMSPoP reporting API returned HTTP ${response.status}.` };
+        break;
+      }
+      const payload = await response.json();
+      const campaigns = payload?.data?.campaigns;
+      if (payload?.success !== true || !Array.isArray(campaigns)) {
+        smspop = { status: 'unavailable', note: 'SMSPoP did not return campaign usage records.' };
+        break;
+      }
+      reportedLastPage = Math.max(1, Number(payload.data?.meta?.last_page) || 1);
+      lastPage = Math.min(100, reportedLastPage);
+      for (const campaign of campaigns) {
+        const createdAt = Date.parse(campaign.created_at);
+        if (Number.isFinite(createdAt) && createdAt < cutoff) { reachedCutoff = true; continue; }
+        if (!Number.isFinite(createdAt)) continue;
+        totals.campaigns++;
+        totals.recipients += Number(campaign.total_contacts) || 0;
+        totals.sent += Number(campaign.sent) || 0;
+        totals.failed += Number(campaign.failed) || 0;
+        totals.delivered += Number(campaign.delivered) || 0;
+        totals.undelivered += Number(campaign.undelivered) || 0;
+      }
+      page++;
+    }
+    if (smspop.status === 'not connected') {
+      smspop = {
+        status: 'measured', interval: 'last 30 days', asOf: new Date().toISOString(), ...totals,
+        truncated: page > 100 && !reachedCutoff && reportedLastPage > 100,
+        note: 'SMSPoP campaign report counts only. Campaign listing does not report SMS-part credits or account balance; long messages may consume multiple credits per recipient.',
+      };
+    }
+  } catch {
+    smspop = { status: 'unavailable', note: 'SMSPoP campaign reporting request failed.' };
+  }
+}
+providerMeters.smspop = smspop;
+
 let cloudflareR2 = { status: 'not connected', note: 'Cloudflare R2 account metrics credentials are not configured.' };
 if (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_R2_API_TOKEN) {
   try {
@@ -100,8 +156,12 @@ const summary = [
   `Chat messages (30d): ${Number(metrics.messages30d ?? 0)}`,
   `Supabase API request telemetry: ${providerMeters.supabaseApiRequests.status}`,
   `Twilio SMS usage: ${providerMeters.twilio.status}`,
+  `SMSPoP campaign usage: ${providerMeters.smspop.status}`,
   `Cloudflare R2 usage: ${providerMeters.cloudflareR2.status}`,
 ].join('\n');
-if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + '\n');
-console.log(`Usage provider status: Supabase requests=${providerMeters.supabaseApiRequests.status} (${providerMeters.supabaseApiRequests.note}); Twilio SMS=${providerMeters.twilio.status}; Cloudflare R2=${providerMeters.cloudflareR2.status} (${providerMeters.cloudflareR2.note}).`);
+const smsPopSummary = providerMeters.smspop.status === 'measured'
+  ? `\nSMSPoP accepted recipients (30d): ${providerMeters.smspop.sent}; delivered: ${providerMeters.smspop.delivered}; campaigns: ${providerMeters.smspop.campaigns}. Credits/balance are not available from the campaign list.`
+  : '';
+if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + smsPopSummary + '\n');
+console.log(`Usage provider status: Supabase requests=${providerMeters.supabaseApiRequests.status} (${providerMeters.supabaseApiRequests.note}); Twilio SMS=${providerMeters.twilio.status}; SMSPoP=${providerMeters.smspop.status}; Cloudflare R2=${providerMeters.cloudflareR2.status} (${providerMeters.cloudflareR2.note}).`);
 console.log('Daily aggregate usage snapshot saved.');
