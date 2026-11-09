@@ -113,6 +113,82 @@ if (process.env.SMSPOP_API_KEY || process.env.SMSPOP_API_TOKEN) {
 }
 providerMeters.smspop = smspop;
 
+let posthog = { status: 'not connected', note: 'PostHog read-only query credentials are not configured.' };
+if (process.env.POSTHOG_PERSONAL_API_KEY && /^\d+$/.test(process.env.POSTHOG_PROJECT_ID ?? '')) {
+  try {
+    const host = (process.env.POSTHOG_HOST || 'https://us.i.posthog.com').replace(/\/+$/, '');
+    const response = await fetch(`${host}/api/projects/${encodeURIComponent(process.env.POSTHOG_PROJECT_ID)}/query/`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${process.env.POSTHOG_PERSONAL_API_KEY}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ query: { kind: 'HogQLQuery', query: 'SELECT count() AS events FROM events WHERE timestamp >= now() - INTERVAL 30 DAY' } }),
+      redirect: 'error', signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) {
+      posthog = { status: 'unavailable', note: `PostHog query API returned HTTP ${response.status}.` };
+    } else {
+      const payload = await response.json();
+      const eventCount = Number(payload?.results?.[0]?.[0]);
+      posthog = Number.isFinite(eventCount)
+        ? { status: 'measured', interval: 'last 30 days', asOf: new Date().toISOString(), eventCount, note: 'HogQL event count is usage telemetry; verify billable event totals and plan quota in PostHog billing.' }
+        : { status: 'unavailable', note: 'PostHog query API returned no event count.' };
+    }
+  } catch {
+    posthog = { status: 'unavailable', note: 'PostHog usage query failed.' };
+  }
+}
+providerMeters.posthog = posthog;
+
+let resend = { status: 'not connected', note: 'Resend email reporting key is not configured.' };
+if (process.env.RESEND_API_KEY) {
+  try {
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const totals = { emails: 0 };
+    let after;
+    let pages = 0;
+    let hasMore = true;
+    let reachedCutoff = false;
+    while (hasMore && pages < 20 && !reachedCutoff) {
+      const url = new URL('https://api.resend.com/emails');
+      url.searchParams.set('limit', '100');
+      if (after) url.searchParams.set('after', after);
+      const response = await fetch(url, {
+        headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, accept: 'application/json' },
+        redirect: 'error', signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok) {
+        resend = { status: 'unavailable', note: `Resend email reporting API returned HTTP ${response.status}.` };
+        break;
+      }
+      const payload = await response.json();
+      const emails = payload?.data;
+      if (!Array.isArray(emails)) {
+        resend = { status: 'unavailable', note: 'Resend did not return email log records.' };
+        break;
+      }
+      pages++;
+      for (const email of emails) {
+        const createdAt = Date.parse(email.created_at);
+        if (Number.isFinite(createdAt) && createdAt < cutoff) { reachedCutoff = true; continue; }
+        if (!Number.isFinite(createdAt)) continue;
+        totals.emails++;
+      }
+      hasMore = payload.has_more === true && emails.length > 0;
+      after = emails.at(-1)?.id;
+      if (!after) hasMore = false;
+    }
+    if (resend.status === 'not connected') {
+      resend = {
+        status: 'measured', interval: 'last 30 days', asOf: new Date().toISOString(), ...totals,
+        truncated: hasMore && !reachedCutoff,
+        note: 'Resend email-log count is telemetry, not an invoice total; recipient-level billing and account quota are shown in Resend billing.',
+      };
+    }
+  } catch {
+    resend = { status: 'unavailable', note: 'Resend email reporting request failed.' };
+  }
+}
+providerMeters.resend = resend;
+
 let cloudflareR2 = { status: 'not connected', note: 'Cloudflare R2 account metrics credentials are not configured.' };
 if (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_R2_API_TOKEN) {
   try {
@@ -157,11 +233,15 @@ const summary = [
   `Supabase API request telemetry: ${providerMeters.supabaseApiRequests.status}`,
   `Twilio SMS usage: ${providerMeters.twilio.status}`,
   `SMSPoP campaign usage: ${providerMeters.smspop.status}`,
+  `PostHog event usage: ${providerMeters.posthog.status}`,
+  `Resend email usage: ${providerMeters.resend.status}`,
   `Cloudflare R2 usage: ${providerMeters.cloudflareR2.status}`,
 ].join('\n');
 const smsPopSummary = providerMeters.smspop.status === 'measured'
   ? `\nSMSPoP accepted recipients (30d): ${providerMeters.smspop.sent}; delivered: ${providerMeters.smspop.delivered}; campaigns: ${providerMeters.smspop.campaigns}. Credits/balance are not available from the campaign list.`
   : '';
-if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + smsPopSummary + '\n');
-console.log(`Usage provider status: Supabase requests=${providerMeters.supabaseApiRequests.status} (${providerMeters.supabaseApiRequests.note}); Twilio SMS=${providerMeters.twilio.status}; SMSPoP=${providerMeters.smspop.status}; Cloudflare R2=${providerMeters.cloudflareR2.status} (${providerMeters.cloudflareR2.note}).`);
+const posthogSummary = providerMeters.posthog.status === 'measured' ? `\nPostHog events (30d): ${providerMeters.posthog.eventCount}.` : '';
+const resendSummary = providerMeters.resend.status === 'measured' ? `\nResend email logs (30d): ${providerMeters.resend.emails}.${providerMeters.resend.truncated ? ' History capped at 2,000 emails.' : ''}` : '';
+if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + smsPopSummary + posthogSummary + resendSummary + '\n');
+console.log(`Usage provider status: Supabase requests=${providerMeters.supabaseApiRequests.status} (${providerMeters.supabaseApiRequests.note}); Twilio SMS=${providerMeters.twilio.status}; SMSPoP=${providerMeters.smspop.status}; PostHog=${providerMeters.posthog.status}; Resend=${providerMeters.resend.status}; Cloudflare R2=${providerMeters.cloudflareR2.status} (${providerMeters.cloudflareR2.note}).`);
 console.log('Daily aggregate usage snapshot saved.');
