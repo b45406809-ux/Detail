@@ -1,10 +1,50 @@
 name: Deploy marketplace function from tested branch
 on:
   workflow_dispatch:
+    inputs:
+      usage_monitor_only:
+        description: Deploy only the usage snapshot migration and marketplace API. Do not run account tests or alter booking settings.
+        type: boolean
+        required: false
+        default: false
 permissions:
   contents: read
 jobs:
+  deploy-usage-monitor:
+    if: inputs.usage_monitor_only == true && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.SUPABASE_SERVICE_ROLE || secrets.SUPABASE_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Validate production target and credentials
+        run: |
+          set -euo pipefail
+          test "$SUPABASE_PROJECT_REF" = yiyhmueospjwbaywzusp
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_DB_PASSWORD"
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_SERVICE_ROLE_KEY"
+      - name: Apply repository migrations
+        run: |
+          supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          supabase db push --remote --yes
+      - name: Deploy marketplace API
+        run: supabase functions deploy marketplace-api --project-ref "$SUPABASE_PROJECT_REF" --yes
+      - name: Capture initial aggregate usage snapshot
+        run: node scripts/capture_usage_snapshot.mjs
+
   deploy:
+    if: inputs.usage_monitor_only != true
     runs-on: ubuntu-latest
     environment: production
     env:
