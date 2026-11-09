@@ -1,0 +1,49 @@
+name: Synthetic booking capacity test (local Supabase)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: booking-capacity-local
+  cancel-in-progress: false
+
+jobs:
+  local-capacity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start isolated local Supabase and apply migrations
+        run: |
+          supabase start
+          supabase db reset --local
+      - name: Install PostgreSQL benchmark client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-contrib
+      - name: Seed isolated synthetic customers and cleaners
+        run: |
+          set -euo pipefail
+          DB_URL="$(supabase status -o env | sed -n 's/^DB_URL="\(.*\)"$/\1/p')"
+          test -n "$DB_URL"
+          case "$DB_URL" in postgresql://postgres:postgres@127.0.0.1:54322/postgres) ;; *) echo 'Refusing to run benchmark outside local Supabase.'; exit 1;; esac
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f scripts/booking_capacity_seed.sql
+      - name: Run 10,000 synthetic booking writes with cleaner fan-out
+        env:
+          RUN_ID: capacity_${{ github.run_id }}_${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          DB_URL="$(supabase status -o env | sed -n 's/^DB_URL="\(.*\)"$/\1/p')"
+          case "$DB_URL" in postgresql://postgres:postgres@127.0.0.1:54322/postgres) ;; *) echo 'Refusing to run benchmark outside local Supabase.'; exit 1;; esac
+          pgbench --no-vacuum --client=100 --jobs=4 --transactions=100 --report-latencies \
+            --define="run_id=$RUN_ID" --file=scripts/booking_capacity_pgbench.sql "$DB_URL"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -v run_id="$RUN_ID" -f scripts/booking_capacity_verify.sql
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
