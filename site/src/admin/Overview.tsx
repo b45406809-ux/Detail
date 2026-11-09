@@ -6,14 +6,26 @@ import type { OverviewData } from './types';
 const money = (value: number, currency: string) => new Intl.NumberFormat('en-ZW', { style: 'currency', currency }).format(value / 100);
 
 function DatabaseUsage() {
-  const [usage, setUsage] = useState<{asOf:string; databaseBytes:number; chatTableBytes:number}>();
+  const [usage, setUsage] = useState<{asOf:string; databaseBytes:number; chatTableBytes:number; fileStorageBytes:number; fileCount:number; activeUsers30d:number; messages30d:number}>();
   const [error, setError] = useState('');
-  useEffect(() => { adminCall<{asOf:string; databaseBytes:number; chatTableBytes:number}>('adminUsage').then(setUsage).catch(() => setError('Usage unavailable. Check deployment and access, then retry by refreshing.')); }, []);
-  const limit = 500_000_000;
-  const percent = usage ? usage.databaseBytes / limit * 100 : 0;
-  return <article className="panel"><div className="panel-title"><h2>Supabase usage</h2>{usage && percent >= 60 && <span className="alert-count" role="alert"><AlertTriangle size={14}/>Database at {percent.toFixed(1)}% of Free limit</span>}</div>
-    {error ? <p className="inline-error">{error}</p> : !usage ? <p className="muted">Loading usage…</p> : <><p>Database: {(usage.databaseBytes / 1_000_000).toFixed(1)} MB of 500 MB Free-plan reference ({percent.toFixed(1)}%).</p><p className="muted">Chat table and indexes: {(usage.chatTableBytes / 1_000_000).toFixed(1)} MB. Database size includes other application data and system databases. Measured {new Date(usage.asOf).toLocaleString()}; check Supabase for the authoritative quota and plan.</p></>}
-    <p className="muted">This dashboard warning appears while this page is open. Function calls, bandwidth, file storage, authentication and realtime limits are not monitored here; check Supabase Usage and Reports.</p>
+  const load = async (force=false) => {
+    const key='detail:usage-snapshot:v1';
+    if(!force){try{const cached=JSON.parse(sessionStorage.getItem(key)||'null');if(cached&&Date.now()-Date.parse(cached.asOf)<24*60*60*1000){setUsage(cached);return;}}catch{}}
+    try{const fresh=await adminCall<any>('adminUsage');setUsage(fresh);sessionStorage.setItem(key,JSON.stringify(fresh));setError('');}
+    catch{setError('Usage could not be read. Check Supabase Usage and Reports.');}
+  };
+  useEffect(() => { void load(); }, []);
+  const rows=usage?[{name:'Database',value:usage.databaseBytes,limit:500_000_000,unit:'MB',divisor:1_000_000},{name:'Supabase file storage',value:usage.fileStorageBytes,limit:1_073_741_824,unit:'MB',divisor:1_000_000},{name:'Monthly active users (sign-in estimate)',value:usage.activeUsers30d,limit:50_000,unit:'users',divisor:1},{name:'Chat messages (30d; database rows)',value:usage.messages30d,limit:null,unit:'messages',divisor:1}] : [];
+  const alerts=rows.filter(row=>row.limit&&row.value/row.limit>=.6);
+  return <article className="panel"><div className="panel-title"><h2>Usage and free-tier watch</h2><button onClick={()=>void load(true)}>Refresh usage</button></div>
+    {alerts.map(row=><p className="alert-count" role="alert" key={row.name}><AlertTriangle size={14}/>{row.name} is at {(row.value/row.limit!*100).toFixed(1)}% of its Free-plan reference.</p>)}
+    {error?<p className="inline-error">{error}</p>:!usage?<p className="muted">Loading usage…</p>:<><div className="rows">{rows.map(row=><div className="row" key={row.name}><b>{row.name}</b><span>{(row.value/row.divisor).toLocaleString(undefined,{maximumFractionDigits:1})} {row.unit}{row.limit?` / ${(row.limit/row.divisor).toLocaleString()} (${(row.value/row.limit*100).toFixed(1)}%)`:' · no fixed free-plan quota'}</span></div>)}</div><p className="muted">Chat table and indexes: {(usage.chatTableBytes/1_000_000).toFixed(1)} MB. Active users are estimated from sign-in timestamps. Snapshot: {new Date(usage.asOf).toLocaleString()}. Cached for 24 hours; refresh is manual.</p></>}
+    <h3>Provider meters</h3><div className="rows">
+      <div className="row"><b>Mapbox</b><span>25,000 monthly map users; 100,000 temporary geocoding and Directions requests each. Account statistics require provider access.</span></div>
+      <div className="row"><b>Cloudflare R2</b><span>10 GB-month, 1M writes, 10M reads; object usage is not yet collected here.</span></div>
+      <div className="row"><b>PostHog</b><span>1M events/month; events are consent-gated. Account usage not yet connected.</span></div>
+      <div className="row"><b>Resend, SMSPOP, Twilio, Didit, Paynow</b><span>Usage is not yet pulled from provider billing APIs. Check provider consoles for invoice-grade totals.</span></div>
+    </div><p className="muted">Dashboard checks are cached for 24 hours and do not poll in the background. Free-plan limits shown here are references; confirm the active account plan and exact billing usage with each provider.</p>
     <a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer">Open Supabase dashboard ↗</a>
   </article>;
 }
