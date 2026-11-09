@@ -1,4 +1,5 @@
 import { supabase, auth } from './supabase';
+import { callFunction } from './functions';
 
 const BUCKET = 'detail-media';
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
@@ -24,8 +25,9 @@ async function uploadUri(uri: string, path: string, onProgress?: (pct: number) =
     throw new Error('Choose a JPEG, PNG, WebP, or HEIC image.');
   }
   onProgress?.(0.1);
-  const { error } = await supabase.storage.from(BUCKET).upload(path, bytes, { upsert, contentType });
-  if (error) throw error;
+  const signed=await callFunction<{path:string;contentType:string;size:number;upsert:boolean},{url:string;path:string}>('mediaUploadUrl',{path,contentType,size:bytes.byteLength,upsert});
+  const uploaded=await fetch(signed.url,{method:'PUT',headers:{'content-type':contentType,'content-length':String(bytes.byteLength)},body:bytes});
+  if(!uploaded.ok)throw new Error('Could not upload the photo. Please try again.');
   onProgress?.(1);
   return `${BUCKET}/${path}`;
 }
@@ -53,8 +55,7 @@ export async function removeSupportEvidence(paths: string[]) {
   const prefix = `${BUCKET}/support-evidence/`;
   const objectPaths = paths.filter(path => path.startsWith(prefix)).map(path => path.slice(BUCKET.length + 1));
   if (!objectPaths.length) return;
-  const { error } = await supabase.storage.from(BUCKET).remove(objectPaths);
-  if (error) throw error;
+  await Promise.all(objectPaths.map(path=>callFunction('mediaDelete',{path:`${BUCKET}/${path}`})));
 }
 export function uploadProfilePhoto(uri: string) {
   const uid = auth.currentUser?.uid;
@@ -72,7 +73,7 @@ export function uploadProofOfResidence(uri: string) {
   return uploadUri(uri, `verification/${uid}/proof-of-residence.jpg`, undefined, true);
 }
 
-/** Media remains in a private bucket; signed links are generated on reads. */
+/** Private media URLs are issued by the authenticated marketplace gateway. */
 export async function signMediaValue(value: unknown): Promise<unknown> {
   if (typeof value === 'string' && value.startsWith(`${BUCKET}/`)) {
     const path = value.slice(BUCKET.length + 1);
@@ -87,15 +88,14 @@ export async function signMediaValue(value: unknown): Promise<unknown> {
     if (cached) signedUrlCache.delete(cacheKey);
     const pending = signedUrlRequests.get(cacheKey);
     if (pending) return pending;
-    const request = supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 60).then(({ data, error }) => {
-      if (error) throw error;
-      signedUrlCache.set(cacheKey, { url: data.signedUrl, expiresAt: Date.now() + SIGNED_URL_TTL_MS });
+    const request = callFunction<{path:string},{url:string}>('mediaReadUrl',{path:`${BUCKET}/${path}`}).then(({url}) => {
+      signedUrlCache.set(cacheKey, { url, expiresAt: Date.now() + SIGNED_URL_TTL_MS });
       while (signedUrlCache.size > SIGNED_URL_CACHE_LIMIT) {
         const oldest = signedUrlCache.keys().next().value;
         if (oldest === undefined) break;
         signedUrlCache.delete(oldest);
       }
-      return data.signedUrl;
+      return url;
     }).finally(() => signedUrlRequests.delete(cacheKey));
     signedUrlRequests.set(cacheKey, request);
     return request;

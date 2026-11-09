@@ -1,5 +1,7 @@
 import { createClient, type SupabaseClient, type User } from 'npm:@supabase/supabase-js@2.80.0';
 import { Paynow } from 'npm:paynow@2.2.2';
+import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from 'npm:@aws-sdk/client-s3@3.840.0';
+import { getSignedUrl } from 'npm:@aws-sdk/s3-request-presigner@3.840.0';
 import { hasRecentSupabaseAuthentication } from '../_shared/session_auth.ts';
 import { adminStepUpFailure } from '../_shared/admin_step_up.ts';
 import { trustedEdgeIp } from '../_shared/trusted_edge_ip.ts';
@@ -15,6 +17,14 @@ if (!url || !anonKey || !serviceKey) throw new Error('Supabase function environm
 
 const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const authClient = createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+function r2Client() {
+  const account=Deno.env.get('CLOUDFLARE_ACCOUNT_ID')??'';
+  const accessKeyId=Deno.env.get('CLOUDFLARE_R2_ACCESS_KEY_ID')??'';
+  const secretAccessKey=Deno.env.get('CLOUDFLARE_R2_SECRET_ACCESS_KEY')??'';
+  if(!account||!accessKeyId||!secretAccessKey)fail(503,'Private media storage is not configured.');
+  return new S3Client({region:'auto',endpoint:`https://${account}.r2.cloudflarestorage.com`,credentials:{accessKeyId,secretAccessKey}});
+}
+const r2Bucket=()=>Deno.env.get('CLOUDFLARE_R2_BUCKET')||'detail-media';
 const allowedOrigins = new Set([
   'https://detail.co.zw', 'https://www.detail.co.zw', 'https://dashboard.detail.co.zw',
   'https://blog.detail.co.zw',
@@ -216,6 +226,53 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
   const uid = user?.id;
   const authed = (): string => { if (!uid) fail(401, 'Sign in required.'); return uid; };
   switch (name) {
+    case 'mediaUploadUrl': {
+      const actor=authed(); await requireActiveMarketplaceAccount(actor);
+      const path=text(input.path,500),type=text(input.contentType,80).toLowerCase(),size=Number(input.size);
+      if(!/^[a-z0-9-]+(?:\/[A-Za-z0-9._-]+){2,3}$/.test(path)||!['image/jpeg','image/png','image/webp','image/heic'].includes(type)||!Number.isFinite(size)||size<=0||size>15*1024*1024)fail(400,'Invalid media upload.');
+      const parts=path.split('/'),folder=parts[0];
+      if(['profile-photos','job-photos','verification','cleaner-portfolio'].includes(folder)&&parts[1]!==actor)fail(403,'You cannot upload to another account folder.');
+      if(['job-completion','chat-photos','support-evidence'].includes(folder)){
+        const {data:job,error}=await admin.from('jobs').select('customerid,cleanerid').eq('id',parts[1]).maybeSingle();
+        if(error)throw error;if(!job||![job.customerid,job.cleanerid].includes(actor)||!path.includes(`/${actor}/`))fail(403,'You cannot upload media for this booking.');
+      }
+      if(!['profile-photos','job-photos','verification','cleaner-portfolio','job-completion','chat-photos','support-evidence'].includes(folder))fail(400,'Unsupported media type.');
+      const command=new PutObjectCommand({Bucket:r2Bucket(),Key:path,ContentType:type,ContentLength:size});
+      return {url:await getSignedUrl(r2Client(),command,{expiresIn:300}),path:`detail-media/${path}`,expiresIn:300};
+    }
+    case 'mediaReadUrl': {
+      const actor=authed(),path=text(input.path,500).replace(/^detail-media\//,'');
+      if(path.includes('..')||path.startsWith('/'))fail(400,'Invalid media path.');
+      const parts=path.split('/'),folder=parts[0];let allowed=false;
+      if(['profile-photos','verification','cleaner-portfolio'].includes(folder)){
+        allowed=parts[1]===actor;
+        if(folder==='profile-photos'&&!allowed){const {data:profile}=await admin.from('users').select('verificationstatus,role').eq('id',parts[1]).maybeSingle();allowed=profile?.role==='CLEANER'&&profile?.verificationstatus==='VERIFIED';}
+        if(folder==='cleaner-portfolio'&&!allowed){const {data:profile}=await admin.from('users').select('verificationstatus,role').eq('id',parts[1]).maybeSingle();allowed=profile?.role==='CLEANER'&&profile?.verificationstatus==='VERIFIED';}
+      }
+      if(['job-photos','job-completion','chat-photos','support-evidence'].includes(folder)){
+        const jobId=folder==='job-photos'?text(input.jobId,80):parts[1];
+        const {data:job,error}=await admin.from('jobs').select('customerid,cleanerid,photos').eq('id',jobId).maybeSingle();if(error)throw error;
+        allowed=!!job&&[job.customerid,job.cleanerid].includes(actor);
+        if(folder==='job-photos')allowed=allowed&&Array.isArray(job?.photos)&&job.photos.includes(`detail-media/${path}`);
+        if(folder==='support-evidence')allowed=allowed&&parts[2]===actor;
+        if(folder==='job-completion'||folder==='chat-photos')allowed=allowed&&parts[2]===actor;
+      }
+      if(!allowed)fail(403,'You cannot view this private media.');
+      const s3=r2Client();
+      try{await s3.send(new HeadObjectCommand({Bucket:r2Bucket(),Key:path}));return {url:await getSignedUrl(s3,new GetObjectCommand({Bucket:r2Bucket(),Key:path}),{expiresIn:3600}),expiresIn:3600};}
+      catch{
+        const {data,error}=await admin.storage.from('detail-media').createSignedUrl(path,3600);
+        if(error)throw error;return {url:data.signedUrl,expiresIn:3600};
+      }
+    }
+    case 'mediaDelete': {
+      const actor=authed(),path=text(input.path,500).replace(/^detail-media\//,'');
+      const parts=path.split('/');
+      if(path.includes('..')||parts.length<3||parts[1]!==actor||!['support-evidence','verification'].includes(parts[0]))fail(403,'You cannot remove this private media.');
+      await r2Client().send(new DeleteObjectCommand({Bucket:r2Bucket(),Key:path}));
+      const {error}=await admin.storage.from('detail-media').remove([path]);if(error)console.warn('legacy media cleanup failed',error.message);
+      return {success:true};
+    }
     case 'blogPublicList': {
       const slug = text(input.slug, 100);
       if (slug) {
