@@ -1349,10 +1349,29 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const {count,error}=await query;if(error)throw error;
       return {recipientCount:count??0,filters:{country,city,serviceInterest:service,preferredLanguage:language},asOf:new Date().toISOString()};
     }
+    case 'adminCampaignControl': {
+      const actor=authed(); await requireAdmin(actor,'marketing.send');
+      const {data:row,error}=await admin.from('configuration').select('value').eq('key','campaignControls').maybeSingle();if(error)throw error;
+      const current=row?.value??{emailPaused:false};
+      if(input.paused===undefined)return {controls:current};
+      await requireRecentAdminAuth(actor);
+      const paused=input.paused===true;
+      const controls={...current,emailPaused:paused,updatedAt:new Date().toISOString(),updatedBy:actor};
+      const {error:saveError}=await admin.from('configuration').upsert({key:'campaignControls',value:controls,updatedby:actor,updatedat:new Date().toISOString()},{onConflict:'key'});if(saveError)throw saveError;
+      await admin.from('adminauditevents').upsert({id:`campaign_pause_${Date.now()}_${actor}`,action:'marketing_campaign_channel_paused',actorid:actor,targetid:'email',reason:paused?'Email campaigns paused':'Email campaigns resumed',data:{paused},immutable:true});
+      return {controls};
+    }
+    case 'adminCampaignHistory': {
+      const actor=authed();await requireAdmin(actor,'marketing.read');
+      const {data,error}=await admin.from('marketingcampaigns').select('id,subject,status,recipientcount,createdat,data').order('createdat',{ascending:false}).limit(50);if(error)throw error;
+      return {campaigns:(data??[]).map((row:Json)=>({id:row.id,subject:row.subject,status:row.status,recipientCount:row.recipientcount,createdAt:row.createdat,filters:row.data?.filters??{}}))};
+    }
     case 'adminSendMarketingCampaign': {
       const actor=authed();await requireAdmin(actor,'marketing.send');
       await enforceRateLimit(request,actor,'marketing_campaign_send',3,3600);
       const subject=text(input.subject,140), message=text(input.message,5000), apiKey=secret('RESEND_API_KEY','EXPO_RESEND_API_KEY');
+      const {data:campaignSettings,error:settingsError}=await admin.from('configuration').select('value').eq('key','campaignControls').maybeSingle();if(settingsError)throw settingsError;
+      if(campaignSettings?.value?.emailPaused===true)fail(423,'Email campaigns are paused by an administrator.');
       if(!subject||!message||!apiKey)fail(503,'Campaign email is not configured.');
       const id=requireKey(input.idempotencyKey);
       const filters=input.filters&&typeof input.filters==='object'?input.filters as Json:{};
