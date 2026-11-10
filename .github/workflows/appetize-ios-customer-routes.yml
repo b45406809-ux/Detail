@@ -93,7 +93,7 @@ jobs:
           set -euo pipefail
           mkdir -p appetize-ios-route-results
           session_id="detail-ios-routes-${GITHUB_RUN_ID}"
-          if ! appetize session start iphone15 --target "$APPETIZE_BUILD_ID" --session-id "$session_id" --json --quiet > appetize-ios-route-results/session.json; then
+          if ! appetize session start iphone15pro --target "$APPETIZE_BUILD_ID" --session-id "$session_id" --json --quiet > appetize-ios-route-results/session.json; then
             APPETIZE_SESSION_LOG_DIR="$HOME/.appetize/cli/sessions/$session_id" node --input-type=module <<'NODE'
           import { readdir, readFile } from 'node:fs/promises';
           import { join } from 'node:path';
