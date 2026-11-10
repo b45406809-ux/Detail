@@ -34,11 +34,12 @@ try {
         signal: AbortSignal.timeout(30000),
       });
       const body = await response.json().catch(() => null);
-      if (!response.ok || !body?.user?.id) {
-        failures.push({ index, status: response.status, message: String(body?.msg ?? body?.message ?? body?.error_description ?? 'signup rejected').slice(0, 140) });
+      const userId = body?.user?.id ?? body?.id;
+      if (!response.ok || !userId) {
+        failures.push({ index, status: response.status, message: String(body?.msg ?? body?.message ?? body?.error_description ?? `signup response keys: ${Object.keys(body ?? {}).join(',')}`).slice(0, 140) });
         return null;
       }
-      const user = { id: body.user.id, email };
+      const user = { id: userId, email };
       users.push(user);
       latencies.push(performance.now() - requestStarted);
       return user;
