@@ -1,0 +1,177 @@
+name: Appetize live iOS customer routes
+
+on:
+  workflow_dispatch:
+    inputs:
+      appetize_build_id:
+        description: Immutable iOS Appetize target ID
+        required: true
+        type: string
+      source_commit:
+        description: Full 40-character source commit that built the selected target
+        required: true
+        type: string
+      source_workflow_run_id:
+        description: Successful iOS simulator build workflow run ID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  customer-ios:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+      APPETIZE_BUILD_ID: ${{ inputs.appetize_build_id }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      SOURCE_WORKFLOW_RUN_ID: ${{ inputs.source_workflow_run_id }}
+      GITHUB_TOKEN: ${{ github.token }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate pinned iOS artifact and source run
+        run: |
+          set -euo pipefail
+          [[ "$APPETIZE_BUILD_ID" =~ ^[A-Za-z0-9]{20,32}$ ]]
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SOURCE_WORKFLOW_RUN_ID" =~ ^[0-9]+$ ]]
+          git cat-file -e "$SOURCE_COMMIT^{commit}"
+          npm install --global @appetize/cli@0.25.1 --no-audit --no-fund
+          appetize build list --app com.detail.app --limit 200 --json --quiet > "$RUNNER_TEMP/appetize-builds.json"
+          APPETIZE_BUILD_ID="$APPETIZE_BUILD_ID" SOURCE_COMMIT="$SOURCE_COMMIT" SOURCE_WORKFLOW_RUN_ID="$SOURCE_WORKFLOW_RUN_ID" node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises';
+          const { builds = [] } = JSON.parse(await readFile(`${process.env.RUNNER_TEMP}/appetize-builds.json`, 'utf8'));
+          const target = builds.find(build => build.id === process.env.APPETIZE_BUILD_ID);
+          if (!target) throw new Error('The requested Appetize build ID is unavailable for com.detail.app.');
+          if (String(target.platform).toLowerCase() !== 'ios') throw new Error('The requested Appetize target is not iOS.');
+          if (target.note && !String(target.note).includes(process.env.SOURCE_COMMIT)) throw new Error('The Appetize build note does not match the supplied source commit.');
+          const api = `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}`;
+          const headers = { authorization: `Bearer ${process.env.GITHUB_TOKEN}`, accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28' };
+          const runResponse = await fetch(`${api}/actions/runs/${process.env.SOURCE_WORKFLOW_RUN_ID}`, { headers });
+          if (!runResponse.ok) throw new Error(`Could not verify the source workflow run (HTTP ${runResponse.status}).`);
+          const run = await runResponse.json();
+          if (run.head_sha !== process.env.SOURCE_COMMIT || run.conclusion !== 'success' || run.name !== 'Build and inspect iOS simulator app on Appetize') {
+            throw new Error('The supplied source run did not successfully build the supplied source commit.');
+          }
+          const jobsResponse = await fetch(`${api}/actions/runs/${process.env.SOURCE_WORKFLOW_RUN_ID}/jobs`, { headers });
+          if (!jobsResponse.ok) throw new Error(`Could not verify the iOS upload job (HTTP ${jobsResponse.status}).`);
+          const { jobs = [] } = await jobsResponse.json();
+          const job = jobs.find(entry => entry.name === 'ios-simulator' && entry.conclusion === 'success');
+          if (!job || !job.steps?.some(step => step.name.includes('Upload iOS simulator app to Appetize') && step.conclusion === 'success')) {
+            throw new Error('The source workflow has no successful iOS Appetize upload.');
+          }
+          console.log(`PINNED_APPETIZE_TARGET: ${target.id}`);
+          console.log(`PINNED_SOURCE_COMMIT: ${process.env.SOURCE_COMMIT}`);
+          console.log(`PINNED_SOURCE_WORKFLOW_RUN: ${process.env.SOURCE_WORKFLOW_RUN_ID}`);
+          NODE
+          {
+            echo '## Pinned iOS Appetize customer route sweep'
+            echo
+            echo "- Appetize build ID: \`$APPETIZE_BUILD_ID\`"
+            echo "- Source commit: \`$SOURCE_COMMIT\`"
+            echo "- Source workflow run: \`$SOURCE_WORKFLOW_RUN_ID\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Check safe booking boundary and create disposable test accounts
+        id: test-users
+        run: |
+          node scripts/live_mobile_ui_e2e.mjs preflight
+          node scripts/live_mobile_ui_e2e.mjs create
+      - name: Sign in and sweep iOS customer routes
+        run: |
+          set -euo pipefail
+          mkdir -p appetize-ios-route-results
+          session_id="detail-ios-routes-${GITHUB_RUN_ID}"
+          trap 'appetize inspect appetize-ios-route-results/final.json --session-id "$session_id" --json --quiet || true; appetize screenshot appetize-ios-route-results/final.png --session-id "$session_id" --json --quiet || true; appetize session stop --session-id "$session_id" --json --quiet || true' EXIT
+          appetize session start iphone15 --target "$APPETIZE_BUILD_ID" --session-id "$session_id" --json --quiet > appetize-ios-route-results/session.json
+          appetize inspect --session-id "$session_id" --select-test-id welcome-skip --timeout 25000 --json --quiet
+          appetize tap --session-id "$session_id" --select-test-id welcome-skip --json --quiet
+          appetize inspect --session-id "$session_id" --select-test-id auth-email-tab --timeout 15000 --json --quiet
+          appetize tap --session-id "$session_id" --select-test-id auth-email-tab --json --quiet
+          appetize tap --session-id "$session_id" --select-test-id auth-email-mode-password --json --quiet
+          appetize inspect --session-id "$session_id" --select-test-id auth-email-input --timeout 10000 --json --quiet
+          appetize tap --session-id "$session_id" --select-test-id auth-email-input --json --quiet
+          appetize type "$E2E_CUSTOMER_EMAIL" --session-id "$session_id" --json --quiet
+          appetize tap --session-id "$session_id" --select-test-id auth-password-input --json --quiet
+          appetize type "$E2E_CUSTOMER_PASSWORD" --session-id "$session_id" --json --quiet
+          appetize type '{Enter}' --session-id "$session_id" --json --quiet
+          appetize inspect appetize-ios-route-results/agreement.json --session-id "$session_id" --select-text 'Customer Agreement' --timeout 25000 --json --quiet
+          appetize screenshot appetize-ios-route-results/agreement.png --session-id "$session_id" --json --quiet
+          for attempt in $(seq 1 12); do
+            if appetize inspect --session-id "$session_id" --select-text '/^I have read and accept$/i' --timeout 500 --json --quiet >/dev/null 2>&1; then break; fi
+            appetize swipe --session-id "$session_id" --direction up --json --quiet
+          done
+          appetize tap --session-id "$session_id" --select-text '/^I have read and accept$/i' --timeout 10000 --json --quiet
+          appetize inspect --session-id "$session_id" --select-text 'Set up your profile' --timeout 20000 --json --quiet
+          appetize tap --session-id "$session_id" --select-text 'Your full name' --timeout 10000 --json --quiet
+          appetize type 'E2E Live Customer' --session-id "$session_id" --json --quiet
+          appetize type '{Enter}' --session-id "$session_id" --json --quiet
+          appetize tap --session-id "$session_id" --select-text '/^Continue$/i' --timeout 10000 --json --quiet
+          appetize inspect --session-id "$session_id" --select-text 'Allow permissions' --timeout 20000 --json --quiet
+          appetize screenshot appetize-ios-route-results/permissions.png --session-id "$session_id" --json --quiet
+          appetize tap --session-id "$session_id" --select-text '/^Continue to App$/i' --timeout 10000 --json --quiet
+          appetize inspect appetize-ios-route-results/home.json --session-id "$session_id" --select-text '/^House$/i' --timeout 25000 --json --quiet
+          appetize screenshot appetize-ios-route-results/home.png --session-id "$session_id" --json --quiet
+          measure_route() {
+            name="$1"
+            uri="$2"
+            expected="$3"
+            started="$(date +%s%3N)"
+            appetize open "$uri" --session-id "$session_id" --json --quiet
+            appetize inspect --session-id "$session_id" --select-text "$expected" --timeout 15000 --json --quiet
+            finished="$(date +%s%3N)"
+            duration_ms="$((finished - started))"
+            safe_name="$(printf '%s' "$name" | tr ' /' '__' | tr -cd '[:alnum:]_-')"
+            appetize screenshot "appetize-ios-route-results/${safe_name}.png" --session-id "$session_id" --json --quiet
+            echo "IOS_SCREEN_LOAD_MS: $name=$duration_ms"
+            echo "- $name: ${duration_ms} ms until expected content appeared" >> "$GITHUB_STEP_SUMMARY"
+          }
+          measure_route 'Activity tab' 'detail:///activity' 'Your bookings'
+          measure_route 'Messages tab' 'detail:///messages' 'Messages'
+          measure_route 'Wallet tab' 'detail:///wallet' 'Wallet'
+          measure_route 'Profile tab' 'detail:///profile' 'Profile'
+          measure_route 'Service history' 'detail:///history' 'Service History'
+          measure_route 'Favorites' 'detail:///favorites' 'Favorites'
+          measure_route 'Cleaner search' 'detail:///cleaners' 'Find Cleaners'
+          measure_route 'Notifications' 'detail:///notifications' 'Notifications'
+          measure_route 'Reviews' 'detail:///reviews' 'My Reviews'
+          measure_route 'Help' 'detail:///help' 'Help & Support'
+          measure_route 'Support requests' 'detail:///support' 'Support requests'
+          measure_route 'Organization' 'detail:///organization' 'Organization'
+          measure_route 'Account email' 'detail:///account/email' 'Email address'
+          measure_route 'Portfolio' 'detail:///portfolio' 'My portfolio'
+          measure_route 'Instant offers' 'detail:///instant-offers' 'Instant offers'
+          measure_route 'Announcement detail' 'detail:///announcement?title=QA%20announcement&body=Test%20announcement' 'Announcement'
+          measure_route 'Unknown route' 'detail:///route-not-present' 'Screen not found'
+          measure_route 'Privacy policy' 'detail:///privacy-policy' 'Privacy Policy'
+          measure_route 'Customer agreement' 'detail:///customer-agreement' 'Customer Agreement'
+          measure_route 'Cleaner agreement' 'detail:///cleaner-agreement' 'Cleaner Agreement'
+          measure_route 'Booking creation' 'detail:///booking/create' 'What do you need cleaned?'
+          measure_route 'Booking offers with unknown ID' 'detail:///booking/offers?jobId=00000000-0000-4000-8000-000000000001' 'Bids Received'
+          measure_route 'Booking confirmation with unknown ID' 'detail:///booking/confirmation?jobId=00000000-0000-4000-8000-000000000001' 'Booking accepted'
+          measure_route 'Job with unknown ID' 'detail:///job/00000000-0000-4000-8000-000000000001' 'Job not found'
+          measure_route 'Tracking with unknown ID' 'detail:///tracking/00000000-0000-4000-8000-000000000001' 'Booking unavailable'
+          echo 'IOS_CUSTOMER_ROUTE_SWEEP_COMPLETED'
+      - name: Verify persisted onboarding state
+        if: steps.test-users.outcome == 'success'
+        run: node scripts/live_mobile_ui_e2e.mjs verify-customer
+      - name: Clean up disposable test accounts
+        if: always()
+        run: node scripts/live_mobile_ui_e2e.mjs cleanup
+      - name: Upload iOS route screenshots and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appetize-ios-customer-routes-${{ github.run_id }}
+          path: appetize-ios-route-results/
+          if-no-files-found: ignore
+          retention-days: 7
