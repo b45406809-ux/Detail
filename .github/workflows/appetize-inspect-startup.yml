@@ -55,9 +55,18 @@ jobs:
           session_id="detail-startup-inspection-${GITHUB_RUN_ID}"
           trap 'appetize inspect appetize-results/final.json --session-id "$session_id" --json --quiet || true; appetize screenshot appetize-results/final.png --session-id "$session_id" --json --quiet || true; appetize session stop --session-id "$session_id" --json --quiet || true' EXIT
           appetize session start pixel7 --target "$APPETIZE_BUILD_ID" --session-id "$session_id" --json --quiet > appetize-results/session.json
+          sleep 12
           appetize inspect appetize-results/startup.json --session-id "$session_id" --json --quiet
           appetize screenshot appetize-results/startup.png --session-id "$session_id" --json --quiet
           node scripts/summarize-appetize-screen.mjs appetize-results/startup.json | tee -a "$GITHUB_STEP_SUMMARY"
+          if appetize inspect --session-id "$session_id" --select-test-id welcome-skip --timeout 15000 --json --quiet; then
+            echo 'WELCOME_ONBOARDING_VISIBLE_AFTER_COLD_START' | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'WELCOME_ONBOARDING_NOT_VISIBLE_AFTER_27_SECONDS' | tee -a "$GITHUB_STEP_SUMMARY"
+            appetize inspect appetize-results/after-wait.json --session-id "$session_id" --json --quiet
+            node scripts/summarize-appetize-screen.mjs appetize-results/after-wait.json | tee -a "$GITHUB_STEP_SUMMARY"
+            appetize screenshot appetize-results/after-wait.png --session-id "$session_id" --json --quiet
+          fi
 
       - name: Save startup screenshot and device tree
         if: always()
