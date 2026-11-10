@@ -30,6 +30,8 @@ jobs:
         run: python -c "compile(open('scripts/migrate_cloudflare_waitlist_to_supabase.py').read(), 'scripts/migrate_cloudflare_waitlist_to_supabase.py', 'exec')"
       - name: Test QA fixture isolation and pool definitions
         run: node --test qa/qa-fixture-pool.test.mjs
+      - name: Test provider usage channel reporting helpers
+        run: node --test scripts/tests/provider_usage_helpers.test.mjs
       - run: npm ci --prefix site --no-audit --no-fund
       - run: npm run build --prefix site
         env:

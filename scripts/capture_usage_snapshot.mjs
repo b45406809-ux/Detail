@@ -1,4 +1,5 @@
 import { appendFileSync } from 'node:fs';
+import { twilioUsageRecords } from './provider_usage_helpers.mjs';
 
 const base = process.env.SUPABASE_URL?.replace(/\/+$/, '');
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -30,6 +31,7 @@ if (process.env.SUPABASE_ACCESS_TOKEN) {
 }
 
 let twilio = { status: 'not connected', note: 'Twilio reporting credentials are not configured.' };
+let twilioVoice = { status: 'not connected', note: 'Twilio reporting credentials are not configured.' };
 if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
   try {
     const credentials = Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
@@ -38,24 +40,28 @@ if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
     });
     if (!response.ok) {
       twilio = { status: 'unavailable', note: `Twilio Usage API returned HTTP ${response.status}.` };
+      twilioVoice = { status: 'unavailable', note: `Twilio Usage API returned HTTP ${response.status}.` };
     } else {
       const payload = await response.json();
-      const records = (payload.usage_records ?? []).filter(record => String(record.category ?? '').toLowerCase().includes('sms'));
+      const usageRecords = payload.usage_records ?? [];
       twilio = {
         status: 'measured', interval: 'previous calendar month', currency: 'USD',
-        records: records.map(record => ({
-          category: record.category, count: Number(record.count ?? 0), countUnit: record.count_unit,
-          usage: Number(record.usage ?? 0), usageUnit: record.usage_unit,
-          price: Number(record.price ?? 0), priceUnit: record.price_unit,
-        })),
+        records: twilioUsageRecords(usageRecords, 'sms'),
         note: 'Twilio usage records are provider reported; totals may exclude taxes or pending adjustments.',
+      };
+      twilioVoice = {
+        status: 'measured', interval: 'previous calendar month', currency: 'USD',
+        records: twilioUsageRecords(usageRecords, 'voice'),
+        note: 'Account-wide Twilio calls/voice usage from provider records. It is not attributable to Detail app calls and may exclude taxes or pending adjustments.',
       };
     }
   } catch {
     twilio = { status: 'unavailable', note: 'Twilio Usage API request failed.' };
+    twilioVoice = { status: 'unavailable', note: 'Twilio Usage API request failed.' };
   }
 }
 providerMeters.twilio = twilio;
+providerMeters.twilioVoice = twilioVoice;
 
 // SMSPoP's campaign listing is a read-only reporting endpoint. Do not call
 // POST /campaigns here: that endpoint immediately sends real, billable SMS.
