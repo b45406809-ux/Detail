@@ -23,14 +23,27 @@ async function exactCount(path, filters) {
   return Number(response.headers.get('content-range')?.split('/')[1] ?? NaN);
 }
 async function rpc(name, body) {
-  const response = await fetch(new URL(`/rest/v1/rpc/${name}`, base), { method: 'POST', headers, body: JSON.stringify(body) });
-  if (!response.ok) throw new Error(`${name} failed with HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
-  return response.json();
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const response = await fetch(new URL(`/rest/v1/rpc/${name}`, base), { method: 'POST', headers, body: JSON.stringify(body) });
+    if (response.ok) return response.json();
+    const message = await response.text();
+    let failure;
+    try { failure = JSON.parse(message); } catch { failure = null; }
+    // PGRST003 happens before a connection is acquired, so the SQL did not run.
+    if (failure?.code === 'PGRST003' && attempt < 5) {
+      connectionPoolRetries++;
+      await new Promise(resolve => setTimeout(resolve, 100 * (2 ** attempt) + Math.random() * 100));
+      continue;
+    }
+    throw new Error(`${name} failed with HTTP ${response.status}: ${message.slice(0, 300)}`);
+  }
+  throw new Error(`${name} failed after database connection-pool retries.`);
 }
 
 const durations = new Array(bookingTotal);
 const failures = [];
 const notificationDistribution = new Map();
+let connectionPoolRetries = 0;
 const eligibleCleaners = await exactCount('/rest/v1/users', {
   role: 'eq.CLEANER', verificationstatus: 'eq.VERIFIED', cleaneragreementaccepted: 'eq.true',
   cleaneronboardingcomplete: 'eq.true', status: 'eq.AVAILABLE',
@@ -84,6 +97,7 @@ const result = {
   runId, target: 'local Supabase PostgREST and booking SQL RPCs',
   requestedBookings: bookingTotal, concurrency, completedBookings: completed,
   failedBookings: failures.length, nearbyCleanerNotifications: notifiedCleaners,
+  connectionPoolRetries,
   eligibleSyntheticCleaners: eligibleCleaners,
   notificationsPerBooking: Object.fromEntries([...notificationDistribution.entries()].sort((a, b) => a[0] - b[0])),
   persistedBookings,
@@ -98,6 +112,7 @@ if (process.env.GITHUB_STEP_SUMMARY) {
     `- Requests completed: ${completed}/${bookingTotal}`,
     `- Persisted bookings verified: ${persistedBookings}/${bookingTotal}`,
     `- Concurrent booking tasks: ${concurrency}`,
+    `- Retried transient PostgREST pool acquisitions: ${connectionPoolRetries}`,
     `- Booking throughput: ${result.bookingsPerSecond}/sec`,
     `- End-to-end DB path latency: p50 ${result.bookingLatencyMs.p50} ms, p95 ${result.bookingLatencyMs.p95} ms, p99 ${result.bookingLatencyMs.p99} ms`,
     `- Nearby cleaner notifications created: ${notifiedCleaners}`,
