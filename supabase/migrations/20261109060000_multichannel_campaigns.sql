@@ -82,7 +82,9 @@ begin
   if audience_name not in ('ALL_USERS','CUSTOMERS','CLEANERS','INACTIVE_7') then raise exception 'Unsupported campaign audience'; end if;
   insert into public.marketingCampaignDeliveries(campaignId,userId,channel,destination,payload)
   select p_campaign_id,u.id,ch.channel,ch.destination,ch.payload
-  from public.users u join public.userMarketingPreferences p on p.userId=u.id
+  from public.users u
+  join public.userMarketingPreferences p on p.userId=u.id
+  join public.marketingCampaigns c on c.id=p_campaign_id
   cross join lateral (
     select 'EMAIL'::text channel,u.email destination,jsonb_build_object('subject',c.subject,'message',c.message) payload where 'EMAIL'=any(p_channels) and p.emailEnabled and nullif(trim(u.email),'') is not null
     union all
@@ -94,7 +96,6 @@ begin
     union all
     select 'WHATSAPP',u.phone,jsonb_build_object('message',c.subject||E'\n'||c.message) where 'WHATSAPP'=any(p_channels) and p.whatsappEnabled and u.phone ~ '^\+[1-9][0-9]{7,14}$'
   ) ch
-  join public.marketingCampaigns c on c.id=p_campaign_id
   where not u.isBanned and not u.isSuspended and u.accountDeletedAt is null
     and (audience_name not in ('CUSTOMERS','CLEANERS') or u.role::text=case audience_name when 'CUSTOMERS' then 'CUSTOMER' else 'CLEANER' end)
     and (audience_name<>'INACTIVE_7' or u.lastActiveAt<now()-interval '7 days')
