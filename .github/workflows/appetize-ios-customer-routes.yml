@@ -208,7 +208,10 @@ jobs:
           # accessibility node, so tap the center of the visible House card.
           appetize tap --session-id "$session_id" --select-position 0.27,0.62 --json --quiet
           appetize inspect --session-id "$session_id" --select-text 'What do you need cleaned?' --timeout 15000 --json --quiet
-          appetize tap --session-id "$session_id" --select-text 'House Cleaning' --json --quiet
+          appetize screenshot appetize-ios-route-results/service-category.png --session-id "$session_id" --json --quiet
+          # The iOS accessibility snapshot exposes the card's child text but
+          # not an actionable element for the containing TouchableOpacity.
+          appetize tap --session-id "$session_id" --select-position 0.50,0.35 --json --quiet
           appetize tap --session-id "$session_id" --select-text '/^Next$/i' --json --quiet
           appetize inspect --session-id "$session_id" --select-text 'Specific Room / Part' --timeout 15000 --json --quiet
           appetize screenshot appetize-ios-route-results/service-selection.png --session-id "$session_id" --json --quiet
