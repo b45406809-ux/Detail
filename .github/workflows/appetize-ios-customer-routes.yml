@@ -93,7 +93,7 @@ jobs:
           set -euo pipefail
           mkdir -p appetize-ios-route-results
           session_id="detail-ios-routes-${GITHUB_RUN_ID}"
-          trap 'appetize inspect appetize-ios-route-results/final.json --session-id "$session_id" --json --quiet || true; appetize screenshot appetize-ios-route-results/final.png --session-id "$session_id" --json --quiet || true; appetize session stop --session-id "$session_id" --json --quiet || true' EXIT
+          trap 'appetize inspect appetize-ios-route-results/final.json --session-id "$session_id" --json --quiet || true; appetize screenshot appetize-ios-route-results/final.png --session-id "$session_id" --json --quiet || true; if [ -d "$HOME/.appetize/cli/sessions/$session_id" ]; then cp -R "$HOME/.appetize/cli/sessions/$session_id" appetize-ios-route-results/cli-session-logs; fi; appetize session stop --session-id "$session_id" --json --quiet || true' EXIT
           appetize session start iphone15 --target "$APPETIZE_BUILD_ID" --session-id "$session_id" --json --quiet > appetize-ios-route-results/session.json
           appetize inspect --session-id "$session_id" --select-test-id welcome-skip --timeout 25000 --json --quiet
           appetize tap --session-id "$session_id" --select-test-id welcome-skip --json --quiet
