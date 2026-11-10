@@ -121,6 +121,22 @@ jobs:
           appetize tap --session-id "$session_id" --select-text '/^Continue to App$/i' --timeout 10000 --json --quiet
           appetize inspect appetize-ios-route-results/home.json --session-id "$session_id" --select-text '/^House$/i' --timeout 25000 --json --quiet
           appetize screenshot appetize-ios-route-results/home.png --session-id "$session_id" --json --quiet
+          appetize tap --session-id "$session_id" --select-text '/^House$/i' --json --quiet
+          appetize inspect --session-id "$session_id" --select-text 'What do you need cleaned?' --timeout 15000 --json --quiet
+          appetize tap --session-id "$session_id" --select-text 'House Cleaning' --json --quiet
+          appetize tap --session-id "$session_id" --select-text '/^Next$/i' --json --quiet
+          appetize inspect --session-id "$session_id" --select-text 'Specific Room / Part' --timeout 15000 --json --quiet
+          appetize screenshot appetize-ios-route-results/service-selection.png --session-id "$session_id" --json --quiet
+          appetize tap --session-id "$session_id" --select-text 'Specific Room / Part' --json --quiet
+          for label in 'Kitchen' 'Under 10 m²'; do
+            for attempt in $(seq 1 8); do
+              if appetize inspect --session-id "$session_id" --select-text "$label" --timeout 500 --json --quiet >/dev/null 2>&1; then break; fi
+              appetize swipe --session-id "$session_id" --direction up --json --quiet
+            done
+            appetize tap --session-id "$session_id" --select-text "$label" --timeout 10000 --json --quiet
+          done
+          appetize tap --session-id "$session_id" --select-text '/^Next$/i' --timeout 10000 --json --quiet
+          appetize inspect --session-id "$session_id" --select-text 'Details & Condition' --timeout 15000 --json --quiet
           measure_route() {
             name="$1"
             uri="$2"
@@ -160,6 +176,7 @@ jobs:
           measure_route 'Booking confirmation with unknown ID' 'detail:///booking/confirmation?jobId=00000000-0000-4000-8000-000000000001' 'Booking accepted'
           measure_route 'Job with unknown ID' 'detail:///job/00000000-0000-4000-8000-000000000001' 'Job not found'
           measure_route 'Tracking with unknown ID' 'detail:///tracking/00000000-0000-4000-8000-000000000001' 'Booking unavailable'
+          echo '- Selected a house-cleaning service and reached booking details; no booking was submitted.' >> "$GITHUB_STEP_SUMMARY"
           echo 'IOS_CUSTOMER_ROUTE_SWEEP_COMPLETED'
       - name: Verify persisted onboarding state
         if: steps.test-users.outcome == 'success'
