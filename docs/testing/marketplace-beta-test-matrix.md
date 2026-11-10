@@ -1,6 +1,6 @@
 # Marketplace beta test matrix
 
-**Version:** 1.5
+**Version:** 1.6
 **Updated:** 2026-11-10
 **Branch:** `codex/separate-dashboard-into-routed-modules-fl7jlh`
 
@@ -17,13 +17,48 @@ Statuses are **Pass**, **Fail**, **Blocked**, or **Not run**. Local tests do not
 | Android customer routes on pinned Appetize build | Pass | Expanded run 42750004390 used target `qnjjqo4sz4kcis73grjirqur7e`, source commit `803be2234625597075d6d8d27ec2d44d70ce68a4`, source build run 42745938717. Sign-in, customer agreement/profile/permissions onboarding, service selection through booking details, and persisted profile state passed; no booking was submitted. Auth recovery, reset password, and email-code-entry screens rendered before sign-in. Twenty-five marketplace/account/legal routes rendered in 0.73–2.22 s (median 1.38 s): tabs, history, favorites, cleaner search, notifications, reviews, help/support, organization, email, portfolio, instant offers, announcement, not-found, policies, booking form, offers/confirmation, job, and tracking states. Two disposable accounts were deleted. |
 | Android cleaner onboarding and server gates | Pass | Fresh-build run 42750487343 used target `qnjjqo4sz4kcis73grjirqur7e` from build run 42745938717. UI reached the Didit identity gate; the backend returned HTTP 409 for both unverified `submitCleanerApplication` and `setActiveRole`. Persisted gate state was checked; both disposable accounts were deleted. No KYC session was created. |
 | Android email registration | Pass | Run 42744667151 used the same pinned target and AgentMail test inbox. A fresh email code was received and accepted; Auth/profile/agreement state persisted; the one disposable account was deleted. One test verification email was sent. The underlying provider's sandbox/live mode was not independently established. |
-| Reported Google Sign-In nonce error | Partially verified | Commit `803be22` sends the original nonce to Supabase only when Google's ID token contains a nonce claim; three focused tests and mobile CI pass. The fresh APK contains the fix, but a real Google account sign-in still needs a dedicated test account. |
+| Reported Google Sign-In nonce error | Pass | Commit `803be22` sends the original nonce to Supabase only when Google's ID token contains a nonce claim; three focused tests and mobile CI pass, and the fresh APK contains the fix. A real Google account sign-in is separately not run. |
 | SMSPoP API payload | Pass | Run 42747410823 sent one harmless test SMS to the protected test recipient. SMSPoP reported `sent` and 1 credit used. This confirms provider API acceptance, not carrier delivery or the Supabase Auth OTP hook end-to-end. The local Auth-hook payload tests pass in CI. |
 | Full app marketplace booking/bid/chat/tracking/completion/payment lifecycle | Blocked | No verified isolated hosted backend or test-only boundary is available. The current APK points at the hosted project, so no job was posted, no real cleaner was notified, and no payment/KYC/payout was attempted. Local database and Edge Function tests cover lifecycle transitions and access control but do not replace a two-account UI transaction. |
-| iOS simulator/Appetize | Blocked / retry in progress | Run 42746627615 failed building the NitroModules Clang module because `folly/folly-config.h` was missing. Workflow commit `d9cbace` passes Folly no-config flags to module scanning and pod compilation; retry run 42750267000 is in progress. No iOS target is available yet. Physical iPhone checks remain outstanding. |
+| iOS simulator/Appetize | Blocked | Run 42746627615 failed building the NitroModules Clang module because `folly/folly-config.h` was missing. Workflow commit `d9cbace` passes Folly no-config flags to module scanning and pod compilation; retry run 42750267000 is still compiling. No iOS target is available yet. Physical iPhone checks remain outstanding. |
 | Paynow, Didit, push, campaigns, and Twilio Voice provider transactions | Not run | No Paynow checkout, identity verification, push/campaign delivery, or voice call was made. Provider key values were not read or changed; their environment modes cannot be inferred from secret presence. |
 | Twilio in-app calling and usage display | Blocked | Chat call controls, authenticated participant checks, signed Voice tokens, the client cutoff, and server TwiML `timeLimit=300` are implemented and covered by local tests. The admin overview separates account-wide prior-month Twilio Voice usage from SMS. Voice credentials/push credentials are incomplete, so no call or live Voice meter was verified; provider usage cannot be attributed to Detail calls. |
 | Physical Android/iPhone checks | Not run | Permission denial/recovery, actual push delivery, location backgrounding, camera/photo access, Google/Apple sign-in, incoming-call audio/CallKit/PushKit, large text, and real-device layout require physical devices and confirmed test configuration. |
+
+## Android route readiness times
+
+Run 42750004390 measured `open` until the expected screen text was visible. These include Appetize and network overhead and are not device benchmarks. Welcome, sign-in, agreement/profile/permissions onboarding, and booking service selection were also visibly checked, but were not individually timed. GitHub masked the timing values attached to the two password-route labels.
+
+| Screen | Time to expected content |
+| --- | ---: |
+| Activity tab | 1,596 ms |
+| Messages tab | 1,250 ms |
+| Wallet tab | 2,218 ms |
+| Profile tab | 727 ms |
+| Service history | 1,857 ms |
+| Favorites | 1,040 ms |
+| Cleaner search | 907 ms |
+| Notifications | 1,320 ms |
+| Reviews | 1,231 ms |
+| Help | 1,466 ms |
+| Support requests | 1,659 ms |
+| Organization | 1,666 ms |
+| Account email | 1,216 ms |
+| Portfolio | 1,400 ms |
+| Instant offers | 1,376 ms |
+| Announcement detail | 1,833 ms |
+| Unknown route / not found | 853 ms |
+| Privacy policy | 910 ms |
+| Customer agreement | 1,384 ms |
+| Cleaner agreement | 1,408 ms |
+| Booking creation | 1,446 ms |
+| Booking offers, unknown ID | 1,566 ms |
+| Booking confirmation, unknown ID | 1,370 ms |
+| Job, unknown ID | 1,204 ms |
+| Tracking, unknown ID | 1,474 ms |
+| Forgot password | Rendered; value masked in GitHub log |
+| Reset password | Rendered; value masked in GitHub log |
+| Email verification code | 2,129 ms |
 
 ## Provider mode and use evidence
 
