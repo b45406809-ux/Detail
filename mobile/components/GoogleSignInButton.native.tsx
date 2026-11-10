@@ -11,6 +11,7 @@ import {
 import { supabase } from '../services/supabase';
 import { ensureProfileExists } from './authProfiles';
 import { GoogleLogo } from './GoogleLogo';
+import { googleSupabaseNonceForIdToken } from './googleIdTokenNonce.mjs';
 
 const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
@@ -50,7 +51,13 @@ export default function GoogleSignInButton() {
 
       const idToken = result.data.idToken;
       if (!idToken) throw new Error('No ID token returned from Google.');
-      const { data, error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: idToken, nonce });
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: 'google',
+        token: idToken,
+        // Google can return a cached ID token without a nonce claim. Supabase
+        // rejects a nonce supplied for a token that has no nonce claim.
+        nonce: googleSupabaseNonceForIdToken(idToken, nonce),
+      });
       if (error) throw error;
       await ensureProfileExists(data.user.id, data.user.email ?? null);
     } catch (err: unknown) {
