@@ -10,7 +10,7 @@ Statuses are **Pass**, **Fail**, **Blocked**, or **Not run**. Local tests do not
 
 | Area | Status | Scope and result |
 | --- | --- | --- |
-| CI, dashboard, mobile, Supabase migrations and Edge Functions | Pass | Latest full successful run 42749516025 on commit `75999c590b76273901416a060293cb6101aa10c0`: site/dashboard, mobile type-check and lint, Google nonce tests, local Supabase migrations/security/pgTAP, Edge Function checks, and authenticated dashboard journeys passed. Workflow-only commit `d9cbace` has CI run 42750266588 pending. |
+| CI, dashboard, mobile, Supabase migrations and Edge Functions | Pass | Latest full successful run 42750266588 on commit `d9cbace4f8cb717edff6a72fc5db2c597636f758`: site/dashboard, mobile type-check and lint, Google nonce tests, local Supabase migrations/security/pgTAP, Edge Function checks, and authenticated dashboard journeys passed. The docs-only update has CI run 42751147161 in progress. |
 | Concurrent registration burst | Pass | Run 42745132147: 20/20 local synthetic Auth registrations and profiles persisted at concurrency 20; 0 failed; p50 738 ms, p95 783 ms, p99 786 ms. All 20 local accounts were deleted. No hosted accounts were created by this pressure test. |
 | Booking write pressure | Pass | Run 42745132147: 10,000/10,000 synthetic booking RPC writes persisted at concurrency 100 with 1,000 eligible synthetic cleaners and 200,000 nearby-cleaner notification rows. Runtime 82.64 s (121 bookings/s); p50 548 ms, p95 2,216 ms, p99 6,001 ms. Eleven transient local PostgREST pool-acquisition errors were retried; 0 bookings failed. This is not a hosted Supabase free-tier guarantee. |
 | Android build and current Appetize upload | Pass | Direct GitHub Actions build run 42745938717 built commit `803be2234625597075d6d8d27ec2d44d70ce68a4`, uploaded target `qnjjqo4sz4kcis73grjirqur7e`, and saved the home screenshot artifact. No EAS build was run. Android Firebase config was absent in this artifact, so push delivery is not covered. |
@@ -57,10 +57,12 @@ Statuses are **Pass**, **Fail**, **Blocked**, or **Not run**. Local tests do not
 | --- | --- |
 | Latest CI validation on commit `989fdeef` | [GitHub Actions run 42746904371](https://github.com/b45406809-ux/Detail/actions/runs/42746904371) |
 | Android Appetize build, uploaded target, and home screenshot | [GitHub Actions run 42745938717](https://github.com/b45406809-ux/Detail/actions/runs/42745938717) |
+| Interactive Android Appetize app | [Open target `qnjjqo4sz4kcis73grjirqur7e`](https://appetize.io/app/qnjjqo4sz4kcis73grjirqur7e) |
 | Expanded Android customer route sweep, screenshots, persisted profile, and cleanup | [GitHub Actions run 42750004390](https://github.com/b45406809-ux/Detail/actions/runs/42750004390) |
 | iOS simulator/Appetize build failure (missing Folly header) | [GitHub Actions run 42746627615](https://github.com/b45406809-ux/Detail/actions/runs/42746627615) |
 | iOS simulator/Appetize rebuild with propagated Folly flags | [GitHub Actions run 42750267000](https://github.com/b45406809-ux/Detail/actions/runs/42750267000) |
 | Android cleaner verification gate and cleanup on fresh APK | [GitHub Actions run 42750487343](https://github.com/b45406809-ux/Detail/actions/runs/42750487343) |
+| Resolved route-test sequencing attempts (all test accounts cleaned) | [Run 42748867394](https://github.com/b45406809-ux/Detail/actions/runs/42748867394) · [Run 42749535556](https://github.com/b45406809-ux/Detail/actions/runs/42749535556) |
 | Earlier Android customer route sweep | [GitHub Actions run 42744666734](https://github.com/b45406809-ux/Detail/actions/runs/42744666734) |
 | Android cleaner verification gate and cleanup | [GitHub Actions run 42744666657](https://github.com/b45406809-ux/Detail/actions/runs/42744666657) |
 | AgentMail email registration and OTP verification | [GitHub Actions run 42744667151](https://github.com/b45406809-ux/Detail/actions/runs/42744667151) |
