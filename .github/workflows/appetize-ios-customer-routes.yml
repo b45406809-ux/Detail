@@ -151,18 +151,27 @@ jobs:
         run: |
           set -euo pipefail
           session_id="$APPETIZE_SESSION_ID"
+          open_detail_route() {
+            uri="$1"
+            appetize open "$uri" --session-id "$session_id" --json --quiet
+            # iOS asks for confirmation the first time an external URL opens Detail.
+            # Accept only when the native iOS "Open in Detail?" alert is present.
+            if appetize inspect --session-id "$session_id" --select-text '/^Open in.*Detail/' --timeout 1000 --json --quiet >/dev/null 2>&1; then
+              appetize tap --session-id "$session_id" --select-text 'Open' --timeout 5000 --json --quiet
+            fi
+          }
           appetize inspect --session-id "$session_id" --select-test-id welcome-skip --timeout 25000 --json --quiet
           appetize tap --session-id "$session_id" --select-test-id welcome-skip --json --quiet
-          appetize open 'detail:///forgot-password' --session-id "$session_id" --json --quiet
+          open_detail_route 'detail:///forgot-password'
           appetize inspect appetize-ios-route-results/forgot-password.json --session-id "$session_id" --select-text 'Forgot password?' --timeout 15000 --json --quiet
           appetize screenshot appetize-ios-route-results/forgot-password.png --session-id "$session_id" --json --quiet
-          appetize open 'detail:///reset-password' --session-id "$session_id" --json --quiet
+          open_detail_route 'detail:///reset-password'
           appetize inspect appetize-ios-route-results/reset-password.json --session-id "$session_id" --select-text 'Choose a new password' --timeout 15000 --json --quiet
           appetize screenshot appetize-ios-route-results/reset-password.png --session-id "$session_id" --json --quiet
-          appetize open 'detail:///verify-email?email=qa%40example.test&intent=SIGN_IN' --session-id "$session_id" --json --quiet
+          open_detail_route 'detail:///verify-email?email=qa%40example.test&intent=SIGN_IN'
           appetize inspect appetize-ios-route-results/email-code.json --session-id "$session_id" --select-text 'Check your email' --timeout 15000 --json --quiet
           appetize screenshot appetize-ios-route-results/email-code.png --session-id "$session_id" --json --quiet
-          appetize open 'detail:///sign-in' --session-id "$session_id" --json --quiet
+          open_detail_route 'detail:///sign-in'
           appetize inspect --session-id "$session_id" --select-test-id auth-email-tab --timeout 15000 --json --quiet
           appetize tap --session-id "$session_id" --select-test-id auth-email-tab --json --quiet
           appetize tap --session-id "$session_id" --select-test-id auth-email-mode-password --json --quiet
@@ -210,7 +219,7 @@ jobs:
             uri="$2"
             expected="$3"
             started="$(date +%s%3N)"
-            appetize open "$uri" --session-id "$session_id" --json --quiet
+            open_detail_route "$uri"
             appetize inspect --session-id "$session_id" --select-text "$expected" --timeout 15000 --json --quiet
             finished="$(date +%s%3N)"
             duration_ms="$((finished - started))"
