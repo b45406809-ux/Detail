@@ -6,7 +6,8 @@ insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,r
 values('859aca4b-b899-49bb-9e37-4a2c5d3168cb','authenticated','authenticated','campaign-test@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now());
 
 insert into public.users(id,email,displayName,role)
-values('859aca4b-b899-49bb-9e37-4a2c5d3168cb','campaign-test@detail.invalid','Campaign Test','CUSTOMER');
+values('859aca4b-b899-49bb-9e37-4a2c5d3168cb','campaign-test@detail.invalid','Campaign Test','CUSTOMER')
+on conflict(id) do update set email=excluded.email,displayName=excluded.displayName,role=excluded.role;
 
 insert into public.userMarketingPreferences(userId,emailEnabled,inAppEnabled)
 values('859aca4b-b899-49bb-9e37-4a2c5d3168cb',true,true);
