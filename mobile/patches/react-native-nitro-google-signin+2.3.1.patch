@@ -1,3 +1,21 @@
+diff --git a/node_modules/react-native-nitro-google-signin/NitroGoogleSignin.podspec b/node_modules/react-native-nitro-google-signin/NitroGoogleSignin.podspec
+index 144c9ec..fc0324a 100644
+--- a/node_modules/react-native-nitro-google-signin/NitroGoogleSignin.podspec
++++ b/node_modules/react-native-nitro-google-signin/NitroGoogleSignin.podspec
+@@ -25,6 +25,13 @@ Pod::Spec.new do |s|
+   load 'nitrogen/generated/ios/NitroGoogleSignin+autolinking.rb'
+   add_nitrogen_files(s)
++
++  # Detail uses its own React Native sign-in button, not this unused Fabric
++  # view. Its generated ViewProps targets a newer React Native API than 0.76.
++  s.exclude_files = [
++    "nitrogen/generated/shared/**/views/**/*",
++    "nitrogen/generated/ios/c++/views/**/*",
++  ]
++
+   s.dependency 'React-jsi'
+   s.dependency 'React-callinvoker'
+   # GoogleSignIn 9.2+ / 10.0+ may resolve AppCheckCore ≥ 11.3 (RecaptchaInterop). Expo's config
 diff --git a/node_modules/react-native-nitro-google-signin/android/build.gradle b/node_modules/react-native-nitro-google-signin/android/build.gradle
 index 80c8715..1cf87f0 100644
 --- a/node_modules/react-native-nitro-google-signin/android/build.gradle
