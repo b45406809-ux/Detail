@@ -112,7 +112,14 @@ jobs:
           measure_route 'Forgot password' 'detail:///forgot-password' 'Forgot password?'
           measure_route 'Reset password' 'detail:///reset-password' 'Choose a new password'
           measure_route 'Email verification code' 'detail:///verify-email?email=qa%40example.test&intent=SIGN_IN' 'Check your email'
-          appetize open 'detail:///sign-in' --json --quiet
+          echo 'LIVE_AUTH_RECOVERY_ROUTES_RENDERED'
+          appetize session stop --json --quiet
+          appetize session start pixel7 --target "$target" --json --quiet >/dev/null
+          appetize inspect --select-test-id welcome-skip --timeout 25000 --json --quiet
+          appetize tap --select-test-id welcome-skip --json --quiet
+          appetize inspect --select-test-id auth-email-tab --timeout 15000 --json --quiet
+          appetize tap --select-test-id auth-email-tab --json --quiet
+          appetize tap --select-test-id auth-email-mode-password --json --quiet
           appetize inspect --select-test-id auth-email-input --timeout 15000 --json --quiet
           appetize tap --select-test-id auth-email-input --json --quiet
           appetize type "$E2E_CUSTOMER_EMAIL" --json --quiet
