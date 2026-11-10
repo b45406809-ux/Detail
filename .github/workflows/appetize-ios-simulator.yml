@@ -65,6 +65,8 @@ jobs:
           IOS_DERIVED_DATA: ${{ runner.temp }}/detail-ios-derived-data
         run: |
           set -euo pipefail
+          # NitroModules imports Folly through a Clang module. Keep the no-generated-config
+          # defines visible to module scanning as well as ordinary pod compilation.
           xcodebuild \
             -workspace Detail.xcworkspace \
             -scheme Detail \
@@ -72,6 +74,9 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$IOS_DERIVED_DATA" \
             CODE_SIGNING_ALLOWED=NO \
+            'GCC_PREPROCESSOR_DEFINITIONS=$(inherited) FOLLY_NO_CONFIG=1 FOLLY_CFG_NO_COROUTINES=1' \
+            'OTHER_CFLAGS=$(inherited) -DFOLLY_NO_CONFIG=1 -DFOLLY_CFG_NO_COROUTINES=1' \
+            'OTHER_CPLUSPLUSFLAGS=$(inherited) -DFOLLY_NO_CONFIG=1 -DFOLLY_CFG_NO_COROUTINES=1' \
             build
           app_path="$IOS_DERIVED_DATA/Build/Products/Release-iphonesimulator/Detail.app"
           test -d "$app_path"
