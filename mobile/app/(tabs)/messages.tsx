@@ -39,7 +39,14 @@ import { ChatMessage } from '../../types';
 
 const QUICK_REPLIES = ['On my way!', 'Sounds good', "I'm here", 'Thank you!'];
 const MESSAGE_RETENTION_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_CALL_LIMIT_SECONDS = 300;
+const MAX_CALL_LIMIT_SECONDS = 3600;
 const messageTime = (value: any) => value?.toDate?.().getTime?.() ?? new Date(value).getTime();
+
+interface VoiceTokenResponse {
+  token: string;
+  maxCallDurationSeconds: number;
+}
 
 async function ensureVoiceMicrophonePermission(): Promise<void> {
   if (Platform.OS !== 'android') return;
@@ -50,7 +57,7 @@ async function ensureVoiceMicrophonePermission(): Promise<void> {
   }
 }
 
-async function requestTwilioVoiceToken(jobId: string): Promise<string> {
+async function requestTwilioVoiceToken(jobId: string): Promise<VoiceTokenResponse> {
   const { data, error } = await supabase.functions.invoke('twilio-voice-token', { body: { jobId, platform: Platform.OS } });
   if (error) {
     let serverMessage = typeof data?.error === 'string' ? data.error : '';
@@ -62,7 +69,11 @@ async function requestTwilioVoiceToken(jobId: string): Promise<string> {
   }
   if (!data?.token) throw new Error(data?.error || 'Voice calling is not configured yet.');
   if (!data.incomingEnabled) throw new Error('Incoming calls are not configured for this device yet.');
-  return data.token as string;
+  const configuredLimit = Number(data.maxCallDurationSeconds);
+  const maxCallDurationSeconds = Number.isInteger(configuredLimit) && configuredLimit >= 60 && configuredLimit <= MAX_CALL_LIMIT_SECONDS
+    ? configuredLimit
+    : DEFAULT_CALL_LIMIT_SECONDS;
+  return { token: data.token as string, maxCallDurationSeconds };
 }
 
 interface Conversation {
@@ -109,6 +120,7 @@ export default function MessagesScreen() {
   const incomingInviteRef = useRef<CallInvite | null>(null);
   const voiceTokenRef = useRef('');
   const connectedAtRef = useRef(0);
+  const callDurationLimitRef = useRef(DEFAULT_CALL_LIMIT_SECONDS);
   const activeConversation = conversations.find(conversation => conversation.jobId === activeJobId);
 
   const getPendingMessageIntent = async (kind: 'text' | 'photo', value: string) => {
@@ -228,9 +240,10 @@ export default function MessagesScreen() {
         const sdk = await import('@twilio/voice-react-native-sdk');
         voice = new sdk.Voice();
         voiceRef.current = voice;
-        const token = await requestTwilioVoiceToken(activeJobId);
+        const tokenResponse = await requestTwilioVoiceToken(activeJobId);
         if (disposed) return;
-        voiceTokenRef.current = token;
+        voiceTokenRef.current = tokenResponse.token;
+        callDurationLimitRef.current = tokenResponse.maxCallDurationSeconds;
         setVoiceIncomingEnabled(true);
         voice.addListener(sdk.Voice.Event.CallInvite as any, (...events: any[]) => {
           const invite = events[0] as CallInvite;
@@ -239,11 +252,15 @@ export default function MessagesScreen() {
             void invite.reject();
             return;
           }
+          const incomingLimit = Number(parameters.maxDurationSeconds);
+          callDurationLimitRef.current = Number.isInteger(incomingLimit) && incomingLimit >= 60 && incomingLimit <= MAX_CALL_LIMIT_SECONDS
+            ? incomingLimit
+            : DEFAULT_CALL_LIMIT_SECONDS;
           incomingInviteRef.current = invite;
           setIncomingCaller(invite.getFrom().replace(/^client:/, '').slice(0, 12));
           setCallState('incoming');
         });
-        try { await voice.register(token); }
+        try { await voice.register(tokenResponse.token); }
         catch (registerError) {
           console.warn('Twilio incoming-call registration failed:', registerError instanceof Error ? registerError.message : 'unknown error');
           throw new Error('Incoming calls could not be enabled on this device. Check notification permissions and try again.');
@@ -253,8 +270,9 @@ export default function MessagesScreen() {
           tokenRefreshTimer = setInterval(() => {
             void requestTwilioVoiceToken(activeJobId).then(async refreshed => {
               if (disposed || !voice) return;
-              await voice.register(refreshed);
-              voiceTokenRef.current = refreshed;
+              await voice.register(refreshed.token);
+              voiceTokenRef.current = refreshed.token;
+              callDurationLimitRef.current = refreshed.maxCallDurationSeconds;
             }).catch(error => console.warn('Twilio Voice token refresh failed:', error instanceof Error ? error.message : 'unknown error'));
           }, 45 * 60 * 1000);
         }
@@ -319,9 +337,10 @@ export default function MessagesScreen() {
     try {
       await ensureVoiceMicrophonePermission();
       const refreshedToken = await requestTwilioVoiceToken(activeJobId);
-      await voiceRef.current.register(refreshedToken);
-      voiceTokenRef.current = refreshedToken;
-      const call = await voiceRef.current.connect(refreshedToken, {
+      await voiceRef.current.register(refreshedToken.token);
+      voiceTokenRef.current = refreshedToken.token;
+      callDurationLimitRef.current = refreshedToken.maxCallDurationSeconds;
+      const call = await voiceRef.current.connect(refreshedToken.token, {
         contactHandle: activeConversation.otherUserName,
         notificationDisplayName: 'Detail booking call',
         params: { To: activeConversation.otherUserId, jobId: activeJobId },
@@ -365,8 +384,8 @@ export default function MessagesScreen() {
     const timer = setInterval(() => {
       const elapsed = Math.floor((Date.now() - connectedAtRef.current) / 1000);
       setCallDuration(elapsed);
-      // TwiML also enforces a hard 300 second limit if this device pauses.
-      if (elapsed >= 300 && voiceCallRef.current) void voiceCallRef.current.disconnect();
+      // TwiML enforces the same server-side limit if this device pauses.
+      if (elapsed >= callDurationLimitRef.current && voiceCallRef.current) void voiceCallRef.current.disconnect();
     }, 1000);
     return () => clearInterval(timer);
   }, [callState]);

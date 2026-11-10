@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.80.0';
-import { createTwilioVoiceToken } from '../_shared/twilio_voice.ts';
+import { createTwilioVoiceToken, voiceCallLimitSeconds } from '../_shared/twilio_voice.ts';
 
 const url = Deno.env.get('SUPABASE_URL') ?? '';
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
@@ -56,8 +56,11 @@ Deno.serve(async request => {
     if (profileError) throw profileError;
     if (!profile || profile.isbanned || profile.issuspended || profile.accountdeletedat) return reply({ error: 'This account cannot start a call.' }, 403);
 
+    const { data: operations, error: operationsError } = await admin.from('configuration').select('value').eq('key', 'operations').maybeSingle();
+    if (operationsError) throw operationsError;
+    const maxCallDurationSeconds = voiceCallLimitSeconds(operations?.value?.voiceCallLimitSeconds);
     const token = await createTwilioVoiceToken({ accountSid, apiKeySid, apiKeySecret, twimlAppSid, identity: user.id, pushCredentialSid });
-    return reply({ token, incomingEnabled: true, expiresIn: 3600 });
+    return reply({ token, incomingEnabled: true, expiresIn: 3600, maxCallDurationSeconds });
   } catch (error) {
     console.error('Twilio Voice token request failed', error instanceof Error ? error.message : 'unknown error');
     return reply({ error: 'Could not prepare this call. Please try again shortly.' }, 503);

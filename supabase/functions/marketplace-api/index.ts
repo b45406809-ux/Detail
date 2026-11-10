@@ -9,6 +9,8 @@ import { isValidScheduledBookingTime } from '../_shared/booking_schedule.ts';
 import { isPaymentGateClosed } from '../_shared/payment_gate.ts';
 import { cleanerLocationIsFresh } from '../_shared/cleaner_location.ts';
 import { toCleanerBookingSummary } from '../_shared/cleaner_booking_summary.ts';
+import { voiceCallLimitSeconds } from '../_shared/twilio_voice.ts';
+import { diditVerificationState, isDiditVerificationPending } from '../_shared/didit.ts';
 
 const url = Deno.env.get('SUPABASE_URL') ?? '';
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
@@ -353,8 +355,8 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const profile = await userRow(actor);
       if (profile.verificationstatus === 'VERIFIED') fail(409, 'Your identity is already verified.');
       const { data: existing } = await admin.from('privatekyc').select('*').eq('userid', actor).maybeSingle();
-      if (existing?.sessionid && existing?.sessionurl && String(existing.status).toLowerCase() === 'pending') return { sessionUrl: existing.sessionurl, status: 'Pending' };
-      const response = await fetch('https://verification.didit.me/v2/session/', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': apiKey }, body: JSON.stringify({ workflow_id: workflow, vendor_data: actor }) });
+      if (existing?.sessionid && existing?.sessionurl && isDiditVerificationPending(existing.status)) return { sessionUrl: existing.sessionurl, status: String(existing.status) };
+      const response = await fetch('https://verification.didit.me/v3/session/', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': apiKey }, body: JSON.stringify({ workflow_id: workflow, vendor_data: actor }) });
       const body = await response.json().catch(() => ({}));
       const sessionUrl = body.session_url ?? body.url;
       let valid = false; try { const parsed = new URL(sessionUrl); valid = parsed.protocol === 'https:' && (parsed.hostname === 'didit.me' || parsed.hostname.endsWith('.didit.me')); } catch { /* invalid provider URL */ }
@@ -370,17 +372,14 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const { data: kyc } = await admin.from('privatekyc').select('*').eq('userid', actor).maybeSingle();
       if (!kyc?.sessionid) fail(409, 'Start identity verification first.');
       let response:Response;
-      try { response=await fetch(`https://verification.didit.me/v2/session/${encodeURIComponent(kyc.sessionid)}/decision/`,{headers:{'x-api-key':key}}); }
+      try { response=await fetch(`https://verification.didit.me/v3/session/${encodeURIComponent(kyc.sessionid)}/decision/`,{headers:{'x-api-key':key}}); }
       catch { fail(503,'Could not check verification yet.'); }
       const decision=await response.json().catch(()=>null);
       if(!response.ok||!decision||decision.session_id!==kyc.sessionid||typeof decision.status!=='string')fail(503,'Could not check verification yet.');
-      const raw=decision.status.trim().toLowerCase();
-      const accepted=['approved','verified'].includes(raw);
-      const rejected=['declined','rejected','failed','expired','abandoned','cancelled','canceled'].includes(raw);
-      const pending=['pending','in progress','in_progress','processing','review','reviewing'].includes(raw);
-      if(!accepted&&!rejected&&!pending)fail(503,'Verification returned an unrecognized status. Try again later.');
+      const state=diditVerificationState(decision.status);
+      if(!state)fail(503,'Verification returned an unrecognized status. Try again later.');
       const profile=await userRow(actor);
-      const status=accepted?'VERIFIED':rejected?'REJECTED':profile.verificationstatus==='VERIFIED'?'VERIFIED':'PENDING';
+      const status=state==='VERIFIED'?'VERIFIED':state==='REJECTED'?'REJECTED':profile.verificationstatus==='VERIFIED'?'VERIFIED':'PENDING';
       const now = new Date().toISOString();
       const {error:userError}=await admin.from('users').update({verificationstatus:status,verificationlevel:status==='VERIFIED'?2:1,updatedat:now}).eq('id',actor);
       if(userError)throw userError;
@@ -1176,7 +1175,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
           admin.from('configuration').select('value').eq('key','beta').maybeSingle(),
         ]);
         if(operationsError)throw operationsError;if(betaError)throw betaError;
-        return {...(operations?.value??{switches:{},supportCopy:''}),bookingEnabled:beta?.value?.bookingEnabled===true};
+        return {...(operations?.value??{switches:{},supportCopy:''}),voiceCallLimitSeconds:voiceCallLimitSeconds(operations?.value?.voiceCallLimitSeconds),bookingEnabled:beta?.value?.bookingEnabled===true};
       }
       const table:Record<string,string>={bookings:'jobs',customers:'users',cleaners:'users',payments:'payments',products:'productsales',analytics:'reportingaggregates',support:'supportcases',waitlist:'betawaitlist'};
       const target=table[module]; if(!target)fail(400,'Unknown dashboard module.');
@@ -1267,7 +1266,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(!targetId && action!=='update_kill_switch')fail(400,'Select a specific record before applying this action.');
       const now=new Date().toISOString();
       if(action==='update_kill_switch'){
-        const keyName=text(input.key,40);if(!['maintenance','bookingCreation','bidAcceptance','payments','supportCopy','bookingLaunch'].includes(keyName))fail(400,'Unknown setting.');
+        const keyName=text(input.key,40);if(!['maintenance','bookingCreation','bidAcceptance','payments','supportCopy','bookingLaunch','voiceCallLimitSeconds'].includes(keyName))fail(400,'Unknown setting.');
         if(keyName==='bookingLaunch'){
           const {data:current,error:readError}=await admin.from('configuration').select('value').eq('key','beta').maybeSingle();if(readError)throw readError;
           const value={...(current?.value??{}),bookingEnabled:input.value===true};
@@ -1275,7 +1274,12 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         }else{
           const {data:current,error:readError}=await admin.from('configuration').select('value').eq('key','operations').maybeSingle();if(readError)throw readError;
           const value=current?.value??{switches:{},supportCopy:''};
-          if(keyName==='supportCopy')value.supportCopy=text(input.value,2000);else value.switches={...(value.switches??{}),[keyName]:input.value===true};
+          if(keyName==='supportCopy')value.supportCopy=text(input.value,2000);
+          else if(keyName==='voiceCallLimitSeconds'){
+            const seconds=Number(input.value);
+            if(!Number.isInteger(seconds)||seconds<60||seconds>3600)fail(400,'Call duration must be a whole number from 60 to 3,600 seconds.');
+            value.voiceCallLimitSeconds=seconds;
+          }else value.switches={...(value.switches??{}),[keyName]:input.value===true};
           const {error:updateError}=await admin.from('configuration').upsert({key:'operations',value,updatedby:actor,updatedat:now});if(updateError)throw updateError;
         }
       } else if(action==='deactivate_cleaner' || action==='suspend_cleaner' || action==='change_account_state') {

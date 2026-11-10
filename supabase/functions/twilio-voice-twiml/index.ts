@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.80.0';
-import { twimlForClient, validateTwilioWebhookSignature, voiceClientIdentity } from '../_shared/twilio_voice.ts';
+import { twimlForClient, validateTwilioWebhookSignature, voiceCallLimitSeconds, voiceClientIdentity } from '../_shared/twilio_voice.ts';
 
 const url = Deno.env.get('SUPABASE_URL') ?? '';
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
@@ -32,7 +32,10 @@ Deno.serve(async request => {
     if (!job || !job.cleanerid || !activeStatuses.has(String(job.status).toUpperCase()) || !participants.includes(caller) || !participants.includes(target)) {
       return xml(unavailable, 403);
     }
-    return xml(twimlForClient(target, jobId));
+    const { data: operations, error: settingsError } = await admin.from('configuration').select('value').eq('key', 'operations').maybeSingle();
+    if (settingsError) throw settingsError;
+    const maxCallDurationSeconds = voiceCallLimitSeconds(operations?.value?.voiceCallLimitSeconds);
+    return xml(twimlForClient(target, jobId, maxCallDurationSeconds));
   } catch (error) {
     console.error('Twilio Voice webhook rejected', error instanceof Error ? error.message : 'unknown error');
     return xml(unavailable, 400);

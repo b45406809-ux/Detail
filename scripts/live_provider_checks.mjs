@@ -174,7 +174,7 @@ async function diditE2E() {
     const key = secretValue('DIDIT_API_KEY');
     const workflow = process.env.DIDIT_WORKFLOW_ID;
     if (!configured('DIDIT_API_KEY', 'DIDIT_WORKFLOW_ID')) return false;
-    const response = await requestStatus('https://verification.didit.me/v2/session/', {
+    const response = await requestStatus('https://verification.didit.me/v3/session/', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': key },
       body: JSON.stringify({ workflow_id: workflow, vendor_data: `detail-e2e-${runId}-${randomUUID()}` }),

@@ -1,5 +1,18 @@
 const encoder = new TextEncoder();
 
+export const DEFAULT_VOICE_CALL_LIMIT_SECONDS = 300;
+export const MIN_VOICE_CALL_LIMIT_SECONDS = 60;
+export const MAX_VOICE_CALL_LIMIT_SECONDS = 3600;
+
+export function voiceCallLimitSeconds(value: unknown): number {
+  const seconds = typeof value === 'number' ? value : Number(value);
+  return Number.isInteger(seconds)
+    && seconds >= MIN_VOICE_CALL_LIMIT_SECONDS
+    && seconds <= MAX_VOICE_CALL_LIMIT_SECONDS
+    ? seconds
+    : DEFAULT_VOICE_CALL_LIMIT_SECONDS;
+}
+
 const toBase64Url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes))
   .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 
@@ -73,8 +86,9 @@ export function voiceClientIdentity(value: string): string | null {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identity) ? identity.toLowerCase() : null;
 }
 
-export function twimlForClient(identity: string, jobId: string): string {
+export function twimlForClient(identity: string, jobId: string, maxDurationSeconds = DEFAULT_VOICE_CALL_LIMIT_SECONDS): string {
   if (!voiceClientIdentity(identity) || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jobId)) throw new Error('Invalid client call target.');
+  const duration = voiceCallLimitSeconds(maxDurationSeconds);
   const xml = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;');
-  return `<?xml version="1.0" encoding="UTF-8"?><Response><Dial timeLimit="300" answerOnBridge="true"><Client><Identity>${xml(voiceClientIdentity(identity)!)}</Identity><Parameter name="jobId" value="${xml(jobId)}"/></Client></Dial></Response>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><Response><Dial timeLimit="${duration}" answerOnBridge="true"><Client><Identity>${xml(voiceClientIdentity(identity)!)}</Identity><Parameter name="jobId" value="${xml(jobId)}"/><Parameter name="maxDurationSeconds" value="${duration}"/></Client></Dial></Response>`;
 }
