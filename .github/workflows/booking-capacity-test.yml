@@ -30,7 +30,7 @@ jobs:
           set -euo pipefail
           eval "$(supabase status -o env)"
           SUPABASE_TEST_URL="$API_URL" SUPABASE_TEST_ANON_KEY="$ANON_KEY" SUPABASE_TEST_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" node scripts/supabase_signup_burst.mjs
-      - name: Seed isolated synthetic customers and cleaners
+      - name: Seed isolated synthetic customers and unverified offline cleaners
         run: |
           set -euo pipefail
           DB_URL="$(supabase status -o env | sed -n 's/^DB_URL="\(.*\)"$/\1/p')"

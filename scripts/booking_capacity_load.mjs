@@ -49,6 +49,12 @@ const eligibleCleaners = await exactCount('/rest/v1/users', {
   cleaneronboardingcomplete: 'eq.true', status: 'eq.AVAILABLE',
   locationupdatedat: `gt.${new Date(Date.now() - 300_000).toISOString()}`, locationpoint: 'not.is.null',
 });
+const unverifiedOfflineCleaners = await exactCount('/rest/v1/users', {
+  role: 'eq.CLEANER', verificationstatus: 'eq.NOT_STARTED', cleaneragreementaccepted: 'eq.false', status: 'eq.OFFLINE',
+});
+if (eligibleCleaners !== 0 || unverifiedOfflineCleaners < 1000) {
+  throw new Error('Benchmark must use at least 1,000 unverified offline cleaners and zero eligible cleaners.');
+}
 let next = 0;
 let notifiedCleaners = 0;
 const startedAt = performance.now();
@@ -98,6 +104,7 @@ const result = {
   requestedBookings: bookingTotal, concurrency, completedBookings: completed,
   failedBookings: failures.length, nearbyCleanerNotifications: notifiedCleaners,
   connectionPoolRetries,
+  unverifiedOfflineSyntheticCleaners: unverifiedOfflineCleaners,
   eligibleSyntheticCleaners: eligibleCleaners,
   notificationsPerBooking: Object.fromEntries([...notificationDistribution.entries()].sort((a, b) => a[0] - b[0])),
   persistedBookings,
@@ -116,13 +123,14 @@ if (process.env.GITHUB_STEP_SUMMARY) {
     `- Booking throughput: ${result.bookingsPerSecond}/sec`,
     `- End-to-end DB path latency: p50 ${result.bookingLatencyMs.p50} ms, p95 ${result.bookingLatencyMs.p95} ms, p99 ${result.bookingLatencyMs.p99} ms`,
     `- Nearby cleaner notifications created: ${notifiedCleaners}`,
-    `- Eligible synthetic cleaners: ${eligibleCleaners}`,
+    `- Synthetic cleaners: ${unverifiedOfflineCleaners} unverified/offline; eligible for dispatch: ${eligibleCleaners}`,
+    '- Unverified cleaners are intentionally not made dispatch-eligible; no KYC result is mocked or seeded.',
     '- Target: local Supabase only; this does not measure hosted plan or Edge Function limits.',
   ].join('\n') + '\n');
 }
-if (failures.length || persistedBookings !== bookingTotal || notifiedCleaners !== bookingTotal * 20) {
+if (failures.length || persistedBookings !== bookingTotal || notifiedCleaners !== 0) {
   if (failures.length) console.error(`${failures.length} synthetic booking tasks failed. First failure: ${failures[0].error}`);
   if (persistedBookings !== bookingTotal) console.error(`Expected ${bookingTotal} persisted bookings, found ${persistedBookings}.`);
-  if (notifiedCleaners !== bookingTotal * 20) console.error(`Expected ${bookingTotal * 20} cleaner notifications, found ${notifiedCleaners}.`);
+  if (notifiedCleaners !== 0) console.error(`Unverified synthetic cleaners received ${notifiedCleaners} notifications.`);
   process.exitCode = 1;
 }
