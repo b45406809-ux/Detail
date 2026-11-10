@@ -1,6 +1,6 @@
 # Marketplace beta test matrix
 
-**Version:** 1.8
+**Version:** 1.9
 **Updated:** 2026-11-10
 **Branch:** `codex/separate-dashboard-into-routed-modules-fl7jlh`
 
@@ -10,7 +10,7 @@ Statuses are **Pass**, **Fail**, **Blocked**, or **Not run**. Local tests do not
 
 | Area | Status | Scope and result |
 | --- | --- | --- |
-| CI, dashboard, mobile, Supabase migrations and Edge Functions | Pass | Full successful run 42757152744 on commit `5fde549`: site/dashboard, mobile type-check and lint, Google nonce tests, local Supabase migrations/security/pgTAP, Edge Function checks, and authenticated dashboard journeys passed. |
+| CI, dashboard, mobile, Supabase migrations and Edge Functions | Pass | Full successful run 42761794028 on commit `b29d25a`: site/dashboard, mobile type-check and lint, Google nonce tests, local Supabase migrations/security/pgTAP, Edge Function checks, and authenticated dashboard journeys passed. The only lint output was the repository's existing unused-import warnings. |
 | Concurrent registration burst | Pass | Corrected run 42755759601: 20/20 local synthetic Auth registrations and profiles persisted at concurrency 20; 0 failed; p50 825 ms, p95 854 ms, p99 967 ms. All 20 local accounts were deleted. No hosted accounts or provider messages were created by this pressure test. |
 | Booking write pressure | Pass | Corrected run 42755759601: 10,000/10,000 synthetic booking RPC writes persisted at concurrency 100; 0 failed; p50 241 ms, p95 904 ms, p99 1,379 ms (306 bookings/s). The 1,000 synthetic cleaners were unverified and offline; eligible cleaner count and dispatch notifications were both zero. This confirms the KYC dispatch gate and booking writes, not a full accepted-booking marketplace flow or hosted free-tier capacity. |
 | Android build and current Appetize upload | Pass | Direct GitHub Actions build run 42745938717 built commit `803be2234625597075d6d8d27ec2d44d70ce68a4`, uploaded target `qnjjqo4sz4kcis73grjirqur7e`, and saved the home screenshot artifact. No EAS build was run. Android Firebase config was absent in this artifact, so push delivery is not covered. |
@@ -20,8 +20,8 @@ Statuses are **Pass**, **Fail**, **Blocked**, or **Not run**. Local tests do not
 | Reported Google Sign-In nonce error | Pass | Commit `803be22` sends the original nonce to Supabase only when Google's ID token contains a nonce claim; three focused tests and mobile CI pass, and the fresh APK contains the fix. A real Google account sign-in is separately not run. |
 | SMSPoP API payload | Pass | Run 42747410823 sent one harmless test SMS to the protected test recipient. SMSPoP reported `sent` and 1 credit used. This confirms provider API acceptance, not carrier delivery or the Supabase Auth OTP hook end-to-end. The local Auth-hook payload tests pass in CI. |
 | Full app marketplace booking/bid/chat/tracking/completion/payment lifecycle | Blocked | Protected project inventory reads the current project, but project creation still returns HTTP 403 (run 42758089450). The current Appetize build points at the hosted project; no job was posted, no real cleaner was notified, and no payment/KYC/payout was attempted. Local database and Edge Function tests cover lifecycle transitions and access control but do not replace a two-account UI transaction. |
-| iOS simulator/Appetize | Not run | Run 42746627615 failed because NitroModules could not find `folly/folly-config.h`. Run 42750267000 passed that point but failed compiling the unused Nitro Google Sign-In Fabric view against React Native 0.76. The corrected exclusion patch on `aca6b1b` passed a clean `npm ci` and CocoaPods install; build run 42755155542 is compiling. No iOS target is available yet. |
-| iOS customer route sweep | Not run | Pinned workflow `.github/workflows/appetize-ios-customer-routes.yml` is ready to exercise onboarding and the same 25 customer routes after run 42755155542 uploads a successful simulator target. It uses at most two synthetic accounts, checks persisted onboarding state, and deletes both accounts. |
+| iOS simulator build and Appetize upload | Pass | Direct GitHub Actions/Xcode build run 42755155542 built source commit `aca6b1babbd314073b0ceb9bf4239ef18ea9ab53` and uploaded immutable iOS target `q3s6mu5wgdv5tlovezm776wequ`; no EAS build was used. The target launched and displayed onboarding and the customer home screen. |
+| iOS customer route sweep | Fail | Run 42761352687 used pinned target `q3s6mu5wgdv5tlovezm776wequ`, source commit `aca6b1babbd314073b0ceb9bf4239ef18ea9ab53`, source build run 42755155542, and two disposable accounts (both deleted). Sign-in, agreement/profile onboarding, location-permission handling, home, and entry to booking-category selection rendered. The run stopped because Appetize could not tap the visible “House Cleaning” child text. This is a test selector failure; no app defect was established, and no booking was submitted. Workflow commit `b29d25a` now uses a visible-position tap and saves the category screenshot, but it could not be exercised: run 42761805384 was blocked before account creation because Appetize reported that the account had reached its streaming usage limit. The remaining iOS routes and screen timings are not verified. |
 | Paynow, Didit, push, campaigns, and Twilio Voice provider transactions | Not run | No Paynow checkout, identity verification, push/campaign delivery, or voice call was made. Protected presence run 42757787278 found Paynow integration secrets missing, Didit API key/workflow ID present but KYC secret missing, and Twilio Voice-specific credentials missing. Presence does not establish sandbox mode; values were never read or changed. |
 | Twilio in-app calling and usage display | Blocked | Chat call controls, authenticated participant checks, signed Voice tokens, the client cutoff, and server TwiML `timeLimit=300` are implemented and covered by local tests. The admin overview separates account-wide prior-month Twilio Voice usage from SMS. Only Twilio account SID/auth token/Messaging Service SID exist for messaging; Voice API key ID/secret, TwiML App SID, and both platform push credential SIDs are missing, so no call or live Voice meter was verified. Usage cannot be attributed to Detail calls. |
 | Physical Android/iPhone checks | Not run | Permission denial/recovery, actual push delivery, location backgrounding, camera/photo access, Google/Apple sign-in, incoming-call audio/CallKit/PushKit, large text, and real-device layout require physical devices and confirmed test configuration. |
@@ -93,7 +93,9 @@ Provider key values were not read, printed, exported, or changed. A key name or 
 | B-09 | Android requested microphone access at app launch instead of when a user started or answered a call. | Fixed | Commit `1524dfc` defers Android microphone permission to call actions; Appetize login/home journey passed without the startup prompt. |
 | B-10 | Google Sign-In failed when Supabase received a nonce that was absent from Google's ID token. | Fix under verification | Commit `803be22` conditionally forwards the nonce; focused tests and CI pass. Verify with a fresh build and a dedicated test Google account. |
 | B-11 | Expanded Appetize auth routes originally ran after sign-in and were redirected by the session guard; the first isolated rerun then carried navigation state into onboarding. | Fixed in test workflow | Auth-only screens now run before sign-in, and onboarding restarts in a fresh Appetize session. Pinned customer route run 42750004390 verifies both phases and account cleanup. |
-| B-12 | Nitro Google Sign-In's generated Fabric view uses a `ViewProps` constructor unavailable in React Native 0.76. | Fix under verification | The Detail app renders its own React Native sign-in button and doesn't use this generated view. Commit `aca6b1b` excludes only the unused iOS view sources. The clean install and pod install pass; simulator compile run 42755155542 is still in progress. |
+| B-12 | Nitro Google Sign-In's generated Fabric view uses a `ViewProps` constructor unavailable in React Native 0.76. | Fixed | The Detail app renders its own React Native sign-in button and doesn't use this generated view. Commit `aca6b1b` excludes only the unused iOS view sources; run 42755155542 built and uploaded the simulator app, and the pinned target launched into onboarding/home. |
+| B-13 | Fresh iOS onboarding opens Apple's native location permission sheet, which covered the home screen and made the next Appetize tap a no-op. | Fixed in test workflow | Commit `30ce70b` detects Apple's labeled “Allow While Using App” button and accepts it only when the native prompt is present. Run 42761352687 advanced to booking-category selection afterward. |
+| B-14 | Appetize's iOS accessibility tree exposed “House Cleaning” as child text but not as an actionable booking-category control. | Blocked | Commit `b29d25a` saves the category screenshot and taps the center of the visible card. Appetize streaming quota was exhausted before this fix could be exercised; no app behavior failure was confirmed. |
 
 ## Safety and limits
 
@@ -104,20 +106,24 @@ Provider key values were not read, printed, exported, or changed. A key name or 
 - One controlled email OTP and one controlled SMS test were sent. The SMSPoP test used one provider credit. Home screens rendered Mapbox maps; no usage/billing polling was run to avoid creating extra provider traffic.
 - No live booking, bid, acceptance, chat message, KYC session, Paynow transaction, payout, campaign, push, or call was submitted.
 - Current Appetize builds use the hosted Supabase project and are limited to bounded auth/profile/UI checks until an isolated backend boundary is verified.
+- Appetize rejected a new session on run 42761805384 with “You've reached your account's usage limit. Upgrade your plan to continue streaming.” No session started and no test accounts were created by that run. No alternate Appetize account or quota workaround was used.
 - UI route times measure `open` plus the first matching visible content, not a device performance benchmark or network waterfall.
 
 ## Evidence index
 
 | Evidence | Link |
 | --- | --- |
-| Latest full CI validation | [GitHub Actions run 42757152744](https://github.com/b45406809-ux/Detail/actions/runs/42757152744) |
+| Latest full CI validation | [GitHub Actions run 42761794028](https://github.com/b45406809-ux/Detail/actions/runs/42761794028) |
+| iOS simulator build and Appetize target upload | [GitHub Actions run 42755155542](https://github.com/b45406809-ux/Detail/actions/runs/42755155542) · [Open iOS target `q3s6mu5wgdv5tlovezm776wequ`](https://appetize.io/app/q3s6mu5wgdv5tlovezm776wequ) |
+| iOS customer onboarding partial route evidence | [GitHub Actions run 42761352687](https://github.com/b45406809-ux/Detail/actions/runs/42761352687) |
+| iOS Appetize quota block (no session/accounts started) | [GitHub Actions run 42761805384](https://github.com/b45406809-ux/Detail/actions/runs/42761805384) |
 | Corrected 20-user registration and 10,000 booking pressure run | [GitHub Actions run 42755759601](https://github.com/b45406809-ux/Detail/actions/runs/42755759601) |
 | Android Appetize build, uploaded target, and home screenshot | [GitHub Actions run 42745938717](https://github.com/b45406809-ux/Detail/actions/runs/42745938717) |
 | Interactive Android Appetize app | [Open target `qnjjqo4sz4kcis73grjirqur7e`](https://appetize.io/app/qnjjqo4sz4kcis73grjirqur7e) |
 | Expanded Android customer route sweep, screenshots, persisted profile, and cleanup | [GitHub Actions run 42750004390](https://github.com/b45406809-ux/Detail/actions/runs/42750004390) |
 | First iOS simulator/Appetize build failure (missing Folly header) | [GitHub Actions run 42746627615](https://github.com/b45406809-ux/Detail/actions/runs/42746627615) |
 | iOS rebuild passed Folly and exposed unused Nitro Google Fabric view incompatibility | [GitHub Actions run 42750267000](https://github.com/b45406809-ux/Detail/actions/runs/42750267000) |
-| Corrected iOS simulator/Appetize build after clean npm and pod installs (in progress) | [GitHub Actions run 42755155542](https://github.com/b45406809-ux/Detail/actions/runs/42755155542) |
+| Corrected iOS simulator/Appetize build after clean npm and pod installs | [GitHub Actions run 42755155542](https://github.com/b45406809-ux/Detail/actions/runs/42755155542) |
 | Prior iOS retry failed during patch parsing; superseded by the corrected patch | [GitHub Actions run 42754376266](https://github.com/b45406809-ux/Detail/actions/runs/42754376266) |
 | Android cleaner verification gate and cleanup on fresh APK | [GitHub Actions run 42750487343](https://github.com/b45406809-ux/Detail/actions/runs/42750487343) |
 | Resolved route-test sequencing attempts (all test accounts cleaned) | [Run 42748867394](https://github.com/b45406809-ux/Detail/actions/runs/42748867394) · [Run 42749535556](https://github.com/b45406809-ux/Detail/actions/runs/42749535556) |
