@@ -23,6 +23,13 @@ jobs:
         run: |
           supabase start
           supabase db reset --local
+      - name: Test 20 concurrent local account registrations
+        env:
+          RUN_ID: signup_${{ github.run_id }}_${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          eval "$(supabase status -o env)"
+          SUPABASE_TEST_URL="$API_URL" SUPABASE_TEST_ANON_KEY="$ANON_KEY" SUPABASE_TEST_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" node scripts/supabase_signup_burst.mjs
       - name: Seed isolated synthetic customers and cleaners
         run: |
           set -euo pipefail

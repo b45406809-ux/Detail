@@ -49,7 +49,7 @@ try {
     ['Overview', 'Overview'], ['Bookings', 'Bookings'], ['Customers', 'Customers'],
     ['Cleaners', 'Cleaners / Staff'], ['Payments / Refunds', 'Payments / Refunds'],
     ['Products', 'After-sales Products'], ['Analytics', 'Analytics'], ['Support Cases', 'Support Cases'],
-    ['Waitlist & Email', 'Waitlist & Email'], ['Blog & GEO', 'Blog & GEO'],
+    ['Waitlist & Campaigns', 'Waitlist & Campaigns'], ['Blog & GEO', 'Blog & GEO'],
     ['Admins & Security', 'Admins & Security'], ['Settings', 'Settings'],
   ];
   for (const [label, heading] of routes) {
