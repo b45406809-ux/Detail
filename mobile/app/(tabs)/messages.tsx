@@ -13,6 +13,7 @@ import {
   Platform,
   ActivityIndicator,
   Image,
+  PermissionsAndroid,
 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -39,6 +40,15 @@ import { ChatMessage } from '../../types';
 const QUICK_REPLIES = ['On my way!', 'Sounds good', "I'm here", 'Thank you!'];
 const MESSAGE_RETENTION_MS = 24 * 60 * 60 * 1000;
 const messageTime = (value: any) => value?.toDate?.().getTime?.() ?? new Date(value).getTime();
+
+async function ensureVoiceMicrophonePermission(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  const permission = PermissionsAndroid.PERMISSIONS.RECORD_AUDIO;
+  const status = await PermissionsAndroid.request(permission);
+  if (status !== PermissionsAndroid.RESULTS.GRANTED) {
+    throw new Error('Microphone access is needed for calls. Allow it in your device settings to continue.');
+  }
+}
 
 async function requestTwilioVoiceToken(jobId: string): Promise<string> {
   const { data, error } = await supabase.functions.invoke('twilio-voice-token', { body: { jobId, platform: Platform.OS } });
@@ -307,6 +317,7 @@ export default function MessagesScreen() {
     setCallError('');
     setCallState('calling');
     try {
+      await ensureVoiceMicrophonePermission();
       const refreshedToken = await requestTwilioVoiceToken(activeJobId);
       await voiceRef.current.register(refreshedToken);
       voiceTokenRef.current = refreshedToken;
@@ -326,6 +337,7 @@ export default function MessagesScreen() {
     const invite = incomingInviteRef.current;
     if (!invite) return;
     try {
+      await ensureVoiceMicrophonePermission();
       const call = await invite.accept();
       incomingInviteRef.current = null;
       await attachCallEvents(call);
@@ -502,7 +514,7 @@ export default function MessagesScreen() {
                       ? `${Math.floor(callDuration / 60)}:${String(callDuration % 60).padStart(2, '0')} elapsed · calls end at 5 minutes`
                       : callState === 'unavailable'
                         ? callError || 'Voice calling is not configured yet.'
-                        : callError || 'Detail calls use your internet connection. Calls end after 5 minutes.'}
+                      : callError || 'Detail calls use your internet connection. Calls end after 5 minutes. Microphone access is requested only when you call or answer.'}
                   </Text>
                   {callState === 'ready' && <Text className="mt-1 text-[11px] leading-4 text-violet-700">{voiceIncomingEnabled ? 'Keep this chat open to receive calls.' : 'Incoming-call push is not configured yet; the other person must keep Detail open.'}</Text>}
                 </View>

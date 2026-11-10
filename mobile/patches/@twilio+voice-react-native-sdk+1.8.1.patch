@@ -1,0 +1,17 @@
+diff --git a/node_modules/@twilio/voice-react-native-sdk/android/src/main/java/com/twiliovoicereactnative/VoiceActivityProxy.java b/node_modules/@twilio/voice-react-native-sdk/android/src/main/java/com/twiliovoicereactnative/VoiceActivityProxy.java
+index f175fea..ed15dbd 100644
+--- a/node_modules/@twilio/voice-react-native-sdk/android/src/main/java/com/twiliovoicereactnative/VoiceActivityProxy.java
++++ b/node_modules/@twilio/voice-react-native-sdk/android/src/main/java/com/twiliovoicereactnative/VoiceActivityProxy.java
+@@ -34,10 +34,8 @@ public class VoiceActivityProxy {
+   }
+   public void onCreate(Bundle ignoredSavedInstanceState) {
+     logger.debug("onCreate(): invoked");
+-    // Ensure the microphone permission is enabled
+-    if (!checkPermissions()) {
+-      requestPermissions();
+-    }
++    // Runtime permissions are requested by the app when the user starts or answers a call.
++    // Asking here would interrupt every app launch, even when the user never uses calling.
+     // These flags ensure that the activity can be launched when the screen is locked.
+     Window window = context.getWindow();
+     window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
