@@ -60,15 +60,17 @@ jobs:
           const runResponse = await fetch(`${api}/actions/runs/${process.env.SOURCE_WORKFLOW_RUN_ID}`, { headers });
           if (!runResponse.ok) throw new Error(`Could not verify the source workflow run (HTTP ${runResponse.status}).`);
           const run = await runResponse.json();
-          if (run.head_sha !== process.env.SOURCE_COMMIT || run.conclusion !== 'success' || run.name !== 'Build and inspect iOS simulator app on Appetize') {
-            throw new Error('The supplied source run did not successfully build the supplied source commit.');
+          if (run.head_sha !== process.env.SOURCE_COMMIT || run.status !== 'completed' || run.name !== 'Build and inspect iOS simulator app on Appetize') {
+            throw new Error('The supplied source run did not complete for the supplied source commit.');
           }
           const jobsResponse = await fetch(`${api}/actions/runs/${process.env.SOURCE_WORKFLOW_RUN_ID}/jobs`, { headers });
           if (!jobsResponse.ok) throw new Error(`Could not verify the iOS upload job (HTTP ${jobsResponse.status}).`);
           const { jobs = [] } = await jobsResponse.json();
-          const job = jobs.find(entry => entry.name === 'ios-simulator' && entry.conclusion === 'success');
-          if (!job || !job.steps?.some(step => step.name.includes('Upload iOS simulator app to Appetize') && step.conclusion === 'success')) {
-            throw new Error('The source workflow has no successful iOS Appetize upload.');
+          const job = jobs.find(entry => entry.name === 'ios-simulator');
+          const steps = job?.steps ?? [];
+          if (!steps.some(step => step.name === 'Build release app for the iOS simulator' && step.conclusion === 'success')
+            || !steps.some(step => step.name === 'Upload iOS simulator app to Appetize' && step.conclusion === 'success')) {
+            throw new Error('The source workflow has no successful iOS simulator build and Appetize upload.');
           }
           console.log(`PINNED_APPETIZE_TARGET: ${target.id}`);
           console.log(`PINNED_SOURCE_COMMIT: ${process.env.SOURCE_COMMIT}`);
