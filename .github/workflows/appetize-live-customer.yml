@@ -91,12 +91,29 @@ jobs:
           mkdir -p appetize-results
           target="$APPETIZE_BUILD_ID"
           trap 'appetize inspect appetize-results/final.json --json --quiet || true; appetize screenshot appetize-results/final.png --json --quiet || true; appetize session stop --json --quiet || true' EXIT
+          measure_route() {
+            name="$1"
+            uri="$2"
+            expected="$3"
+            started="$(date +%s%3N)"
+            appetize open "$uri" --json --quiet
+            appetize inspect --select-text "$expected" --timeout 15000 --json --quiet
+            finished="$(date +%s%3N)"
+            duration_ms="$((finished - started))"
+            echo "SCREEN_LOAD_MS: $name=$duration_ms"
+            echo "- $name: ${duration_ms} ms until expected content appeared" >> "$GITHUB_STEP_SUMMARY"
+          }
           appetize session start pixel7 --target "$target" --json --quiet >/dev/null
           appetize inspect --select-test-id welcome-skip --timeout 25000 --json --quiet
           appetize tap --select-test-id welcome-skip --json --quiet
           appetize inspect --select-test-id auth-email-tab --timeout 15000 --json --quiet
           appetize tap --select-test-id auth-email-tab --json --quiet
           appetize tap --select-test-id auth-email-mode-password --json --quiet
+          measure_route 'Forgot password' 'detail:///forgot-password' 'Forgot password?'
+          measure_route 'Reset password' 'detail:///reset-password' 'Choose a new password'
+          measure_route 'Email verification code' 'detail:///verify-email?email=qa%40example.test&intent=SIGN_IN' 'Check your email'
+          appetize open 'detail:///sign-in' --json --quiet
+          appetize inspect --select-test-id auth-email-input --timeout 15000 --json --quiet
           appetize tap --select-test-id auth-email-input --json --quiet
           appetize type "$E2E_CUSTOMER_EMAIL" --json --quiet
           appetize tap --select-test-id auth-password-input --json --quiet
@@ -137,18 +154,6 @@ jobs:
           appetize inspect --select-text 'Details & Condition' --timeout 15000 --json --quiet
           echo 'LIVE_CUSTOMER_CHECKLIST_COMPLETED'
           echo 'LIVE_CUSTOMER_SERVICE_SELECTION_REACHED'
-          measure_route() {
-            name="$1"
-            uri="$2"
-            expected="$3"
-            started="$(date +%s%3N)"
-            appetize open "$uri" --json --quiet
-            appetize inspect --select-text "$expected" --timeout 15000 --json --quiet
-            finished="$(date +%s%3N)"
-            duration_ms="$((finished - started))"
-            echo "SCREEN_LOAD_MS: $name=$duration_ms"
-            echo "- $name: ${duration_ms} ms until expected content appeared" >> "$GITHUB_STEP_SUMMARY"
-          }
           measure_route 'Activity tab' 'detail:///activity' 'Your bookings'
           measure_route 'Messages tab' 'detail:///messages' 'Messages'
           measure_route 'Wallet tab' 'detail:///wallet' 'Wallet'
@@ -166,9 +171,6 @@ jobs:
           measure_route 'Account email' 'detail:///account/email' 'Email address'
           measure_route 'Portfolio' 'detail:///portfolio' 'My portfolio'
           measure_route 'Instant offers' 'detail:///instant-offers' 'Instant offers'
-          measure_route 'Forgot password' 'detail:///forgot-password' 'Forgot password?'
-          measure_route 'Reset password' 'detail:///reset-password' 'Choose a new password'
-          measure_route 'Email verification code' 'detail:///verify-email?email=qa%40example.test&intent=SIGN_IN' 'Check your email'
           measure_route 'Announcement detail' 'detail:///announcement?title=QA%20announcement&body=Test%20announcement' 'Announcement'
           measure_route 'Unknown route' 'detail:///route-not-present' 'Screen not found'
           measure_route 'Privacy policy' 'detail:///privacy-policy' 'Privacy Policy'
