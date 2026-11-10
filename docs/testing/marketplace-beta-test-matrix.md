@@ -1,6 +1,6 @@
 # Marketplace beta test matrix
 
-**Version:** 1.4
+**Version:** 1.5
 **Updated:** 2026-11-10
 **Branch:** `codex/separate-dashboard-into-routed-modules-fl7jlh`
 
@@ -24,6 +24,23 @@ Statuses are **Pass**, **Fail**, **Blocked**, or **Not run**. Local tests do not
 | Paynow, Didit, push, campaigns, and Twilio Voice provider transactions | Not run | No Paynow checkout, identity verification, push/campaign delivery, or voice call was made. Provider key values were not read or changed; their environment modes cannot be inferred from secret presence. |
 | Twilio in-app calling and usage display | Blocked | Chat call controls, authenticated participant checks, signed Voice tokens, the client cutoff, and server TwiML `timeLimit=300` are implemented and covered by local tests. The admin overview separates account-wide prior-month Twilio Voice usage from SMS. Voice credentials/push credentials are incomplete, so no call or live Voice meter was verified; provider usage cannot be attributed to Detail calls. |
 | Physical Android/iPhone checks | Not run | Permission denial/recovery, actual push delivery, location backgrounding, camera/photo access, Google/Apple sign-in, incoming-call audio/CallKit/PushKit, large text, and real-device layout require physical devices and confirmed test configuration. |
+
+## Provider mode and use evidence
+
+Provider key values were not read, printed, exported, or changed. A key name or secret presence cannot establish sandbox mode.
+
+| Provider | Verified in this test pass | Sandbox/live mode |
+| --- | --- | --- |
+| Supabase | Appetize used the configured hosted project for disposable sign-in/profile checks; local Supabase handled the concurrency and booking pressure tests. | Hosted project is not an isolated QA project. No marketplace booking was submitted. |
+| Resend / Supabase email | One email code reached the controlled AgentMail inbox and was accepted. | The SMTP/API key mode was not verified. |
+| SMSPoP | One harmless test SMS was accepted by the API; provider reported one credit used. | API acceptance does not prove sandbox mode or handset delivery. |
+| Paynow | No payment, refund, wallet top-up, or withdrawal was attempted. Integration credentials were absent in the last protected-environment check. | No sandbox transaction has been confirmed. |
+| Didit | No KYC session was created; the unverified cleaner remained blocked by the backend. | Usage was reported exhausted; sandbox mode was not verified. |
+| Mapbox | The home map rendered in Appetize. No usage/billing endpoint was polled. | App token is used for map rendering; no sandbox or cost report was established. |
+| Firebase / Expo Push | No push was sent; Android Firebase configuration was absent from the APK build environment. | Push configuration and delivery mode were not verified. |
+| Twilio Voice | App call code and the 300-second server limit have local coverage; no provider call or usage request was made. | Voice credentials and platform push credentials are incomplete; mode is unknown. |
+| Google / Apple sign-in | Google nonce handling has focused unit tests; no native provider login was completed. | OAuth project mode and iOS provider configuration were not verified. |
+| PostHog, Turnstile, Cloudflare R2 | No usage report was polled or deliberate analytics event sent; no Turnstile challenge or media upload was run. Route navigation and map rendering may generate routine app analytics/map requests. | No sandbox/billing mode was verified. |
 
 ## Bug register
 
