@@ -198,7 +198,9 @@ jobs:
           appetize tap --session-id "$session_id" --select-text '/^Continue to App$/i' --timeout 10000 --json --quiet
           appetize inspect appetize-ios-route-results/home.json --session-id "$session_id" --select-text '/^House$/i' --timeout 25000 --json --quiet
           appetize screenshot appetize-ios-route-results/home.png --session-id "$session_id" --json --quiet
-          appetize tap --session-id "$session_id" --select-text '/^House$/i' --json --quiet
+          # iOS exposes this TouchableOpacity's label on a non-actionable
+          # accessibility node, so tap the center of the visible House card.
+          appetize tap --session-id "$session_id" --select-position 0.27,0.62 --json --quiet
           appetize inspect --session-id "$session_id" --select-text 'What do you need cleaned?' --timeout 15000 --json --quiet
           appetize tap --session-id "$session_id" --select-text 'House Cleaning' --json --quiet
           appetize tap --session-id "$session_id" --select-text '/^Next$/i' --json --quiet
