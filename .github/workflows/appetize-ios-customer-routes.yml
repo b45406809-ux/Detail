@@ -73,6 +73,7 @@ jobs:
             throw new Error('The source workflow has no successful iOS simulator build and Appetize upload.');
           }
           console.log(`PINNED_APPETIZE_TARGET: ${target.id}`);
+          console.log(`APPETIZE_TARGET_STATE: ${target.status ?? target.state ?? 'not reported'}`);
           console.log(`PINNED_SOURCE_COMMIT: ${process.env.SOURCE_COMMIT}`);
           console.log(`PINNED_SOURCE_WORKFLOW_RUN: ${process.env.SOURCE_WORKFLOW_RUN_ID}`);
           NODE
@@ -101,6 +102,7 @@ jobs:
             .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
             .replace(/((?:token|secret|password|authorization)\s*[:=]\s*)[^,\s]+/gi, '$1[redacted]')
             .replace(/https?:\/\/[^\s"'<>]+/g, '[url redacted]')
+            .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[email redacted]')
             .replace(/\b[A-Za-z0-9_-]{36,}\b/g, '[redacted]');
           const allowed = /^(status|statusCode|httpStatus|errorCode|type|message)$/i;
           async function scan(path) {
@@ -109,7 +111,15 @@ jobs:
             for (const entry of entries) {
               const file = join(path, entry.name);
               if (entry.isDirectory()) { await scan(file); continue; }
-              if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+              if (!entry.isFile()) continue;
+              console.log(`SESSION_DIAGNOSTIC_FILE ${entry.name}`);
+              if (!entry.name.endsWith('.json')) {
+                try {
+                  const lines = (await readFile(file, 'utf8')).split(/\r?\n/);
+                  for (const line of lines.filter(value => /error|status|request|response|code|device|session|fail/i.test(value)).slice(-30)) console.log(`SESSION_DIAGNOSTIC_LOG ${safe(line)}`);
+                } catch { /* Non-text CLI files stay in the restricted artifact. */ }
+                continue;
+              }
               try {
                 const value = JSON.parse(await readFile(file, 'utf8'));
                 const visit = (node, trail = '') => {
