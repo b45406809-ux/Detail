@@ -1,61 +1,70 @@
 # Marketplace beta test matrix
 
-**Version:** 1.2
-**Updated:** 2026-11-10  
+**Version:** 1.4
+**Updated:** 2026-11-10
 **Branch:** `codex/separate-dashboard-into-routed-modules-fl7jlh`
 
-Status is reported as **Pass**, **Fail**, **Blocked**, or **Not run**. A passing local test does not establish that the hosted free plan has the same capacity.
+Statuses are **Pass**, **Fail**, **Blocked**, or **Not run**. Local tests do not prove hosted free-plan capacity, and UI readiness times include Appetize automation/network overhead.
 
 ## Test matrix
 
 | Area | Status | Scope and result |
 | --- | --- | --- |
-| Site, dashboard, mobile type check/lint, Edge Functions | Pass | CI run 42732660944: site build and browser smoke, mobile type check/lint, local Supabase migrations, pgTAP, and dashboard fixture journeys passed. The new Voice endpoints and UI require the next CI run. |
-| Backend booking lifecycle and security | Pass | The isolated local Supabase suite covers booking idempotency, bid acceptance replay, quote/reschedule/instant-offer lifecycles, messaging, arrival/completion evidence, payout idempotency, account deletion, notification status, Paynow webhook/reconciliation/refund records, and access-control invariants. These are database/function tests, not provider transactions. |
-| Concurrent registration burst | Pass | 20/20 synthetic registrations persisted profiles at concurrency 20; 0 failed; p50 915 ms, p95 942 ms, p99 1,014 ms; all 20 were deleted. Target was local Supabase at `127.0.0.1`, not the hosted project. |
-| Booking write pressure | Pass | 10,000/10,000 synthetic booking RPC writes persisted with concurrency 100, 1,000 synthetic eligible cleaners, and 200,000 nearby-cleaner notification rows. Runtime 93.78 s (106.6 bookings/s); latency p50 641 ms, p95 2,589 ms, p99 6,205 ms. Five transient local PostgREST pool-acquisition errors were retried. This is not a hosted Supabase free-tier guarantee. |
-| Android baseline screens on existing APK | Pass | Pinned build `du2xyaxoiakaw57cecgor2jfd4` (EAS `1858f342-02c5-41ad-9672-255b9b22b9e6`, source `dedbb98c7fc71d442d4cad47c9178a4c989189e3`). Welcome, sign-in, create-account, email, and password screens rendered; no account was submitted. Screenshots are attached to run 42729896172. |
-| Android build and Appetize home/onboarding journey | Pass | GitHub Actions built the APK directly (not EAS), uploaded it as Appetize target `dnyjnnuzqq5ip3vp53da4ew6um`, and verified persisted customer onboarding. Two temporary auth accounts were removed. No booking or payment was submitted. |
-| Android customer account and route UI journey | Pass | Pinned route run 42732054256 against target `dnyjnnuzqq5ip3vp53da4ew6um`, source commit `f5081fab504133e38e53f3f1580f99d7e186ac0d`, build run 42726618583. On-screen route readiness: Activity 1.71 s, Messages 1.66 s, Wallet 2.32 s, Profile 0.99 s, Cleaner search 2.04 s, Booking creation 1.47 s, booking-offers/confirmation/job/tracking invalid-ID states 1.41–1.72 s, other tested routes 0.61–2.14 s. These Appetize timings include remote automation/network overhead. The flow stopped before booking submission. |
-| Android cleaner UI and server-side verification gates | Pass | Pinned cleaner run 42732497555 against the same target/source. UI reached the Didit identity-check gate; live backend rejected both `submitCleanerApplication` and `setActiveRole` for the unverified synthetic cleaner (HTTP 409); profile persistence was checked, and both temporary accounts were deleted. No KYC request was started. |
-| Full live marketplace transaction through the app | Blocked | The live backend booking gate is open, but there is no verified test-only boundary and a separate hosted QA project could not be provisioned because Supabase project creation returned HTTP 403. No production booking was submitted. The local database suite covers individual state transitions, but does not replace a two-account Appetize transaction. |
-| iOS simulator build/UI | Not run | First direct macOS/Xcode simulator Release build failed in the `fmt` pod under Xcode 26 (run 42732672881). The runner is now pinned to macOS 15/Xcode 16 for the retry. No iOS artifact or physical-device pass is recorded yet. |
-| Paynow, Didit, SMSPoP, Resend, push, and other provider transactions | Not run | No payment, identity verification, email, SMS, or push was generated. Provider secrets were not read or changed, so the sandbox/live mode of each configured credential cannot be independently confirmed from this run. |
-| Twilio app-to-app WebRTC | Blocked / not run | Mobile call controls and backend token/TwiML endpoints are implemented with a hard 300 second server limit. No voice keys were read and no call was placed. To activate: configure the protected Twilio Voice API key, TwiML App, webhook URL and (for incoming calls) platform Push Credential. Simulator cannot validate physical CallKit/PushKit. Setup is documented in `docs/providers/twilio-voice-setup.md`. |
+| CI, dashboard, mobile, Supabase migrations and Edge Functions | Pass | Latest full successful run 42749516025 on commit `75999c590b76273901416a060293cb6101aa10c0`: site/dashboard, mobile type-check and lint, Google nonce tests, local Supabase migrations/security/pgTAP, Edge Function checks, and authenticated dashboard journeys passed. Workflow-only commit `d9cbace` has CI run 42750266588 pending. |
+| Concurrent registration burst | Pass | Run 42745132147: 20/20 local synthetic Auth registrations and profiles persisted at concurrency 20; 0 failed; p50 738 ms, p95 783 ms, p99 786 ms. All 20 local accounts were deleted. No hosted accounts were created by this pressure test. |
+| Booking write pressure | Pass | Run 42745132147: 10,000/10,000 synthetic booking RPC writes persisted at concurrency 100 with 1,000 eligible synthetic cleaners and 200,000 nearby-cleaner notification rows. Runtime 82.64 s (121 bookings/s); p50 548 ms, p95 2,216 ms, p99 6,001 ms. Eleven transient local PostgREST pool-acquisition errors were retried; 0 bookings failed. This is not a hosted Supabase free-tier guarantee. |
+| Android build and current Appetize upload | Pass | Direct GitHub Actions build run 42745938717 built commit `803be2234625597075d6d8d27ec2d44d70ce68a4`, uploaded target `qnjjqo4sz4kcis73grjirqur7e`, and saved the home screenshot artifact. No EAS build was run. Android Firebase config was absent in this artifact, so push delivery is not covered. |
+| Android customer routes on pinned Appetize build | Pass | Expanded run 42750004390 used target `qnjjqo4sz4kcis73grjirqur7e`, source commit `803be2234625597075d6d8d27ec2d44d70ce68a4`, source build run 42745938717. Sign-in, customer agreement/profile/permissions onboarding, service selection through booking details, and persisted profile state passed; no booking was submitted. Auth recovery, reset password, and email-code-entry screens rendered before sign-in. Twenty-five marketplace/account/legal routes rendered in 0.73–2.22 s (median 1.38 s): tabs, history, favorites, cleaner search, notifications, reviews, help/support, organization, email, portfolio, instant offers, announcement, not-found, policies, booking form, offers/confirmation, job, and tracking states. Two disposable accounts were deleted. |
+| Android cleaner onboarding and server gates | Pass | Fresh-build run 42750487343 used target `qnjjqo4sz4kcis73grjirqur7e` from build run 42745938717. UI reached the Didit identity gate; the backend returned HTTP 409 for both unverified `submitCleanerApplication` and `setActiveRole`. Persisted gate state was checked; both disposable accounts were deleted. No KYC session was created. |
+| Android email registration | Pass | Run 42744667151 used the same pinned target and AgentMail test inbox. A fresh email code was received and accepted; Auth/profile/agreement state persisted; the one disposable account was deleted. One test verification email was sent. The underlying provider's sandbox/live mode was not independently established. |
+| Reported Google Sign-In nonce error | Partially verified | Commit `803be22` sends the original nonce to Supabase only when Google's ID token contains a nonce claim; three focused tests and mobile CI pass. The fresh APK contains the fix, but a real Google account sign-in still needs a dedicated test account. |
+| SMSPoP API payload | Pass | Run 42747410823 sent one harmless test SMS to the protected test recipient. SMSPoP reported `sent` and 1 credit used. This confirms provider API acceptance, not carrier delivery or the Supabase Auth OTP hook end-to-end. The local Auth-hook payload tests pass in CI. |
+| Full app marketplace booking/bid/chat/tracking/completion/payment lifecycle | Blocked | No verified isolated hosted backend or test-only boundary is available. The current APK points at the hosted project, so no job was posted, no real cleaner was notified, and no payment/KYC/payout was attempted. Local database and Edge Function tests cover lifecycle transitions and access control but do not replace a two-account UI transaction. |
+| iOS simulator/Appetize | Blocked / retry in progress | Run 42746627615 failed building the NitroModules Clang module because `folly/folly-config.h` was missing. Workflow commit `d9cbace` passes Folly no-config flags to module scanning and pod compilation; retry run 42750267000 is in progress. No iOS target is available yet. Physical iPhone checks remain outstanding. |
+| Paynow, Didit, push, campaigns, and Twilio Voice provider transactions | Not run | No Paynow checkout, identity verification, push/campaign delivery, or voice call was made. Provider key values were not read or changed; their environment modes cannot be inferred from secret presence. |
+| Twilio in-app calling and usage display | Blocked | Chat call controls, authenticated participant checks, signed Voice tokens, the client cutoff, and server TwiML `timeLimit=300` are implemented and covered by local tests. The admin overview separates account-wide prior-month Twilio Voice usage from SMS. Voice credentials/push credentials are incomplete, so no call or live Voice meter was verified; provider usage cannot be attributed to Detail calls. |
+| Physical Android/iPhone checks | Not run | Permission denial/recovery, actual push delivery, location backgrounding, camera/photo access, Google/Apple sign-in, incoming-call audio/CallKit/PushKit, large text, and real-device layout require physical devices and confirmed test configuration. |
 
 ## Bug register
 
 | ID | Finding | Status | Evidence / follow-up |
 | --- | --- | --- | --- |
-| B-01 | Campaign waitlist UI had malformed JSX, and the campaign SQL enqueue query used an invalid lateral alias. | Fixed | Resolved in `f5081fa`; site build and local database tests pass in CI run 42728357867. |
-| B-02 | A campaign regression fixture could collide with the auth-triggered profile row. | Fixed | Fixture now upserts the profile; pgTAP passes in CI run 42728357867. |
-| B-03 | Dashboard route smoke test expected a menu label instead of the rendered page heading. | Fixed | Test now navigates by the visible “Waitlist & Email” menu item; CI dashboard journey passes. |
-| B-04 | At 100 concurrent local booking writes, PostgREST returned five transient `PGRST003` pool-acquisition failures. | Open / capacity signal | The pressure harness retries this specific pre-query pool error and reached 10,000 persisted writes. Repeat against a dedicated hosted QA project before making hosted free-plan capacity claims. |
-| B-05 | User-reported login/API/dialog issues and visual spacing issues have not been comprehensively rechecked against the new APK. | Partially verified | New APK successfully signs in and reaches customer/cleaner routes. Route screenshots are attached to run 42732054256 and cleaner gate screenshots to run 42732497555. Dialog dimensions, Google Sign-In, SMS/email OTP, push delivery, and visual spacing still need dedicated checks. |
-| B-06 | Appetize build inventory omitted the upload note even though the upload request carried it, so the first route run stopped at artifact validation before creating accounts. | Fixed | Route workflows now verify the exact target ID against the successful source workflow's run metadata and upload logs. The failed attempt created no accounts. |
-| B-07 | Direct iOS simulator build failed compiling the `fmt` pod under Xcode 26 on the moving macOS latest runner. | Fix queued | Failure was isolated to Apple Clang 26 constant-evaluation errors in `fmt`; CocoaPods completed. The next simulator run pins the macOS 15 runner/Xcode 16 toolchain. |
-| B-08 | New Twilio call integration has not been exercised against Twilio. | Blocked | Voice keys, TwiML App, and incoming-call push credentials must be provisioned in the protected GitHub environment. No calls were made. The route enforces active-booking participant checks and five minutes in server TwiML, with a client-side cutoff as backup. |
+| B-01 | Campaign waitlist UI had malformed JSX and its SQL enqueue query used an invalid lateral alias. | Fixed | Existing CI and local migration tests pass. |
+| B-02 | A campaign regression fixture could collide with the auth-triggered profile row. | Fixed | Fixture uses an upsert; local pgTAP passes. |
+| B-03 | Dashboard route smoke test expected a menu label instead of the rendered page heading. | Fixed | Authenticated dashboard journey passes in run 42746904371. |
+| B-04 | Concurrent local booking writes can hit transient PostgREST pool acquisition limits. | Open / capacity signal | Latest run retried 11 local pool errors and persisted all 10,000 writes. Repeat only against a dedicated hosted QA project before making hosted capacity claims. |
+| B-05 | User-reported SMS/Google/email/notification errors and dialog sizing needed rechecking. | Partially fixed | Fresh AgentMail code passed; Google nonce handling was fixed and unit-tested; one SMSPoP API test was accepted. Supabase phone OTP, visual dialog sizing, push delivery, and physical permissions are not fully verified. |
+| B-06 | Appetize inventory did not expose upload notes reliably to route tests. | Fixed | Route tests now pin target ID, source commit, and successful source run metadata/logs. |
+| B-07 | iOS simulator compilation failed because NitroModules could not find `folly/folly-config.h`. | Fix under verification | The new workflow passes `FOLLY_NO_CONFIG=1` and `FOLLY_CFG_NO_COROUTINES=1` to Xcode module scanning and compilation; retry run 42750267000 is building. |
+| B-08 | Twilio Voice has not been exercised against a provider. | Blocked | Protected Voice API key, TwiML App, platform push credentials, and physical call checks are required. The server enforces the five-minute limit. |
+| B-09 | Android requested microphone access at app launch instead of when a user started or answered a call. | Fixed | Commit `1524dfc` defers Android microphone permission to call actions; Appetize login/home journey passed without the startup prompt. |
+| B-10 | Google Sign-In failed when Supabase received a nonce that was absent from Google's ID token. | Fix under verification | Commit `803be22` conditionally forwards the nonce; focused tests and CI pass. Verify with a fresh build and a dedicated test Google account. |
+| B-11 | Expanded Appetize auth routes originally ran after sign-in and were redirected by the session guard; the first isolated rerun then carried navigation state into onboarding. | Fixed in test workflow | Auth-only screens now run before sign-in, and onboarding restarts in a fresh Appetize session. Pinned customer route run 42750004390 verifies both phases and account cleanup. |
 
 ## Safety and limits
 
-- Provider credential values are not printed, exported, or modified by these checks.
-- The local 20-account and 10,000-booking tests use an isolated loopback Supabase instance and clean their data.
-- The live Appetize workflow creates at most two synthetic, disposable auth accounts and verifies cleanup. It does not submit a booking, charge a customer, perform KYC, or send a provider message.
-- The current Appetize APK is configured with the repository's hosted Supabase project. It is suitable for bounded authentication/profile UI checks only; use a verified isolated backend for destructive or multi-party marketplace transactions.
-- UI time-to-text is a practical route readiness measure, not a device performance benchmark or a network waterfall.
+- Provider credential values were not printed, exported, or modified. Presence does not establish whether a key is sandbox or live.
+- The local 20-account and 10,000-booking pressure tests use an isolated loopback Supabase instance and clean their data.
+- Appetize account tests use disposable synthetic users and verify cleanup. Each Appetize run creates at most two accounts; completed runs verify deletion. The 20-user burst was isolated locally, not run against hosted Auth.
+- One controlled email OTP and one controlled SMS test were sent. The SMSPoP test used one provider credit. Home screens rendered Mapbox maps; no usage/billing polling was run to avoid creating extra provider traffic.
+- No live booking, bid, acceptance, chat message, KYC session, Paynow transaction, payout, campaign, push, or call was submitted.
+- Current Appetize builds use the hosted Supabase project and are limited to bounded auth/profile/UI checks until an isolated backend boundary is verified.
+- UI route times measure `open` plus the first matching visible content, not a device performance benchmark or network waterfall.
 
 ## Evidence index
 
 | Evidence | Link |
 | --- | --- |
-| CI validation, migration reset, pgTAP, dashboard journeys | [GitHub Actions run 42728357867](https://github.com/b45406809-ux/Detail/actions/runs/42728357867) |
-| 20-user signup burst and 10,000-booking local pressure test | [GitHub Actions run 42728206600](https://github.com/b45406809-ux/Detail/actions/runs/42728206600) |
-| Pinned existing-APK baseline screens and screenshots | [GitHub Actions run 42729896172](https://github.com/b45406809-ux/Detail/actions/runs/42729896172) |
-| GitHub Android build/Appetize upload and home/onboarding screenshots | [GitHub Actions run 42726618583](https://github.com/b45406809-ux/Detail/actions/runs/42726618583) |
-| Pinned Android customer screen route sweep and screenshots | [GitHub Actions run 42732054256](https://github.com/b45406809-ux/Detail/actions/runs/42732054256) |
-| Pinned Android cleaner registration/identity gate and cleanup | [GitHub Actions run 42732497555](https://github.com/b45406809-ux/Detail/actions/runs/42732497555) |
-| Direct iOS simulator build and Appetize inspection (in progress) | [GitHub Actions run 42732672881](https://github.com/b45406809-ux/Detail/actions/runs/42732672881) |
-| Earlier iOS build failure (Xcode 26 `fmt` compile) | [GitHub Actions run 42732672881](https://github.com/b45406809-ux/Detail/actions/runs/42732672881) |
-| Latest CI validation | [GitHub Actions run 42732660944](https://github.com/b45406809-ux/Detail/actions/runs/42732660944) |
-| Hosted isolated Supabase project request (HTTP 403) | [GitHub Actions run 42558073940](https://github.com/b45406809-ux/Detail/actions/runs/42558073940) |
-| Prior EAS build attempt (Starter plan required) | [GitHub Actions run 42328844702](https://github.com/b45406809-ux/Detail/actions/runs/42328844702) |
+| Latest CI validation on commit `989fdeef` | [GitHub Actions run 42746904371](https://github.com/b45406809-ux/Detail/actions/runs/42746904371) |
+| Android Appetize build, uploaded target, and home screenshot | [GitHub Actions run 42745938717](https://github.com/b45406809-ux/Detail/actions/runs/42745938717) |
+| Expanded Android customer route sweep, screenshots, persisted profile, and cleanup | [GitHub Actions run 42750004390](https://github.com/b45406809-ux/Detail/actions/runs/42750004390) |
+| iOS simulator/Appetize build failure (missing Folly header) | [GitHub Actions run 42746627615](https://github.com/b45406809-ux/Detail/actions/runs/42746627615) |
+| iOS simulator/Appetize rebuild with propagated Folly flags | [GitHub Actions run 42750267000](https://github.com/b45406809-ux/Detail/actions/runs/42750267000) |
+| Android cleaner verification gate and cleanup on fresh APK | [GitHub Actions run 42750487343](https://github.com/b45406809-ux/Detail/actions/runs/42750487343) |
+| Earlier Android customer route sweep | [GitHub Actions run 42744666734](https://github.com/b45406809-ux/Detail/actions/runs/42744666734) |
+| Android cleaner verification gate and cleanup | [GitHub Actions run 42744666657](https://github.com/b45406809-ux/Detail/actions/runs/42744666657) |
+| AgentMail email registration and OTP verification | [GitHub Actions run 42744667151](https://github.com/b45406809-ux/Detail/actions/runs/42744667151) |
+| SMSPoP API acceptance test (one credit) | [GitHub Actions run 42747410823](https://github.com/b45406809-ux/Detail/actions/runs/42747410823) |
+| 20 concurrent registrations and 10,000 local booking writes | [GitHub Actions run 42745132147](https://github.com/b45406809-ux/Detail/actions/runs/42745132147) |
+| Prior Android build, home screenshot, and microphone-startup fix verification | [GitHub Actions run 42740802700](https://github.com/b45406809-ux/Detail/actions/runs/42740802700) |
+| Isolated hosted QA project request (creation returned HTTP 403) | [GitHub Actions run 42558073940](https://github.com/b45406809-ux/Detail/actions/runs/42558073940) |
