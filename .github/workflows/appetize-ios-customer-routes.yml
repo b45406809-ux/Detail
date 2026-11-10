@@ -196,6 +196,12 @@ jobs:
           appetize inspect --session-id "$session_id" --select-text 'Allow permissions' --timeout 20000 --json --quiet
           appetize screenshot appetize-ios-route-results/permissions.png --session-id "$session_id" --json --quiet
           appetize tap --session-id "$session_id" --select-text '/^Continue to App$/i' --timeout 10000 --json --quiet
+          # Continue opens Apple's native location permission sheet on a fresh
+          # simulator. Accept the scoped while-using permission so the home
+          # screen is interactive for the following service-card test.
+          if appetize inspect --session-id "$session_id" --select-text '/^Allow While Using App$/' --timeout 3000 --json --quiet >/dev/null 2>&1; then
+            appetize tap --session-id "$session_id" --select-text '/^Allow While Using App$/' --timeout 5000 --json --quiet
+          fi
           appetize inspect appetize-ios-route-results/home.json --session-id "$session_id" --select-text '/^House$/i' --timeout 25000 --json --quiet
           appetize screenshot appetize-ios-route-results/home.png --session-id "$session_id" --json --quiet
           # iOS exposes this TouchableOpacity's label on a non-actionable
