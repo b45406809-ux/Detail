@@ -7,11 +7,16 @@ on:
         required: true
         type: string
       source_commit:
-        description: Full 40-character source commit recorded in the Appetize build note
+        description: Full 40-character source commit that built the selected Appetize target
+        required: true
+        type: string
+      source_workflow_run_id:
+        description: GitHub run ID that built and uploaded the selected Appetize target
         required: true
         type: string
 permissions:
   contents: read
+  actions: read
 jobs:
   cleaner:
     runs-on: ubuntu-latest
@@ -20,6 +25,8 @@ jobs:
       APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
       APPETIZE_BUILD_ID: ${{ inputs.appetize_build_id }}
       SOURCE_COMMIT: ${{ inputs.source_commit }}
+      SOURCE_WORKFLOW_RUN_ID: ${{ inputs.source_workflow_run_id }}
+      GITHUB_TOKEN: ${{ github.token }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE }}
       SUPABASE_PUBLIC_ANON: ${{ secrets.SUPABASE_PUBLIC_ANON || secrets.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_ANON_KEY }}
@@ -38,23 +45,43 @@ jobs:
           set -euo pipefail
           [[ "$APPETIZE_BUILD_ID" =~ ^[a-z0-9]{20,32}$ ]]
           [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SOURCE_WORKFLOW_RUN_ID" =~ ^[0-9]+$ ]]
           git cat-file -e "$SOURCE_COMMIT^{commit}"
           appetize build list --app com.detail.app --limit 200 --json --quiet > "$RUNNER_TEMP/appetize-builds.json"
-          APPETIZE_BUILD_ID="$APPETIZE_BUILD_ID" SOURCE_COMMIT="$SOURCE_COMMIT" node --input-type=module <<'NODE'
+          APPETIZE_BUILD_ID="$APPETIZE_BUILD_ID" SOURCE_COMMIT="$SOURCE_COMMIT" SOURCE_WORKFLOW_RUN_ID="$SOURCE_WORKFLOW_RUN_ID" node --input-type=module <<'NODE'
           import { readFile } from 'node:fs/promises';
           const { builds = [] } = JSON.parse(await readFile(`${process.env.RUNNER_TEMP}/appetize-builds.json`, 'utf8'));
           const target = builds.find(build => build.id === process.env.APPETIZE_BUILD_ID);
           if (!target) throw new Error('The requested Appetize build ID is unavailable for com.detail.app.');
           if (target.platform !== 'android') throw new Error('The requested Appetize target is not Android.');
-          if (!String(target.note ?? '').includes(process.env.SOURCE_COMMIT)) throw new Error('The Appetize build note does not match the supplied source commit.');
+          if (target.note && !String(target.note).includes(process.env.SOURCE_COMMIT)) throw new Error('The Appetize build note does not match the supplied source commit.');
+          const api = `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}`;
+          const headers = { authorization: `Bearer ${process.env.GITHUB_TOKEN}`, accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28' };
+          const runResponse = await fetch(`${api}/actions/runs/${process.env.SOURCE_WORKFLOW_RUN_ID}`, { headers });
+          if (!runResponse.ok) throw new Error(`Could not verify the source workflow run (HTTP ${runResponse.status}).`);
+          const run = await runResponse.json();
+          if (run.head_sha !== process.env.SOURCE_COMMIT || run.conclusion !== 'success' || run.name !== 'Appetize home panel layout screenshot') {
+            throw new Error('The supplied source run did not successfully build the supplied source commit.');
+          }
+          const jobsResponse = await fetch(`${api}/actions/runs/${process.env.SOURCE_WORKFLOW_RUN_ID}/jobs`, { headers });
+          if (!jobsResponse.ok) throw new Error(`Could not verify the Appetize upload job (HTTP ${jobsResponse.status}).`);
+          const { jobs = [] } = await jobsResponse.json();
+          const uploadJob = jobs.find(job => job.name === 'home-panel' && job.conclusion === 'success');
+          if (!uploadJob) throw new Error('The source Appetize workflow has no successful home-panel job.');
+          const logsResponse = await fetch(`${api}/actions/jobs/${uploadJob.id}/logs`, { headers });
+          if (!logsResponse.ok) throw new Error(`Could not verify the source Appetize build output (HTTP ${logsResponse.status}).`);
+          const logs = await logsResponse.text();
+          if (!logs.includes(`APPETIZE_TARGET: ${process.env.APPETIZE_BUILD_ID}`)) throw new Error('The selected Appetize target was not uploaded by the supplied source workflow run.');
           console.log(`PINNED_APPETIZE_TARGET: ${target.id}`);
           console.log(`PINNED_SOURCE_COMMIT: ${process.env.SOURCE_COMMIT}`);
+          console.log(`PINNED_SOURCE_WORKFLOW_RUN: ${process.env.SOURCE_WORKFLOW_RUN_ID}`);
           NODE
           {
             echo '## Pinned Android Appetize cleaner journey'
             echo
             echo "- Appetize build ID: \`$APPETIZE_BUILD_ID\`"
             echo "- Source commit: \`$SOURCE_COMMIT\`"
+            echo "- Source workflow run: \`$SOURCE_WORKFLOW_RUN_ID\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Create confirmed disposable accounts
         id: test-users
