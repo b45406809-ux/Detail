@@ -1,6 +1,6 @@
 # Marketplace beta test matrix
 
-**Version:** 1.6
+**Version:** 1.7
 **Updated:** 2026-11-10
 **Branch:** `codex/separate-dashboard-into-routed-modules-fl7jlh`
 
@@ -20,7 +20,7 @@ Statuses are **Pass**, **Fail**, **Blocked**, or **Not run**. Local tests do not
 | Reported Google Sign-In nonce error | Pass | Commit `803be22` sends the original nonce to Supabase only when Google's ID token contains a nonce claim; three focused tests and mobile CI pass, and the fresh APK contains the fix. A real Google account sign-in is separately not run. |
 | SMSPoP API payload | Pass | Run 42747410823 sent one harmless test SMS to the protected test recipient. SMSPoP reported `sent` and 1 credit used. This confirms provider API acceptance, not carrier delivery or the Supabase Auth OTP hook end-to-end. The local Auth-hook payload tests pass in CI. |
 | Full app marketplace booking/bid/chat/tracking/completion/payment lifecycle | Blocked | No verified isolated hosted backend or test-only boundary is available. The current APK points at the hosted project, so no job was posted, no real cleaner was notified, and no payment/KYC/payout was attempted. Local database and Edge Function tests cover lifecycle transitions and access control but do not replace a two-account UI transaction. |
-| iOS simulator/Appetize | Blocked | Run 42746627615 failed building the NitroModules Clang module because `folly/folly-config.h` was missing. Workflow commit `d9cbace` passes Folly no-config flags to module scanning and pod compilation; retry run 42750267000 is still compiling. No iOS target is available yet. Physical iPhone checks remain outstanding. |
+| iOS simulator/Appetize | Blocked | Run 42746627615 failed because NitroModules could not find `folly/folly-config.h`. Run 42750267000 passed that point but failed compiling the unused Nitro Google Sign-In Fabric view against React Native 0.76. Commit `8b5c187` excludes that view from the iOS pod; retry run 42754376266 is in progress. No iOS target is available yet. |
 | Paynow, Didit, push, campaigns, and Twilio Voice provider transactions | Not run | No Paynow checkout, identity verification, push/campaign delivery, or voice call was made. Provider key values were not read or changed; their environment modes cannot be inferred from secret presence. |
 | Twilio in-app calling and usage display | Blocked | Chat call controls, authenticated participant checks, signed Voice tokens, the client cutoff, and server TwiML `timeLimit=300` are implemented and covered by local tests. The admin overview separates account-wide prior-month Twilio Voice usage from SMS. Voice credentials/push credentials are incomplete, so no call or live Voice meter was verified; provider usage cannot be attributed to Detail calls. |
 | Physical Android/iPhone checks | Not run | Permission denial/recovery, actual push delivery, location backgrounding, camera/photo access, Google/Apple sign-in, incoming-call audio/CallKit/PushKit, large text, and real-device layout require physical devices and confirmed test configuration. |
@@ -87,11 +87,12 @@ Provider key values were not read, printed, exported, or changed. A key name or 
 | B-04 | Concurrent local booking writes can hit transient PostgREST pool acquisition limits. | Open / capacity signal | Latest run retried 11 local pool errors and persisted all 10,000 writes. Repeat only against a dedicated hosted QA project before making hosted capacity claims. |
 | B-05 | User-reported SMS/Google/email/notification errors and dialog sizing needed rechecking. | Partially fixed | Fresh AgentMail code passed; Google nonce handling was fixed and unit-tested; one SMSPoP API test was accepted. Supabase phone OTP, visual dialog sizing, push delivery, and physical permissions are not fully verified. |
 | B-06 | Appetize inventory did not expose upload notes reliably to route tests. | Fixed | Route tests now pin target ID, source commit, and successful source run metadata/logs. |
-| B-07 | iOS simulator compilation failed because NitroModules could not find `folly/folly-config.h`. | Fix under verification | The new workflow passes `FOLLY_NO_CONFIG=1` and `FOLLY_CFG_NO_COROUTINES=1` to Xcode module scanning and compilation; retry run 42750267000 is building. |
+| B-07 | RCT-Folly required a no-generated-config mode for NitroModules' Clang module. | Fixed | Xcode now passes `FOLLY_NO_CONFIG=1` and `FOLLY_CFG_NO_COROUTINES=1`; iOS run 42750267000 compiled past the previous missing-header error. |
 | B-08 | Twilio Voice has not been exercised against a provider. | Blocked | Protected Voice API key, TwiML App, platform push credentials, and physical call checks are required. The server enforces the five-minute limit. |
 | B-09 | Android requested microphone access at app launch instead of when a user started or answered a call. | Fixed | Commit `1524dfc` defers Android microphone permission to call actions; Appetize login/home journey passed without the startup prompt. |
 | B-10 | Google Sign-In failed when Supabase received a nonce that was absent from Google's ID token. | Fix under verification | Commit `803be22` conditionally forwards the nonce; focused tests and CI pass. Verify with a fresh build and a dedicated test Google account. |
 | B-11 | Expanded Appetize auth routes originally ran after sign-in and were redirected by the session guard; the first isolated rerun then carried navigation state into onboarding. | Fixed in test workflow | Auth-only screens now run before sign-in, and onboarding restarts in a fresh Appetize session. Pinned customer route run 42750004390 verifies both phases and account cleanup. |
+| B-12 | Nitro Google Sign-In's generated Fabric view uses a `ViewProps` constructor unavailable in React Native 0.76. | Fix under verification | The Detail app renders its own React Native sign-in button and doesn't use this generated view. Commit `8b5c187` excludes only the unused iOS view sources; Appetize simulator build 42754376266 is verifying the pod change. |
 
 ## Safety and limits
 
@@ -111,8 +112,9 @@ Provider key values were not read, printed, exported, or changed. A key name or 
 | Android Appetize build, uploaded target, and home screenshot | [GitHub Actions run 42745938717](https://github.com/b45406809-ux/Detail/actions/runs/42745938717) |
 | Interactive Android Appetize app | [Open target `qnjjqo4sz4kcis73grjirqur7e`](https://appetize.io/app/qnjjqo4sz4kcis73grjirqur7e) |
 | Expanded Android customer route sweep, screenshots, persisted profile, and cleanup | [GitHub Actions run 42750004390](https://github.com/b45406809-ux/Detail/actions/runs/42750004390) |
-| iOS simulator/Appetize build failure (missing Folly header) | [GitHub Actions run 42746627615](https://github.com/b45406809-ux/Detail/actions/runs/42746627615) |
-| iOS simulator/Appetize rebuild with propagated Folly flags | [GitHub Actions run 42750267000](https://github.com/b45406809-ux/Detail/actions/runs/42750267000) |
+| First iOS simulator/Appetize build failure (missing Folly header) | [GitHub Actions run 42746627615](https://github.com/b45406809-ux/Detail/actions/runs/42746627615) |
+| iOS rebuild passed Folly and exposed unused Nitro Google Fabric view incompatibility | [GitHub Actions run 42750267000](https://github.com/b45406809-ux/Detail/actions/runs/42750267000) |
+| iOS simulator/Appetize retry with unused view excluded (in progress) | [GitHub Actions run 42754376266](https://github.com/b45406809-ux/Detail/actions/runs/42754376266) |
 | Android cleaner verification gate and cleanup on fresh APK | [GitHub Actions run 42750487343](https://github.com/b45406809-ux/Detail/actions/runs/42750487343) |
 | Resolved route-test sequencing attempts (all test accounts cleaned) | [Run 42748867394](https://github.com/b45406809-ux/Detail/actions/runs/42748867394) · [Run 42749535556](https://github.com/b45406809-ux/Detail/actions/runs/42749535556) |
 | Earlier Android customer route sweep | [GitHub Actions run 42744666734](https://github.com/b45406809-ux/Detail/actions/runs/42744666734) |
