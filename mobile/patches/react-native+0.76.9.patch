@@ -32,3 +32,19 @@ index 1d399d4..3595290 100644
  
  #endif // platforms besides __ANDROID__
  
+diff --git a/node_modules/react-native/third-party-podspecs/RCT-Folly.podspec b/node_modules/react-native/third-party-podspecs/RCT-Folly.podspec
+index c3e095f..b6c93fa 100644
+--- a/node_modules/react-native/third-party-podspecs/RCT-Folly.podspec
++++ b/node_modules/react-native/third-party-podspecs/RCT-Folly.podspec
+@@ -95,6 +95,11 @@ Pod::Spec.new do |spec|
+                                "DEFINES_MODULE" => "YES",
+                                "CLANG_CXX_LANGUAGE_STANDARD" => rct_cxx_language_standard(),
+                                "HEADER_SEARCH_PATHS" => "\"$(PODS_TARGET_SRCROOT)\" \"$(PODS_ROOT)/boost\" \"$(PODS_ROOT)/DoubleConversion\" \"$(PODS_ROOT)/fast_float/include\" \"$(PODS_ROOT)/fmt/include\"",
++                               # Folly's generated config header is not part of the CocoaPods source tree.
++                               # NitroModules imports Folly headers as a Clang module, so make the same
++                               # no-generated-config mode available while Xcode builds that module.
++                               "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) FOLLY_NO_CONFIG=1 FOLLY_CFG_NO_COROUTINES=1",
++                               "OTHER_CPLUSPLUSFLAGS" => "$(inherited) -DFOLLY_NO_CONFIG=1 -DFOLLY_CFG_NO_COROUTINES=1",
+                                # In dynamic framework (use_frameworks!) mode, ignore the unused and undefined boost symbols when generating the library.
+                                "OTHER_LDFLAGS" => "\"-Wl,-U,_jump_fcontext\" \"-Wl,-U,_make_fcontext\""
+                              }
