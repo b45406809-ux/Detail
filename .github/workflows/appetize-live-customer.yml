@@ -6,12 +6,8 @@ on:
         description: Immutable Android Appetize target ID
         required: true
         type: string
-      eas_build_id:
-        description: EAS build ID represented by the selected Appetize target
-        required: true
-        type: string
       source_commit:
-        description: Full 40-character source commit for the selected EAS build
+        description: Full 40-character source commit recorded in the Appetize build note
         required: true
         type: string
 permissions:
@@ -23,7 +19,6 @@ jobs:
     env:
       APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
       APPETIZE_BUILD_ID: ${{ inputs.appetize_build_id }}
-      EAS_BUILD_ID: ${{ inputs.eas_build_id }}
       SOURCE_COMMIT: ${{ inputs.source_commit }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE }}
@@ -41,23 +36,23 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$APPETIZE_BUILD_ID" =~ ^[a-z0-9]{20,32}$ ]]
-          [[ "$EAS_BUILD_ID" =~ ^[0-9a-f-]{36}$ ]]
           [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           git cat-file -e "$SOURCE_COMMIT^{commit}"
           appetize build list --app com.detail.app --limit 200 --json --quiet > "$RUNNER_TEMP/appetize-builds.json"
-          APPETIZE_BUILD_ID="$APPETIZE_BUILD_ID" node --input-type=module <<'NODE'
+          APPETIZE_BUILD_ID="$APPETIZE_BUILD_ID" SOURCE_COMMIT="$SOURCE_COMMIT" node --input-type=module <<'NODE'
           import { readFile } from 'node:fs/promises';
           const { builds = [] } = JSON.parse(await readFile(`${process.env.RUNNER_TEMP}/appetize-builds.json`, 'utf8'));
           const target = builds.find(build => build.id === process.env.APPETIZE_BUILD_ID);
           if (!target) throw new Error('The requested Appetize build ID is unavailable for com.detail.app.');
           if (target.platform !== 'android') throw new Error('The requested Appetize target is not Android.');
+          if (!String(target.note ?? '').includes(process.env.SOURCE_COMMIT)) throw new Error('The Appetize build note does not match the supplied source commit.');
           console.log(`PINNED_APPETIZE_TARGET: ${target.id}`);
+          console.log(`PINNED_SOURCE_COMMIT: ${process.env.SOURCE_COMMIT}`);
           NODE
           {
             echo '## Pinned Android Appetize customer journey'
             echo
             echo "- Appetize build ID: \`$APPETIZE_BUILD_ID\`"
-            echo "- EAS build ID: \`$EAS_BUILD_ID\`"
             echo "- Source commit: \`$SOURCE_COMMIT\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Create confirmed disposable accounts
@@ -115,54 +110,43 @@ jobs:
           appetize inspect --select-text 'Details & Condition' --timeout 15000 --json --quiet
           echo 'LIVE_CUSTOMER_CHECKLIST_COMPLETED'
           echo 'LIVE_CUSTOMER_SERVICE_SELECTION_REACHED'
-          appetize open 'detail:///activity' --json --quiet
-          appetize inspect --select-text 'Your bookings' --timeout 15000 --json --quiet
-          appetize open 'detail:///messages' --json --quiet
-          appetize inspect --select-text 'Messages' --timeout 15000 --json --quiet
-          appetize open 'detail:///wallet' --json --quiet
-          appetize inspect --select-text 'Wallet' --timeout 15000 --json --quiet
-          appetize open 'detail:///profile' --json --quiet
-          appetize inspect --select-text 'Profile' --timeout 15000 --json --quiet
+          measure_route() {
+            name="$1"
+            uri="$2"
+            expected="$3"
+            started="$(date +%s%3N)"
+            appetize open "$uri" --json --quiet
+            appetize inspect --select-text "$expected" --timeout 15000 --json --quiet
+            finished="$(date +%s%3N)"
+            duration_ms="$((finished - started))"
+            echo "SCREEN_LOAD_MS: $name=$duration_ms"
+            echo "- $name: ${duration_ms} ms until expected content appeared" >> "$GITHUB_STEP_SUMMARY"
+          }
+          measure_route 'Activity tab' 'detail:///activity' 'Your bookings'
+          measure_route 'Messages tab' 'detail:///messages' 'Messages'
+          measure_route 'Wallet tab' 'detail:///wallet' 'Wallet'
+          measure_route 'Profile tab' 'detail:///profile' 'Profile'
           echo 'LIVE_CUSTOMER_TABS_RENDERED'
-          appetize open 'detail:///history' --json --quiet
-          appetize inspect --select-text 'Service History' --timeout 12000 --json --quiet
-          appetize open 'detail:///favorites' --json --quiet
-          appetize inspect --select-text 'Favorites' --timeout 12000 --json --quiet
-          appetize open 'detail:///cleaners' --json --quiet
-          appetize inspect --select-text 'Find Cleaners' --timeout 12000 --json --quiet
-          appetize open 'detail:///notifications' --json --quiet
-          appetize inspect --select-text 'Notifications' --timeout 12000 --json --quiet
-          appetize open 'detail:///reviews' --json --quiet
-          appetize inspect --select-text 'My Reviews' --timeout 12000 --json --quiet
-          appetize open 'detail:///help' --json --quiet
-          appetize inspect --select-text 'Help & Support' --timeout 12000 --json --quiet
+          measure_route 'Service history' 'detail:///history' 'Service History'
+          measure_route 'Favorites' 'detail:///favorites' 'Favorites'
+          measure_route 'Cleaner search' 'detail:///cleaners' 'Find Cleaners'
+          measure_route 'Notifications' 'detail:///notifications' 'Notifications'
+          measure_route 'Reviews' 'detail:///reviews' 'My Reviews'
+          measure_route 'Help' 'detail:///help' 'Help & Support'
           echo 'LIVE_CUSTOMER_ACCOUNT_ROUTES_RENDERED'
-          appetize open 'detail:///support' --json --quiet
-          appetize inspect --select-text 'Support requests' --timeout 12000 --json --quiet
-          appetize open 'detail:///organization' --json --quiet
-          appetize inspect --select-text 'Organization' --timeout 12000 --json --quiet
-          appetize open 'detail:///account/email' --json --quiet
-          appetize inspect --select-text 'Email address' --timeout 12000 --json --quiet
-          appetize open 'detail:///portfolio' --json --quiet
-          appetize inspect --select-text 'My portfolio' --timeout 12000 --json --quiet
-          appetize open 'detail:///instant-offers' --json --quiet
-          appetize inspect --select-text 'Instant offers' --timeout 12000 --json --quiet
-          appetize open 'detail:///privacy-policy' --json --quiet
-          appetize inspect --select-text 'Privacy Policy' --timeout 12000 --json --quiet
-          appetize open 'detail:///customer-agreement' --json --quiet
-          appetize inspect --select-text 'Customer Agreement' --timeout 12000 --json --quiet
-          appetize open 'detail:///cleaner-agreement' --json --quiet
-          appetize inspect --select-text 'Cleaner Agreement' --timeout 12000 --json --quiet
-          appetize open 'detail:///booking/create' --json --quiet
-          appetize inspect --select-text 'What do you need cleaned?' --timeout 12000 --json --quiet
-          appetize open 'detail:///booking/offers?jobId=00000000-0000-4000-8000-000000000001' --json --quiet
-          appetize inspect --select-text 'Bids Received' --timeout 12000 --json --quiet
-          appetize open 'detail:///booking/confirmation?jobId=00000000-0000-4000-8000-000000000001' --json --quiet
-          appetize inspect --select-text 'Booking accepted' --timeout 12000 --json --quiet
-          appetize open 'detail:///job/00000000-0000-4000-8000-000000000001' --json --quiet
-          appetize inspect --select-text 'Job not found' --timeout 12000 --json --quiet
-          appetize open 'detail:///tracking/00000000-0000-4000-8000-000000000001' --json --quiet
-          appetize inspect --select-text 'Booking unavailable' --timeout 12000 --json --quiet
+          measure_route 'Support requests' 'detail:///support' 'Support requests'
+          measure_route 'Organization' 'detail:///organization' 'Organization'
+          measure_route 'Account email' 'detail:///account/email' 'Email address'
+          measure_route 'Portfolio' 'detail:///portfolio' 'My portfolio'
+          measure_route 'Instant offers' 'detail:///instant-offers' 'Instant offers'
+          measure_route 'Privacy policy' 'detail:///privacy-policy' 'Privacy Policy'
+          measure_route 'Customer agreement' 'detail:///customer-agreement' 'Customer Agreement'
+          measure_route 'Cleaner agreement' 'detail:///cleaner-agreement' 'Cleaner Agreement'
+          measure_route 'Booking creation' 'detail:///booking/create' 'What do you need cleaned?'
+          measure_route 'Booking offers with unknown ID' 'detail:///booking/offers?jobId=00000000-0000-4000-8000-000000000001' 'Bids Received'
+          measure_route 'Booking confirmation with unknown ID' 'detail:///booking/confirmation?jobId=00000000-0000-4000-8000-000000000001' 'Booking accepted'
+          measure_route 'Job with unknown ID' 'detail:///job/00000000-0000-4000-8000-000000000001' 'Job not found'
+          measure_route 'Tracking with unknown ID' 'detail:///tracking/00000000-0000-4000-8000-000000000001' 'Booking unavailable'
           echo 'LIVE_CUSTOMER_ADDITIONAL_ROUTES_RENDERED'
       - name: Verify persisted customer onboarding state
         if: steps.test-users.outcome == 'success'
