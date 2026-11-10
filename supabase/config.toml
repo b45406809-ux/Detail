@@ -66,6 +66,12 @@ verify_jwt = false
 [functions.twilio-status]
 verify_jwt = false
 
+[functions.twilio-voice-token]
+verify_jwt = false
+
+[functions.twilio-voice-twiml]
+verify_jwt = false
+
 [functions.auth-sms-smspop]
 verify_jwt = false
 

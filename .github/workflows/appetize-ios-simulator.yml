@@ -8,7 +8,9 @@ permissions:
 
 jobs:
   ios-simulator:
-    runs-on: macos-latest
+    # Xcode 16 on the pinned macOS 15 image avoids an Apple Clang 26 / fmt
+    # constant-evaluation failure seen on the moving macos-latest image.
+    runs-on: macos-15
     timeout-minutes: 70
     env:
       EAS_BUILD_PROFILE: production

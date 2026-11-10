@@ -79,6 +79,7 @@ expo.plugins = [
   ...(expo.plugins || []),
   './plugins/withAndroidKotlinVersion',
   './plugins/withMapboxDownloadToken',
+  ['@twilio/voice-react-native-sdk', { apsEnvironment: 'production' }],
   ['react-native-nitro-google-signin', { iosUrlScheme }],
 ];
 expo.extra = {

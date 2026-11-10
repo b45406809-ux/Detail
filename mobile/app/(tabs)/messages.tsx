@@ -17,8 +17,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../../components/LoadingList';
-import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Send, MessageSquare, ImagePlus } from 'lucide-react-native';
+import { useLocalSearchParams } from 'expo-router';
+import { ArrowLeft, Send, MessageSquare, ImagePlus, PhoneCall, PhoneOff } from 'lucide-react-native';
+import type { Call, CallInvite, Voice as VoiceClient } from '@twilio/voice-react-native-sdk';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -39,13 +40,30 @@ const QUICK_REPLIES = ['On my way!', 'Sounds good', "I'm here", 'Thank you!'];
 const MESSAGE_RETENTION_MS = 24 * 60 * 60 * 1000;
 const messageTime = (value: any) => value?.toDate?.().getTime?.() ?? new Date(value).getTime();
 
+async function requestTwilioVoiceToken(jobId: string): Promise<string> {
+  const { data, error } = await supabase.functions.invoke('twilio-voice-token', { body: { jobId, platform: Platform.OS } });
+  if (error) {
+    let serverMessage = typeof data?.error === 'string' ? data.error : '';
+    const context = (error as { context?: unknown }).context;
+    if (!serverMessage && context && typeof context === 'object' && 'clone' in context && typeof (context as Response).clone === 'function') {
+      try { serverMessage = (await (context as Response).clone().json())?.error || ''; } catch { /* use the safe fallback below */ }
+    }
+    throw new Error(serverMessage || 'Voice calling is not available right now.');
+  }
+  if (!data?.token) throw new Error(data?.error || 'Voice calling is not configured yet.');
+  if (!data.incomingEnabled) throw new Error('Incoming calls are not configured for this device yet.');
+  return data.token as string;
+}
+
 interface Conversation {
   jobId: string;
+  otherUserId: string;
   otherUserName: string;
   otherUserPhoto: string;
   lastMessage: string;
   lastMessageAt: any;
   unreadCount: number;
+  jobStatus: string;
 }
 
 export default function MessagesScreen() {
@@ -63,6 +81,11 @@ export default function MessagesScreen() {
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [chatError, setChatError] = useState('');
+  const [callState, setCallState] = useState<'loading' | 'ready' | 'calling' | 'ringing' | 'connected' | 'incoming' | 'unavailable'>('loading');
+  const [callError, setCallError] = useState('');
+  const [callDuration, setCallDuration] = useState(0);
+  const [incomingCaller, setIncomingCaller] = useState('');
+  const [voiceIncomingEnabled, setVoiceIncomingEnabled] = useState(false);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
@@ -71,6 +94,12 @@ export default function MessagesScreen() {
   const preserveChatScrollRef = useRef(false);
   const reachedHistoryStartRef = useRef(false);
   const pendingMessageIntentsRef = useRef(new Map<string, { key: string; storageKey: string; imagePath?: string }>());
+  const voiceRef = useRef<VoiceClient | null>(null);
+  const voiceCallRef = useRef<Call | null>(null);
+  const incomingInviteRef = useRef<CallInvite | null>(null);
+  const voiceTokenRef = useRef('');
+  const connectedAtRef = useRef(0);
+  const activeConversation = conversations.find(conversation => conversation.jobId === activeJobId);
 
   const getPendingMessageIntent = async (kind: 'text' | 'photo', value: string) => {
     if (!user || !activeJobId) throw new Error('Open a booking conversation before sending a message.');
@@ -120,6 +149,7 @@ export default function MessagesScreen() {
           .filter((job: any) => job.cleanerId) // only show once a cleaner is assigned
           .map((job: any) => ({
             jobId: job.id,
+            otherUserId: isCustomer ? job.cleanerId : job.customerId,
             otherUserName: isCustomer
               ? job.cleanerName ?? 'Cleaner'
               : job.customerName ?? 'Customer',
@@ -127,6 +157,7 @@ export default function MessagesScreen() {
             lastMessage: job.lastMessageAt && messageTime(job.lastMessageAt) < Date.now() - MESSAGE_RETENTION_MS ? 'No recent messages' : job.lastMessage ?? 'No messages yet',
             lastMessageAt: job.lastMessageAt,
             unreadCount: job[unreadField] ?? 0,
+            jobStatus: String(job.status ?? '').toUpperCase(),
           }));
         setConversations(convos);
         setIsLoading(false);
@@ -171,6 +202,162 @@ export default function MessagesScreen() {
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     }, err => setChatError(err.message || 'Messages could not be refreshed.'));
   }, [activeJobId, userId, chatRetry]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' || !activeJobId || !activeConversation?.otherUserId || !userId) {
+      setCallState('unavailable');
+      return;
+    }
+    let disposed = false;
+    let voice: VoiceClient | null = null;
+    let tokenRefreshTimer: ReturnType<typeof setInterval> | undefined;
+    const initializeVoice = async () => {
+      setCallState('loading');
+      setCallError('');
+      try {
+        const sdk = await import('@twilio/voice-react-native-sdk');
+        voice = new sdk.Voice();
+        voiceRef.current = voice;
+        const token = await requestTwilioVoiceToken(activeJobId);
+        if (disposed) return;
+        voiceTokenRef.current = token;
+        setVoiceIncomingEnabled(true);
+        voice.addListener(sdk.Voice.Event.CallInvite as any, (...events: any[]) => {
+          const invite = events[0] as CallInvite;
+          const parameters = invite.getCustomParameters() as Record<string, string>;
+          if ((parameters.jobId ?? parameters.JobId) !== activeJobId || voiceCallRef.current || incomingInviteRef.current) {
+            void invite.reject();
+            return;
+          }
+          incomingInviteRef.current = invite;
+          setIncomingCaller(invite.getFrom().replace(/^client:/, '').slice(0, 12));
+          setCallState('incoming');
+        });
+        try { await voice.register(token); }
+        catch (registerError) {
+          console.warn('Twilio incoming-call registration failed:', registerError instanceof Error ? registerError.message : 'unknown error');
+          throw new Error('Incoming calls could not be enabled on this device. Check notification permissions and try again.');
+        }
+        if (!disposed) {
+          setCallState('ready');
+          tokenRefreshTimer = setInterval(() => {
+            void requestTwilioVoiceToken(activeJobId).then(async refreshed => {
+              if (disposed || !voice) return;
+              await voice.register(refreshed);
+              voiceTokenRef.current = refreshed;
+            }).catch(error => console.warn('Twilio Voice token refresh failed:', error instanceof Error ? error.message : 'unknown error'));
+          }, 45 * 60 * 1000);
+        }
+      } catch (error) {
+        if (!disposed) {
+          setCallError(error instanceof Error ? error.message : 'Voice calling is not configured yet.');
+          setCallState('unavailable');
+        }
+      }
+    };
+    void initializeVoice();
+    return () => {
+      disposed = true;
+      if (tokenRefreshTimer) clearInterval(tokenRefreshTimer);
+      const call = voiceCallRef.current;
+      voiceCallRef.current = null;
+      if (call) void call.disconnect().catch(() => undefined);
+      const invite = incomingInviteRef.current;
+      incomingInviteRef.current = null;
+      if (invite) void invite.reject().catch(() => undefined);
+      const currentVoice = voiceRef.current;
+      voiceRef.current = null;
+      if (currentVoice && voiceTokenRef.current) void currentVoice.unregister(voiceTokenRef.current).catch(() => undefined);
+      voiceTokenRef.current = '';
+    };
+  }, [activeJobId, activeConversation?.otherUserId, userId]);
+
+  const attachCallEvents = async (call: Call) => {
+    const sdk = await import('@twilio/voice-react-native-sdk');
+    voiceCallRef.current = call;
+    if (call.getState() === 'connected') {
+      connectedAtRef.current = Date.now();
+      setCallDuration(0);
+      setCallState('connected');
+    } else {
+      setCallState('calling');
+    }
+    call.addListener(sdk.Call.Event.Ringing, () => setCallState('ringing'));
+    call.addListener(sdk.Call.Event.Connected, () => {
+      connectedAtRef.current = Date.now();
+      setCallDuration(0);
+      setCallState('connected');
+    });
+    call.addListener(sdk.Call.Event.Disconnected, () => {
+      voiceCallRef.current = null;
+      connectedAtRef.current = 0;
+      setIncomingCaller('');
+      setCallState('ready');
+    });
+    call.addListener(sdk.Call.Event.ConnectFailure, () => {
+      voiceCallRef.current = null;
+      connectedAtRef.current = 0;
+      setCallError('The call could not connect. Check your connection and try again.');
+      setCallState('ready');
+    });
+  };
+
+  const startVoiceCall = async () => {
+    if (!activeConversation?.otherUserId || !activeJobId || callState !== 'ready' || !voiceRef.current || !voiceTokenRef.current) return;
+    setCallError('');
+    setCallState('calling');
+    try {
+      const refreshedToken = await requestTwilioVoiceToken(activeJobId);
+      await voiceRef.current.register(refreshedToken);
+      voiceTokenRef.current = refreshedToken;
+      const call = await voiceRef.current.connect(refreshedToken, {
+        contactHandle: activeConversation.otherUserName,
+        notificationDisplayName: 'Detail booking call',
+        params: { To: activeConversation.otherUserId, jobId: activeJobId },
+      });
+      await attachCallEvents(call);
+    } catch (error) {
+      setCallError(error instanceof Error ? error.message : 'The call could not start. Please try again.');
+      setCallState('ready');
+    }
+  };
+
+  const acceptVoiceCall = async () => {
+    const invite = incomingInviteRef.current;
+    if (!invite) return;
+    try {
+      const call = await invite.accept();
+      incomingInviteRef.current = null;
+      await attachCallEvents(call);
+    } catch {
+      incomingInviteRef.current = null;
+      setCallError('The incoming call could not be answered.');
+      setCallState('ready');
+    }
+  };
+
+  const endVoiceCall = async () => {
+    const invite = incomingInviteRef.current;
+    incomingInviteRef.current = null;
+    if (invite) await invite.reject().catch(() => undefined);
+    const call = voiceCallRef.current;
+    if (call) await call.disconnect().catch(() => undefined);
+    voiceCallRef.current = null;
+    connectedAtRef.current = 0;
+    setIncomingCaller('');
+    setCallState('ready');
+  };
+
+  useEffect(() => {
+    if (callState !== 'connected' || !connectedAtRef.current) return;
+    const timer = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - connectedAtRef.current) / 1000);
+      setCallDuration(elapsed);
+      // TwiML also enforces a hard 300 second limit if this device pauses.
+      if (elapsed >= 300 && voiceCallRef.current) void voiceCallRef.current.disconnect();
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [callState]);
 
   const loadOlderMessages = async () => {
     const oldest = messages[0];
@@ -291,7 +478,45 @@ export default function MessagesScreen() {
                 Job #{activeJobId.slice(-6).toUpperCase()}
               </Text>
             </View>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Start booking voice call"
+              accessibilityState={{ disabled: callState !== 'ready' || !['ASSIGNED', 'EN_ROUTE', 'IN_PROGRESS'].includes(activeConversation?.jobStatus ?? '') }}
+              disabled={callState !== 'ready' || !['ASSIGNED', 'EN_ROUTE', 'IN_PROGRESS'].includes(activeConversation?.jobStatus ?? '')}
+              onPress={() => void startVoiceCall()}
+              className="h-10 w-10 items-center justify-center rounded-full bg-accent/10"
+            >
+              <PhoneCall size={19} color={callState === 'ready' ? '#3906D2' : '#94a3b8'} />
+            </TouchableOpacity>
           </View>
+
+          {activeConversation && ['ASSIGNED', 'EN_ROUTE', 'IN_PROGRESS'].includes(activeConversation.jobStatus) ? (
+            <View className="mx-4 mt-3 rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3">
+              <View className="flex-row items-center justify-between gap-3">
+                <View className="flex-1">
+                  <Text className="text-sm font-bold text-violet-950">
+                    {callState === 'incoming' ? `Incoming call${incomingCaller ? ` · ${incomingCaller}` : ''}` : callState === 'connected' ? 'In-app call' : callState === 'ringing' ? 'Ringing…' : callState === 'calling' ? 'Calling…' : callState === 'loading' ? 'Setting up calls…' : callState === 'unavailable' ? 'Calls unavailable' : 'Call your booking partner'}
+                  </Text>
+                  <Text className="mt-1 text-xs leading-4 text-violet-800">
+                    {callState === 'connected'
+                      ? `${Math.floor(callDuration / 60)}:${String(callDuration % 60).padStart(2, '0')} elapsed · calls end at 5 minutes`
+                      : callState === 'unavailable'
+                        ? callError || 'Voice calling is not configured yet.'
+                        : callError || 'Detail calls use your internet connection. Calls end after 5 minutes.'}
+                  </Text>
+                  {callState === 'ready' && <Text className="mt-1 text-[11px] leading-4 text-violet-700">{voiceIncomingEnabled ? 'Keep this chat open to receive calls.' : 'Incoming-call push is not configured yet; the other person must keep Detail open.'}</Text>}
+                </View>
+                {callState === 'incoming' ? (
+                  <View className="flex-row gap-2">
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Decline call" onPress={() => void endVoiceCall()} className="h-11 w-11 items-center justify-center rounded-full bg-rose-100"><PhoneOff size={18} color="#be123c" /></TouchableOpacity>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Answer call" onPress={() => void acceptVoiceCall()} className="h-11 w-11 items-center justify-center rounded-full bg-emerald-600"><PhoneCall size={18} color="#fff" /></TouchableOpacity>
+                  </View>
+                ) : ['connected', 'ringing', 'calling'].includes(callState) ? (
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="End call" onPress={() => void endVoiceCall()} className="h-11 w-11 items-center justify-center rounded-full bg-rose-600"><PhoneOff size={18} color="#fff" /></TouchableOpacity>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
 
           {/* Messages */}
           {chatError ? <View className="items-center px-4 py-2"><Text accessibilityRole="alert" className="text-center text-xs text-rose-700">{chatError}</Text><TouchableOpacity accessibilityRole="button" onPress={() => setChatRetry(value => value + 1)} className="mt-1 rounded-full bg-rose-50 px-3 py-1"><Text className="text-xs font-bold text-rose-800">Retry messages</Text></TouchableOpacity></View> : null}
