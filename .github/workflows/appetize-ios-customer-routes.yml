@@ -83,17 +83,15 @@ jobs:
             echo "- Source commit: \`$SOURCE_COMMIT\`"
             echo "- Source workflow run: \`$SOURCE_WORKFLOW_RUN_ID\`"
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Check safe booking boundary and create disposable test accounts
-        id: test-users
-        run: |
-          node scripts/live_mobile_ui_e2e.mjs preflight
-          node scripts/live_mobile_ui_e2e.mjs create
-      - name: Sign in and sweep iOS customer routes
+      - name: Check safe booking boundary
+        id: preflight
+        run: node scripts/live_mobile_ui_e2e.mjs preflight
+      - name: Start pinned iOS Appetize session
+        id: appetize-session
         run: |
           set -euo pipefail
           mkdir -p appetize-ios-route-results
           session_id="detail-ios-routes-${GITHUB_RUN_ID}"
-          trap 'appetize inspect appetize-ios-route-results/final.json --session-id "$session_id" --json --quiet || true; appetize screenshot appetize-ios-route-results/final.png --session-id "$session_id" --json --quiet || true; if [ -d "$HOME/.appetize/cli/sessions/$session_id" ]; then cp -R "$HOME/.appetize/cli/sessions/$session_id" appetize-ios-route-results/cli-session-logs; fi; appetize session stop --session-id "$session_id" --json --quiet || true' EXIT
           if ! appetize session start iphone15 --target "$APPETIZE_BUILD_ID" --session-id "$session_id" --json --quiet > appetize-ios-route-results/session.json; then
             APPETIZE_SESSION_LOG_DIR="$HOME/.appetize/cli/sessions/$session_id" node --input-type=module <<'NODE'
           import { readdir, readFile } from 'node:fs/promises';
@@ -104,7 +102,7 @@ jobs:
             .replace(/((?:token|secret|password|authorization)\s*[:=]\s*)[^,\s]+/gi, '$1[redacted]')
             .replace(/https?:\/\/[^\s"'<>]+/g, '[url redacted]')
             .replace(/\b[A-Za-z0-9_-]{36,}\b/g, '[redacted]');
-          const allowed = /^(status|statusCode|httpStatus|code|errorCode|type|name|message)$/i;
+          const allowed = /^(status|statusCode|httpStatus|errorCode|type|message)$/i;
           async function scan(path) {
             let entries;
             try { entries = await readdir(path, { withFileTypes: true }); } catch { return; }
@@ -123,13 +121,26 @@ jobs:
                   }
                 };
                 visit(value);
-              } catch { /* Preserve the raw file only in the restricted workflow artifact. */ }
+              } catch { /* Preserve raw logs only in the restricted workflow artifact. */ }
             }
           }
           await scan(root);
           NODE
             exit 1
           fi
+          echo "session_id=$session_id" >> "$GITHUB_OUTPUT"
+      - name: Create disposable test accounts
+        id: test-users
+        if: steps.preflight.outcome == 'success' && steps.appetize-session.outcome == 'success'
+        run: node scripts/live_mobile_ui_e2e.mjs create
+      - name: Sign in and sweep iOS customer routes
+        id: route-sweep
+        if: steps.test-users.outcome == 'success'
+        env:
+          APPETIZE_SESSION_ID: ${{ steps.appetize-session.outputs.session_id }}
+        run: |
+          set -euo pipefail
+          session_id="$APPETIZE_SESSION_ID"
           appetize inspect --session-id "$session_id" --select-test-id welcome-skip --timeout 25000 --json --quiet
           appetize tap --session-id "$session_id" --select-test-id welcome-skip --json --quiet
           appetize open 'detail:///forgot-password' --session-id "$session_id" --json --quiet
@@ -226,11 +237,22 @@ jobs:
           echo '- Selected a house-cleaning service and reached booking details; no booking was submitted.' >> "$GITHUB_STEP_SUMMARY"
           echo 'IOS_CUSTOMER_ROUTE_SWEEP_COMPLETED'
       - name: Verify persisted onboarding state
-        if: steps.test-users.outcome == 'success'
+        if: steps.test-users.outcome == 'success' && steps.route-sweep.outcome == 'success'
         run: node scripts/live_mobile_ui_e2e.mjs verify-customer
       - name: Clean up disposable test accounts
         if: always()
         run: node scripts/live_mobile_ui_e2e.mjs cleanup
+      - name: Capture final iOS screenshot and stop Appetize session
+        if: always()
+        env:
+          APPETIZE_SESSION_ID: ${{ steps.appetize-session.outputs.session_id }}
+        run: |
+          set -euo pipefail
+          if [ -z "$APPETIZE_SESSION_ID" ]; then exit 0; fi
+          appetize inspect appetize-ios-route-results/final.json --session-id "$APPETIZE_SESSION_ID" --json --quiet || true
+          appetize screenshot appetize-ios-route-results/final.png --session-id "$APPETIZE_SESSION_ID" --json --quiet || true
+          if [ -d "$HOME/.appetize/cli/sessions/$APPETIZE_SESSION_ID" ]; then cp -R "$HOME/.appetize/cli/sessions/$APPETIZE_SESSION_ID" appetize-ios-route-results/cli-session-logs; fi
+          appetize session stop --session-id "$APPETIZE_SESSION_ID" --json --quiet || true
       - name: Upload iOS route screenshots and evidence
         if: always()
         uses: actions/upload-artifact@v4
