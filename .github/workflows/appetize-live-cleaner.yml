@@ -6,12 +6,8 @@ on:
         description: Immutable Android Appetize target ID
         required: true
         type: string
-      eas_build_id:
-        description: EAS build ID represented by the selected Appetize target
-        required: true
-        type: string
       source_commit:
-        description: Full 40-character source commit for the selected EAS build
+        description: Full 40-character source commit recorded in the Appetize build note
         required: true
         type: string
 permissions:
@@ -23,7 +19,6 @@ jobs:
     env:
       APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
       APPETIZE_BUILD_ID: ${{ inputs.appetize_build_id }}
-      EAS_BUILD_ID: ${{ inputs.eas_build_id }}
       SOURCE_COMMIT: ${{ inputs.source_commit }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE }}
@@ -42,23 +37,23 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$APPETIZE_BUILD_ID" =~ ^[a-z0-9]{20,32}$ ]]
-          [[ "$EAS_BUILD_ID" =~ ^[0-9a-f-]{36}$ ]]
           [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           git cat-file -e "$SOURCE_COMMIT^{commit}"
           appetize build list --app com.detail.app --limit 200 --json --quiet > "$RUNNER_TEMP/appetize-builds.json"
-          APPETIZE_BUILD_ID="$APPETIZE_BUILD_ID" node --input-type=module <<'NODE'
+          APPETIZE_BUILD_ID="$APPETIZE_BUILD_ID" SOURCE_COMMIT="$SOURCE_COMMIT" node --input-type=module <<'NODE'
           import { readFile } from 'node:fs/promises';
           const { builds = [] } = JSON.parse(await readFile(`${process.env.RUNNER_TEMP}/appetize-builds.json`, 'utf8'));
           const target = builds.find(build => build.id === process.env.APPETIZE_BUILD_ID);
           if (!target) throw new Error('The requested Appetize build ID is unavailable for com.detail.app.');
           if (target.platform !== 'android') throw new Error('The requested Appetize target is not Android.');
+          if (!String(target.note ?? '').includes(process.env.SOURCE_COMMIT)) throw new Error('The Appetize build note does not match the supplied source commit.');
           console.log(`PINNED_APPETIZE_TARGET: ${target.id}`);
+          console.log(`PINNED_SOURCE_COMMIT: ${process.env.SOURCE_COMMIT}`);
           NODE
           {
             echo '## Pinned Android Appetize cleaner journey'
             echo
             echo "- Appetize build ID: \`$APPETIZE_BUILD_ID\`"
-            echo "- EAS build ID: \`$EAS_BUILD_ID\`"
             echo "- Source commit: \`$SOURCE_COMMIT\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Create confirmed disposable accounts
