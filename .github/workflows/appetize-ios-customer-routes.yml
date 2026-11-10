@@ -94,7 +94,42 @@ jobs:
           mkdir -p appetize-ios-route-results
           session_id="detail-ios-routes-${GITHUB_RUN_ID}"
           trap 'appetize inspect appetize-ios-route-results/final.json --session-id "$session_id" --json --quiet || true; appetize screenshot appetize-ios-route-results/final.png --session-id "$session_id" --json --quiet || true; if [ -d "$HOME/.appetize/cli/sessions/$session_id" ]; then cp -R "$HOME/.appetize/cli/sessions/$session_id" appetize-ios-route-results/cli-session-logs; fi; appetize session stop --session-id "$session_id" --json --quiet || true' EXIT
-          appetize session start iphone15 --target "$APPETIZE_BUILD_ID" --session-id "$session_id" --json --quiet > appetize-ios-route-results/session.json
+          if ! appetize session start iphone15 --target "$APPETIZE_BUILD_ID" --session-id "$session_id" --json --quiet > appetize-ios-route-results/session.json; then
+            APPETIZE_SESSION_LOG_DIR="$HOME/.appetize/cli/sessions/$session_id" node --input-type=module <<'NODE'
+          import { readdir, readFile } from 'node:fs/promises';
+          import { join } from 'node:path';
+          const root = process.env.APPETIZE_SESSION_LOG_DIR;
+          const safe = value => String(value)
+            .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
+            .replace(/((?:token|secret|password|authorization)\s*[:=]\s*)[^,\s]+/gi, '$1[redacted]')
+            .replace(/https?:\/\/[^\s"'<>]+/g, '[url redacted]')
+            .replace(/\b[A-Za-z0-9_-]{36,}\b/g, '[redacted]');
+          const allowed = /^(status|statusCode|httpStatus|code|errorCode|type|name|message)$/i;
+          async function scan(path) {
+            let entries;
+            try { entries = await readdir(path, { withFileTypes: true }); } catch { return; }
+            for (const entry of entries) {
+              const file = join(path, entry.name);
+              if (entry.isDirectory()) { await scan(file); continue; }
+              if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+              try {
+                const value = JSON.parse(await readFile(file, 'utf8'));
+                const visit = (node, trail = '') => {
+                  if (!node || typeof node !== 'object') return;
+                  for (const [key, child] of Object.entries(node)) {
+                    const next = trail ? `${trail}.${key}` : key;
+                    if (allowed.test(key) && (typeof child === 'string' || typeof child === 'number')) console.log(`SESSION_DIAGNOSTIC ${next}: ${safe(child)}`);
+                    if (child && typeof child === 'object' && !/token|secret|password|authorization|headers|url/i.test(key)) visit(child, next);
+                  }
+                };
+                visit(value);
+              } catch { /* Preserve the raw file only in the restricted workflow artifact. */ }
+            }
+          }
+          await scan(root);
+          NODE
+            exit 1
+          fi
           appetize inspect --session-id "$session_id" --select-test-id welcome-skip --timeout 25000 --json --quiet
           appetize tap --session-id "$session_id" --select-test-id welcome-skip --json --quiet
           appetize open 'detail:///forgot-password' --session-id "$session_id" --json --quiet
