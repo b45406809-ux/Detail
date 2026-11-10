@@ -95,6 +95,16 @@ jobs:
           appetize session start iphone15 --target "$APPETIZE_BUILD_ID" --session-id "$session_id" --json --quiet > appetize-ios-route-results/session.json
           appetize inspect --session-id "$session_id" --select-test-id welcome-skip --timeout 25000 --json --quiet
           appetize tap --session-id "$session_id" --select-test-id welcome-skip --json --quiet
+          appetize open 'detail:///forgot-password' --session-id "$session_id" --json --quiet
+          appetize inspect appetize-ios-route-results/forgot-password.json --session-id "$session_id" --select-text 'Forgot password?' --timeout 15000 --json --quiet
+          appetize screenshot appetize-ios-route-results/forgot-password.png --session-id "$session_id" --json --quiet
+          appetize open 'detail:///reset-password' --session-id "$session_id" --json --quiet
+          appetize inspect appetize-ios-route-results/reset-password.json --session-id "$session_id" --select-text 'Choose a new password' --timeout 15000 --json --quiet
+          appetize screenshot appetize-ios-route-results/reset-password.png --session-id "$session_id" --json --quiet
+          appetize open 'detail:///verify-email?email=qa%40example.test&intent=SIGN_IN' --session-id "$session_id" --json --quiet
+          appetize inspect appetize-ios-route-results/email-code.json --session-id "$session_id" --select-text 'Check your email' --timeout 15000 --json --quiet
+          appetize screenshot appetize-ios-route-results/email-code.png --session-id "$session_id" --json --quiet
+          appetize open 'detail:///sign-in' --session-id "$session_id" --json --quiet
           appetize inspect --session-id "$session_id" --select-test-id auth-email-tab --timeout 15000 --json --quiet
           appetize tap --session-id "$session_id" --select-test-id auth-email-tab --json --quiet
           appetize tap --session-id "$session_id" --select-test-id auth-email-mode-password --json --quiet
