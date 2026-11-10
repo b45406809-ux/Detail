@@ -1,0 +1,123 @@
+name: Build and inspect iOS simulator app on Appetize
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-simulator:
+    runs-on: macos-14
+    timeout-minutes: 70
+    env:
+      EAS_BUILD_PROFILE: production
+      EXPO_PUBLIC_APP_BUILD_PROFILE: production
+      EXPO_PUBLIC_DEMO_MODE: 'false'
+      MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
+      EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || secrets.MAPBOX_PUBLIC_TOKEN }}
+      EXPO_PUBLIC_SUPABASE_URL: ${{ vars.SUPABASE_URL || vars.EXPO_PUBLIC_SUPABASE_URL || secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_PUBLIC_ANON || secrets.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_ANON_KEY || secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+      EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || vars.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
+      EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || vars.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID }}
+      EXPO_PUBLIC_APPLE_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_APPLE_CLIENT_ID || vars.EXPO_PUBLIC_APPLE_CLIENT_ID }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Validate build credentials and Xcode availability
+        run: |
+          set -euo pipefail
+          test -n "$MAPBOX_DOWNLOADS_TOKEN"
+          test -n "$EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN"
+          test -n "$EXPO_PUBLIC_SUPABASE_URL"
+          test -n "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
+          test -n "$SUPABASE_URL"
+          test -n "$APPETIZE_API_TOKEN"
+          xcodebuild -version
+          pod --version
+
+      - run: npm ci --prefix mobile --no-audit --no-fund
+
+      - name: Generate iOS project from this commit
+        working-directory: mobile
+        run: |
+          set -euo pipefail
+          CI=1 npx expo prebuild --platform ios --no-install --clean
+          git checkout -- package.json
+
+      - name: Install iOS pods
+        working-directory: mobile/ios
+        run: pod install --repo-update
+
+      - name: Build release app for the iOS simulator
+        working-directory: mobile/ios
+        env:
+          IOS_DERIVED_DATA: ${{ runner.temp }}/detail-ios-derived-data
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -workspace Detail.xcworkspace \
+            -scheme Detail \
+            -configuration Release \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$IOS_DERIVED_DATA" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+          app_path="$IOS_DERIVED_DATA/Build/Products/Release-iphonesimulator/Detail.app"
+          test -d "$app_path"
+          ditto -c -k --sequesterRsrc --keepParent "$app_path" "$RUNNER_TEMP/detail-ios-simulator.zip"
+
+      - name: Upload iOS simulator app to Appetize
+        id: appetize
+        uses: appetizeio/github-action-appetize@v1.1.0
+        with:
+          apiToken: ${{ secrets.APPETIZE_API_TOKEN }}
+          platform: ios
+          appFile: ${{ runner.temp }}/detail-ios-simulator.zip
+          note: iOS simulator UI check from ${{ github.sha }}
+
+      - name: Inspect iOS welcome and account screens
+        env:
+          APPETIZE_TARGET: ${{ steps.appetize.outputs.publicKey }}
+        run: |
+          set -euo pipefail
+          mkdir -p appetize-ios-results
+          test -n "$APPETIZE_TARGET"
+          session_id="detail-ios-baseline-${GITHUB_RUN_ID}"
+          trap 'appetize inspect appetize-ios-results/final.json --session-id "$session_id" --json --quiet || true; appetize screenshot appetize-ios-results/final.png --session-id "$session_id" --json --quiet || true; appetize session stop --session-id "$session_id" --json --quiet || true' EXIT
+          npm install --global @appetize/cli@0.25.1 --no-audit --no-fund
+          appetize session start iphone15 --target "$APPETIZE_TARGET" --session-id "$session_id" --json --quiet > appetize-ios-results/session.json
+          appetize inspect appetize-ios-results/01-welcome.json --session-id "$session_id" --select-test-id welcome-skip --timeout 40000 --json --quiet
+          appetize screenshot appetize-ios-results/01-welcome.png --session-id "$session_id" --json --quiet
+          appetize tap --session-id "$session_id" --select-test-id welcome-skip --json --quiet
+          appetize inspect appetize-ios-results/02-sign-in.json --session-id "$session_id" --select-text 'Welcome back' --timeout 20000 --json --quiet
+          appetize screenshot appetize-ios-results/02-sign-in.png --session-id "$session_id" --json --quiet
+          appetize tap --session-id "$session_id" --select-test-id auth-account-mode-toggle --timeout 15000 --json --quiet
+          appetize inspect appetize-ios-results/03-create-account.json --session-id "$session_id" --select-text 'Join Detail' --timeout 15000 --json --quiet
+          appetize screenshot appetize-ios-results/03-create-account.png --session-id "$session_id" --json --quiet
+          {
+            echo '## Pinned iOS simulator UI check'
+            echo
+            echo "- Source commit: \`$GITHUB_SHA\`"
+            echo "- Appetize target: \`$APPETIZE_TARGET\`"
+            echo '- Welcome, sign-in and create-account screens rendered; no account was submitted.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save iOS Appetize screenshots and build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appetize-ios-simulator-${{ github.run_id }}
+          path: |
+            appetize-ios-results/
+            ${{ runner.temp }}/detail-ios-simulator.zip
+          if-no-files-found: ignore
+          retention-days: 7
