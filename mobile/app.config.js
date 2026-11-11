@@ -80,6 +80,7 @@ module.exports = ({ config = appJson.expo } = {}) => {
     ...(expo.plugins || []),
     './plugins/withAndroidKotlinVersion',
     './plugins/withMapboxDownloadToken',
+    './plugins/withFmtCxx17',
     ['@twilio/voice-react-native-sdk', { apsEnvironment: 'production' }],
     ['react-native-nitro-google-signin', { iosUrlScheme }],
   ];
