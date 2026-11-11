@@ -38,7 +38,7 @@ const allowedOrigins = new Set([
 type Json = Record<string, any>;
 class ApiError extends Error { constructor(public status: number, message: string) { super(message); } }
 const reply = (body: unknown, status = 200, origin: string | null = null) => new Response(JSON.stringify(body), {
-  status, headers: { 'content-type': 'application/json', 'access-control-allow-origin': origin ?? '*', 'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type', 'access-control-allow-methods': 'POST, OPTIONS', 'vary': 'Origin' },
+  status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': origin ?? '*', 'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type', 'access-control-allow-methods': 'POST, OPTIONS', 'vary': 'Origin' },
 });
 function fail(status: number, message: string): never { throw new ApiError(status, message); }
 const text = (value: unknown, max = 500) => typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -150,6 +150,33 @@ async function requireAdmin(uid: string, permission?: string, elevated = false) 
   if (elevated && role.elevated !== true) fail(403, 'Elevated administrator permission required.');
   if (permission && role.elevated !== true && !(role.permissions ?? []).includes(permission)) fail(403, `Permission ${permission} is required.`);
   return role;
+}
+async function listDiditSessions(apiKey:string,userId:string):Promise<{sessions:Json[];hasMore:boolean}>{
+  const endpoint=new URL('https://verification.didit.me/v3/sessions/');endpoint.searchParams.set('vendor_data',userId);endpoint.searchParams.set('limit','100');
+  const response=await fetch(endpoint,{headers:{'x-api-key':apiKey},signal:AbortSignal.timeout(12000)});
+  const payload=await response.json().catch(()=>null);
+  if(!response.ok||!payload||!Array.isArray(payload.results))throw new ApiError(503,`Didit sessions could not be loaded (HTTP ${response.status}).`);
+  const sessions=payload.results.filter((item:Json)=>item.vendor_data===userId&&typeof item.session_id==='string');
+  return {sessions,hasMore:typeof payload.next==='string'};
+}
+async function getDiditDecision(apiKey:string,sessionId:string):Promise<Json>{
+  const response=await fetch(`https://verification.didit.me/v3/session/${encodeURIComponent(sessionId)}/decision/?include=events,resubmissions`,{headers:{'x-api-key':apiKey},signal:AbortSignal.timeout(12000)});
+  const decision=await response.json().catch(()=>null);
+  if(!response.ok||!decision||decision.session_id!==sessionId||typeof decision.status!=='string')throw new ApiError(503,`Didit session details could not be loaded (HTTP ${response.status}).`);
+  return decision as Json;
+}
+async function getDiditVendorUser(apiKey:string,userId:string):Promise<Json|null>{
+  const response=await fetch(`https://verification.didit.me/v3/users/${encodeURIComponent(userId)}/`,{headers:{'x-api-key':apiKey},signal:AbortSignal.timeout(12000)});
+  if(response.status===404)return null;
+  const user=await response.json().catch(()=>null);
+  if(!response.ok||!user||user.vendor_data!==userId)throw new ApiError(503,`Didit user data could not be loaded (HTTP ${response.status}).`);
+  return user as Json;
+}
+async function getDiditNetworks(apiKey:string,organizationId:string,applicationId:string,diditUserId:string):Promise<Json[]>{
+  const response=await fetch(`https://verification.didit.me/v3/organization/${encodeURIComponent(organizationId)}/application/${encodeURIComponent(applicationId)}/users/${encodeURIComponent(diditUserId)}/networks/`,{headers:{'x-api-key':apiKey},signal:AbortSignal.timeout(12000)});
+  const payload=await response.json().catch(()=>null);
+  if(!response.ok||!payload||!Array.isArray(payload.results))throw new ApiError(503,`Didit network matches could not be loaded (HTTP ${response.status}).`);
+  return payload.results as Json[];
 }
 async function notify(userId: string, payload: Json) {
   const supportCaseId=text(payload.supportCaseId,100);
@@ -1164,6 +1191,118 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const attention=(Array.isArray(data.attention)?data.attention:[]).map((item:Json)=>({...item,caseId:item.caseId??item.id}));
       return {asOf:new Date().toISOString(),timezone:'Africa/Harare',currency:'USD',metrics,revenue,attention};
     }
+    case 'adminUserDetail': {
+      const actor=authed();
+      const role=await requireAdmin(actor,'users.manage');
+      const userId=text(input.userId,80);
+      if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId))fail(400,'A valid user ID is required.');
+      const {data:profile,error:profileError}=await admin.from('users').select('id,email,displayname,photourl,phone,role,accounttype,organizationid,issuspended,isbanned,accountdeletedat,verificationstatus,verificationlevel,cleaneronboardingcomplete,cleaneragreementaccepted,servicecategories,serviceradiuskm,experienceyears,servicearea,status,jobscompleted,ratingaverage,ratingcount,responsetimeaverage,hasagreedtoterms,createdat,updatedat').eq('id',userId).maybeSingle();
+      if(profileError)throw profileError;if(!profile)fail(404,'User account not found.');
+      const [jobResult,orgMemberResult,kycResult]=await Promise.all([
+        admin.from('jobs').select('id,customerid,cleanerid,customername,cleanername,category,servicetype,scheduleddatetime,scheduledtime,status,budget,price,paymentmethod,paymentstatus,paidat,rating,ratedat,isfavoriterebook,createdat,updatedat,description', {count:'exact'}).or(`customerid.eq.${userId},cleanerid.eq.${userId}`).order('createdat',{ascending:false}).limit(100),
+        admin.from('organizationmembers').select('id,organizationid,role,status,createdat').eq('userid',userId).order('createdat',{ascending:false}).limit(50),
+        admin.from('privatekyc').select('provider,sessionid,status,consentedat,updatedat').eq('userid',userId).maybeSingle(),
+      ]);
+      if(jobResult.error)throw jobResult.error;if(orgMemberResult.error)throw orgMemberResult.error;if(kycResult.error)throw kycResult.error;
+      const jobs=jobResult.data??[],jobIds=jobs.map((job:Json)=>job.id).filter((id:unknown):id is string=>typeof id==='string');
+      const isElevated=role.elevated===true,permissions=new Set<string>(Array.isArray(role.permissions)?role.permissions:[]);
+      const canReadFinance=isElevated||permissions.has('finance.read'),canReadSupport=isElevated||permissions.has('support.manage'),canReadBookingEvents=isElevated||permissions.has('bookings.manage');
+      const [customerJobCount,cleanerJobCount]=await Promise.all([
+        admin.from('jobs').select('id',{count:'exact',head:true}).eq('customerid',userId),
+        admin.from('jobs').select('id',{count:'exact',head:true}).eq('cleanerid',userId),
+      ]);
+      if(customerJobCount.error)throw customerJobCount.error;if(cleanerJobCount.error)throw cleanerJobCount.error;
+      const [customerCompletedCount,cleanerCompletedCount]=await Promise.all([
+        admin.from('jobs').select('id',{count:'exact',head:true}).eq('customerid',userId).eq('status','COMPLETED'),
+        admin.from('jobs').select('id',{count:'exact',head:true}).eq('cleanerid',userId).eq('status','COMPLETED'),
+      ]);
+      if(customerCompletedCount.error)throw customerCompletedCount.error;if(cleanerCompletedCount.error)throw cleanerCompletedCount.error;
+      const counterpartyIds=[...new Set(jobs.flatMap((job:Json)=>[job.customerid,job.cleanerid]).filter((id:unknown):id is string=>typeof id==='string'&&id!==userId))];
+      const [counterpartyResult,reviewsResult,bidsAsCleanerResult,bidsOnCustomerJobsResult,eventsResult,organizationResult,financeResult,supportResult,conversationResult,notificationResult]=await Promise.all([
+        counterpartyIds.length?admin.from('users').select('id,displayname,role').in('id',counterpartyIds):Promise.resolve({data:[],error:null}),
+        admin.from('reviews').select('id,jobid,customerid,cleanerid,rating,comment,createdat',{count:'exact'}).or(`customerid.eq.${userId},cleanerid.eq.${userId}`).order('createdat',{ascending:false}).limit(100),
+        admin.from('bids').select('id,jobid,cleanerid,bidprice,estimatedarrival,message,status,createdat,updatedat').eq('cleanerid',userId).order('createdat',{ascending:false}).limit(100),
+        jobIds.length?admin.from('bids').select('id,jobid,cleanerid,bidprice,estimatedarrival,message,status,createdat,updatedat').in('jobid',jobIds).order('createdat',{ascending:false}).limit(200):Promise.resolve({data:[],error:null}),
+        canReadBookingEvents&&jobIds.length?admin.from('jobevents').select('id,jobid,actorid,actorrole,type,previousstate,newstate,reason,createdat').in('jobid',jobIds).order('createdat',{ascending:false}).limit(300):Promise.resolve({data:[],error:null}),
+        profile.organizationid?admin.from('organizations').select('id,name,registrationnumber,phone,country,city,createdat').eq('id',profile.organizationid).maybeSingle():Promise.resolve({data:null,error:null}),
+        canReadFinance?Promise.all([
+          admin.from('payments').select('id,jobid,customerid,cleanerid,provider,reference,amount,currency,status,createdat,updatedat').or(`customerid.eq.${userId},cleanerid.eq.${userId}`).order('createdat',{ascending:false}).limit(100),
+          admin.from('wallettransactions').select('id,jobid,paymentid,payoutrequestid,type,amount,balancetype,status,description,createdat').eq('userid',userId).order('createdat',{ascending:false}).limit(100),
+        ]):Promise.resolve(null),
+        canReadSupport?admin.from('supportcases').select('id,jobid,customerid,cleanerid,ownerid,status,reason,data,createdat').or(`customerid.eq.${userId},cleanerid.eq.${userId}`).order('createdat',{ascending:false}).limit(100):Promise.resolve({data:[],error:null}),
+        canReadSupport&&jobIds.length?admin.from('messages').select('id,jobid,senderid,sendername,text,imageurl,createdat').in('jobid',jobIds).order('createdat',{ascending:false}).limit(200):Promise.resolve({data:[],error:null}),
+        admin.from('notifications').select('id,title,body,type,jobid,read,createdat').eq('userid',userId).order('createdat',{ascending:false}).limit(100),
+      ]);
+      const queryErrors=[counterpartyResult,reviewsResult,bidsAsCleanerResult,bidsOnCustomerJobsResult,eventsResult,organizationResult,supportResult,conversationResult,notificationResult].filter((result:any)=>result?.error);
+      if(queryErrors.length)throw queryErrors[0].error;
+      const paymentRows=financeResult?.[0]?.data??[],walletRows=financeResult?.[1]?.data??[];
+      const financeError=financeResult?.find((result:any)=>result.error)?.error;if(financeError)throw financeError;
+      const counterpartyMap=new Map((counterpartyResult.data??[]).map((row:Json)=>[row.id,row.displayname||row.id]));
+      const bidMap=new Map<string,Json>();for(const bid of [...(bidsAsCleanerResult.data??[]),...(bidsOnCustomerJobsResult.data??[])])bidMap.set(bid.id,bid);
+      let didit:Json={record:kycResult.data?{provider:kycResult.data.provider,status:kycResult.data.status,sessionId:kycResult.data.sessionid,consentedAt:kycResult.data.consentedat,updatedAt:kycResult.data.updatedat,appLinked:true}:null,sessions:[],sessionsHasMore:false,decision:null,user:null,networks:[],error:null};
+      const diditKey=secret('DIDIT_API_KEY','DIDIT_KYC_SECRET_KEY');
+      if(!diditKey)didit.error='Didit API access is not configured.';
+      else {
+        let listing:{sessions:Json[];hasMore:boolean}|null=null;
+        try{listing=await listDiditSessions(diditKey,userId);didit.sessions=listing.sessions;didit.sessionsHasMore=listing.hasMore;}
+        catch(error){didit.sessionsError=error instanceof ApiError?error.message:'Didit verification history could not be loaded.';}
+        try{didit.user=await getDiditVendorUser(diditKey,userId);}
+        catch(error){didit.userError=error instanceof ApiError?error.message:'Didit profile could not be loaded.';}
+        if(didit.user?.didit_internal_id){
+          const diditOrganizationId=Deno.env.get('DIDIT_ORGANIZATION_ID')??'',diditApplicationId=Deno.env.get('DIDIT_APPLICATION_ID')??'';
+          if(!diditOrganizationId||!diditApplicationId)didit.networkError='Add DIDIT_ORGANIZATION_ID and DIDIT_APPLICATION_ID to the Supabase Edge Function environment to load Didit fraud network memberships.';
+          else try{didit.networks=await getDiditNetworks(diditKey,diditOrganizationId,diditApplicationId,String(didit.user.didit_internal_id));}
+          catch(error){didit.networkError=error instanceof ApiError?error.message:'Didit network matches could not be loaded.';}
+        }
+        const currentSessionId=kycResult.data?.provider==='didit'&&kycResult.data?.sessionid?kycResult.data.sessionid:listing?.sessions[0]?.session_id;
+        if(currentSessionId){
+          const belongsToUser=(kycResult.data?.provider==='didit'&&kycResult.data?.sessionid===currentSessionId)||(listing?.sessions.some((session:Json)=>session.session_id===currentSessionId)??false);
+          if(!belongsToUser)didit.decisionError='The saved Didit session is not linked to this user in the provider account.';
+          else try{didit.decision=await getDiditDecision(diditKey,currentSessionId);}
+          catch(error){didit.decisionError=error instanceof ApiError?error.message:'Didit could not be reached. Use Refresh to try again.';}
+          if(!didit.record&&didit.decision)didit.record={provider:'didit',status:didit.decision.status,sessionId:currentSessionId,consentedAt:null,updatedAt:didit.decision.updated_at??didit.decision.created_at??null,appLinked:false};
+        }
+      }
+      const hasCleanerHistory=(cleanerJobCount.count??0)>0||profile.verificationstatus!=='NOT_STARTED'||profile.cleaneronboardingcomplete||profile.cleaneragreementaccepted;
+      const marketplaceRoles=[...new Set([profile.role,...((customerJobCount.count??0)>0?['CUSTOMER']:[]),...(hasCleanerHistory?['CLEANER']:[])])];
+      const timeline:Json[]=[];
+      for(const job of jobs)timeline.push({id:`booking-${job.id}`,type:'BOOKING',at:job.createdat,label:`${job.servicetype||job.category||'Cleaning'} booking created`,detail:`${job.customerid===userId?'Customer':'Cleaner'} · ${job.status}`,jobId:job.id});
+      for(const event of eventsResult.data??[])timeline.push({id:`event-${event.id}`,type:event.type,at:event.createdat,label:String(event.type).replaceAll('_',' ').toLowerCase(),detail:event.reason||`${event.previousstate??''}${event.newstate?` → ${event.newstate}`:''}`.trim(),jobId:event.jobid});
+      for(const review of reviewsResult.data??[])timeline.push({id:`review-${review.id}`,type:'REVIEW',at:review.createdat,label:`${review.rating}/5 review`,detail:review.comment??'',jobId:review.jobid});
+      for(const payment of paymentRows)timeline.push({id:`payment-${payment.id}`,type:'PAYMENT',at:payment.createdat,label:`Payment ${payment.status}`,detail:`${payment.currency} ${Number(payment.amount).toFixed(2)}`,jobId:payment.jobid});
+      for(const message of conversationResult.data??[])timeline.push({id:`message-${message.id}`,type:'CHAT',at:message.createdat,label:`Message from ${message.sendername||message.senderid}`,detail:message.text,jobId:message.jobid});
+      for(const notification of notificationResult.data??[])timeline.push({id:`notification-${notification.id}`,type:'NOTIFICATION',at:notification.createdat,label:notification.title,detail:`${notification.read?'Read':'Unread'} · ${notification.body}`,jobId:notification.jobid});
+      if(kycResult.data?.consentedat)timeline.push({id:'didit-start',type:'KYC',at:kycResult.data.consentedat,label:'Didit verification started',detail:kycResult.data.status});
+      timeline.sort((a,b)=>Date.parse(b.at||'')-Date.parse(a.at||''));
+      return {
+        profile:{id:profile.id,email:profile.email,displayName:profile.displayname,photoURL:profile.photourl,phone:profile.phone,currentRole:profile.role,marketplaceRoles,accountType:profile.accounttype,organizationId:profile.organizationid,organization:organizationResult.data??null,organizationMemberships:orgMemberResult.data??[],isSuspended:profile.issuspended,isBanned:profile.isbanned,deletedAt:profile.accountdeletedat,verificationStatus:profile.verificationstatus,verificationLevel:profile.verificationlevel,cleanerOnboardingComplete:profile.cleaneronboardingcomplete,cleanerAgreementAccepted:profile.cleaneragreementaccepted,serviceCategories:profile.servicecategories,serviceRadiusKm:profile.serviceradiuskm,experienceYears:profile.experienceyears,serviceArea:profile.servicearea,availability:profile.status,jobsCompleted:profile.jobscompleted,ratingAverage:profile.ratingaverage,ratingCount:profile.ratingcount,responseTimeAverage:profile.responsetimeaverage,termsAccepted:profile.hasagreedtoterms,createdAt:profile.createdat,updatedAt:profile.updatedat},
+        summary:{customerBookings:customerJobCount.count??0,cleanerBookings:cleanerJobCount.count??0,completedAsCustomer:customerCompletedCount.count??0,completedAsCleaner:cleanerCompletedCount.count??0,bookingsReturned:jobs.length,totalBookings:jobResult.count??0,bids:bidMap.size,reviews:reviewsResult.count??0,reviewsReturned:(reviewsResult.data??[]).length},
+        bookings:jobs.map((job:Json)=>({...job,side:job.customerid===userId?'CUSTOMER':'CLEANER',otherParty:counterpartyMap.get(job.customerid===userId?job.cleanerid:job.customerid)??'—'})),
+        bids:[...bidMap.values()].sort((a,b)=>Date.parse(b.createdat)-Date.parse(a.createdat)),
+        reviews:reviewsResult.data??[],
+        notifications:notificationResult.data??[],
+        jobEvents:eventsResult.data??[],
+        didit,
+        finance:canReadFinance?{payments:paymentRows,walletTransactions:walletRows}:null,
+        support:canReadSupport?{cases:supportResult.data??[],messages:conversationResult.data??[]}:null,
+        permissions:{finance:canReadFinance,support:canReadSupport,bookingEvents:canReadBookingEvents},
+        timeline:timeline.slice(0,300),
+      };
+    }
+    case 'adminDiditSessionDetail': {
+      const actor=authed();await requireAdmin(actor,'users.manage');
+      const userId=text(input.userId,80),sessionId=text(input.sessionId,80);
+      if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId))fail(400,'A valid user and Didit session ID are required.');
+      const key=secret('DIDIT_API_KEY','DIDIT_KYC_SECRET_KEY');if(!key)fail(503,'Didit API access is not configured.');
+      const {data:linkedKyc,error:linkedKycError}=await admin.from('privatekyc').select('provider,sessionid').eq('userid',userId).maybeSingle();if(linkedKycError)throw linkedKycError;
+      const isCurrentLinkedSession=linkedKyc?.provider==='didit'&&linkedKyc.sessionid===sessionId;
+      if(!isCurrentLinkedSession){
+        const listing=await listDiditSessions(key,userId);
+        if(!listing.sessions.some((session:Json)=>session.session_id===sessionId))fail(404,'That Didit session is not linked to this user.');
+      }
+      const decision=await getDiditDecision(key,sessionId);
+      return {decision};
+    }
     case 'adminQuery': {
       const module=text(input.module,40);
       const readPermissions:Record<string,string>={bookings:'bookings.manage',customers:'users.manage',cleaners:'users.manage',payments:'finance.read',support:'support.manage',products:'finance.read',analytics:'finance.read',waitlist:'marketing.read'};
@@ -1224,7 +1363,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       }
       const rows=page.map((row:Json)=>{
         if(module==='waitlist')return {id:row.id,participantType:row.participanttype,fullName:row.fullname,email:row.email,phone:row.phone,country:row.country,city:row.city,area:row.area,preferredLanguage:row.preferredlanguage,serviceInterest:row.serviceinterest,marketingEmailPermission:row.marketingemailpermission,status:row.status,createdAt:row.createdat};
-        if(module==='customers')return {id:row.id,createdAt:row.createdat,Customer:row.displayname??'Customer',Contact:[row.email,row.phone].filter(Boolean).join(' · '),State:row.isbanned?'SUSPENDED':row.issuspended?'SUSPENDED':'ACTIVE',Bookings:row.jobscompleted??0,'Total spend':'—',Upcoming:'—'};
+        if(module==='customers')return {id:row.id,createdAt:row.createdat,Customer:row.displayname??'Customer',Contact:[row.email,row.phone].filter(Boolean).join(' · '),State:row.isbanned?'SUSPENDED':row.issuspended?'SUSPENDED':'ACTIVE',Joined:row.createdat?new Date(row.createdat).toLocaleDateString('en-US',{timeZone:'Africa/Harare'}):'—'};
         if(module==='cleaners')return {id:row.id,createdAt:row.createdat,Cleaner:row.displayname??'Cleaner',Verification:row.verificationstatus??'PENDING',Coverage:row.servicearea??'—',Availability:row.status??'OFFLINE',Assignments:row.jobscompleted??0,Rating:row.ratingaverage??0,Earnings:'Restricted'};
         if(module==='payments'){const refund=paymentRefunds.get(row.id);return {id:row.id,createdAt:row.createdat,Payment:row.reference??row.id,Booking:row.jobid??'—',Customer:row.customerid??'—',Captured:['ESCROWED','DELIVERED','PAID','DISPUTED','REFUNDED'].includes(row.status)?row.amount:0,Refunded:refund?refund.confirmed:Number(row.data?.refundSummary?.confirmedAmount??0),'Refund request':refund?.latest?`${Number(refund.latest.amount).toFixed(2)} ${refund.latest.status}`:'—','Processor ref':row.reference??'—',Status:row.status};}
         if(module==='bookings')return {id:row.id,createdAt:row.createdat,Booking:row.id,Customer:row.customername??row.customerid??'—',Cleaner:row.cleanername??row.cleanerid??'—',Service:row.servicetype??row.category??'—',Scheduled:row.scheduleddatetime??row.scheduledtime??'—',Status:row.status,Payment:row.paymentstatus??row.paymentmethod??'—'};
@@ -1255,11 +1394,11 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     }
     case 'adminMutation': {
       const actor=authed(); const action=text(input.action,80); const key=requireKey(input.idempotencyKey); const reason=text(input.reason,500); const targetId=text(input.targetId,120);
-      const supportedActions=new Set(['update_kill_switch','deactivate_cleaner','suspend_cleaner','change_account_state','resolve_case','assign_support_case','reschedule_booking','reassign_booking','assign_cleaner','cancel_booking','request_refund','record_refund_update','full_refund','partial_refund']);
+      const supportedActions=new Set(['update_kill_switch','deactivate_cleaner','suspend_cleaner','change_account_state','review_didit_kyc','resolve_case','assign_support_case','reschedule_booking','reassign_booking','assign_cleaner','cancel_booking','request_refund','record_refund_update','full_refund','partial_refund']);
       if(!supportedActions.has(action))fail(400,`Admin action "${action}" is not supported.`);
       const {data:alreadyApplied}=await admin.from('adminauditevents').select('id,action,targetid').eq('id',key).maybeSingle();
       if(alreadyApplied){if(alreadyApplied.action!==action||alreadyApplied.targetid!==(targetId||null))fail(409,'This idempotency key was already used for a different admin action.');return {ok:true,auditId:key};}
-      const permission = action.includes('refund') ? 'finance.write' : action.includes('booking') || action.includes('reschedule') || action.includes('assign') ? 'bookings.manage' : action.includes('cleaner') || action.includes('account') ? 'users.manage' : action.includes('support') || action.includes('case') ? 'support.manage' : undefined;
+      const permission = action.includes('refund') ? 'finance.write' : action==='review_didit_kyc'||action.includes('cleaner') || action.includes('account') ? 'users.manage' : action.includes('booking') || action.includes('reschedule') || action.includes('assign') ? 'bookings.manage' : action.includes('support') || action.includes('case') ? 'support.manage' : undefined;
       await requireAdmin(actor,permission,action==='update_kill_switch');
       await requireRecentAdminAuth(actor);
       if(reason.length<4)fail(400,'A meaningful reason is required.');
@@ -1289,7 +1428,21 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         if(error)throw error;if(!profile)fail(404,'User account not found.');
         if(profile.role==='CLEANER' && action!=='change_account_state') {
           const {error:updateError}=await admin.from('users').update({issuspended:true,status:'OFFLINE',updatedat:now}).eq('id',userId);if(updateError)throw updateError;
-        } else { const {error:updateError}=await admin.from('users').update({isbanned:state==='SUSPENDED',updatedat:now}).eq('id',userId);if(updateError)throw updateError;const {error:authError}=await admin.auth.admin.updateUserById(userId,{ban_duration:state==='SUSPENDED'?'876000h':'none'});if(authError)throw authError; }
+        } else { const {error:updateError}=await admin.from('users').update({isbanned:state==='SUSPENDED',issuspended:state==='SUSPENDED',...(profile.role==='CLEANER'?{status:'OFFLINE'}:{}),updatedat:now}).eq('id',userId);if(updateError)throw updateError;const {error:authError}=await admin.auth.admin.updateUserById(userId,{ban_duration:state==='SUSPENDED'?'876000h':'none'});if(authError)throw authError; }
+      } else if(action==='review_didit_kyc') {
+        if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId))fail(400,'A valid user ID is required for a Didit decision.');
+        const decision=input.decision==='APPROVE'?'Approved':input.decision==='DECLINE'?'Declined':'';
+        if(!decision)fail(400,'Choose whether to approve or decline the Didit session.');
+        const {data:kyc,error:kycReadError}=await admin.from('privatekyc').select('provider,sessionid').eq('userid',targetId).maybeSingle();if(kycReadError)throw kycReadError;
+        if(kyc?.provider!=='didit'||!kyc?.sessionid)fail(409,'This user does not have a Didit session to review.');
+        if(text(input.sessionId,80)!==kyc.sessionid)fail(409,'Only the current Didit session linked to this account can change marketplace verification.');
+        const diditKey=secret('DIDIT_API_KEY','DIDIT_KYC_SECRET_KEY');if(!diditKey)fail(503,'Didit API access is not configured.');
+        let response:Response;try{response=await fetch(`https://verification.didit.me/v3/session/${encodeURIComponent(kyc.sessionid)}/update-status/`,{method:'PATCH',headers:{'x-api-key':diditKey,'content-type':'application/json'},body:JSON.stringify({new_status:decision,comment:reason}),signal:AbortSignal.timeout(12000)});}catch{fail(503,'Didit could not be reached. No local verification status was changed.');}
+        const providerResult=await response.json().catch(()=>null);
+        if(!response.ok||providerResult?.session_id!==kyc.sessionid)fail(response.status===400?409:503,`Didit did not accept the review (HTTP ${response.status}). No local verification status was changed.`);
+        const verificationStatus=decision==='Approved'?'VERIFIED':'REJECTED';
+        const {error:updateKycError}=await admin.from('privatekyc').update({status:decision,updatedat:now}).eq('userid',targetId);if(updateKycError)fail(503,'Didit accepted the decision, but Detail could not sync its KYC record. Retry to sync the provider decision.');
+        const {error:updateUserError}=await admin.from('users').update({verificationstatus:verificationStatus,verificationlevel:verificationStatus==='VERIFIED'?2:1,updatedat:now}).eq('id',targetId);if(updateUserError)fail(503,'Didit accepted the decision, but Detail could not sync the account verification. Retry to sync the provider decision.');
       } else if(action==='resolve_case' || action==='assign_support_case') {
         const {data:record,error}=await admin.from('supportcases').select('data,jobid,status').eq('id',targetId).maybeSingle();if(error)throw error;if(!record)fail(404,'Support case not found.');
         if(action==='assign_support_case'&&['RESOLVED','CLOSED'].includes(record.status))fail(409,'A closed support case cannot be assigned.');
