@@ -201,6 +201,34 @@ async function emailSupport(subject: string, message: string) {
   try{const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:`Bearer ${apiKey}`,'content-type':'application/json'},body:JSON.stringify({from:'Detail Alerts <hello@detailapp.co.zw>',to:['support@detailapp.co.zw'],subject:subject.slice(0,180),text:message.slice(0,5000)})});if(!response.ok)console.error('support alert email failed',response.status,await response.text());}
   catch(error){console.error('support alert email could not be delivered',String(error));}
 }
+function decodeAppleJwtPart(value:string):Json{
+  const normalized=value.replace(/-/g,'+').replace(/_/g,'/');
+  return JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length/4)*4,'=')));
+}
+async function revokeAppleAuthorizationCode(code:string,expectedSubject:string):Promise<boolean>{
+  const clientId=Deno.env.get('APPLE_CLIENT_ID')||'com.detail.app';
+  const clientSecret=Deno.env.get('APPLE_CLIENT_SECRET')||'';
+  if(!code||!clientSecret||!expectedSubject)return false;
+  const tokenResponse=await fetch('https://appleid.apple.com/auth/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:clientId,client_secret:clientSecret,code,grant_type:'authorization_code'}),signal:AbortSignal.timeout(12000)});
+  const tokenPayload=await tokenResponse.json().catch(()=>null);
+  if(!tokenResponse.ok||typeof tokenPayload?.id_token!=='string')return false;
+  const parts=String(tokenPayload.id_token).split('.');if(parts.length!==3)return false;
+  let header:Json,claims:Json,signature:ArrayBuffer;
+  try{header=decodeAppleJwtPart(parts[0]);claims=decodeAppleJwtPart(parts[1]);const signatureBytes=Uint8Array.from(atob(parts[2].replace(/-/g,'+').replace(/_/g,'/').padEnd(Math.ceil(parts[2].length/4)*4,'=')),c=>c.charCodeAt(0));signature=signatureBytes.buffer as ArrayBuffer;}catch{return false;}
+  if(header.alg!=='RS256'||claims.iss!=='https://appleid.apple.com'||claims.aud!==clientId||claims.sub!==expectedSubject||Number(claims.exp)<=Math.floor(Date.now()/1000))return false;
+  const keysResponse=await fetch('https://appleid.apple.com/auth/keys',{signal:AbortSignal.timeout(12000)});
+  const keysPayload=await keysResponse.json().catch(()=>null);
+  const jwk=(keysPayload?.keys??[]).find((key:Json)=>key.kid===header.kid&&key.kty==='RSA');
+  if(!keysResponse.ok||!jwk)return false;
+  const publicKey=await crypto.subtle.importKey('jwk',jwk,{name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'},false,['verify']);
+  const signedContent=new TextEncoder().encode(`${parts[0]}.${parts[1]}`);
+  if(!await crypto.subtle.verify('RSASSA-PKCS1-v1_5',publicKey,signature,signedContent))return false;
+  const token=typeof tokenPayload.refresh_token==='string'?tokenPayload.refresh_token:tokenPayload.access_token;
+  const tokenType=typeof tokenPayload.refresh_token==='string'?'refresh_token':'access_token';
+  if(!token)return false;
+  const revokeResponse=await fetch('https://appleid.apple.com/auth/revoke',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:clientId,client_secret:clientSecret,token,token_type_hint:tokenType}),signal:AbortSignal.timeout(12000)});
+  return revokeResponse.ok;
+}
 function paynowClient() {
   const id = Deno.env.get('PAYNOW_INTEGRATION_ID');
   const key = Deno.env.get('PAYNOW_INTEGRATION_KEY');
@@ -264,6 +292,16 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(['job-completion','chat-photos','support-evidence'].includes(folder)){
         const {data:job,error}=await admin.from('jobs').select('customerid,cleanerid').eq('id',parts[1]).maybeSingle();
         if(error)throw error;if(!job||![job.customerid,job.cleanerid].includes(actor)||!path.includes(`/${actor}/`))fail(403,'You cannot upload media for this booking.');
+        if(folder==='chat-photos'){
+          const otherUserId=job.customerid===actor?job.cleanerid:job.customerid;
+          if(!otherUserId)fail(403,'This booking has no chat partner yet.');
+          const [blockedByActor,blockedByOther]=await Promise.all([
+            admin.from('userblocks').select('blockerid').eq('blockerid',actor).eq('blockeduserid',otherUserId).maybeSingle(),
+            admin.from('userblocks').select('blockerid').eq('blockerid',otherUserId).eq('blockeduserid',actor).maybeSingle(),
+          ]);
+          if(blockedByActor.error)throw blockedByActor.error;if(blockedByOther.error)throw blockedByOther.error;
+          if(blockedByActor.data||blockedByOther.data)fail(403,'Chat photos are unavailable in this conversation.');
+        }
       }
       if(!['profile-photos','job-photos','verification','cleaner-portfolio','job-completion','chat-photos','support-evidence'].includes(folder))fail(400,'Unsupported media type.');
       const command=new PutObjectCommand({Bucket:r2Bucket(),Key:path,ContentType:type,ContentLength:size});
@@ -999,6 +1037,33 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       await emailSupport(`New booking support report: ${jobId}`,`A booking issue was reported. Case ${id}. Booking ${jobId}. Reporter ${actor}. ${reason}`);
       return {success:true,caseId:id};
     }
+    case 'reportUserContent': {
+      const actor=authed(),jobId=text(input.jobId,80),targetUserId=text(input.targetUserId,80),messageId=text(input.messageId,80);
+      const category=text(input.category,40).toUpperCase();
+      const allowedCategories=new Set(['HARASSMENT','SCAM_OR_OFF_PLATFORM_REQUEST','INAPPROPRIATE_CONTENT','OTHER_SAFETY_CONCERN']);
+      if(!allowedCategories.has(category)||!/^[0-9a-f-]{36}$/i.test(jobId)||!/^[0-9a-f-]{36}$/i.test(targetUserId))fail(400,'Choose a report reason for a booking participant.');
+      await enforceRateLimit(request,actor,'report_user_content',8,3600);
+      const {data:job,error:jobError}=await admin.from('jobs').select('customerid,cleanerid').eq('id',jobId).maybeSingle();if(jobError)throw jobError;
+      if(!job||![job.customerid,job.cleanerid].includes(actor)||targetUserId===actor||![job.customerid,job.cleanerid].includes(targetUserId))fail(403,'You can report only the other participant in this booking.');
+      let reportedTextExcerpt='';let messageHasImage=false;let reportedImagePath='';
+      if(messageId){
+        const {data:message,error:messageError}=await admin.from('messages').select('id,senderid,text,imageurl').eq('id',messageId).eq('jobid',jobId).maybeSingle();if(messageError)throw messageError;
+        if(!message||message.senderid!==targetUserId)fail(404,'That message is no longer available to report.');
+        reportedTextExcerpt=text(message.text,500);messageHasImage=!!message.imageurl;reportedImagePath=text(message.imageurl,500);
+        if(!reportedTextExcerpt&&!messageHasImage)fail(400,'Select a message with content to report.');
+      }
+      const detail=text(input.details,500);
+      const categoryLabels:Record<string,string>={HARASSMENT:'Harassment or bullying',SCAM_OR_OFF_PLATFORM_REQUEST:'Scam or request to move payment off Detail',INAPPROPRIATE_CONTENT:'Inappropriate message or photo',OTHER_SAFETY_CONCERN:'Other safety concern'};
+      const description=[`Reported content: ${categoryLabels[category]}`,messageId?`Message ID: ${messageId}`:'Reported participant',reportedTextExcerpt?`Message excerpt: ${reportedTextExcerpt}`:messageHasImage?'The reported message contains a photo.':'',detail?`Reporter note: ${detail}`:''].filter(Boolean).join('\n');
+      const id=crypto.randomUUID();
+      const isCustomerReporter=job.customerid===actor;
+      const {error:insertError}=await admin.from('supportcases').insert({id,jobid:jobId,customerid:isCustomerReporter?actor:null,cleanerid:isCustomerReporter?null:actor,reason:`User safety report · ${categoryLabels[category]}`,status:'URGENT',data:{type:'USER_CONTENT_REPORT',category,reporterId:actor,reportedUserId:targetUserId,targetMessageId:messageId||null,messageHasImage,reportedTextExcerpt,reportedImagePath:reportedImagePath||null,description,createdAt:new Date().toISOString()}});
+      if(insertError)throw insertError;
+      const {data:admins,error:adminError}=await admin.from('adminroles').select('userid');if(adminError)console.error('safety report admin notification lookup failed',adminError.message);
+      await Promise.all((admins??[]).map(row=>notify(row.userid,{type:'SUPPORT_CASE',title:'User safety report needs review',body:`A booking chat report needs review. Booking ${jobId}.`,jobId,supportCaseId:id})));
+      await emailSupport(`User safety report for booking ${jobId}`,`A user safety report needs review.\nCase: ${id}\nBooking: ${jobId}\nReporter: ${actor}\nReported account: ${targetUserId}\nOpen the dashboard Support Cases queue to review the report.`);
+      return {success:true,caseId:id};
+    }
     case 'reportEmergency': {
       const actor=authed(),jobId=text(input.jobId,80),description=text(input.description,1000)||'Emergency safety alert';
       await enforceRateLimit(request, actor, 'emergency_report', 3, 600);
@@ -1125,6 +1190,10 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       // getUser above validates this token; the signed AMR timestamps prove
       // this session's recent authentication, unlike account-wide sign-in time.
       if(!hasRecentSupabaseAuthentication(tokenClaims(request).amr,Date.now(),5*60*1000))fail(409,'RECENT_LOGIN_REQUIRED');
+      const {data:authRecord,error:authRecordError}=await admin.auth.admin.getUserById(actor);if(authRecordError)throw authRecordError;
+      const appleIdentity=(authRecord.user?.identities??[]).find(identity=>identity.provider==='apple');
+      const appleSubject=String(appleIdentity?.identity_data?.sub??'');
+      const appleAuthorizationCode=text(input.appleAuthorizationCode,4096);
       const [profileResult,payoutResult,bookingResult]=await Promise.all([admin.from('users').select('balance,earningsbalance,commissionbalance,commissionowed,walletrestricted').eq('id',actor).single(),admin.from('payoutrequests').select('id').eq('cleanerid',actor).in('status',['PENDING','APPROVED']).limit(1).maybeSingle(),admin.from('jobs').select('id').or(`customerid.eq.${actor},cleanerid.eq.${actor}`)]);
       if(profileResult.error)throw profileResult.error;if(payoutResult.error)throw payoutResult.error;if(bookingResult.error)throw bookingResult.error;
       const profile=profileResult.data,pendingPayout=payoutResult.data,bookings=bookingResult.data;
@@ -1142,8 +1211,14 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       }
       // Soft deletion anonymizes Auth while preserving UUID references held by
       // retained bookings, support cases, payouts and accounting records.
+      const {error:blockCleanupError}=await admin.from('userblocks').delete().or(`blockerid.eq.${actor},blockeduserid.eq.${actor}`);if(blockCleanupError)throw blockCleanupError;
       const {error:deleteError}=await admin.auth.admin.deleteUser(actor,true); if(deleteError)throw deleteError;
-      return {success:true};
+      let appleRevocation=appleIdentity?'MANUAL_REQUIRED':'NOT_REQUIRED';
+      if(appleIdentity&&appleAuthorizationCode&&appleSubject){
+        try{if(await revokeAppleAuthorizationCode(appleAuthorizationCode,appleSubject))appleRevocation='REVOKED';}
+        catch(error){console.warn('Apple token revocation was not completed; account deletion still completed.',error instanceof Error?error.name:'unknown error');}
+      }
+      return {success:true,appleRevocation};
     }
     case 'joinWaitlist': {
       if(text(input.website,200)) return {success:true};
@@ -1346,19 +1421,26 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const supportContext=new Map<string,Json>();
       const profileMap=new Map<string,Json>();
       if(module==='support'&&page.length){
-        const profileIds=[...new Set(page.flatMap((row:Json)=>[row.customerid,row.cleanerid,row.ownerid,row.data?.reporterId,...(Array.isArray(row.data?.assignmentHistory)?row.data.assignmentHistory.map((entry:Json)=>entry.assignee):[])]).filter((id:unknown):id is string=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id)))];
+        const profileIds=[...new Set(page.flatMap((row:Json)=>[row.customerid,row.cleanerid,row.ownerid,row.data?.reporterId,row.data?.reportedUserId,...(Array.isArray(row.data?.assignmentHistory)?row.data.assignmentHistory.map((entry:Json)=>entry.assignee):[])]).filter((id:unknown):id is string=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id)))];
         const jobIds=[...new Set(page.map((row:Json)=>row.jobid).filter((id:unknown):id is string=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id)))];
         let profiles:Json[]=[];let jobs:Json[]=[];
         if(profileIds.length){const result=await admin.from('users').select('id,displayname,email,phone').in('id',profileIds);if(result.error)throw result.error;profiles=result.data??[];}
         if(jobIds.length){const result=await admin.from('jobs').select('id,status,paymentstatus,paymentmethod,scheduleddatetime').in('id',jobIds);if(result.error)throw result.error;jobs=result.data??[];}
         profiles.forEach(profile=>profileMap.set(profile.id,profile));const jobMap=new Map(jobs.map(job=>[job.id,job]));
         for(const row of page){
-          const customer=profileMap.get(row.customerid),cleanerProfile=profileMap.get(row.cleanerid),reporter=profileMap.get(row.data?.reporterId),job=jobMap.get(row.jobid);
+          const customer=profileMap.get(row.customerid),cleanerProfile=profileMap.get(row.cleanerid),reporter=profileMap.get(row.data?.reporterId),reportedUser=profileMap.get(row.data?.reportedUserId),job=jobMap.get(row.jobid);
           const evidenceUrls:string[]=[];const reporterId=typeof row.data?.reporterId==='string'?row.data.reporterId:'';
           const evidencePaths=Array.isArray(row.data?.evidence)?row.data.evidence.filter((path:unknown)=>typeof path==='string'&&/^detail-media\/support-evidence\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/[A-Za-z0-9_-]{1,120}$/i.test(path)&&path.startsWith(`detail-media/support-evidence/${row.jobid}/${reporterId}/`)):[];
           const signedEvidence=await Promise.all(evidencePaths.map(async(path:string)=>{const signed=await admin.storage.from('detail-media').createSignedUrl(path.slice('detail-media/'.length),600);if(signed.error){console.warn('support evidence signing failed',signed.error.message);return null;}return signed.data?.signedUrl??null;}));
           evidenceUrls.push(...signedEvidence.filter((path):path is string=>typeof path==='string'));
-          supportContext.set(row.id,{customer,cleaner:cleanerProfile,reporter,job,evidenceUrls});
+          let reportedImageUrl:string|null=null;
+          const reportedImagePath=typeof row.data?.reportedImagePath==='string'?row.data.reportedImagePath:'';
+          const reportedUserId=typeof row.data?.reportedUserId==='string'?row.data.reportedUserId:'';
+          if(reportedImagePath&&reportedImagePath.startsWith(`detail-media/chat-photos/${row.jobid}/${reportedUserId}/`)&&/^detail-media\/chat-photos\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/[A-Za-z0-9._-]+$/i.test(reportedImagePath)){
+            const signed=await admin.storage.from('detail-media').createSignedUrl(reportedImagePath.slice('detail-media/'.length),600);
+            if(signed.error)console.warn('reported chat photo signing failed',signed.error.message);else reportedImageUrl=signed.data?.signedUrl??null;
+          }
+          supportContext.set(row.id,{customer,cleaner:cleanerProfile,reporter,reportedUser,job,evidenceUrls,reportedImageUrl});
         }
       }
       const rows=page.map((row:Json)=>{
@@ -1368,16 +1450,17 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         if(module==='payments'){const refund=paymentRefunds.get(row.id);return {id:row.id,createdAt:row.createdat,Payment:row.reference??row.id,Booking:row.jobid??'—',Customer:row.customerid??'—',Captured:['ESCROWED','DELIVERED','PAID','DISPUTED','REFUNDED'].includes(row.status)?row.amount:0,Refunded:refund?refund.confirmed:Number(row.data?.refundSummary?.confirmedAmount??0),'Refund request':refund?.latest?`${Number(refund.latest.amount).toFixed(2)} ${refund.latest.status}`:'—','Processor ref':row.reference??'—',Status:row.status};}
         if(module==='bookings')return {id:row.id,createdAt:row.createdat,Booking:row.id,Customer:row.customername??row.customerid??'—',Cleaner:row.cleanername??row.cleanerid??'—',Service:row.servicetype??row.category??'—',Scheduled:row.scheduleddatetime??row.scheduledtime??'—',Status:row.status,Payment:row.paymentstatus??row.paymentmethod??'—'};
         if(module==='support'){
-          const context=supportContext.get(row.id)??{},customer=context.customer??{},cleanerProfile=context.cleaner??{},reporter=context.reporter??{},job=context.job??{};
+          const context=supportContext.get(row.id)??{},customer=context.customer??{},cleanerProfile=context.cleaner??{},reporter=context.reporter??{},reportedUser=context.reportedUser??{},job=context.job??{};
           return {id:row.id,createdAt:row.createdat,Case:row.id,Booking:row.jobid??'General support',Reason:row.reason??'Support request',Opened:row.createdat,Owner:row.ownerid?(profileMap.get(row.ownerid)?.displayname??row.ownerid):'Unassigned',Status:row.status,
             reporterName:reporter.displayname??'Unknown reporter',reporterContact:[reporter.email,reporter.phone].filter(Boolean).join(' · '),
+            reportedUserName:reportedUser.displayname??'—',reportedUserContact:[reportedUser.email,reportedUser.phone].filter(Boolean).join(' · '),
             customerName:customer.displayname??'—',customerContact:[customer.email,customer.phone].filter(Boolean).join(' · '),
             cleanerName:cleanerProfile.displayname??'—',cleanerContact:[cleanerProfile.email,cleanerProfile.phone].filter(Boolean).join(' · '),
             category:row.data?.category??row.data?.type??'GENERAL',description:row.data?.description??row.reason??'',
             bookingStatus:job.status??'—',paymentStatus:job.paymentstatus??'—',paymentMethod:job.paymentmethod??'—',scheduledAt:job.scheduleddatetime??null,
             evidenceCount:Array.isArray(row.data?.evidence)?row.data.evidence.length:0,evidenceUrls:context.evidenceUrls??[],
             assignmentHistory:Array.isArray(row.data?.assignmentHistory)?row.data.assignmentHistory.slice(-20).map((entry:Json)=>({assignee:profileMap.get(entry.assignee)?.displayname??entry.assignee,assignedAt:entry.assignedAt,reason:entry.reason})):[],
-            data:{type:row.data?.type,severity:row.data?.severity}};
+            data:{type:row.data?.type,severity:row.data?.severity,reportedUserId:row.data?.reportedUserId,category:row.data?.category,targetMessageId:row.data?.targetMessageId,messageHasImage:row.data?.messageHasImage,reportedTextExcerpt:row.data?.reportedTextExcerpt,reportedImageUrl:context.reportedImageUrl??null}};
         }
         // Never return push credentials, exact coordinates, or arbitrary profile metadata.
         if(module==='customers'||module==='cleaners')return {id:row.id,createdAt:row.createdat};

@@ -19,7 +19,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../../components/LoadingList';
 import { useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Send, MessageSquare, ImagePlus, PhoneCall, PhoneOff } from 'lucide-react-native';
+import { ArrowLeft, Send, MessageSquare, ImagePlus, PhoneCall, PhoneOff, MoreHorizontal, Flag } from 'lucide-react-native';
 import type { Call, CallInvite, Voice as VoiceClient } from '@twilio/voice-react-native-sdk';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
@@ -35,6 +35,7 @@ import {
   supabase,
 } from '../../services/supabase';
 import { uploadChatPhoto } from '../../services/storage';
+import { callFunction } from '../../services/functions';
 import { ChatMessage } from '../../types';
 
 const QUICK_REPLIES = ['On my way!', 'Sounds good', "I'm here", 'Thank you!'];
@@ -107,6 +108,10 @@ export default function MessagesScreen() {
   const [callDuration, setCallDuration] = useState(0);
   const [incomingCaller, setIncomingCaller] = useState('');
   const [voiceIncomingEnabled, setVoiceIncomingEnabled] = useState(false);
+  const [blockedByMe, setBlockedByMe] = useState(false);
+  const [blockedMe, setBlockedMe] = useState(false);
+  const conversationBlocked = blockedByMe || blockedMe;
+  const [safetyStateLoading, setSafetyStateLoading] = useState(false);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
@@ -122,6 +127,87 @@ export default function MessagesScreen() {
   const connectedAtRef = useRef(0);
   const callDurationLimitRef = useRef(DEFAULT_CALL_LIMIT_SECONDS);
   const activeConversation = conversations.find(conversation => conversation.jobId === activeJobId);
+
+  useEffect(() => {
+    if (!activeJobId || !userId) { setBlockedByMe(false); setBlockedMe(false); return; }
+    let active = true;
+    setBlockedByMe(false); setBlockedMe(false);
+    setSafetyStateLoading(true);
+    void Promise.resolve(supabase.rpc('get_message_safety_state', { p_job_id: activeJobId })).then(({ data, error }) => {
+      if (!active) return;
+      if (error) {
+        console.warn('Could not load conversation safety settings:', error.message);
+        return;
+      }
+      setBlockedByMe(data?.blockedByMe === true);
+      setBlockedMe(data?.blockedMe === true);
+    }).catch((error: unknown) => {
+      if (active) console.warn('Could not load conversation safety settings:', error);
+    }).finally(() => { if (active) setSafetyStateLoading(false); });
+    return () => { active = false; };
+  }, [activeJobId, userId]);
+
+  const submitSafetyReport = async (category: string, message?: ChatMessage) => {
+    if (!activeJobId || !activeConversation?.otherUserId) return;
+    try {
+      await callFunction('reportUserContent', {
+        jobId: activeJobId,
+        targetUserId: activeConversation.otherUserId,
+        category,
+        messageId: message?.id,
+      });
+      appAlert('Report sent', 'Detail support received your report. You can also block this person from the conversation menu.');
+    } catch (error) {
+      appAlert('Could not send report', error instanceof Error ? error.message : 'Try again or contact Detail support.');
+    }
+  };
+
+  const chooseReportReason = (message?: ChatMessage) => appAlert(
+    message ? 'Report this message' : 'Report this person',
+    'Choose the reason that best describes the safety concern.',
+    [
+      { text: 'Harassment or bullying', onPress: () => void submitSafetyReport('HARASSMENT', message) },
+      { text: 'Scam or off-app payment request', onPress: () => void submitSafetyReport('SCAM_OR_OFF_PLATFORM_REQUEST', message) },
+      { text: 'Inappropriate message or photo', onPress: () => void submitSafetyReport('INAPPROPRIATE_CONTENT', message) },
+      { text: 'Other safety concern', onPress: () => void submitSafetyReport('OTHER_SAFETY_CONCERN', message) },
+      { text: 'Cancel', style: 'cancel' },
+    ],
+  );
+
+  const blockConversationPartner = () => {
+    if (!activeJobId || !activeConversation?.otherUserId) return;
+    if (blockedByMe) {
+      appAlert('Unblock this person?', 'They will be able to send messages and start calls for this booking again.', [
+        { text: 'Unblock', onPress: async () => {
+          const { error } = await supabase.rpc('unblock_user', { p_target_user_id: activeConversation.otherUserId });
+          if (error) { appAlert('Could not unblock person', error.message); return; }
+          setBlockedByMe(false);
+        } },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+      return;
+    }
+    appAlert('Block this person?', 'They will not be able to send you messages or start calls in Detail. Your booking history and existing messages stay available.', [
+      { text: 'Block person', style: 'destructive', onPress: async () => {
+        const { error } = await supabase.rpc('block_user', { p_job_id: activeJobId, p_target_user_id: activeConversation.otherUserId });
+        if (error) { appAlert('Could not block person', error.message); return; }
+        setBlockedByMe(true);
+        const call = voiceCallRef.current;
+        voiceCallRef.current = null;
+        if (call) await call.disconnect().catch(() => undefined);
+        const invite = incomingInviteRef.current;
+        incomingInviteRef.current = null;
+        if (invite) await invite.reject().catch(() => undefined);
+        const voice = voiceRef.current;
+        if (voice && voiceTokenRef.current) void voice.unregister(voiceTokenRef.current).catch(() => undefined);
+        voiceRef.current = null;
+        voiceTokenRef.current = '';
+        setCallState('unavailable');
+        setCallError('Calls are disabled because this person is blocked.');
+      } },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
 
   const getPendingMessageIntent = async (kind: 'text' | 'photo', value: string) => {
     if (!user || !activeJobId) throw new Error('Open a booking conversation before sending a message.');
@@ -226,6 +312,11 @@ export default function MessagesScreen() {
   }, [activeJobId, userId, chatRetry]);
 
   useEffect(() => {
+    if (conversationBlocked) {
+      setCallState('unavailable');
+      setCallError(blockedByMe ? 'Calls are disabled because this person is blocked.' : 'Calls are unavailable because this person has blocked this account.');
+      return;
+    }
     if (Platform.OS === 'web' || !activeJobId || !activeConversation?.otherUserId || !userId) {
       setCallState('unavailable');
       return;
@@ -298,7 +389,7 @@ export default function MessagesScreen() {
       if (currentVoice && voiceTokenRef.current) void currentVoice.unregister(voiceTokenRef.current).catch(() => undefined);
       voiceTokenRef.current = '';
     };
-  }, [activeJobId, activeConversation?.otherUserId, userId]);
+  }, [activeJobId, activeConversation?.otherUserId, userId, conversationBlocked, blockedByMe]);
 
   const attachCallEvents = async (call: Call) => {
     const sdk = await import('@twilio/voice-react-native-sdk');
@@ -331,7 +422,7 @@ export default function MessagesScreen() {
   };
 
   const startVoiceCall = async () => {
-    if (!activeConversation?.otherUserId || !activeJobId || callState !== 'ready' || !voiceRef.current || !voiceTokenRef.current) return;
+    if (conversationBlocked || !activeConversation?.otherUserId || !activeJobId || callState !== 'ready' || !voiceRef.current || !voiceTokenRef.current) return;
     setCallError('');
     setCallState('calling');
     try {
@@ -353,6 +444,7 @@ export default function MessagesScreen() {
   };
 
   const acceptVoiceCall = async () => {
+    if (conversationBlocked) return;
     const invite = incomingInviteRef.current;
     if (!invite) return;
     try {
@@ -432,7 +524,12 @@ export default function MessagesScreen() {
       if (!override) setInputText('');
     } catch (error) {
       console.error('Could not send message:', error);
-      appAlert('Message not sent', 'Check your connection and try again.');
+      const detail = error instanceof Error ? error.message : '';
+      const blocked = detail.includes('MESSAGING_BLOCKED');
+      const filtered = detail.includes('CHAT_CONTENT_FILTERED');
+      appAlert(blocked || filtered ? 'Message unavailable' : 'Message not sent', blocked
+        ? 'A participant has blocked this conversation. Existing history remains available.'
+        : filtered ? 'Please remove abusive language and send a respectful message.' : 'Check your connection and try again.');
     }
   };
 
@@ -511,9 +608,22 @@ export default function MessagesScreen() {
             </View>
             <TouchableOpacity
               accessibilityRole="button"
+              accessibilityLabel="Conversation safety options"
+              disabled={!activeConversation?.otherUserId || safetyStateLoading}
+              onPress={() => appAlert('Conversation safety', 'Report a safety concern to Detail or block this person.', [
+                { text: 'Report person', onPress: () => chooseReportReason() },
+                { text: blockedByMe ? 'Unblock person' : 'Block person', style: blockedByMe ? 'default' : 'destructive', onPress: blockConversationPartner },
+                { text: 'Cancel', style: 'cancel' },
+              ])}
+              className="h-10 w-10 items-center justify-center rounded-full bg-slate-100"
+            >
+              <MoreHorizontal size={20} color="#334155" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityRole="button"
               accessibilityLabel="Start booking voice call"
-              accessibilityState={{ disabled: callState !== 'ready' || !['ASSIGNED', 'EN_ROUTE', 'IN_PROGRESS'].includes(activeConversation?.jobStatus ?? '') }}
-              disabled={callState !== 'ready' || !['ASSIGNED', 'EN_ROUTE', 'IN_PROGRESS'].includes(activeConversation?.jobStatus ?? '')}
+              accessibilityState={{ disabled: conversationBlocked || callState !== 'ready' || !['ASSIGNED', 'EN_ROUTE', 'IN_PROGRESS'].includes(activeConversation?.jobStatus ?? '') }}
+              disabled={conversationBlocked || callState !== 'ready' || !['ASSIGNED', 'EN_ROUTE', 'IN_PROGRESS'].includes(activeConversation?.jobStatus ?? '')}
               onPress={() => void startVoiceCall()}
               className="h-10 w-10 items-center justify-center rounded-full bg-accent/10"
             >
@@ -551,9 +661,10 @@ export default function MessagesScreen() {
 
           {/* Messages */}
           {chatError ? <View className="items-center px-4 py-2"><Text accessibilityRole="alert" className="text-center text-xs text-rose-700">{chatError}</Text><TouchableOpacity accessibilityRole="button" onPress={() => setChatRetry(value => value + 1)} className="mt-1 rounded-full bg-rose-50 px-3 py-1"><Text className="text-xs font-bold text-rose-800">Retry messages</Text></TouchableOpacity></View> : null}
+        {conversationBlocked ? <View className="mx-4 mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3"><Text className="text-xs font-bold text-rose-900">{blockedByMe ? 'You blocked this person' : 'This person blocked you'}</Text><Text className="mt-1 text-xs leading-5 text-rose-800">Existing history stays available. New messages, photos, and calls are disabled{blockedByMe ? ' until you unblock them from the conversation menu.' : ' in this conversation.'}</Text></View> : null}
         <View className="mx-4 mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
           <Text className="text-xs font-bold text-amber-950">Stay safe on Detail</Text>
-          <Text className="mt-1 text-xs leading-5 text-amber-900">Messages disappear from this chat after 24 hours, but remain stored securely. Keep communication and payments in Detail. Don’t share your phone number, verification codes, or send money outside the app.</Text>
+          <Text className="mt-1 text-xs leading-5 text-amber-900">Messages disappear from this chat after 24 hours, but remain stored securely. Abusive language is screened automatically. Keep communication and payments in Detail. Don’t share your phone number, verification codes, or send money outside the app. Use the conversation menu to report or block someone; you can also report a message below.</Text>
         </View>
         <FlatList
             ref={flatListRef}
@@ -566,21 +677,16 @@ export default function MessagesScreen() {
               const isMe = item.senderId === user?.uid;
               return (
                 <View className={`flex-row ${isMe ? 'justify-end' : 'justify-start'}`}>
-                  {item.imageUrl ? (
-                    <Image source={{ uri: item.imageUrl }} style={{ width: 180, height: 180, borderRadius: 20 }} />
-                  ) : (
-                    <View
-                      className={`max-w-[78%] px-4 py-3 rounded-3xl ${
-                        isMe ? 'bg-accent rounded-tr-sm' : 'bg-slate-100 rounded-tl-sm'
-                      }`}
-                    >
-                      <Text
-                        className={`text-sm font-medium ${isMe ? 'text-white' : 'text-slate-900'}`}
-                      >
-                        {item.text}
-                      </Text>
-                    </View>
-                  )}
+                  <View className="max-w-[78%]">
+                    {item.imageUrl ? (
+                      <Image source={{ uri: item.imageUrl }} style={{ width: 180, height: 180, borderRadius: 20 }} />
+                    ) : (
+                      <View className={`px-4 py-3 rounded-3xl ${isMe ? 'bg-accent rounded-tr-sm' : 'bg-slate-100 rounded-tl-sm'}`}>
+                        <Text className={`text-sm font-medium ${isMe ? 'text-white' : 'text-slate-900'}`}>{item.text}</Text>
+                      </View>
+                    )}
+                    {!isMe ? <TouchableOpacity accessibilityRole="button" accessibilityLabel="Report this message" onPress={() => chooseReportReason(item)} className="mt-1 self-start flex-row items-center gap-1 py-1"><Flag size={12} color="#64748b" /><Text className="text-[11px] font-semibold text-slate-500">Report</Text></TouchableOpacity> : null}
+                  </View>
                 </View>
               );
             }}
@@ -597,6 +703,7 @@ export default function MessagesScreen() {
               renderItem={({ item: reply }) => (
                 <TouchableOpacity
                   onPress={() => sendMessage(reply)}
+                  disabled={conversationBlocked}
                   className="bg-slate-100 px-4 py-2 rounded-full border border-slate-200"
                 >
                   <Text className="font-sans text-xs font-bold text-slate-600">{reply}</Text>
@@ -609,7 +716,7 @@ export default function MessagesScreen() {
           <View className="flex-row items-center gap-3 px-4 py-3 border-t border-slate-100">
             <TouchableOpacity
               onPress={sendPhoto}
-              disabled={isSendingPhoto}
+              disabled={isSendingPhoto || conversationBlocked}
               className="w-11 h-11 rounded-2xl items-center justify-center bg-accent/10"
             >
               {isSendingPhoto ? <ActivityIndicator size="small" color="#3906D2" /> : <ImagePlus size={18} color="#3906D2" />}
@@ -620,6 +727,7 @@ export default function MessagesScreen() {
               placeholderTextColor="#94a3b8"
               value={inputText}
               onChangeText={setInputText}
+              editable={!conversationBlocked}
               multiline
               maxLength={500}
               onSubmitEditing={() => sendMessage()}
@@ -627,7 +735,7 @@ export default function MessagesScreen() {
             />
             <TouchableOpacity
               onPress={() => sendMessage()}
-              disabled={!inputText.trim()}
+              disabled={!inputText.trim() || conversationBlocked}
               className={`w-11 h-11 rounded-2xl items-center justify-center ${
                 inputText.trim() ? 'bg-accent' : 'bg-slate-100'
               }`}

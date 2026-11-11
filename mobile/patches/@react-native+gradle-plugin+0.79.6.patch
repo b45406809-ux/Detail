@@ -1,12 +1,12 @@
 diff --git a/node_modules/@react-native/gradle-plugin/gradle/libs.versions.toml b/node_modules/@react-native/gradle-plugin/gradle/libs.versions.toml
-index 3b161c3..5921a90 100644
+index 1a9426f..5a81f33 100644
 --- a/node_modules/@react-native/gradle-plugin/gradle/libs.versions.toml
 +++ b/node_modules/@react-native/gradle-plugin/gradle/libs.versions.toml
 @@ -4,7 +4,7 @@ gson = "2.8.9"
  guava = "31.0.1-jre"
  javapoet = "1.13.0"
  junit = "4.13.2"
--kotlin = "1.9.25"
+-kotlin = "2.0.21"
 +kotlin = "2.1.21"
  assertj = "3.25.1"
  

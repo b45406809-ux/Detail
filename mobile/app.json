@@ -20,7 +20,8 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Detail uses your location to find nearby cleaners.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "If you choose to go online as a cleaner, Detail shares your location with the service while you are online and on an active booking so nearby customers can be matched and customers can follow your arrival.",
-        "NSCameraUsageDescription": "Detail uses the camera to take job photos."
+        "NSCameraUsageDescription": "Detail uses the camera when you choose to add a profile, portfolio, booking, or chat photo.",
+        "NSMicrophoneUsageDescription": "Detail uses the microphone only during a voice call you start or answer with your booking partner."
       }
     },
     "android": {
@@ -54,7 +55,7 @@
         "expo-image-picker",
         {
           "photosPermission": "Detail uses your photos so cleaners can see the space or vehicle before bidding.",
-          "cameraPermission": "Detail uses the camera to take job photos."
+          "cameraPermission": "Detail uses the camera when you choose to add a profile, portfolio, booking, or chat photo."
         }
       ],
       [

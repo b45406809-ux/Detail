@@ -32,6 +32,13 @@ Deno.serve(async request => {
     if (!job || !job.cleanerid || !activeStatuses.has(String(job.status).toUpperCase()) || !participants.includes(caller) || !participants.includes(target)) {
       return xml(unavailable, 403);
     }
+    const [callerBlock, targetBlock] = await Promise.all([
+      admin.from('userblocks').select('blockerid').eq('blockerid', caller).eq('blockeduserid', target).maybeSingle(),
+      admin.from('userblocks').select('blockerid').eq('blockerid', target).eq('blockeduserid', caller).maybeSingle(),
+    ]);
+    if (callerBlock.error) throw callerBlock.error;
+    if (targetBlock.error) throw targetBlock.error;
+    if (callerBlock.data || targetBlock.data) return xml(unavailable, 403);
     const { data: operations, error: settingsError } = await admin.from('configuration').select('value').eq('key', 'operations').maybeSingle();
     if (settingsError) throw settingsError;
     const maxCallDurationSeconds = voiceCallLimitSeconds(operations?.value?.voiceCallLimitSeconds);

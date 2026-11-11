@@ -8,9 +8,8 @@ permissions:
 
 jobs:
   ios-simulator:
-    # Xcode 16 on the pinned macOS 15 image avoids an Apple Clang 26 / fmt
-    # constant-evaluation failure seen on the moving macos-latest image.
-    runs-on: macos-15
+    # New App Store submissions must use the iOS 26 SDK or newer.
+    runs-on: macos-26
     timeout-minutes: 70
     env:
       EAS_BUILD_PROFILE: production
@@ -44,6 +43,8 @@ jobs:
           test -n "$SUPABASE_URL"
           test -n "$APPETIZE_API_TOKEN"
           xcodebuild -version
+          xcode_major="$(xcodebuild -version | sed -n 's/^Xcode \([0-9][0-9]*\).*/\1/p')"
+          test "${xcode_major:-0}" -ge 26
           pod --version
 
       - run: npm ci --prefix mobile --no-audit --no-fund

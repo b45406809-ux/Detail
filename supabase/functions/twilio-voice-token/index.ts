@@ -51,6 +51,14 @@ Deno.serve(async request => {
     if (jobError) throw jobError;
     if (!job || ![job.customerid, job.cleanerid].includes(user.id)) return reply({ error: 'This booking is not available for calls.' }, 403);
     if (!job.cleanerid || !activeStatuses.has(String(job.status).toUpperCase())) return reply({ error: 'Calls are available only while a cleaner is assigned to an active booking.' }, 409);
+    const otherUserId = job.customerid === user.id ? job.cleanerid : job.customerid;
+    const [blockedByCaller, blockedByOther] = await Promise.all([
+      admin.from('userblocks').select('blockerid').eq('blockerid', user.id).eq('blockeduserid', otherUserId).maybeSingle(),
+      admin.from('userblocks').select('blockerid').eq('blockerid', otherUserId).eq('blockeduserid', user.id).maybeSingle(),
+    ]);
+    if (blockedByCaller.error) throw blockedByCaller.error;
+    if (blockedByOther.error) throw blockedByOther.error;
+    if (blockedByCaller.data || blockedByOther.data) return reply({ error: 'Voice calls are unavailable in this conversation.' }, 403);
 
     const { data: profile, error: profileError } = await admin.from('users').select('isbanned,issuspended,accountdeletedat').eq('id', user.id).maybeSingle();
     if (profileError) throw profileError;

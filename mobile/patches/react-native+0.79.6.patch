@@ -33,7 +33,7 @@ index 1d399d4..3595290 100644
  #endif // platforms besides __ANDROID__
  
 diff --git a/node_modules/react-native/third-party-podspecs/RCT-Folly.podspec b/node_modules/react-native/third-party-podspecs/RCT-Folly.podspec
-index c3e095f..b6c93fa 100644
+index b3c60a5..78a0617 100644
 --- a/node_modules/react-native/third-party-podspecs/RCT-Folly.podspec
 +++ b/node_modules/react-native/third-party-podspecs/RCT-Folly.podspec
 @@ -95,6 +95,11 @@ Pod::Spec.new do |spec|
@@ -46,5 +46,5 @@ index c3e095f..b6c93fa 100644
 +                               "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) FOLLY_NO_CONFIG=1 FOLLY_CFG_NO_COROUTINES=1",
 +                               "OTHER_CPLUSPLUSFLAGS" => "$(inherited) -DFOLLY_NO_CONFIG=1 -DFOLLY_CFG_NO_COROUTINES=1",
                                 # In dynamic framework (use_frameworks!) mode, ignore the unused and undefined boost symbols when generating the library.
-                                "OTHER_LDFLAGS" => "\"-Wl,-U,_jump_fcontext\" \"-Wl,-U,_make_fcontext\""
-                              }
+                                "OTHER_LDFLAGS" => "\"-Wl,-U,_jump_fcontext\" \"-Wl,-U,_make_fcontext\"",
+                                "GCC_WARN_INHIBIT_ALL_WARNINGS" => "YES" # Disable warnings because we don't control this library

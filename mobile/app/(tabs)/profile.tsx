@@ -31,11 +31,12 @@ import {
   Mail,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { auth, clearLocalSession, signOut } from '../../services/supabase';
+import { auth, clearLocalSession, signOut, supabase } from '../../services/supabase';
 import { callFunction } from '../../services/functions';
 import { stopCleanerLocationUpdates } from '../../services/locationTracking';
 import { uploadProfilePhoto } from '../../services/storage';
@@ -167,10 +168,26 @@ export default function ProfileScreen() {
       { text: 'Keep account', style: 'cancel' },
       { text: 'Delete permanently', style: 'destructive', onPress: async () => {
         try {
-          await callFunction('deleteAccount', { confirmation: 'DELETE' });
+          const { data: { user: authUser } } = await supabase.auth.getUser();
+          const appleLinked = !!authUser?.identities?.some(identity => identity.provider === 'apple');
+          let appleAuthorizationCode: string | undefined;
+          if (appleLinked) {
+            try {
+              const appleCredential = await AppleAuthentication.signInAsync({ requestedScopes: [] });
+              appleAuthorizationCode = appleCredential.authorizationCode ?? undefined;
+            } catch (appleError: any) {
+              if (appleError?.code !== 'ERR_REQUEST_CANCELED') {
+                console.warn('Could not obtain a fresh Apple authorization code for account deletion.');
+              }
+            }
+          }
+          const result = await callFunction<{ confirmation: string; appleAuthorizationCode?: string }, { success: boolean; appleRevocation?: string }>('deleteAccount', { confirmation: 'DELETE', appleAuthorizationCode });
           await stopCleanerLocationUpdates().catch(() => {});
           await clearLocalSession();
           router.replace('/(auth)/welcome');
+          if (result.appleRevocation === 'MANUAL_REQUIRED') {
+            appAlert('Finish Apple sign-in cleanup', 'Your Detail account was deleted. Detail could not revoke the Apple sign-in authorization automatically. On your iPhone, open Settings → your name → Sign in with Apple → Detail → Stop Using Apple ID.');
+          }
         }
         catch (error: any) {
           if (error?.message === 'RECENT_LOGIN_REQUIRED') {

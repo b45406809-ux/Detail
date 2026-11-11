@@ -19,14 +19,14 @@ const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
 export default function GoogleSignInButton() {
   const [isLoading, setIsLoading] = useState(false);
 
-  if (!webClientId) {
+  if (!webClientId || (Platform.OS === 'ios' && !iosClientId)) {
     return (
       <View className="gap-2">
         <View testID="google-sign-in-unconfigured" accessibilityRole="text" className="w-full bg-ink/[0.03] flex-row items-center justify-center gap-3 py-4 rounded-[24px] border border-ink/10">
           <GoogleLogo size={18} />
           <Text className="font-display font-black text-sm text-ink/50">Google sign-in unavailable</Text>
         </View>
-        <Text className="font-sans text-xs text-center text-ink/40">Use email or SMS while Google sign-in is being configured.</Text>
+        <Text className="font-sans text-xs text-center text-ink/40">Use email while Google sign-in is being configured for this device.</Text>
       </View>
     );
   }
