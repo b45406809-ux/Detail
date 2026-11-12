@@ -33,6 +33,7 @@ on:
           - deploy-sms-hook
           - push-config-readiness
           - play-internal-bundle
+          - play-internal-release
       android_version_code:
         description: Unused Google Play Android version code for the internal test bundle.
         required: false
@@ -62,7 +63,7 @@ concurrency:
 
 jobs:
   play-internal-bundle:
-    if: github.event_name == 'workflow_dispatch' && inputs.task == 'play-internal-bundle' && inputs.confirm_live_access == true && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
+    if: github.event_name == 'workflow_dispatch' && (inputs.task == 'play-internal-bundle' || inputs.task == 'play-internal-release') && inputs.confirm_live_access == true && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 45
@@ -87,10 +88,14 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
       - name: Check release inputs and prepare Firebase config
+        env:
+          PLAY_RELEASE_REQUESTED: ${{ inputs.task == 'play-internal-release' }}
+          PLAY_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
           set -euo pipefail
           [[ "$DETAIL_ANDROID_VERSION_CODE" =~ ^[1-9][0-9]{0,9}$ ]] || { echo 'Supply an unused Play version code.'; exit 1; }
           test -n "$EXPO_TOKEN" && test -n "$FIREBASE_ANDROID_JSON" && test -n "$MAPBOX_DOWNLOADS_TOKEN" && test -n "$EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN" && test -n "$EXPO_PUBLIC_SUPABASE_URL" && test -n "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
+          if [ "$PLAY_RELEASE_REQUESTED" = 'true' ]; then test -n "$PLAY_SERVICE_ACCOUNT" || { echo 'Google Play service account is not configured.'; exit 1; }; fi
           node <<'NODE'
           const fs = require('fs');
           const value = process.env.FIREBASE_ANDROID_JSON;
@@ -144,6 +149,15 @@ jobs:
           name: detail-play-internal-${{ github.sha }}-${{ inputs.android_version_code }}
           path: mobile/android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 7
+      - name: Upload to Play internal testing
+        if: inputs.task == 'play-internal-release'
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.detail.app
+          releaseFiles: mobile/android/app/build/outputs/bundle/release/app-release.aab
+          track: internal
+          status: completed
       - name: Remove temporary signing credentials
         if: always()
         run: rm -rf "$RUNNER_TEMP/detail-play-signing" "$RUNNER_TEMP/detail-google-services.json"
