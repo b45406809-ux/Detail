@@ -31,14 +31,14 @@ const PERMISSIONS = [
     id: 'camera',
     icon: Camera,
     title: 'Camera',
-    sub: 'Take photos of the areas or vehicle you want cleaned, so cleaners can quote accurately.',
+    sub: 'Take profile or portfolio photos, add photos to a booking, capture cleaning progress, and send photos in chat.',
     required: false,
   },
   {
     id: 'photos',
     icon: Images,
     title: 'Photos',
-    sub: 'Choose job photos from your library and attach evidence to a support request.',
+    sub: 'Choose profile or portfolio photos, add booking or support photos, and share images in chat.',
     required: false,
   },
 ];
@@ -98,7 +98,7 @@ export default function PermissionsScreen() {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     setGranted((prev) => ({ ...prev, camera: permission.granted }));
     if (!permission.granted && !permission.canAskAgain) {
-      appAlert('Camera access is off', 'You can still use Detail. Open device settings if you want to take job photos.', [
+      appAlert('Camera access is off', 'You can still use Detail. Open device settings to take profile, portfolio, booking, cleaning progress, or chat photos.', [
         { text: 'Later', style: 'cancel' },
         { text: 'Open Settings', onPress: () => void Linking.openSettings() },
       ]);
@@ -109,7 +109,7 @@ export default function PermissionsScreen() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     setGranted((prev) => ({ ...prev, photos: permission.granted }));
     if (!permission.granted && !permission.canAskAgain) {
-      appAlert('Photo access is off', 'You can still use Detail. Open device settings if you want to attach photos from your library.', [
+      appAlert('Photo access is off', 'You can still use Detail. Open device settings to choose photos for your profile, portfolio, bookings, support requests, or chat.', [
         { text: 'Later', style: 'cancel' },
         { text: 'Open Settings', onPress: () => void Linking.openSettings() },
       ]);
