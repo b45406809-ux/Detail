@@ -1,0 +1,71 @@
+name: iOS simulator UI smoke test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  ios-maestro:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      # Reuse the exact Xcode 26 build that uploaded successfully to Appetize.
+      # The Appetize UI session was unavailable because the account hit its usage cap.
+      - uses: actions/download-artifact@v4
+        with:
+          name: appetize-ios-simulator-43127962433
+          run-id: 43127962433
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ${{ runner.temp }}/detail-ios-build
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Maestro CLI
+        run: |
+          set -euo pipefail
+          curl -fsSL https://get.maestro.mobile.dev | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+          "$HOME/.maestro/bin/maestro" --version
+
+      - name: Install app on an iOS simulator
+        id: simulator
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          archive="$(find "$RUNNER_TEMP/detail-ios-build" -maxdepth 3 -name detail-ios-simulator.zip -print -quit)"
+          test -n "$archive"
+          mkdir -p "$RUNNER_TEMP/detail-ios-app"
+          ditto -x -k "$archive" "$RUNNER_TEMP/detail-ios-app"
+          app="$(find "$RUNNER_TEMP/detail-ios-app" -maxdepth 3 -name Detail.app -print -quit)"
+          test -n "$app"
+          device_id="$(xcrun simctl list devices available -j | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const d=JSON.parse(s).devices.flat().find(x=>x.isAvailable&&/^iPhone/.test(x.name));if(!d)process.exit(1);process.stdout.write(d.udid)})')"
+          xcrun simctl boot "$device_id"
+          xcrun simctl bootstatus "$device_id" -b
+          xcrun simctl install "$device_id" "$app"
+          echo "device_id=$device_id" >> "$GITHUB_OUTPUT"
+          echo "Installed built app on simulator $device_id. No account was submitted."
+
+      - name: Verify welcome, sign-in, and create-account screens
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/detail-maestro-results"
+          maestro --device "${{ steps.simulator.outputs.device_id }}" test \
+            --test-output-dir "$RUNNER_TEMP/detail-maestro-results" \
+            qa/ios/auth-smoke.yaml
+
+      - name: Save simulator screenshots and Maestro report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-maestro-smoke-${{ github.run_id }}
+          path: ${{ runner.temp }}/detail-maestro-results/
+          if-no-files-found: warn
+          retention-days: 7

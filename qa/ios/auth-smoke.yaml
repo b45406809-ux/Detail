@@ -1,0 +1,24 @@
+appId: com.detail.app
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: welcome-skip
+    timeout: 30000
+- takeScreenshot:
+    path: 01-welcome
+- tapOn:
+    id: welcome-skip
+- extendedWaitUntil:
+    visible: Welcome back
+    timeout: 15000
+- takeScreenshot:
+    path: 02-sign-in
+- tapOn:
+    id: auth-account-mode-toggle
+- extendedWaitUntil:
+    visible: Join Detail
+    timeout: 10000
+- takeScreenshot:
+    path: 03-create-account
