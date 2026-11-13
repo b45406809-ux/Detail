@@ -117,7 +117,7 @@ export default function HomeScreen() {
         );
         return;
       }
-      callFunction('setActiveRole', { role: 'CLEANER' }).then(() => setViewRole('CLEANER')).catch((e:any) => appAlert('Could not switch role', e.message ?? 'Try again.'));
+      callFunction('setActiveRole', { role: 'CLEANER' }).then(() => setViewRole('CLEANER')).catch((e:any) => appAlert('Could not switch role', e.message ?? 'Try again.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Cleaner registration', onPress: () => router.push('/register-cleaner') }]));
     } else {
       callFunction('setActiveRole', { role: 'CUSTOMER' }).then(async () => {
         setViewRole('CUSTOMER');
@@ -246,7 +246,7 @@ export default function HomeScreen() {
         await callFunction('updateCleanerPresence',{status:'OFFLINE'}).catch(()=>{});
       }
       if (error instanceof CleanerLocationPermissionError) showPermissionDenied(error.message, error.canAskAgain);
-      else appAlert('Could not go online', error?.message || 'Please try again.');
+      else appAlert('Could not go online', error?.message || 'Please try again.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Cleaner registration', onPress: () => router.push('/register-cleaner') }]);
     }
   };
 

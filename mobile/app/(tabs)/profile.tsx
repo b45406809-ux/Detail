@@ -152,7 +152,7 @@ export default function ProfileScreen() {
     if (profile?.role === 'CUSTOMER') {
       if (profile.cleanerOnboardingComplete && profile.hasAgreedToTerms
         && profile.cleanerAgreementAccepted && profile.verificationStatus === 'VERIFIED') {
-        callFunction('setActiveRole', { role: 'CLEANER' }).catch((e:any) => appAlert('Could not switch role', e.message ?? 'Try again.'));
+        callFunction('setActiveRole', { role: 'CLEANER' }).catch((e:any) => appAlert('Could not switch role', e.message ?? 'Try again.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Cleaner registration', onPress: () => router.push('/register-cleaner') }]));
       } else {
         router.push('/register-cleaner');
       }

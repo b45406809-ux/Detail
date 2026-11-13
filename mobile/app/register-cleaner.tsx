@@ -6,7 +6,7 @@ import { goBackSafely } from '@/utils/navigation';
 // provider needed). Reached from profile.tsx's "Switch to Cleaner" action
 // whenever cleanerOnboardingComplete or hasAgreedToTerms is missing; ends by
 // routing into cleaner-agreement.tsx, which is what actually flips role.
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -32,7 +32,7 @@ import {
   ShieldCheck,
 } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
-import { auth, sendEmailVerification } from '../services/supabase';
+import { auth, sendEmailVerification, supabase } from '../services/supabase';
 import { callFunction } from '../services/functions';
 import { ServiceCategory } from '../types';
 
@@ -54,6 +54,50 @@ export default function RegisterCleanerScreen() {
   const [organizationCode, setOrganizationCode] = useState('');
   const [isCheckingIdentity, setIsCheckingIdentity] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [verifiedPhone, setVerifiedPhone] = useState('');
+  const [phoneCode, setPhoneCode] = useState('');
+  const [codeSentTo, setCodeSentTo] = useState('');
+  const [phoneBusy, setPhoneBusy] = useState(false);
+  const normalizedPhone = phone.trim().replace(/[\s()-]/g, '');
+  const phoneIsVerified = /^\+[1-9]\d{7,14}$/.test(normalizedPhone) && verifiedPhone.replace(/\D/g, '') === normalizedPhone.replace(/\D/g, '');
+
+  useEffect(() => {
+    let active = true;
+    void supabase.auth.getUser().then(({ data }) => {
+      if (active && data.user?.phone_confirmed_at && data.user.phone) {
+        const number = `+${data.user.phone.replace(/\D/g, '')}`;
+        setVerifiedPhone(number);
+        setPhone(current => current || number);
+      }
+    });
+    return () => { active = false; };
+  }, []);
+
+  const sendPhoneCode = async () => {
+    if (!/^\+[1-9]\d{7,14}$/.test(normalizedPhone)) { appAlert('Enter your phone number', 'Include the country code, for example +263 followed by your mobile number.'); return; }
+    setPhoneBusy(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ phone: normalizedPhone });
+      if (error) throw error;
+      setCodeSentTo(normalizedPhone); setPhoneCode('');
+      appAlert('Code sent', 'Enter the SMS code to verify your cleaner phone number.');
+    } catch (error) { appAlert('Could not send code', error instanceof Error ? error.message : 'Please try again.'); }
+    finally { setPhoneBusy(false); }
+  };
+
+  const verifyPhoneCode = async () => {
+    if (!/^\d{6}$/.test(phoneCode) || codeSentTo !== normalizedPhone) { appAlert('Enter the code', 'Enter the six-digit code sent to this number.'); return; }
+    setPhoneBusy(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({ phone: codeSentTo, token: phoneCode, type: 'phone_change' });
+      if (error) throw error;
+      const { data, error: userError } = await supabase.auth.getUser();
+      if (userError || !data.user?.phone_confirmed_at || data.user.phone?.replace(/\D/g, '') !== codeSentTo.replace(/\D/g, '')) throw new Error('Phone verification could not be confirmed. Try again.');
+      setVerifiedPhone(codeSentTo); setCodeSentTo(''); setPhoneCode('');
+      appAlert('Phone verified', 'Your phone number is verified.');
+    } catch (error) { appAlert('Code not accepted', error instanceof Error ? error.message : 'Please request a new code and try again.'); }
+    finally { setPhoneBusy(false); }
+  };
 
   const emailVerified = auth.currentUser?.emailVerified ?? false;
   const [verificationSent, setVerificationSent] = useState(false);
@@ -135,6 +179,7 @@ export default function RegisterCleanerScreen() {
       appAlert('Pick a service', 'Choose at least one service you want to offer.');
       return;
     }
+    if (!phoneIsVerified) { appAlert('Verify your phone', 'Verify your mobile number before applying as a cleaner.'); return; }
     if (!isIdentityVerified) {
       appAlert('Identity check required', 'Complete your Didit identity check before continuing.');
       return;
@@ -149,7 +194,7 @@ export default function RegisterCleanerScreen() {
       await auth.currentUser?.reload();
       await auth.currentUser?.getIdToken(true);
       await callFunction('submitCleanerApplication', {
-        fullName: fullName.trim(), phone: phone.trim(), address: address.trim(),
+        fullName: fullName.trim(), phone: normalizedPhone, address: address.trim(),
         serviceArea: serviceArea.trim(), serviceCategories: categories,
         serviceRadiusKm: Number(radius) || 15, experienceYears: Number(experience) || 0,
       });
@@ -207,6 +252,12 @@ export default function RegisterCleanerScreen() {
           <View className="gap-3 mb-6">
             <LabeledInput icon={User} label="Full Name" value={fullName} onChangeText={setFullName} placeholder="Your full legal name" />
             <LabeledInput icon={User} label="Phone Number" value={phone} onChangeText={setPhone} placeholder="+263 7X XXX XXXX" keyboardType="phone-pad" />
+            <View className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <Text className="font-sans text-sm text-ink">{phoneIsVerified ? 'Phone number verified' : 'Cleaners must verify their mobile number.'}</Text>
+              {!phoneIsVerified && <TouchableOpacity disabled={phoneBusy} onPress={() => void sendPhoneCode()} className="mt-3 rounded-xl bg-accent px-4 py-3"><Text className="text-center font-sans-bold text-white">{phoneBusy ? 'Please wait…' : codeSentTo === normalizedPhone ? 'Send a new code' : 'Send verification code'}</Text></TouchableOpacity>}
+              {!phoneIsVerified && codeSentTo === normalizedPhone && <View className="mt-3 gap-3"><TextInput value={phoneCode} onChangeText={setPhoneCode} keyboardType="number-pad" maxLength={6} placeholder="Six-digit code" className="rounded-xl bg-white px-4 py-3 text-ink" /><TouchableOpacity disabled={phoneBusy} onPress={() => void verifyPhoneCode()} className="rounded-xl border border-accent px-4 py-3"><Text className="text-center font-sans-bold text-accent">Verify code</Text></TouchableOpacity></View>}
+              {phoneIsVerified && profile?.cleanerOnboardingComplete && profile?.cleanerAgreementAccepted && <TouchableOpacity disabled={phoneBusy} onPress={() => { setPhoneBusy(true); void callFunction('setActiveRole', { role: 'CLEANER' }).then(() => router.replace('/(tabs)/home')).catch((error) => appAlert('Could not switch role', error instanceof Error ? error.message : 'Please try again.')).finally(() => setPhoneBusy(false)); }} className="mt-3 rounded-xl bg-accent px-4 py-3"><Text className="text-center font-sans-bold text-white">Continue as cleaner</Text></TouchableOpacity>}
+            </View>
             <LabeledInput icon={MapPin} label="Physical Address" value={address} onChangeText={setAddress} placeholder="Street, suburb, city" multiline />
             <LabeledInput icon={MapPin} label="Service Area (Optional)" value={serviceArea} onChangeText={setServiceArea} placeholder="City or suburbs you serve" />
           </View>

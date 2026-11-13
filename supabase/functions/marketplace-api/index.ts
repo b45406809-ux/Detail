@@ -454,6 +454,8 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     }
     case 'acceptCleanerAgreement': {
       const actor = authed();
+      const profile = await userRow(actor);
+      if (!user?.phone_confirmed_at || !user?.phone || String(profile.phone ?? '').replace(/\D/g, '') !== user.phone.replace(/\D/g, '')) fail(409, 'Verify your phone number before becoming a cleaner.');
       const { error } = await admin.rpc('accept_cleaner_agreement',{p_user_id:actor});
       if (error) throw error;
       return { ok: true };
@@ -468,6 +470,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const actor = authed(); const profile = await userRow(actor);
       if (profile.verificationstatus !== 'VERIFIED' || !user?.email_confirmed_at) fail(409, 'Verify your identity and email before applying.');
       const inputName = text(input.fullName, 120), phone = text(input.phone, 40), address = text(input.address, 250), area = text(input.serviceArea, 120);
+      if (!user?.phone_confirmed_at || !user?.phone || phone.replace(/\D/g, '') !== user.phone.replace(/\D/g, '')) fail(409, 'Verify this phone number before applying as a cleaner.');
       const categories = Array.isArray(input.serviceCategories) ? [...new Set(input.serviceCategories.filter((x: unknown) => x === 'HOUSE' || x === 'CAR'))] : [];
       const radius = Number(input.serviceRadiusKm ?? 15), experience = Number(input.experienceYears ?? 0);
       if (inputName.length < 2 || phone.length < 7 || address.length < 5 || (area.length > 0 && area.length < 2) || !categories.length || !Number.isFinite(radius) || !Number.isFinite(experience) || radius < 1 || radius > 100 || experience < 0 || experience > 60) fail(400, 'Complete all cleaner application fields with valid values.');
@@ -479,6 +482,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const actor = authed(); const profile = await userRow(actor); const role = input.role;
       if (!['CUSTOMER','CLEANER'].includes(role)) fail(400, 'Invalid role.');
       if (profile.issuspended || profile.isbanned || profile.accountdeletedat) fail(403, 'This account cannot change marketplace roles. Contact support for help.');
+      if (role === 'CLEANER' && (!user?.phone_confirmed_at || !user?.phone || String(profile.phone ?? '').replace(/\D/g, '') !== user.phone.replace(/\D/g, ''))) fail(409, 'Verify your phone number in cleaner registration before switching roles.');
       if (role === 'CLEANER' && (profile.verificationstatus !== 'VERIFIED' || !profile.cleaneragreementaccepted || !profile.cleaneronboardingcomplete || profile.issuspended || profile.isbanned)) fail(409, 'Complete cleaner verification and onboarding first.');
       if (role === 'CUSTOMER' && profile.role === 'CLEANER') {
         const { count, error } = await admin.from('jobs').select('id', { count: 'exact', head: true }).eq('cleanerid', actor).in('status', ['ASSIGNED','EN_ROUTE','IN_PROGRESS']);
@@ -505,6 +509,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'updateCleanerPresence': {
       const actor = authed(); const profile = await userRow(actor);
       if (!['AVAILABLE','OFFLINE'].includes(input.status) || profile.role !== 'CLEANER' || profile.verificationstatus !== 'VERIFIED' || !profile.cleaneragreementaccepted || profile.issuspended || profile.isbanned) fail(403, 'Only an approved cleaner can change availability.');
+      if (input.status === 'AVAILABLE' && (!user?.phone_confirmed_at || !user?.phone || String(profile.phone ?? '').replace(/\D/g, '') !== user.phone.replace(/\D/g, ''))) fail(409, 'Verify your phone number in cleaner registration before going online.');
       if(input.status==='OFFLINE'){
         const {count,error}=await admin.from('jobs').select('id',{count:'exact',head:true}).eq('cleanerid',actor).in('status',['ASSIGNED','EN_ROUTE','IN_PROGRESS']);
         if(error)throw error;
@@ -831,6 +836,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if (profileResult.error || jobResult.error) fail(404,'Job or cleaner not found.');
       const profile=profileResult.data, job=jobResult.data;
       if (profile.role!=='CLEANER' || profile.verificationstatus!=='VERIFIED' || !profile.cleaneragreementaccepted || !profile.cleaneronboardingcomplete || profile.issuspended || profile.isbanned || profile.accountdeletedat || Number(profile.balance)<0) fail(403,'Complete cleaner verification and resolve any outstanding commission before bidding.');
+      if (!user?.phone_confirmed_at || !user?.phone || String(profile.phone ?? '').replace(/\D/g, '') !== user.phone.replace(/\D/g, '')) fail(409, 'Verify your phone number in cleaner registration before bidding.');
       const {data:operations}=await admin.from('configuration').select('value').eq('key','operations').maybeSingle();
       if(operations?.value?.switches?.maintenance===true||operations?.value?.switches?.bidAcceptance===true)fail(503,'Cleaner bidding is temporarily paused.');
       if (job.status!=='PENDING' || job.bookingmode==='INSTANT' || (job.biddingexpiresat && new Date(job.biddingexpiresat).getTime()<Date.now())) fail(409,'This booking is not accepting cleaner bids.');

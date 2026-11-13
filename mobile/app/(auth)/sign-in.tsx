@@ -31,7 +31,7 @@ type EmailAuthMode = 'CODE' | 'PASSWORD';
 
 export default function SignInScreen() {
   const passwordInputRef = useRef<TextInput>(null);
-  const [tab, setTab] = useState<AuthTab>('phone');
+  const [tab, setTab] = useState<AuthTab>('email');
   const [phone, setPhone] = useState('');
   const [selectedCountry, setSelectedCountry] = useState<Country>(DEFAULT_COUNTRY);
   const [isCountryPickerOpen, setIsCountryPickerOpen] = useState(false);
@@ -184,7 +184,7 @@ export default function SignInScreen() {
           <View>
                 {/* Tab switcher */}
                 <View className="flex-row bg-ink/5 rounded-xl p-1 mb-6">
-                  {(['phone', 'email'] as AuthTab[]).map((t) => (
+                  {(['email', 'phone'] as AuthTab[]).map((t) => (
                     <TouchableOpacity
                       key={t}
                       testID={`auth-${t}-tab`}
@@ -208,6 +208,7 @@ export default function SignInScreen() {
                   ))}
                 </View>
 
+                <Text className="font-sans text-xs text-ink/50 mb-4">Customers can use email. Cleaners verify a phone number during registration.</Text>
                 {tab === 'phone' ? (
                   <View className="gap-4">
                     <View>
