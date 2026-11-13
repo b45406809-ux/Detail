@@ -643,7 +643,7 @@ export default function MessagesScreen() {
                       ? `${Math.floor(callDuration / 60)}:${String(callDuration % 60).padStart(2, '0')} elapsed · calls end at 5 minutes`
                       : callState === 'unavailable'
                         ? callError || 'Voice calling is not configured yet.'
-                      : callError || 'Detail calls use your internet connection. Calls end after 5 minutes. Microphone access is requested only when you call or answer.'}
+                      : callError || 'Detail calls use your internet connection. The call duration limit is set by Detail. Microphone access is needed for calls.'}
                   </Text>
                   {callState === 'ready' && <Text className="mt-1 text-[11px] leading-4 text-violet-700">{voiceIncomingEnabled ? 'Keep this chat open to receive calls.' : 'Incoming-call push is not configured yet; the other person must keep Detail open.'}</Text>}
                 </View>

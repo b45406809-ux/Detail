@@ -1,12 +1,14 @@
 import { appAlert } from '@/components/AppDialog';
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Linking, ScrollView } from 'react-native';
-import { router } from 'expo-router';
+import { View, Text, TouchableOpacity, ActivityIndicator, Linking, ScrollView, PermissionsAndroid, Platform } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MapPin, Bell, Shield, Camera, Images } from 'lucide-react-native';
+import { MapPin, Bell, Shield, Camera as CameraIcon, Images, Mic, Bluetooth } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import * as ImagePicker from 'expo-image-picker';
+import * as ExpoCamera from 'expo-camera';
+import { Audio } from 'expo-av';
 import { useAuth } from '../../context/AuthContext';
 import { registerCurrentPushDevice } from '../../services/pushRegistration';
 import { configureNotificationChannels } from '../../services/notifications';
@@ -29,7 +31,7 @@ const PERMISSIONS = [
   },
   {
     id: 'camera',
-    icon: Camera,
+    icon: CameraIcon,
     title: 'Camera',
     sub: 'Take profile or portfolio photos, add photos to a booking, capture cleaning progress, and send photos in chat.',
     required: false,
@@ -41,23 +43,29 @@ const PERMISSIONS = [
     sub: 'Choose profile or portfolio photos, add booking or support photos, and share images in chat.',
     required: false,
   },
+  { id: 'microphone', icon: Mic, title: 'Microphone', sub: 'Use your microphone for voice calls with your booking partner.', required: false },
+  ...(Platform.OS === 'android' && Number(Platform.Version) >= 31 ? [{ id: 'bluetooth', icon: Bluetooth, title: 'Bluetooth', sub: 'Connect a Bluetooth headset during voice calls.', required: false }] : []),
 ];
 
 export default function PermissionsScreen() {
   const { updateProfile } = useAuth();
+  const { next } = useLocalSearchParams<{next?:string}>();
   const [granted, setGranted] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [requestingAll, setRequestingAll] = useState(false);
 
   useEffect(() => {
     let active = true;
     Promise.all([
       Location.getForegroundPermissionsAsync(),
       Notifications.getPermissionsAsync(),
-      ImagePicker.getCameraPermissionsAsync(),
+      ExpoCamera.Camera.getCameraPermissionsAsync(),
       ImagePicker.getMediaLibraryPermissionsAsync(),
-    ]).then(async ([location, notifications, camera, photos]) => {
+      Audio.getPermissionsAsync(),
+      Platform.OS === 'android' && Number(Platform.Version) >= 31 ? PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT) : Promise.resolve(false),
+    ]).then(async ([location, notifications, camera, photos, microphone, bluetooth]) => {
       if (!active) return;
-      setGranted({ location: location.granted, notifications: notifications.granted, camera: camera.granted, photos: photos.granted });
+      setGranted({ location: location.granted, notifications: notifications.granted, camera: camera.granted, photos: photos.granted, microphone: microphone.granted, bluetooth });
       if (notifications.granted) {
         if (active) await registerCurrentPushDevice().catch((error) => console.warn('Could not save this device notification registration:', error));
       }
@@ -122,16 +130,42 @@ export default function PermissionsScreen() {
       else if (id === 'notifications') await requestNotifications();
       else if (id === 'camera') await requestCamera();
       else if (id === 'photos') await requestPhotos();
+      else if (id === 'microphone') {
+        const result = await Audio.requestPermissionsAsync();
+        setGranted(prev => ({ ...prev, microphone: result.granted }));
+        if (!result.granted && !result.canAskAgain) appAlert('Microphone access is off', 'Open device settings to enable voice calls.', [{ text: 'Later', style: 'cancel' }, { text: 'Open Settings', onPress: () => void Linking.openSettings() }]);
+      }
+      else if (id === 'bluetooth' && Platform.OS === 'android' && Number(Platform.Version) >= 31) {
+        const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT);
+        setGranted(prev => ({ ...prev, bluetooth: result === PermissionsAndroid.RESULTS.GRANTED }));
+        if (result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) appAlert('Bluetooth access is off', 'Open device settings to connect a headset.', [{ text: 'Later', style: 'cancel' }, { text: 'Open Settings', onPress: () => void Linking.openSettings() }]);
+      }
     } catch {
       appAlert('Permission unavailable', 'You can change this permission later in your device settings.');
     }
+  };
+
+  const requestAll = async () => {
+    setRequestingAll(true);
+    try {
+      // Ask one at a time: Android and iOS cannot reliably show multiple native prompts simultaneously.
+      const steps = [
+        async () => { const p = await Location.requestForegroundPermissionsAsync(); setGranted(prev => ({ ...prev, location: p.granted })); },
+        async () => { await configureNotificationChannels(); const p = await Notifications.requestPermissionsAsync(); setGranted(prev => ({ ...prev, notifications: p.granted })); if (p.granted) await registerCurrentPushDevice(); },
+        async () => { const p = await ExpoCamera.Camera.requestCameraPermissionsAsync(); setGranted(prev => ({ ...prev, camera: p.granted })); },
+        async () => { const p = await ImagePicker.requestMediaLibraryPermissionsAsync(); setGranted(prev => ({ ...prev, photos: p.granted })); },
+        async () => { const p = await Audio.requestPermissionsAsync(); setGranted(prev => ({ ...prev, microphone: p.granted })); },
+        ...(Platform.OS === 'android' && Number(Platform.Version) >= 31 ? [async () => { const p = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT); setGranted(prev => ({ ...prev, bluetooth: p === PermissionsAndroid.RESULTS.GRANTED })); }] : []),
+      ];
+      for (const step of steps) { try { await step(); } catch (error) { console.warn('Permission request failed:', error); } }
+    } finally { setRequestingAll(false); }
   };
 
   const handleContinue = async () => {
     setIsLoading(true);
     try {
       await updateProfile({ hasSetupPermissions: true });
-      router.replace('/home');
+      router.replace(next==='cleaner'?'/register-cleaner':'/home');
     } catch {
       appAlert('Error', 'Failed to save settings. Please try again.');
     } finally {
@@ -154,8 +188,11 @@ export default function PermissionsScreen() {
           </View>
           <Text className="text-3xl font-display font-black text-ink tracking-tight mb-2">Allow permissions</Text>
           <Text className="font-sans text-base text-ink/50 font-medium mb-8 leading-relaxed">
-            Detail needs a few permissions to match you with cleaners and keep you updated.
+            Choose which permissions to allow. You can change them later in your device settings.
           </Text>
+          <Text className="font-sans text-xs text-ink/50 mb-5">Cleaners may also be asked for background location when they choose to go online.</Text>
+
+          <TouchableOpacity accessibilityRole="button" disabled={requestingAll} onPress={() => void requestAll()} className="mb-5 rounded-2xl bg-accent py-4 items-center"><Text className="text-white font-display font-black">{requestingAll ? 'Requesting permissions…' : 'Request permissions'}</Text></TouchableOpacity>
 
           <View className="gap-4">
             {PERMISSIONS.map(({ id, icon: Icon, title, sub, required }) => (
@@ -184,6 +221,7 @@ export default function PermissionsScreen() {
 
                 {!granted[id] && (
                   <TouchableOpacity
+                    disabled={requestingAll}
                     onPress={() => handlePermissionRequest(id)}
                     activeOpacity={0.8}
                     className="mt-4 bg-accent py-3 rounded-2xl items-center"
@@ -200,7 +238,7 @@ export default function PermissionsScreen() {
 
         <TouchableOpacity
           onPress={handleContinue}
-          disabled={isLoading}
+          disabled={isLoading || requestingAll}
           activeOpacity={0.85}
           className="w-full bg-accent py-5 rounded-[28px] items-center mt-6 shadow-lg shadow-accent/30"
         >

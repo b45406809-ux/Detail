@@ -13,6 +13,7 @@ import {
   Platform,
   ActivityIndicator,
   Linking,
+  Modal,
 
   Image,
 } from 'react-native';
@@ -20,6 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import * as ExpoCamera from 'expo-camera';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -94,9 +96,17 @@ export default function CreateBookingScreen() {
   const [description, setDescription] = useState('');
   const [photoUris, setPhotoUris] = useState<string[]>([]);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [takingPhoto, setTakingPhoto] = useState(false);
+  const cameraRef = React.useRef<React.ElementRef<typeof ExpoCamera.CameraView>>(null);
 
   const [address, setAddress] = useState('');
   const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(null);
+  const [carServiceMode, setCarServiceMode] = useState<'MOBILE'|'VISIT_WASH'>('MOBILE');
+  const [washSites, setWashSites] = useState<{id:string;cleanerId:string;name:string;address:string;lat:number;lng:number}[]>([]);
+  const [selectedWashSiteId, setSelectedWashSiteId] = useState('');
+  const [loadingWashSites, setLoadingWashSites] = useState(false);
   const [searchProximity, setSearchProximity] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
@@ -164,6 +174,17 @@ export default function CreateBookingScreen() {
   const step = STEPS[stepIndex];
 
   useEffect(() => {
+    if (step !== 'LOCATION' || category !== 'CAR' || carServiceMode !== 'VISIT_WASH') return;
+    let active=true;const center=coordinates??(searchProximity?{lat:searchProximity.latitude,lng:searchProximity.longitude}:null);
+    if(!center){setWashSites([]);return;}
+    setLoadingWashSites(true);
+    callFunction<{lat:number;lng:number},{sites:typeof washSites}>('listCarWashSites',{lat:center.lat,lng:center.lng})
+      .then(result=>{if(active){setWashSites(result.sites);if(!result.sites.some(site=>site.id===selectedWashSiteId))setSelectedWashSiteId('');}})
+      .catch(()=>{if(active)setWashSites([]);}).finally(()=>{if(active)setLoadingWashSites(false);});
+    return()=>{active=false;};
+  },[step,category,carServiceMode,coordinates?.lat,coordinates?.lng,searchProximity?.latitude,searchProximity?.longitude]);
+
+  useEffect(() => {
     if (preselectedCategory) setCategory(preselectedCategory);
   }, [preselectedCategory]);
 
@@ -200,15 +221,14 @@ export default function CreateBookingScreen() {
     }
     try {
     const permission = fromCamera
-      ? await ImagePicker.requestCameraPermissionsAsync()
+      ? await ExpoCamera.Camera.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       appAlert('Permission needed', 'Allow access to add photos.', [{ text: 'Not now', style: 'cancel' }, ...(!permission.canAskAgain ? [{ text: 'Open settings', onPress: () => void Linking.openSettings() }] : [])]);
       return;
     }
-    const result = fromCamera
-      ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
-      : await ImagePicker.launchImageLibraryAsync({ quality: 0.7, allowsMultipleSelection: false });
+    if(fromCamera){setCameraReady(false);setShowCamera(true);return;}
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, allowsMultipleSelection: false });
     if (result.canceled || !result.assets?.[0]) return;
 
     setIsUploadingPhoto(true);
@@ -220,12 +240,30 @@ export default function CreateBookingScreen() {
     } finally {
       setIsUploadingPhoto(false);
     }
-    } catch {
-      appAlert('Photo unavailable', fromCamera ? 'The camera could not be opened. Check camera permissions or try the photo library.' : 'The photo library could not be opened. Check permissions and try again.', fromCamera ? [
+    } catch (error) {
+      const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : 'unknown';
+      console.warn('[booking photo] picker failed:', code);
+      appAlert('Photo unavailable', fromCamera ? 'The camera could not be opened. Check camera access in settings, or choose a photo from your library.' : 'The photo library could not be opened. Check access in settings and try again.', fromCamera ? [
         { text: 'Choose from library', onPress: () => { void pickPhoto(false); } },
+        { text: 'Open settings', onPress: () => void Linking.openSettings() },
         { text: 'OK', style: 'cancel' },
       ] : undefined);
     }
+  };
+
+  const captureBookingPhoto=async()=>{
+    if(!cameraReady||takingPhoto||!cameraRef.current)return;
+    setTakingPhoto(true);
+    try{
+      const photo=await cameraRef.current.takePictureAsync({quality:0.7,skipProcessing:false});
+      setShowCamera(false);
+      if(!photo?.uri)return;
+      setIsUploadingPhoto(true);
+      try{const url=await uploadJobPhoto(photo.uri);setPhotoUris(prev=>[...prev,url]);}
+      catch{appAlert('Upload failed','Could not upload that photo. Please try again.');}
+      finally{setIsUploadingPhoto(false);}
+    }catch(error){const code=typeof error==='object'&&error!==null&&'code'in error?String(error.code):'unknown';console.warn('[booking camera] capture failed:',code);setShowCamera(false);appAlert('Camera unavailable','Detail could not capture a photo. Check that camera access is enabled and close other apps using the camera, or choose a photo from your library.');}
+    finally{setTakingPhoto(false);}
   };
 
   const removePhoto = (url: string) => setPhotoUris((prev) => prev.filter((p) => p !== url));
@@ -254,7 +292,7 @@ export default function CreateBookingScreen() {
       case 'DETAILS':
         return true;
       case 'LOCATION':
-        return !!address || !!coordinates;
+        return category==='CAR'&&carServiceMode==='VISIT_WASH' ? !!selectedWashSiteId : !!address || !!coordinates;
       case 'SCHEDULE':
         return bookingMode==='INSTANT' || (!!timePreference && (timePreference !== 'CUSTOM' || (!!customDateTime && customDateTime.getTime() >= Date.now() + MIN_CUSTOM_BOOKING_LEAD_MS && customDateTime.getTime() <= Date.now() + MAX_CUSTOM_BOOKING_HORIZON_MS)));
       case 'BUDGET':
@@ -297,8 +335,11 @@ export default function CreateBookingScreen() {
       }
       const now = Date.now();
       const finalBudget = budgetOption === 'NOT_SURE' ? 0 : Number(budget);
+      const selectedWashSite=washSites.find(site=>site.id===selectedWashSiteId);
+      const visitWash=category==='CAR'&&carServiceMode==='VISIT_WASH';
+      if(visitWash&&!selectedWashSite){appAlert('Choose a car wash','Select an available published car wash before continuing.');return;}
       let resolvedCoordinates = coordinates;
-      if (!resolvedCoordinates && address.trim()) {
+      if (!visitWash&&!resolvedCoordinates && address.trim()) {
         try {
           const [match] = await Location.geocodeAsync(address.trim());
           if (match) resolvedCoordinates = { lat: match.latitude, lng: match.longitude };
@@ -307,15 +348,19 @@ export default function CreateBookingScreen() {
           // fabricated 0,0 coordinate. Ask the customer to resolve the address.
         }
       }
-      if (!resolvedCoordinates || !Number.isFinite(resolvedCoordinates.lat) || !Number.isFinite(resolvedCoordinates.lng)
+      if (!visitWash&&(!resolvedCoordinates || !Number.isFinite(resolvedCoordinates.lat) || !Number.isFinite(resolvedCoordinates.lng)
         || Math.abs(resolvedCoordinates.lat) > 90 || Math.abs(resolvedCoordinates.lng) > 180
-        || (resolvedCoordinates.lat === 0 && resolvedCoordinates.lng === 0)) {
+        || (resolvedCoordinates.lat === 0 && resolvedCoordinates.lng === 0))) {
         appAlert('Confirm the job location', 'We could not map that address. Use your current location or enter a more specific address before continuing.');
         return;
       }
 
       const intent = { category, serviceId, bookingMode, suppliesRequired, selections, choices, description, photoUris, address: address.trim(), coordinates: resolvedCoordinates, timePreference, scheduledDateTime: timePreference === 'CUSTOM' ? scheduledDateTime?.toISOString() ?? null : timePreference, finalBudget };
-      const signature = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, JSON.stringify(intent));
+      const serviceLocation=visitWash&&selectedWashSite
+        ? {lat:selectedWashSite.lat,lng:selectedWashSite.lng,address:selectedWashSite.address}
+        : {lat:resolvedCoordinates!.lat,lng:resolvedCoordinates!.lng,address:address.trim()};
+      const bookingIntent={...intent,serviceMode:category==='CAR'?carServiceMode:'MOBILE',washSiteId:selectedWashSite?.id??null,serviceLocation};
+      const signature = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, JSON.stringify(bookingIntent));
       const storageKey = `detail:booking-intent:${user.uid}:${signature}`;
       let idempotencyKey = '';
       try { idempotencyKey = (await AsyncStorage.getItem(storageKey)) ?? ''; } catch { /* create a fresh operation key */ }
@@ -328,13 +373,15 @@ export default function CreateBookingScreen() {
         customerName: profile?.displayName,
         customerPhoto: profile?.photoURL ?? '',
         category,
+        serviceMode: category==='CAR'?carServiceMode:'MOBILE',
+        washSiteId: selectedWashSite?.id,
         serviceId,
         bookingMode,
         suppliesRequired,
         serviceType: serviceLabel(),
         checklist,
         description,
-        location: { lat: resolvedCoordinates.lat, lng: resolvedCoordinates.lng, address },
+        location: serviceLocation,
         scheduledTime: timePreference,
         timePreference,
         scheduledDateTime: scheduledDateTime ? Timestamp.fromDate(scheduledDateTime) : null,
@@ -363,6 +410,12 @@ export default function CreateBookingScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-white">
+      <Modal visible={showCamera} animationType="slide" onRequestClose={()=>setShowCamera(false)}>
+        <View className="flex-1 bg-black"><ExpoCamera.CameraView ref={cameraRef} style={{flex:1}} facing="back" onCameraReady={()=>setCameraReady(true)} onMountError={()=>{setCameraReady(false);appAlert('Camera unavailable','The camera could not start. Close other apps using the camera, check permissions, or choose a photo from your library.');setShowCamera(false);}} />
+          <View className="absolute top-14 left-5 right-5 flex-row justify-between"><TouchableOpacity onPress={()=>setShowCamera(false)} className="h-11 w-11 rounded-full bg-black/50 items-center justify-center"><X size={22} color="white"/></TouchableOpacity><Text className="font-display font-black text-white mt-3">Booking photo</Text><View className="w-11"/></View>
+          <View className="absolute bottom-12 left-0 right-0 items-center"><TouchableOpacity accessibilityRole="button" accessibilityLabel="Take booking photo" disabled={!cameraReady||takingPhoto} onPress={()=>void captureBookingPhoto()} className={`h-20 w-20 rounded-full border-4 border-white items-center justify-center ${cameraReady?'bg-white/20':'bg-white/5'}`}>{takingPhoto?<ActivityIndicator color="white"/>:<View className="h-14 w-14 rounded-full bg-white"/>}</TouchableOpacity><Text className="font-sans text-white mt-3">{cameraReady?'Tap to take photo':'Starting camera…'}</Text></View>
+        </View>
+      </Modal>
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View className="flex-row items-center gap-3 px-5 pt-4 pb-2">
           <TouchableOpacity onPress={goBack} className="w-10 h-10 bg-ink/5 rounded-2xl items-center justify-center">
@@ -519,6 +572,20 @@ export default function CreateBookingScreen() {
 
           {step === 'LOCATION' && (
             <View>
+              {category==='CAR'&&<>
+                <Text className="text-2xl font-display font-black text-ink mb-1">Where should we clean your car?</Text>
+                <Text className="font-sans text-sm text-ink/50 font-medium mb-4">Choose a published wash location or have a cleaner come to you.</Text>
+                {[{id:'MOBILE' as const,title:'Cleaner comes to you',copy:'The cleaner travels to your address.'},{id:'VISIT_WASH' as const,title:'I’ll visit a car wash',copy:'Choose a car wash with a published location.'}].map(option=><TouchableOpacity key={option.id} onPress={()=>{setCarServiceMode(option.id);setSelectedWashSiteId('');if(option.id==='VISIT_WASH')setBookingMode('SCHEDULED');}} className={`p-4 rounded-2xl border-2 mb-2 flex-row items-center ${carServiceMode===option.id?'border-accent bg-white':'border-ink/10 bg-ink/[0.02]'}`}><View className="flex-1"><Text className="font-sans-bold text-ink">{option.title}</Text><Text className="font-sans text-xs text-ink/50 mt-1">{option.copy}</Text></View>{carServiceMode===option.id&&<Check size={18} color="#3906D2"/>}</TouchableOpacity>)}
+              </>}
+              {category==='CAR'&&carServiceMode==='VISIT_WASH'?<>
+                <Text className="text-sm font-display font-black text-ink mt-4 mb-2">Find a wash near</Text>
+                <View className="mb-3"><TextInput className="font-sans rounded-2xl px-4 py-4 text-sm text-ink bg-ink/5" placeholder="Enter a town or area to search…" placeholderTextColor="#9C94C4" value={address} onChangeText={value=>{setAddress(value);setCoordinates(null);}} /></View>
+                {addressSuggestions.length>0&&<View className="mb-3 rounded-2xl border border-ink/10 bg-white">{addressSuggestions.map(item=><TouchableOpacity key={item.id} onPress={()=>{setAddress(item.label);setCoordinates({lat:item.lat,lng:item.lng});setSearchProximity({latitude:item.lat,longitude:item.lng});setAddressSuggestions([]);}} className="px-4 py-3 border-b border-ink/5"><Text className="font-sans text-sm text-ink">{item.label}</Text></TouchableOpacity>)}</View>}
+                <TouchableOpacity onPress={useCurrentLocation} disabled={isFetchingLocation} className="flex-row items-center gap-3 bg-accent/10 border border-accent/20 rounded-2xl px-4 py-3 mb-4">{isFetchingLocation?<ActivityIndicator size="small" color="#3906D2"/>:<MapPin size={18} color="#3906D2"/>}<Text className="text-sm font-display font-black text-accent">{isFetchingLocation?'Finding your area…':'Use my current area'}</Text></TouchableOpacity>
+                <Text className="font-display font-black text-ink mb-2">Available car washes</Text>
+                {loadingWashSites?<ActivityIndicator color="#3906D2"/>:washSites.length===0?<Text className="font-sans text-sm text-ink/50 py-3">No published washes found nearby. Try another area or choose a cleaner to come to you.</Text>:washSites.map(site=><TouchableOpacity key={site.id} onPress={()=>setSelectedWashSiteId(site.id)} className={`rounded-2xl border-2 p-4 mb-2 ${selectedWashSiteId===site.id?'border-accent bg-accent/5':'border-ink/10 bg-white'}`}><View className="flex-row items-start gap-3"><View className="w-10 h-10 bg-accent/10 rounded-xl items-center justify-center"><Car size={18} color="#3906D2"/></View><View className="flex-1"><Text className="font-display font-black text-ink">{site.name}</Text><Text className="font-sans text-xs text-ink/55 mt-1">{site.address}</Text></View>{selectedWashSiteId===site.id&&<Check size={18} color="#3906D2"/>}</View></TouchableOpacity>)}
+                <Text className="font-sans text-xs text-ink/45 mt-2">The selected wash’s published address becomes the booking destination and is shared with its cleaner.</Text>
+              </>:<>
               <Text className="text-2xl font-display font-black text-ink mb-1">Where is the job?</Text>
               <Text className="font-sans text-sm text-ink/50 font-medium mb-6">Enter the address or use your current location</Text>
 
@@ -549,6 +616,7 @@ export default function CreateBookingScreen() {
                   {isFetchingLocation ? 'Detecting location…' : 'Use my current location'}
                 </Text>
               </TouchableOpacity>
+              </>}
             </View>
           )}
 

@@ -59,6 +59,13 @@
         }
       ],
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Take profile and portfolio photos, add photos to bookings, capture cleaning progress or completion, and share photos in chat.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
         "expo-font",
         {
           "fonts": []

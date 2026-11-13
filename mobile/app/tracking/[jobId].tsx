@@ -128,26 +128,27 @@ export default function TrackingScreen() {
 
   const isCustomer = profile?.role === 'CUSTOMER';
   const isCleaner = profile?.role === 'CLEANER';
+  const isVisitWash=job?.category==='CAR'&&job?.serviceMode==='VISIT_WASH';
   const rescheduleProposal = job?.rescheduleProposal;
 
   useEffect(()=>{
     let active=true;
-    const origin=job?.cleanerLocation,destination=job?.location;
-    if(!isCustomer||!origin||!destination){setRouteCoordinates(null);setEtaMinutes(null);setRouteIsRoadBased(false);return()=>{active=false;};}
+    const origin=isCustomer?job?.cleanerLocation:profile?.location,destination=job?.location;
+    if((!isCustomer&&!isCleaner)||!origin||!destination||!['ASSIGNED','EN_ROUTE','IN_PROGRESS'].includes(String(job?.status))){setRouteCoordinates(null);setEtaMinutes(null);setRouteIsRoadBased(false);return()=>{active=false;};}
     getDrivingRoute(origin,destination).then(route=>{if(active){setEtaMinutes(route.durationMinutes);setRouteCoordinates(route.coordinates);setRouteIsRoadBased(true);}}).catch(()=>{
       if(active){setEtaMinutes(Math.max(1,Math.round(haversineDistanceKm(origin,destination)/28*60)));setRouteCoordinates([[origin.lng,origin.lat],[destination.lng,destination.lat]]);setRouteIsRoadBased(false);}
     });
     return()=>{active=false;};
-  },[isCustomer,job?.cleanerLocation?.lat,job?.cleanerLocation?.lng,job?.location?.lat,job?.location?.lng]);
+  },[isCustomer,isCleaner,profile?.location?.lat,profile?.location?.lng,job?.status,job?.cleanerLocation?.lat,job?.cleanerLocation?.lng,job?.location?.lat,job?.location?.lng]);
 
   useEffect(() => {
-    const cleaner = job?.cleanerLocation;
+    const cleaner = isCustomer?job?.cleanerLocation:profile?.location;
     const destination = job?.location;
-    if (!isCustomer || !cleaner || !destination || !trackingCameraRef.current) return;
+    if ((!isCustomer&&!isCleaner) || !cleaner || !destination || !trackingCameraRef.current) return;
     const northEast: [number, number] = [Math.max(cleaner.lng, destination.lng), Math.max(cleaner.lat, destination.lat)];
     const southWest: [number, number] = [Math.min(cleaner.lng, destination.lng), Math.min(cleaner.lat, destination.lat)];
     trackingCameraRef.current.fitBounds(northEast, southWest, [150, 48, 320, 48], 700);
-  }, [isCustomer, job?.cleanerLocation?.lat, job?.cleanerLocation?.lng, job?.location?.lat, job?.location?.lng]);
+  }, [isCustomer,isCleaner,profile?.location?.lat,profile?.location?.lng,job?.cleanerLocation?.lat,job?.cleanerLocation?.lng,job?.location?.lat,job?.location?.lng]);
 
   useEffect(()=>{
     if(!isCustomer||job?.bookingMode!=='INSTANT'||job.status!=='PENDING')return;
@@ -532,6 +533,7 @@ export default function TrackingScreen() {
   const mapRegion = job.location && (job.location.lat !== 0 || job.location.lng !== 0)
     ? { latitude: job.location.lat, longitude: job.location.lng, latitudeDelta: 0.015, longitudeDelta: 0.015 }
     : { latitude: -17.8252, longitude: 31.0335, latitudeDelta: 0.12, longitudeDelta: 0.12 };
+  const routeOrigin=isCustomer?job.cleanerLocation:profile?.location;
 
   if (step === 'SUCCESS') {
     return (
@@ -735,20 +737,20 @@ export default function TrackingScreen() {
           />
           <Mapbox.UserLocation visible />
           {job.location && (
-            <Mapbox.PointAnnotation id="job-location" coordinate={[job.location.lng, job.location.lat]} title="Job Location">
+            <Mapbox.PointAnnotation id="job-location" coordinate={[job.location.lng, job.location.lat]} title={isVisitWash?String(job.washSiteName||'Selected Car Wash'):'Job Location'}>
               <View className="w-10 h-10 bg-accent rounded-2xl items-center justify-center shadow-lg">
                 <MapPin size={20} color="#fff" />
               </View>
             </Mapbox.PointAnnotation>
           )}
 
-          {isCustomer && job.cleanerLocation && job.location && (
+          {(isCustomer&&job.cleanerLocation||isCleaner&&profile?.location)&&job.location&&(
             <>
-              <Mapbox.PointAnnotation id="cleaner-location" coordinate={[job.cleanerLocation.lng, job.cleanerLocation.lat]} title={job.cleanerName ?? 'Your Cleaner'}>
+              {isCustomer&&job.cleanerLocation&&<Mapbox.PointAnnotation id="cleaner-location" coordinate={[job.cleanerLocation.lng, job.cleanerLocation.lat]} title={job.cleanerName ?? 'Your Cleaner'}>
                 <View className="w-10 h-10 bg-emerald-500 rounded-2xl items-center justify-center shadow-lg">
                   <Navigation size={20} color="#fff" />
                 </View>
-              </Mapbox.PointAnnotation>
+              </Mapbox.PointAnnotation>}
               <Mapbox.ShapeSource
                 id="cleaner-route-source"
                 shape={{
@@ -756,7 +758,7 @@ export default function TrackingScreen() {
                   properties: {},
                   geometry: {
                     type: 'LineString',
-                      coordinates: routeCoordinates??[[job.cleanerLocation.lng,job.cleanerLocation.lat],[job.location.lng,job.location.lat]],
+                      coordinates: routeCoordinates??[[routeOrigin!.lng,routeOrigin!.lat],[job.location.lng,job.location.lat]],
                   },
                 }}
               >
@@ -819,6 +821,8 @@ export default function TrackingScreen() {
             </View>
           </View>
         )}
+
+        {job.location&&['ASSIGNED','EN_ROUTE','IN_PROGRESS'].includes(String(job.status))&&(isCustomer||isCleaner)&&<TouchableOpacity accessibilityRole="button" onPress={()=>{const target=`${job.location.lat},${job.location.lng}`;Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(target)}&travelmode=driving`).catch(()=>appAlert('Directions unavailable',`Open maps and search for ${job.location.address}.`));}} className="flex-row items-center gap-3 rounded-2xl border border-accent/15 bg-white p-4 mb-4"><View className="w-10 h-10 rounded-xl bg-accent/10 items-center justify-center"><MapPin size={18} color="#3906D2"/></View><View className="flex-1"><Text className="font-display font-black text-ink">{isVisitWash?String(job.washSiteName||'Selected car wash'):'Job location'}</Text><Text className="font-sans text-xs text-ink/55 mt-1">{job.location.address||'Booking address'}</Text><Text className="font-sans text-xs text-accent mt-1">{isCleaner?'Open driving directions':'View destination'}</Text></View><Navigation size={18} color="#3906D2"/></TouchableOpacity>}
 
         <View className="flex-row items-center gap-4 bg-white/60 rounded-3xl p-4 mb-4 border border-white">
           <View className="relative">

@@ -1,4 +1,3 @@
-import { showPermissionDenied } from '@/utils/permissionPrompt';
 import { appAlert } from '@/components/AppDialog';
 import React, { useState } from 'react';
 import {
@@ -11,15 +10,12 @@ import {
   ScrollView,
   ActivityIndicator,
 
-  Image,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { User, Briefcase, ChevronRight, Camera } from 'lucide-react-native';
-import * as ImagePicker from 'expo-image-picker';
+import { User, Briefcase, ChevronRight } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { auth, db, setDoc, doc, serverTimestamp } from '../../services/supabase';
-import { uploadProfilePhoto } from '../../services/storage';
 import { GlassCard } from '../../components/glass';
 
 type Role = 'CUSTOMER' | 'CLEANER';
@@ -28,43 +24,7 @@ export default function CreateProfileScreen() {
   const { user, refreshProfile } = useAuth();
   const [name, setName] = useState('');
   const [role, setRole] = useState<Role>('CUSTOMER');
-  const [photoURL, setPhotoURL] = useState('');
-  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-
-  const handlePickPhoto = async () => {
-    appAlert('Profile Photo', 'Add a photo so people recognize you', [
-      { text: 'Take Photo', onPress: () => chooseImage(true) },
-      { text: 'Choose from Gallery', onPress: () => chooseImage(false) },
-      ...(photoURL ? [{ text: 'Remove Photo', style: 'destructive' as const, onPress: () => setPhotoURL('') }] : []),
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  };
-
-  const chooseImage = async (fromCamera: boolean) => {
-    try {
-      const permission = fromCamera
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        showPermissionDenied('Allow camera or photo access to add your profile photo.', permission.canAskAgain);
-        return;
-      }
-      const result = fromCamera
-        ? await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.8 })
-        : await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.8 });
-
-      if (result.canceled || !result.assets?.[0]?.uri) return;
-
-      setIsUploadingPhoto(true);
-      const url = await uploadProfilePhoto(result.assets[0].uri);
-      setPhotoURL(url);
-    } catch {
-      appAlert('Upload Failed', 'Could not upload photo. You can still proceed or try again.');
-    } finally {
-      setIsUploadingPhoto(false);
-    }
-  };
 
   const handleContinue = async () => {
     if (!name.trim()) {
@@ -81,7 +41,7 @@ export default function CreateProfileScreen() {
           uid: user.uid,
           email: user.email ?? '',
           displayName: name.trim(),
-          photoURL: photoURL.trim(),
+          photoURL: '',
           // Cleaner role is granted only after provider verified identity and
           // the Cleaner Agreement is accepted.
           role: role === 'CLEANER' ? 'CUSTOMER' : role,
@@ -94,7 +54,7 @@ export default function CreateProfileScreen() {
         { merge: true }
       );
       await refreshProfile();
-      router.replace(role === 'CLEANER' ? '/register-cleaner' : '/(auth)/permissions');
+      router.replace(role === 'CLEANER' ? '/(auth)/permissions?next=cleaner' : '/(auth)/permissions');
     } catch (err: any) {
       appAlert('Error', 'Failed to save profile. Please try again.');
     } finally {
@@ -121,31 +81,7 @@ export default function CreateProfileScreen() {
             Tell us a bit about yourself to get started
           </Text>
 
-          {/* Profile photo picker */}
-          <View className="items-center mb-6">
-            <TouchableOpacity
-              onPress={handlePickPhoto}
-              disabled={isUploadingPhoto}
-              activeOpacity={0.85}
-              className="relative"
-            >
-              <View className="w-24 h-24 rounded-full bg-accent/10 items-center justify-center border-2 border-accent overflow-hidden">
-                {isUploadingPhoto ? (
-                  <ActivityIndicator color="#3906D2" size="small" />
-                ) : photoURL ? (
-                  <Image source={{ uri: photoURL }} className="w-full h-full" />
-                ) : (
-                  <User size={38} color="#3906D2" />
-                )}
-              </View>
-              <View className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-accent items-center justify-center border-2 border-white shadow-sm">
-                <Camera size={14} color="#fff" />
-              </View>
-            </TouchableOpacity>
-            <Text className="font-sans text-xs font-bold text-ink/50 mt-2">
-              {photoURL ? 'Tap to change photo' : 'Add profile picture (Optional)'}
-            </Text>
-          </View>
+          <View className="rounded-2xl bg-accent/5 border border-accent/10 p-4 mb-6"><Text className="font-sans text-sm text-ink/70">You can add a profile photo from your profile after setup.</Text></View>
 
           <GlassCard style={{ padding: 20 }}>
             <View className="mb-6">

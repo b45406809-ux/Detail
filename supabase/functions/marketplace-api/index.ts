@@ -677,7 +677,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       return { success: true, jobId: newJobId, cleanerName: cleaner.displayName, targetPrice };
     }
     case 'createBooking': {
-      const actor = authed(); await requireActiveMarketplaceAccount(actor); const key = requireKey(input.idempotencyKey); const booking = input.booking ?? {};
+      const actor = authed(); await requireActiveMarketplaceAccount(actor); const key = requireKey(input.idempotencyKey); let booking = input.booking ?? {};
       await enforceRateLimit(request, actor, 'create_booking', 8, 3600);
       const [{data:config,error:configError},{data:operations,error:operationsError}]=await Promise.all([admin.from('configuration').select('value').eq('key','beta').maybeSingle(),admin.from('configuration').select('value').eq('key','operations').maybeSingle()]);
       if(configError)throw configError;if(operationsError)throw operationsError;
@@ -699,6 +699,20 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const prices: Record<string,number> = { BASIC_HOUSE:10,SPECIFIC_ROOM:15,STANDARD_HOUSE:35,DEEP_HOUSE:80,EXTERIOR_WASH:3,FULL_CAR:12,DEEP_DETAIL:65 };
       const basePrice=prices[text(booking.serviceId,40)];
       if(bookingMode==='INSTANT'&&!basePrice)fail(400,'Choose a supported fixed-price service for Book Now.');
+      const serviceMode=booking.category==='CAR'?(booking.serviceMode==='VISIT_WASH'?'VISIT_WASH':'MOBILE'):'MOBILE';
+      let washSite: Json|null=null;
+      if(serviceMode==='VISIT_WASH') {
+        if(bookingMode==='INSTANT')fail(400,'Visit a wash bookings currently use scheduled cleaner quotes.');
+        const washSiteId=text(booking.washSiteId,80);
+        if(!washSiteId)fail(400,'Choose a published car wash location.');
+        const {data:siteRows,error:siteError}=await admin.rpc('get_car_wash_site',{p_id:washSiteId});
+        if(siteError)throw siteError;const site=siteRows?.[0];if(!site||!site.enabled)fail(404,'That wash location is no longer available. Choose another location.');
+        const {data:owner,error:ownerError}=await admin.from('users').select('role,verificationstatus,cleaneragreementaccepted,cleaneronboardingcomplete,issuspended,isbanned,accountdeletedat,servicecategories').eq('id',site.cleaner_id).maybeSingle();
+        if(ownerError)throw ownerError;
+        if(!owner||owner.role!=='CLEANER'||owner.verificationstatus!=='VERIFIED'||!owner.cleaneragreementaccepted||!owner.cleaneronboardingcomplete||owner.issuspended||owner.isbanned||owner.accountdeletedat||(owner.servicecategories??[]).indexOf('CAR')<0)fail(409,'That wash cannot accept bookings right now. Choose another location.');
+        washSite={id:site.id,cleanerId:site.cleaner_id,name:site.name,address:site.address,lat:Number(site.lat),lng:Number(site.lng)};
+        booking={...booking,serviceMode,washSiteId:site.id,washSiteCleanerId:site.cleaner_id,washSiteName:site.name,location:{lat:Number(site.lat),lng:Number(site.lng),address:site.address}};
+      } else booking={...booking,serviceMode};
       const latitude=Number(booking.location?.lat),longitude=Number(booking.location?.lng);
       if(!Number.isFinite(latitude)||!Number.isFinite(longitude)||Math.abs(latitude)>90||Math.abs(longitude)>180||(latitude===0&&longitude===0))
         fail(400,'A mappable job location is required. Use the location button or enter a more specific address.');
@@ -713,6 +727,11 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         if (offerError) throw offerError;
         await Promise.all(cleanerIds.map((cleanerId: string) => notify(cleanerId, { type:'INSTANT_BOOKING_OFFER', title:'Nearby cleaning request', body:`A ${booking.serviceType || 'cleaning'} request is available nearby. Open Detail to respond.`, jobId })));
         return { success:true, jobId, matchedCleaners:cleanerIds.length };
+      }
+      if(serviceMode==='VISIT_WASH'&&washSite) {
+        const cleanerId=String(washSite.cleanerId);
+        await notify(cleanerId,{type:'NEW_SCHEDULED_JOB',title:'Car wash booking request',body:`A customer requested ${String(washSite.name)}. Review the vehicle and send a quote in Detail.`,jobId});
+        return {success:true,jobId,notifiedCleaners:1};
       }
       const {data:scheduledNotices,error:noticeError}=await admin.rpc('notify_scheduled_job_cleaners',{p_job_id:jobId,p_customer_id:actor,p_limit:20});
       if(noticeError)throw noticeError;
@@ -1095,6 +1114,27 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       }
       return {cases:cases.map((item:Json)=>({id:item.id,jobId:item.jobid,subject:item.reason,status:item.status,createdAt:item.createdat,description:item.data?.description??item.data?.resolution??'',resolution:item.data?.resolution??null}))};
     }
+    case 'getCleanerMapVisibility': {
+      const actor=authed(), profile=await userRow(actor);
+      return { enabled: profile.metadata?.showOnCustomerMap === true };
+    }
+    case 'setCleanerMapVisibility': {
+      const actor=authed();
+      if (typeof input.enabled !== 'boolean') fail(400, 'Choose whether your approximate location is shown.');
+      const {error}=await admin.rpc('set_cleaner_map_visibility',{p_user_id:actor,p_enabled:input.enabled});
+      if(error)throw error;
+      return {enabled:input.enabled};
+    }
+    case 'nearbyCleanersForMap': {
+      const actor=authed();
+      await requireActiveMarketplaceAccount(actor);
+      await enforceRateLimit(request,actor,'nearby_cleaners_map',30,300);
+      const lat=input.lat,lng=input.lng;
+      if(typeof lat!=='number'||typeof lng!=='number'||!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180) fail(400,'A valid location is required.');
+      const {data,error}=await admin.rpc('nearby_cleaners_for_map',{p_lat:lat,p_lng:lng});
+      if(error)throw error;
+      return {cleaners:data??[]};
+    }
     case 'searchVerifiedCleaners': {
       const actor=authed();
       const search=text(input.search,80).replace(/[^a-zA-Z0-9 -]/g,' ').trim().replace(/\s+/g,' ');
@@ -1127,9 +1167,26 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(profile.role!=='CLEANER'||profile.verificationstatus!=='VERIFIED'||!profile.cleaneragreementaccepted||!profile.cleaneronboardingcomplete||profile.issuspended||profile.isbanned)fail(403,'Only active, verified cleaners can review open bookings.');
       const {data:openJob,error:openError}=await admin.from('openjobs').select('jobid,status').eq('jobid',jobId).eq('status','PENDING').maybeSingle();
       if(openError)throw openError;if(!openJob)fail(404,'This booking is no longer accepting quotes.');
-      const {data:job,error}=await admin.from('jobs').select('id,category,servicetype,checklist,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status').eq('id',openJob.jobid).maybeSingle();
+      const {data:job,error}=await admin.from('jobs').select('id,category,servicetype,checklist,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status,data').eq('id',openJob.jobid).maybeSingle();
       if(error)throw error;if(!job||job.status!=='PENDING')fail(404,'This booking is no longer accepting quotes.');
+      if(job.data?.serviceMode==='VISIT_WASH'&&job.data?.washSiteCleanerId!==actor)fail(404,'This booking is reserved for the selected car wash.');
       return toCleanerBookingSummary(job as Json);
+    }
+    case 'nearbyCleanerJobs': {
+      const actor=authed(),profile=await userRow(actor);
+      if(profile.role!=='CLEANER'||profile.verificationstatus!=='VERIFIED'||!profile.cleaneragreementaccepted||!profile.cleaneronboardingcomplete||profile.issuspended||profile.isbanned||profile.accountdeletedat)fail(403,'Only active, verified cleaners can review open bookings.');
+      await enforceRateLimit(request,actor,'nearby_cleaner_jobs',30,300);
+      const lat=input.lat,lng=input.lng;
+      if(typeof lat!=='number'||typeof lng!=='number'||!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)fail(400,'A valid location is required.');
+      const {data:nearby,error:nearbyError}=await admin.rpc('nearby_open_job_ids',{p_cleaner_id:actor,p_lat:lat,p_lng:lng});
+      if(nearbyError)throw nearbyError;
+      const ids:string[]=(nearby??[]).map((row:Json)=>row.jobid).filter((id:unknown):id is string=>typeof id==='string');
+      if(!ids.length)return {jobs:[]};
+      const {data:jobs,error}=await admin.from('jobs').select('id,category,servicetype,checklist,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status,data').in('id',ids).eq('status','PENDING');
+      if(error)throw error;
+      const eligibleJobs=(jobs??[]).filter((job:Json)=>job.data?.serviceMode!=='VISIT_WASH'||job.data?.washSiteCleanerId===actor);
+      const byId=new Map<string,Json>(eligibleJobs.map((job:Json):[string,Json]=>[String(job.id),job]));
+      return {jobs:ids.map(id=>byId.get(id)).filter((job):job is Json=>!!job).map(job=>toCleanerBookingSummary(job))};
     }
     case 'getCleanerBookingPreviews': {
       const actor=authed(),profile=await userRow(actor);
@@ -1140,9 +1197,10 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(openError)throw openError;
       const openIds=(openJobs??[]).map((row:Json)=>row.jobid).filter((id:unknown):id is string=>typeof id==='string');
       if(!openIds.length)return {jobs:[]};
-      const {data:jobs,error}=await admin.from('jobs').select('id,category,servicetype,checklist,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status').in('id',openIds).eq('status','PENDING');
+      const {data:jobs,error}=await admin.from('jobs').select('id,category,servicetype,checklist,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status,data').in('id',openIds).eq('status','PENDING');
       if(error)throw error;
-      const byId=new Map<string,Json>((jobs??[]).map((job:Json):[string,Json]=>[String(job.id),job]));
+      const eligibleJobs=(jobs??[]).filter((job:Json)=>job.data?.serviceMode!=='VISIT_WASH'||job.data?.washSiteCleanerId===actor);
+      const byId=new Map<string,Json>(eligibleJobs.map((job:Json):[string,Json]=>[String(job.id),job]));
       return {jobs:openIds.map(id=>byId.get(id)).filter((job):job is Json=>!!job).map(job=>toCleanerBookingSummary(job))};
     }
     case 'addCleanerPortfolioPhoto': {
@@ -1151,6 +1209,31 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(!path.startsWith(`detail-media/cleaner-portfolio/${actor}/`))fail(400,'Upload the photo to your private portfolio folder first.');
       const {data:existing}=await admin.from('cleanerportfolio').select('id').eq('cleanerid',actor);if((existing?.length??0)>=12)fail(409,'Portfolio limit reached. Remove a photo before adding another.');
       const {data,error}=await admin.from('cleanerportfolio').insert({cleanerid:actor,imagepath:path.slice('detail-media/'.length),caption:text(input.caption,240)}).select('id').single();if(error)throw error;return {id:data.id};
+    }
+    case 'listCarWashSites': {
+      const actor=authed();await requireActiveMarketplaceAccount(actor);
+      const lat=Number(input.lat),lng=Number(input.lng);
+      if(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)fail(400,'Choose a valid area to find car washes.');
+      await enforceRateLimit(request,actor,'list_car_wash_sites',30,300);
+      const {data,error}=await admin.rpc('list_car_wash_sites',{p_lat:lat,p_lng:lng});if(error)throw error;
+      return {sites:(data??[]).map((site:Json)=>({id:site.id,cleanerId:site.cleaner_id,name:site.name,address:site.address,lat:Number(site.lat),lng:Number(site.lng)}))};
+    }
+    case 'getMyCarWashSite': {
+      const actor=authed(),profile=await userRow(actor);
+      if(profile.role!=='CLEANER'||profile.verificationstatus!=='VERIFIED'||profile.issuspended||profile.isbanned)fail(403,'Only verified cleaners can manage a wash location.');
+      const {data:rows,error}=await admin.from('car_wash_sites').select('id').eq('cleaner_id',actor).maybeSingle();if(error)throw error;
+      if(!rows)return {site:null};
+      const {data,error:siteError}=await admin.rpc('get_car_wash_site',{p_id:rows.id});if(siteError)throw siteError;
+      const site=data?.[0];return {site:site?{id:site.id,name:site.name,address:site.address,lat:Number(site.lat),lng:Number(site.lng),enabled:site.enabled}:null};
+    }
+    case 'saveMyCarWashSite': {
+      const actor=authed(),profile=await userRow(actor);
+      if(profile.role!=='CLEANER'||profile.verificationstatus!=='VERIFIED'||!profile.cleaneragreementaccepted||!profile.cleaneronboardingcomplete||profile.issuspended||profile.isbanned||!(profile.servicecategories??[]).includes('CAR'))fail(403,'Complete verified car cleaner registration before publishing a wash location.');
+      await enforceRateLimit(request,actor,'save_car_wash_site',10,3600);
+      const lat=Number(input.lat),lng=Number(input.lng),enabled=input.enabled!==false;
+      if(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)fail(400,'Choose a valid map location.');
+      const {data,error}=await admin.rpc('save_car_wash_site',{p_cleaner_id:actor,p_name:text(input.name,80),p_address:text(input.address,240),p_lat:lat,p_lng:lng,p_enabled:enabled});if(error)throw error;
+      return {success:true,id:data,enabled};
     }
     case 'removeCleanerPortfolioPhoto': {
       const actor=authed(), photoId=text(input.photoId,80);const {data:photo}=await admin.from('cleanerportfolio').select('imagepath').eq('id',photoId).eq('cleanerid',actor).maybeSingle();if(!photo)fail(404,'Portfolio photo not found.');

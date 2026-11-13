@@ -14,6 +14,7 @@ import {
   Animated,
   Image,
   Platform,
+  Switch,
 
   AppState,
 } from 'react-native';
@@ -50,7 +51,7 @@ import {
   limit,
 } from '../../services/supabase';
 import { Job, JobStatus, Favorite } from '../../types';
-import { rankJobsByProximity } from '../../services/matching';
+import { haversineDistanceKm, rankJobsByProximity } from '../../services/matching';
 import { GlassCard, GlassSheet, GlassIconButton, RoleToggle } from '../../components/glass';
 import { MapPlaceholder } from '../../components/MapPlaceholder';
 import { IS_DEMO } from '../../utils/env';
@@ -70,6 +71,9 @@ export default function HomeScreen() {
   const [jobsError, setJobsError] = useState(false);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [mapCleaners, setMapCleaners] = useState<{id:string;display_name:string;lat:number;lng:number}[]>([]);
+  const [mapVisibility, setMapVisibility] = useState(false);
+  const [mapVisibilityBusy, setMapVisibilityBusy] = useState(false);
   const [canUseForegroundLocation, setCanUseForegroundLocation] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
@@ -81,6 +85,30 @@ export default function HomeScreen() {
   );
 
   const isCustomer = viewRole === 'CUSTOMER';
+  const mapSearchLat = currentLocation ? Math.round(currentLocation.lat * 100) / 100 : null;
+  const mapSearchLng = currentLocation ? Math.round(currentLocation.lng * 100) / 100 : null;
+
+  useEffect(() => {
+    let active = true;
+    if (!userId || isCustomer) { setMapVisibility(false); return; }
+    callFunction<{}, {enabled:boolean}>('getCleanerMapVisibility', {}).then(result => { if (active) setMapVisibility(result.enabled); }).catch(() => { if (active) setMapVisibility(false); });
+    return () => { active = false; };
+  }, [userId, isCustomer]);
+
+  useEffect(() => {
+    let active = true;
+    if (!userId || !isCustomer || mapSearchLat === null || mapSearchLng === null) { setMapCleaners([]); return; }
+    const refresh = () => { void callFunction<{lat:number;lng:number},{cleaners:typeof mapCleaners}>('nearbyCleanersForMap', {lat:mapSearchLat,lng:mapSearchLng}).then(result => { if (active) setMapCleaners(result.cleaners); }).catch(() => { if (active) setMapCleaners([]); }); };
+    refresh(); const timer = setInterval(refresh, 120000);
+    return () => { active = false; clearInterval(timer); };
+  }, [userId, isCustomer, mapSearchLat, mapSearchLng, refreshNonce]);
+
+  const changeMapVisibility = async (enabled:boolean) => {
+    setMapVisibilityBusy(true);
+    try { const result=await callFunction<{enabled:boolean},{enabled:boolean}>('setCleanerMapVisibility',{enabled}); setMapVisibility(result.enabled); }
+    catch (error) { appAlert('Could not update map visibility', error instanceof Error ? error.message : 'Please try again.'); }
+    finally { setMapVisibilityBusy(false); }
+  };
 
   useEffect(() => {
     if (profile?.role) {
@@ -189,31 +217,38 @@ export default function HomeScreen() {
   }, [userId, isCustomer, refreshNonce]);
 
   useEffect(() => {
-    if (isCustomer || !userId) { setAvailableJobs([]); setJobsLoading(false); setJobsError(false); return; }
+    if (isCustomer || !userId || mapSearchLat === null || mapSearchLng === null) { setAvailableJobs([]); setJobsLoading(false); setJobsError(false); return; }
     setJobsLoading(true);
     setJobsError(false);
-    // Keep the open-job listener realtime, then hydrate one sanitized scope
-    // batch so cleaners can assess work without reading the private job row.
+    // A feed update prompts a geographically scoped refresh; the query itself
+    // selects nearest eligible jobs rather than only the newest global jobs.
     const q = query(collection(db, 'openJobs'), where('status', '==', JobStatus.PENDING), orderBy('createdAt', 'desc'), limit(30));
     let active = true;
     let revision = 0;
-    const unsubscribe = onSnapshot(
-      q,
-      (snap) => {
+    let nextRefreshAt = 0;
+    let pendingRefresh: ReturnType<typeof setTimeout> | undefined;
+    const refreshJobs = () => {
+        nextRefreshAt = Date.now() + 15000;
         const currentRevision = ++revision;
-        const jobIds = snap.docs.map((item) => item.id);
-        if (!jobIds.length) { setAvailableJobs([]); setJobsLoading(false); setJobsError(false); return; }
-        callFunction<{ jobIds: string[] }, { jobs: Job[] }>('getCleanerBookingPreviews', { jobIds })
+        callFunction<{ lat:number;lng:number }, { jobs: Job[] }>('nearbyCleanerJobs', {lat:mapSearchLat,lng:mapSearchLng})
           .then(({ jobs }) => { if (active && currentRevision === revision) { setAvailableJobs(jobs); setJobsLoading(false); setJobsError(false); } })
           .catch((err) => {
             console.warn('[home] availableJobs preview failed:', err instanceof Error ? err.message : String(err));
             if (active && currentRevision === revision) { setAvailableJobs([]); setJobsLoading(false); setJobsError(true); }
           });
-      },
+    };
+    const scheduleRefresh = () => {
+      if (pendingRefresh) return;
+      pendingRefresh = setTimeout(() => { pendingRefresh = undefined; refreshJobs(); }, Math.max(0, nextRefreshAt - Date.now()));
+    };
+    const unsubscribe = onSnapshot(
+      q,
+      () => scheduleRefresh(),
       (err) => { console.warn('[home] availableJobs listener error:', err.message); revision++; if (active) { setAvailableJobs([]); setJobsLoading(false); setJobsError(true); } }
     );
-    return () => { active = false; revision++; unsubscribe(); };
-  }, [userId, isCustomer, refreshNonce]);
+    const timer = setInterval(scheduleRefresh, 120000);
+    return () => { active = false; revision++; clearInterval(timer); if (pendingRefresh) clearTimeout(pendingRefresh); unsubscribe(); };
+  }, [userId, isCustomer, refreshNonce, mapSearchLat, mapSearchLng]);
 
   useEffect(() => {
     if (!userId || !isCustomer) { setFavorites([]); return; }
@@ -293,6 +328,31 @@ export default function HomeScreen() {
             }}
           />
           <Mapbox.UserLocation visible />
+          {isCustomer && mapCleaners.filter(cleaner => Number.isFinite(cleaner.lat) && Number.isFinite(cleaner.lng)).map(cleaner => (
+            <Mapbox.PointAnnotation key={`cleaner-${cleaner.id}`} id={`cleaner-${cleaner.id}`} coordinate={[cleaner.lng, cleaner.lat]} onSelected={() => appAlert(cleaner.display_name || 'Nearby cleaner', 'This marker shows an approximate area. Open Find a cleaner to browse verified cleaners.', [{text:'Close',style:'cancel'},{text:'Find a cleaner',onPress:()=>router.push('/cleaners')}])}>
+              <View accessibilityLabel="Approximate cleaner area" style={{ backgroundColor:'#3906D2', borderColor:'#fff', borderWidth:2, borderRadius:20, padding:8 }}><Brush size={18} color="#fff" /></View>
+            </Mapbox.PointAnnotation>
+          ))}
+          {!isCustomer && cleanerStatus === 'AVAILABLE' && currentLocation && rankJobsByProximity(availableJobs, currentLocation)
+            .filter((job) => {
+              const point = job.location;
+              return point && Number.isFinite(point.lat) && Number.isFinite(point.lng)
+                && !(point.lat === 0 && point.lng === 0)
+                && haversineDistanceKm(currentLocation, point) <= 25;
+            })
+            .slice(0, 20)
+            .map((job) => (
+              <Mapbox.PointAnnotation
+                key={`nearby-job-${job.id}`}
+                id={`nearby-job-${job.id}`}
+                coordinate={[job.location.lng, job.location.lat]}
+                onSelected={() => router.push({ pathname: '/job/[jobId]', params: { jobId: job.id } })}
+              >
+                <View accessibilityLabel="Approximate job area" style={{ backgroundColor: '#3906D2', borderColor: '#fff', borderWidth: 2, borderRadius: 20, padding: 8 }}>
+                  {job.category === 'CAR' ? <Car size={18} color="#fff" /> : <HomeIcon size={18} color="#fff" />}
+                </View>
+              </Mapbox.PointAnnotation>
+            ))}
         </Mapbox.MapView>
       )}
 
@@ -398,6 +458,9 @@ export default function HomeScreen() {
                 jobsError={jobsError}
                 onRetryJobs={() => setRefreshNonce(value => value + 1)}
                 currentLocation={currentLocation}
+                mapVisibility={mapVisibility}
+                mapVisibilityBusy={mapVisibilityBusy}
+                onChangeMapVisibility={changeMapVisibility}
               />
             )}
           </ScrollView>
@@ -532,6 +595,9 @@ function CleanerPanel({
   jobsError,
   onRetryJobs,
   currentLocation,
+  mapVisibility,
+  mapVisibilityBusy,
+  onChangeMapVisibility,
 }: {
   profile: any;
   status: string;
@@ -543,6 +609,9 @@ function CleanerPanel({
   jobsError: boolean;
   onRetryJobs: () => void;
   currentLocation: { lat: number; lng: number } | null;
+  mapVisibility: boolean;
+  mapVisibilityBusy: boolean;
+  onChangeMapVisibility: (enabled:boolean) => void;
 }) {
   const isAvailable = status === 'AVAILABLE';
   // Uber-style "match nearby first" — once we know where the cleaner is,
@@ -586,6 +655,7 @@ function CleanerPanel({
       {isAvailable && (
         <LocationFreshness updatedAt={locationUpdatedAt} />
       )}
+      <View className="flex-row items-center justify-between rounded-2xl bg-white p-4 mb-4"><View className="flex-1 pr-3"><Text className="font-display font-black text-ink">Show my area on customer maps</Text><Text className="font-sans text-xs text-ink/50 mt-1">When online, customers can see your approximate area. Your exact location is not shown on the map.</Text></View><Switch accessibilityLabel="Show my approximate area on customer maps" value={mapVisibility} disabled={mapVisibilityBusy} onValueChange={onChangeMapVisibility} /></View>
       <TouchableOpacity onPress={()=>router.push('/instant-offers')} className="flex-row items-center justify-between rounded-2xl bg-accent/10 border border-accent/20 px-4 py-3 mb-4">
         <Text className="font-display font-black text-accent">Nearby instant offers</Text><ChevronRight size={18} color="#3906D2"/>
       </TouchableOpacity>
@@ -609,6 +679,7 @@ function CleanerPanel({
           <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest mb-3">
             Incoming Jobs{displayJobs.length > 0 ? ` (${displayJobs.length}) · Nearest first` : ''}
           </Text>
+          <Text className="font-sans text-xs text-ink/50 mb-3">Map pins show approximate job areas.</Text>
           {jobsLoading ? (
             <View accessibilityRole="progressbar" accessibilityLabel="Loading nearby jobs" className="bg-white rounded-2xl p-5 border border-slate-100">
               <View className="h-4 w-2/3 rounded-full bg-[#EBE8F7] mb-3" />
@@ -619,6 +690,8 @@ function CleanerPanel({
               <Text accessibilityRole="alert" className="text-center text-sm text-ink/60">Could not load nearby jobs. Check your connection and try again.</Text>
               <TouchableOpacity accessibilityRole="button" onPress={onRetryJobs} className="mt-3 rounded-xl bg-accent px-5 py-3"><Text className="font-display font-bold text-white">Try again</Text></TouchableOpacity>
             </View>
+          ) : !currentLocation ? (
+            <View className="bg-white rounded-2xl p-5 border border-slate-100"><Text className="text-sm text-ink/60 text-center">Enable location to see nearby jobs.</Text></View>
           ) : displayJobs.length === 0 ? (
             <View className="bg-white rounded-2xl p-8 items-center border border-slate-100">
               <View className="w-14 h-14 bg-accent/10 rounded-2xl items-center justify-center mb-3">

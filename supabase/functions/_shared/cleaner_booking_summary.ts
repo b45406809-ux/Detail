@@ -94,6 +94,8 @@ export function toCleanerBookingSummary(job: Json) {
     timePreference: job.timepreference,
     scheduledDateTime: job.scheduleddatetime,
     bookingMode: job.bookingmode,
+    serviceMode: job.data && typeof job.data === 'object' ? (job.data as Json).serviceMode : 'MOBILE',
+    washSiteName: job.data && typeof job.data === 'object' ? safeText((job.data as Json).washSiteName, 80) : '',
     budget: job.budget,
     biddingExpiresAt: job.biddingexpiresat,
     estimatedDuration: job.estimatedduration,

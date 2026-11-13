@@ -14,12 +14,13 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
+  Linking,
 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { ArrowLeft, Clock, Star, ShieldCheck, X, Check, TrendingUp, Timer, ChevronRight, Brush, CreditCard, Banknote } from 'lucide-react-native';
+import { ArrowLeft, Clock, Star, ShieldCheck, X, Check, TrendingUp, Timer, ChevronRight, Brush, CreditCard, Banknote, MapPin, Navigation } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { db, doc, collection, query, where, onSnapshot } from '../../services/supabase';
 import { callFunction } from '../../services/functions';
@@ -208,6 +209,8 @@ export default function OffersScreen() {
           <X size={18} color="#ef4444" />
         </TouchableOpacity>
       </View>
+
+      {job?.category==='CAR'&&<View className="mx-5 mb-4 rounded-2xl border border-accent/15 bg-white p-4"><View className="flex-row items-center gap-3"><View className="w-10 h-10 rounded-xl bg-accent/10 items-center justify-center"><MapPin size={18} color="#3906D2"/></View><View className="flex-1"><Text className="font-display font-black text-ink">{job.serviceMode==='VISIT_WASH'?job.washSiteName||'Your selected car wash':'Cleaner comes to you'}</Text><Text className="font-sans text-xs text-ink/55 mt-1">{job.location?.address||'Your booking location'}</Text><Text className="font-sans text-xs text-ink/45 mt-1">{job.serviceMode==='VISIT_WASH'?'This wash address stays attached to your booking.':'The cleaner travels to this location.'}</Text></View>{job.serviceMode==='VISIT_WASH'&&<TouchableOpacity accessibilityRole="button" accessibilityLabel="Get directions to the selected car wash" onPress={()=>void Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${job.location.lat},${job.location.lng}`)}&travelmode=driving`).catch(()=>appAlert('Directions unavailable','Open Maps and search for the selected car wash address.'))} className="w-10 h-10 rounded-xl bg-accent items-center justify-center"><Navigation size={17} color="white"/></TouchableOpacity>}</View></View>}
 
       {/* Budget + bidding-window timer card */}
       <View className="mx-5 mb-4 bg-white rounded-3xl p-4 border border-ink/5">

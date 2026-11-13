@@ -276,6 +276,12 @@ export default function ProfileScreen() {
                 sub: 'Showcase your work',
                 onPress: () => router.push('/portfolio'),
               },
+              ...(profile?.serviceCategories?.includes('CAR') ? [{
+                icon: Building2,
+                label: 'Car wash location',
+                sub: 'Publish or hide your customer-facing wash address',
+                onPress: () => router.push('/car-wash-location'),
+              }] : []),
             ]
           : []),
         {

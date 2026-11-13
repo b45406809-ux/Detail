@@ -150,6 +150,8 @@ export interface Job {
   /** Photos uploaded upon job completion (proof of work). */
   completionPhotos?: string[];
   bookingMode?: 'SCHEDULED'|'INSTANT';
+  serviceMode?: 'MOBILE'|'VISIT_WASH';
+  washSiteName?: string;
   suppliesRequired?: boolean;
   suppliesFee?: number;
   arrivalAt?: any;
@@ -182,7 +184,7 @@ export interface Job {
   scheduledDateTime?: any;
   reminderSent?: boolean;
   estimatedDuration?: number;
-  data?: { customerCompletionResponse?: { status?: string } };
+  data?: { customerCompletionResponse?: { status?: string }; [key: string]: any };
   cleanerLocation?: { lat: number; lng: number };
   paidAt?: any;
   paymentMethod?: string;

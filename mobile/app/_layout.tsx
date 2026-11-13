@@ -1,7 +1,7 @@
 import { appAlert } from '@/components/AppDialog';
 import '../global.css';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Stack, router, useSegments } from 'expo-router';
+import { Stack, router, useLocalSearchParams, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Platform, Pressable, Text, View } from 'react-native';
@@ -26,6 +26,7 @@ SplashScreen.preventAutoHideAsync();
 function AuthGuard() {
   const { user, profile, isLoading, profileError, refreshProfile } = useAuth();
   const segments = useSegments();
+  const { next } = useLocalSearchParams<{next?:string}>();
 
   useEffect(() => {
     if (isLoading || profileError) return;
@@ -50,10 +51,10 @@ function AuthGuard() {
       } else if (profile?.role === 'CLEANER' && profile.verificationStatus === 'VERIFIED' && profile.cleanerOnboardingComplete && !profile.cleanerAgreementAccepted) {
         router.replace('/cleaner-agreement');
       } else if (inAuthGroup && currentScreen !== 'customer-agreement') {
-        router.replace('/home');
+        router.replace(currentScreen==='permissions'&&next==='cleaner'?'/register-cleaner':'/home');
       }
     }
-  }, [user, profile, isLoading, profileError, segments]);
+  }, [user, profile, isLoading, profileError, segments, next]);
 
   const overlayStyle = { position: 'absolute' as const, top: 0, bottom: 0, left: 0, right: 0, zIndex: 1000, elevation: 1000 };
   if (profileError && user) return <View style={overlayStyle} className="items-center justify-center bg-white px-8"><Text accessibilityRole="alert" className="text-center text-base font-sans text-ink mb-5">{profileError}</Text><Pressable accessibilityRole="button" onPress={() => void refreshProfile().catch(() => undefined)} className="rounded-2xl bg-accent px-6 py-4"><Text className="font-display font-bold text-white">Try again</Text></Pressable></View>;
