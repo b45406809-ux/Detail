@@ -1,4 +1,4 @@
-appId: com.detail.app
+appId: zw.co.detailapp.mobile
 ---
 # This is a route-level rendering pass after authentication. It deliberately
 # avoids actions that create bookings, charge money, upload identity documents,

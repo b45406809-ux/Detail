@@ -1,13 +1,17 @@
 import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { readFile } from 'node:fs/promises';
 
 // Fetch only the existing Android signing key into the runner's temporary directory.
 // The response and credential values must never be logged or stored as artifacts.
 const token = process.env.EXPO_TOKEN;
 const temp = process.env.RUNNER_TEMP;
 if (!token || !temp) throw new Error('Expo access or runner temporary directory is missing.');
+const appConfig = JSON.parse(await readFile(resolve('mobile/app.json'), 'utf8'));
+const applicationIdentifier = appConfig.expo?.android?.package;
+if (!applicationIdentifier) throw new Error('Android package identifier is missing from mobile/app.json.');
 async function readCredentials(fields) {
-  const query = `query { app { byFullName(fullName: "@detail-test/detail") { androidAppCredentials(filter: { applicationIdentifier: "com.detail.app" }) { ${fields} } } } }`;
+  const query = `query { app { byFullName(fullName: "@detail-test/detail") { androidAppCredentials(filter: { applicationIdentifier: "${applicationIdentifier}" }) { ${fields} } } } }`;
   const response = await fetch('https://api.expo.dev/graphql', {
     method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },

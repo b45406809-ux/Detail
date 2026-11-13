@@ -101,7 +101,7 @@ jobs:
           const value = process.env.FIREBASE_ANDROID_JSON;
           const json = value.trim().startsWith('{') ? value : Buffer.from(value, 'base64').toString('utf8');
           const config = JSON.parse(json);
-          if (!config.client?.some(client => client.client_info?.android_client_info?.package_name === 'com.detail.app')) throw new Error('Firebase configuration does not match com.detail.app.');
+          if (!config.client?.some(client => client.client_info?.android_client_info?.package_name === 'zw.co.detailapp.mobile')) throw new Error('Firebase configuration must contain the zw.co.detailapp.mobile Android app.');
           const file = `${process.env.RUNNER_TEMP}/detail-google-services.json`;
           fs.writeFileSync(file, json, { mode: 0o600 });
           fs.appendFileSync(process.env.GITHUB_ENV, `GOOGLE_SERVICES_JSON=${file}\n`);
@@ -154,7 +154,7 @@ jobs:
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: com.detail.app
+          packageName: zw.co.detailapp.mobile
           releaseFiles: mobile/android/app/build/outputs/bundle/release/app-release.aab
           track: internal
           status: completed
@@ -183,7 +183,7 @@ jobs:
           if [ -z "$EXPO_TOKEN" ]; then echo 'EXPO_ACCESS: unavailable'; exit 1; fi
           node <<'NODE'
           (async () => {
-            const query = 'query { app { byFullName(fullName: "@detail-test/detail") { androidAppCredentials(filter: { applicationIdentifier: "com.detail.app" }) { googleServiceAccountKeyForFcmV1 { id } googleServiceAccountKeyForSubmissions { id } androidAppBuildCredentialsList { isDefault androidKeystore { id } } } } } }';
+            const query = 'query { app { byFullName(fullName: "@detail-test/detail") { androidAppCredentials(filter: { applicationIdentifier: "zw.co.detailapp.mobile" }) { googleServiceAccountKeyForFcmV1 { id } googleServiceAccountKeyForSubmissions { id } androidAppBuildCredentialsList { isDefault androidKeystore { id } } } } } }';
             const response = await fetch('https://api.expo.dev/graphql', { method: 'POST', headers: { authorization: `Bearer ${process.env.EXPO_TOKEN}`, 'content-type': 'application/json' }, body: JSON.stringify({ query }) });
             if (!response.ok) { console.log(`EXPO_CREDENTIAL_QUERY: HTTP ${response.status}`); process.exitCode = 1; return; }
             const data = await response.json();

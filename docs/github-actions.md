@@ -41,6 +41,9 @@ Create a GitHub environment named `production`, enable required reviewers if des
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-side key used by the manual legacy data migration workflow; never expose it to frontend builds. |
 | `MAPBOX_PUBLIC_TOKEN` | Public Mapbox token used by the manual live style-access check. |
 | `EXPO_TOKEN` or `EAS_BOT_ACCESS_TOKEN` | Expo EAS bot token used by the manual Android production build workflow. |
+| `GOOGLE_SERVICES_JSON` or `GOOGLE_SERVICES_JSON_BASE64` | Firebase Android app configuration for package `zw.co.detailapp.mobile`; configure in the protected `production` environment. |
+| `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` | Google Play Android Developer API service account key used only for the internal track upload operation. |
+| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Google OAuth Web client ID used for native ID-token sign-in; this is a public client ID, not a client secret. |
 | `MAPBOX_DOWNLOADS_TOKEN` | Mapbox secret token with `DOWNLOADS:READ` scope, required to fetch the native Android Mapbox SDK. The build workflow verifies access before starting EAS. |
 | `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` or `MAPBOX_PUBLIC_TOKEN` | Public Mapbox styles token embedded in the app; keep it separate from the downloads token. |
 | `LIVE_E2E_EMAIL_TO` | Dedicated test mailbox for the manual Resend delivery test. |

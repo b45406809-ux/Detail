@@ -6,7 +6,7 @@ These flows are intentionally separate from load tests. Maestro drives one insta
 
 - Install Maestro from the official installer: <https://docs.maestro.dev/getting-started/installing-maestro>
 - Start the Expo app in a development build or install an EAS development/preview build.
-- Use the package identifier from the installed build. The current app identifier is `com.detail.app`.
+- Android uses `zw.co.detailapp.mobile`; iOS continues to use `com.detail.app`.
 - Create a dedicated Supabase email/password test user. Do not use a personal or production account.
 
 ## Run
@@ -14,14 +14,14 @@ These flows are intentionally separate from load tests. Maestro drives one insta
 From the repository root in PowerShell:
 
 ```powershell
-$env:APP_ID = "com.detail.app"
+$env:APP_ID = "zw.co.detailapp.mobile"
 maestro test mobile/.maestro/00-auth-smoke.yaml
 ```
 
 The authenticated flow needs a test account. Keep these values only in the current shell session:
 
 ```powershell
-$env:APP_ID = "com.detail.app"
+$env:APP_ID = "zw.co.detailapp.mobile"
 $env:E2E_EMAIL = "your-dedicated-test-user@example.com"
 $env:E2E_PASSWORD = "your-test-password"
 maestro test mobile/.maestro/01-email-sign-in.yaml

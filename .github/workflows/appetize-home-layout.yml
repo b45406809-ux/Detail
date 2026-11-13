@@ -63,7 +63,7 @@ jobs:
           if (!value) { console.log('Firebase Android configuration is not available in this workflow.'); process.exit(0); }
           const json = value.trim().startsWith('{') ? value : Buffer.from(value, 'base64').toString('utf8');
           const config = JSON.parse(json);
-          if (!config.client?.some(client => client.client_info?.android_client_info?.package_name === 'com.detail.app')) throw new Error('Firebase configuration does not match the Android app.');
+          if (!config.client?.some(client => client.client_info?.android_client_info?.package_name === 'zw.co.detailapp.mobile')) throw new Error('Firebase configuration does not match zw.co.detailapp.mobile.');
           const file = `${process.env.RUNNER_TEMP}/detail-google-services.json`;
           fs.writeFileSync(file, json, { mode: 0o600 });
           fs.appendFileSync(process.env.GITHUB_ENV, `GOOGLE_SERVICES_JSON=${file}\n`);
