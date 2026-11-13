@@ -1,6 +1,6 @@
 const encoder = new TextEncoder();
 
-export const DEFAULT_VOICE_CALL_LIMIT_SECONDS = 300;
+export const DEFAULT_VOICE_CALL_LIMIT_SECONDS = 120;
 export const MIN_VOICE_CALL_LIMIT_SECONDS = 60;
 export const MAX_VOICE_CALL_LIMIT_SECONDS = 3600;
 

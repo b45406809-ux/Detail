@@ -17,8 +17,8 @@ type SettingsConfig = {
 };
 
 export function Settings() {
-  const [config, setConfig] = useState<SettingsConfig>({ switches: {}, supportCopy: '', bookingEnabled: false, voiceCallLimitSeconds: 300 });
-  const [callLimitMinutes, setCallLimitMinutes] = useState(5);
+  const [config, setConfig] = useState<SettingsConfig>({ switches: {}, supportCopy: '', bookingEnabled: false, voiceCallLimitSeconds: 120 });
+  const [callLimitMinutes, setCallLimitMinutes] = useState(2);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -26,7 +26,7 @@ export function Settings() {
     adminCall<SettingsConfig>('adminQuery', { module: 'settings' })
       .then(next => {
         setConfig(next);
-        const seconds = Number(next.voiceCallLimitSeconds) || 300;
+        const seconds = Number(next.voiceCallLimitSeconds) || 120;
         setCallLimitMinutes(Math.min(60, Math.max(1, Math.round(seconds / 60))));
       })
       .catch((reason: Error) => setError(reason.message))

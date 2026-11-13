@@ -54,11 +54,11 @@ Deno.test('Twilio webhook signature validation matches sorted form fields and re
 
 Deno.test('TwiML enforces the configured call limit and validates UUID identities', () => {
   const twiml = twimlForClient(`client:${sample.identity}`, 'a7e4f515-8b73-4f8e-b278-61db9b3fdfac');
-  if (!twiml.includes('<Dial timeLimit="300" answerOnBridge="true">') || !twiml.includes(`<Identity>${sample.identity}</Identity>`) || !twiml.includes('<Parameter name="maxDurationSeconds" value="300"/>')) throw new Error('TwiML did not enforce the default call limit or target identity.');
+  if (!twiml.includes('<Dial timeLimit="120" answerOnBridge="true">') || !twiml.includes(`<Identity>${sample.identity}</Identity>`) || !twiml.includes('<Parameter name="maxDurationSeconds" value="120"/>')) throw new Error('TwiML did not enforce the default call limit or target identity.');
   const extended = twimlForClient(sample.identity, 'a7e4f515-8b73-4f8e-b278-61db9b3fdfac', 1200);
   if (!extended.includes('<Dial timeLimit="1200" answerOnBridge="true">') || !extended.includes('<Parameter name="maxDurationSeconds" value="1200"/>')) throw new Error('TwiML did not apply the configured call limit.');
   if (voiceCallLimitSeconds(60) !== 60 || voiceCallLimitSeconds(3600) !== 3600 || voiceCallLimitSeconds(3599) !== 3599) throw new Error('A valid configured call limit was not accepted.');
-  if (voiceCallLimitSeconds(59) !== 300 || voiceCallLimitSeconds(3601) !== 300 || voiceCallLimitSeconds(300.5) !== 300) throw new Error('An invalid call limit did not fall back to the safe default.');
+  if (voiceCallLimitSeconds(59) !== 120 || voiceCallLimitSeconds(3601) !== 120 || voiceCallLimitSeconds(300.5) !== 120) throw new Error('An invalid call limit did not fall back to the safe default.');
   if (voiceClientIdentity('client:not-a-uuid') !== null) throw new Error('Malformed identity was accepted.');
   let rejected = false;
   try { twimlForClient('client:not-a-uuid', 'job'); } catch { rejected = true; }

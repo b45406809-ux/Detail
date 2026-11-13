@@ -40,7 +40,7 @@ import { ChatMessage } from '../../types';
 
 const QUICK_REPLIES = ['On my way!', 'Sounds good', "I'm here", 'Thank you!'];
 const MESSAGE_RETENTION_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_CALL_LIMIT_SECONDS = 300;
+const DEFAULT_CALL_LIMIT_SECONDS = 120;
 const MAX_CALL_LIMIT_SECONDS = 3600;
 const messageTime = (value: any) => value?.toDate?.().getTime?.() ?? new Date(value).getTime();
 
