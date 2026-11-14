@@ -124,6 +124,7 @@ jobs:
       - name: Configure signing for the Play bundle
         working-directory: mobile/android/app
         run: |
+          printf '\n' >> build.gradle
           cat >> build.gradle <<'GRADLE'
           def detailSigning = new groovy.json.JsonSlurper().parse(new File(System.getenv('RUNNER_TEMP'), 'detail-play-signing/signing.json'))
           android {
