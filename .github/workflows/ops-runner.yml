@@ -34,6 +34,7 @@ on:
           - push-config-readiness
           - play-internal-bundle
           - play-internal-release
+          - play-store-listing
       android_version_code:
         description: Unused Google Play Android version code for the internal test bundle.
         required: false
@@ -62,6 +63,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  play-store-listing:
+    if: github.event_name == 'workflow_dispatch' && inputs.task == 'play-store-listing' && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Update Play listing and icon
+        env:
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: node scripts/update-play-listing.mjs
   play-internal-bundle:
     if: github.event_name == 'workflow_dispatch' && (inputs.task == 'play-internal-bundle' || inputs.task == 'play-internal-release') && inputs.confirm_live_access == true && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
     runs-on: ubuntu-latest
