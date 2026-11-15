@@ -49,8 +49,8 @@ function AuthGuard() {
       } else if (!profile?.hasSetupPermissions) {
         if (currentScreen !== 'permissions') router.replace('/(auth)/permissions');
       } else if (profile?.role === 'CLEANER' && profile.verificationStatus === 'VERIFIED' && profile.cleanerOnboardingComplete && !profile.cleanerAgreementAccepted) {
-        router.replace('/cleaner-agreement');
-      } else if (inAuthGroup && currentScreen !== 'customer-agreement') {
+        if (currentScreen !== 'cleaner-agreement') router.replace('/cleaner-agreement');
+      } else if ((inAuthGroup && currentScreen !== 'customer-agreement') || currentScreen === '' || currentScreen === 'index') {
         router.replace(currentScreen==='permissions'&&next==='cleaner'?'/register-cleaner':'/home');
       }
     }
