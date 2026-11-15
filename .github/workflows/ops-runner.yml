@@ -60,7 +60,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: detail-ops-${{ github.ref }}
+  group: detail-ops-${{ github.ref }}-${{ inputs.task == 'configure-paynow-sandbox' && 'paynow-config' || 'default' }}
   cancel-in-progress: false
 
 jobs:
