@@ -214,7 +214,7 @@ export default function RegisterCleanerScreen() {
     { title: 'Work with Detail', body: 'Choose the cleaning services and areas you offer. Complete identity verification and the cleaner agreement before accepting bookings.' },
     { title: 'Your earnings', body: 'Detail currently charges a 10% platform commission. For example, on a $30 job the commission is $3 and your share is $27. Changes are communicated in advance.' },
     { title: 'When you get paid', body: 'For Paynow BuySafe bookings, the customer confirms delivery in Paynow. After Paynow releases funds following its 24-hour dispute window, Detail credits your 90% share to your in-app balance.' },
-    { title: 'Direct payments', body: 'For eligible cash or mobile-money bookings, prepaid commission credit may be required before acceptance. Reserved credit is returned if the booking is cancelled before travel or work begins. Review the payment terms for each booking.' },
+    { title: 'Offline payments and commission', body: 'For eligible bookings, the customer pays you directly using cash, EcoCash, InnBucks, or another agreed method. Detail records its 10% commission after completion is confirmed. Commission credit is used first; any remainder is due and can be paid through your Detail wallet.' },
     { title: 'Deliver with care', body: 'Keep your availability accurate, arrive on time, communicate through Detail and provide the required completion photos. Review the full cleaner agreement before joining.' },
   ];
   if (introStep < introSlides.length) {

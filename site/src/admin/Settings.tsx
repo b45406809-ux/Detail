@@ -14,11 +14,13 @@ type SettingsConfig = {
   supportCopy?: string;
   bookingEnabled?: boolean;
   voiceCallLimitSeconds?: number;
+  commissionDebtLimit?: number;
 };
 
 export function Settings() {
   const [config, setConfig] = useState<SettingsConfig>({ switches: {}, supportCopy: '', bookingEnabled: false, voiceCallLimitSeconds: 120 });
   const [callLimitMinutes, setCallLimitMinutes] = useState(2);
+  const [commissionDebtLimit, setCommissionDebtLimit] = useState(10);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -28,6 +30,7 @@ export function Settings() {
         setConfig(next);
         const seconds = Number(next.voiceCallLimitSeconds) || 120;
         setCallLimitMinutes(Math.min(60, Math.max(1, Math.round(seconds / 60))));
+        setCommissionDebtLimit(Number(next.commissionDebtLimit) || 10);
       })
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setLoading(false));
@@ -42,6 +45,7 @@ export function Settings() {
       if (key === 'bookingLaunch') setConfig(current => ({ ...current, bookingEnabled: value === true }));
       else if (key === 'supportCopy') setConfig(current => ({ ...current, supportCopy: String(value ?? '') }));
       else if (key === 'voiceCallLimitSeconds') setConfig(current => ({ ...current, voiceCallLimitSeconds: Number(value) }));
+      else if (key === 'commissionDebtLimit') setConfig(current => ({ ...current, commissionDebtLimit: Number(value) }));
       else setConfig(current => ({ ...current, switches: { ...current.switches, [key]: value === true } }));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Setting could not be saved.');
@@ -62,6 +66,13 @@ export function Settings() {
         </span>
         <input type="checkbox" checked={key === 'bookingLaunch' ? !!config.bookingEnabled : !!config.switches?.[key]} onChange={event => void save(key, event.target.checked)} />
       </label>)}
+    </article>
+    <article className="panel">
+      <h2>Cleaner commission due limit</h2>
+      <p className="muted">New cleaner bids are paused when unpaid Detail commission reaches this limit. Paynow top-ups clear commission due first.</p>
+      <div className="toolbar"><label htmlFor="commission-debt-limit">Limit in USD<input id="commission-debt-limit" type="number" min={1} max={1000} step={1} value={commissionDebtLimit} disabled={loading} onChange={event => setCommissionDebtLimit(Number(event.target.value))} /></label>
+        <button disabled={loading || !Number.isInteger(commissionDebtLimit) || commissionDebtLimit < 1 || commissionDebtLimit > 1000 || commissionDebtLimit === Number(config.commissionDebtLimit ?? 10)} onClick={() => void save('commissionDebtLimit', commissionDebtLimit)}>Save due limit</button></div>
+      <small className="muted">Default: $10. Changes require a reason, recent administrator sign-in, and are audited.</small>
     </article>
     <article className="panel">
       <h2>In-app voice call limit</h2>

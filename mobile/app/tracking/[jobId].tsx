@@ -352,7 +352,7 @@ export default function TrackingScreen() {
         onPress: async () => {
           try {
             const result=await callFunction<{jobId:string;reason:string;idempotencyKey:string},{refund?:{status?:string}}>('cancelBooking', { jobId, reason: 'Cancelled by participant', idempotencyKey: `cancel-${jobId}-${Date.now()}` });
-            if(result.refund?.status==='REVIEW_REQUIRED'){appAlert('Review opened','Paynow BuySafe needs support review before this booking can be cancelled. We have opened a case for you.');return;}
+            if(result.refund?.status==='REVIEW_REQUIRED'){appAlert('Review opened','Support will review this cancellation request before closing the booking.');return;}
             router.replace('/home');
           } catch(error:any) { appAlert('Could not cancel booking',error.message||'Please try again.'); }
         },
@@ -437,6 +437,11 @@ export default function TrackingScreen() {
     if (!job?.price || !user || !job.cleanerId) return;
     setIsSubmitting(true);
     try {
+      if (job.paymentMethod === 'DIRECT_OFFLINE') {
+        await callFunction('settleJobPayment', { jobId, paymentMethod: 'DIRECT_OFFLINE' });
+        setStep('RATING');
+        return;
+      }
       await callFunction('settleJobPayment', { jobId, paymentMethod: selectedPayment });
       setStep('RATING');
     } catch (err: any) {
@@ -616,11 +621,11 @@ export default function TrackingScreen() {
             <Text className="text-3xl font-display font-black text-ink mb-2">Arrange payment directly</Text>
             <Text className="font-sans text-base text-ink/50 font-medium mb-4">Booking total: <Text className="font-display font-black text-ink">${job.price?.toFixed(2) ?? '—'}</Text></Text>
             <View className="rounded-3xl border border-amber-200 bg-amber-50 p-5 mb-6">
-              <Text className="text-xs font-display font-black text-amber-800 uppercase tracking-widest mb-2">In-app payments are not available yet</Text>
-              <Text className="font-sans text-sm text-amber-900 leading-6">Agree payment directly with your cleaner. Detail has not charged you or collected commission, and cannot track, verify, refund, or protect this payment. Your booking remains unpaid in Detail.</Text>
+              <Text className="text-xs font-display font-black text-amber-800 uppercase tracking-widest mb-2">Pay the cleaner using your agreed method</Text>
+              <Text className="font-sans text-sm text-amber-900 leading-6">Pay the cleaner directly by cash, EcoCash, InnBucks, or another method you agreed on. Detail does not receive or protect this payment. Once you confirm completion, Detail records its 10% commission against the cleaner’s commission credit or amount due.</Text>
             </View>
-            <TouchableOpacity onPress={() => setStep('RATING')} className="mt-auto bg-accent py-5 rounded-[32px] items-center mb-3">
-              <Text className="text-white font-display font-black text-sm uppercase tracking-widest">Continue to rating</Text>
+            <TouchableOpacity onPress={handlePayment} disabled={isSubmitting} className="mt-auto bg-accent py-5 rounded-[32px] items-center mb-3">
+              {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-display font-black text-sm uppercase tracking-widest">I paid the cleaner · continue</Text>}
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -804,7 +809,7 @@ export default function TrackingScreen() {
           </TouchableOpacity>
         )}
         {isCustomer&&job.status===JobStatus.COMPLETED&&job.completionSubmittedAt&&!job.customerResponseAt&&(
-          <View className="bg-white rounded-2xl border border-accent/20 p-4 mb-4"><Text className="font-display font-black text-ink">Was the cleaning completed as requested?</Text><Text className="font-sans text-xs text-ink/50 mt-1 mb-3">You have 24 hours to confirm or report a problem. Paynow BuySafe funds still follow Paynow’s own status.</Text><View className="flex-row gap-3"><TouchableOpacity disabled={isSubmitting} onPress={()=>setShowCompletionDispute(true)} className="flex-1 rounded-xl bg-rose-50 border border-rose-200 p-3 items-center"><Text className="font-display font-black text-rose-700">Report an issue</Text></TouchableOpacity><TouchableOpacity disabled={isSubmitting} onPress={()=>submitCompletionResponse('CONFIRMED')} className="flex-1 rounded-xl bg-accent p-3 items-center"><Text className="font-display font-black text-white">Confirm completed</Text></TouchableOpacity></View></View>
+          <View className="bg-white rounded-2xl border border-accent/20 p-4 mb-4"><Text className="font-display font-black text-ink">Was the cleaning completed as requested?</Text><Text className="font-sans text-xs text-ink/50 mt-1 mb-3">You have {Number(job.directCommissionPolicyVersion)===1?'48':'24'} hours to confirm or report a problem. Paynow BuySafe funds still follow Paynow’s own status.</Text><View className="flex-row gap-3"><TouchableOpacity disabled={isSubmitting} onPress={()=>setShowCompletionDispute(true)} className="flex-1 rounded-xl bg-rose-50 border border-rose-200 p-3 items-center"><Text className="font-display font-black text-rose-700">Report an issue</Text></TouchableOpacity><TouchableOpacity disabled={isSubmitting} onPress={()=>submitCompletionResponse('CONFIRMED')} className="flex-1 rounded-xl bg-accent p-3 items-center"><Text className="font-display font-black text-white">Confirm completed</Text></TouchableOpacity></View></View>
         )}
         {isCustomer&&job.bookingMode==='INSTANT'&&job.status==='PENDING'&&<View className="bg-white rounded-2xl border border-accent/20 p-4 mb-4"><Text className="font-display font-black text-ink">{instantCleanerAccepted?'A cleaner accepted your request':'Finding a nearby cleaner'}</Text><Text className="font-sans text-xs text-ink/50 mt-1">Only verified cleaners who are online and within their travel radius receive your request. You will review the price and payment before the booking is confirmed.</Text>{instantCleanerAccepted&&<TouchableOpacity onPress={()=>router.push({pathname:'/booking/offers',params:{jobId:job.id}})} className="mt-3 rounded-xl bg-accent px-4 py-3 items-center"><Text className="font-display font-black text-white">Review cleaner and choose payment</Text></TouchableOpacity>}{job.matchExpiresAt&&Date.parse(job.matchExpiresAt)<=Date.now()&&!instantCleanerAccepted&&<Text className="font-sans text-xs text-rose-600 mt-2">No cleaner has accepted yet. You can cancel this request and create a scheduled booking.</Text>}</View>}
         {isCustomer&&job.bookingMode==='INSTANT'&&job.status==='CANCELLED'&&job.instantMatchingExpired&&<View className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4"><Text className="font-display font-black text-amber-900">This instant request has expired</Text><Text className="font-sans text-xs text-amber-800 mt-1">No cleaner accepted in time, or the accepted offer was not confirmed. Create a new booking to try again.</Text><TouchableOpacity onPress={()=>router.replace('/booking/create')} className="mt-3 rounded-xl bg-accent px-4 py-3 items-center"><Text className="font-display font-black text-white">Create another booking</Text></TouchableOpacity></View>}

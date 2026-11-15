@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Phone, Mail, ChevronDown, Check } from 'lucide-react-native';
+import { ArrowLeft, Check } from 'lucide-react-native';
 import {
   auth,
   signInWithEmailAndPassword,
@@ -22,59 +22,18 @@ import {
   authErrorMessage,
 } from '../../services/supabase';
 import { SocialSignInButtons } from '../../components/SocialSignInButtons';
-import { CountryPickerModal } from '../../components/CountryPickerModal';
-import { DEFAULT_COUNTRY, Country } from '../../constants/countries';
 import { sendEmailLoginCode } from '../../services/emailAuth';
 
-type AuthTab = 'phone' | 'email';
 type EmailAuthMode = 'CODE' | 'PASSWORD';
 
 export default function SignInScreen() {
   const passwordInputRef = useRef<TextInput>(null);
-  const [tab, setTab] = useState<AuthTab>('email');
-  const [phone, setPhone] = useState('');
-  const [selectedCountry, setSelectedCountry] = useState<Country>(DEFAULT_COUNTRY);
-  const [isCountryPickerOpen, setIsCountryPickerOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [emailAuthMode, setEmailAuthMode] = useState<EmailAuthMode>('CODE');
   const [password, setPassword] = useState('');
   const [isNewAccount, setIsNewAccount] = useState(false);
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-
-  const handlePhoneContinue = () => {
-    const cleanDigits = phone.replace(/[^\d]/g, '');
-    if (!cleanDigits) {
-      appAlert('Phone required', 'Please enter your phone number.');
-      return;
-    }
-    if (!hasAcceptedTerms) {
-      appAlert(
-        'Accept Terms & Conditions',
-        'Please review and accept Detail’s Terms of Service and Privacy Policy to continue.',
-        [
-          { text: 'Review Terms', onPress: () => router.push('/customer-agreement') },
-          { text: 'I Agree', onPress: () => { setHasAcceptedTerms(true); proceedWithPhone(cleanDigits); } },
-          { text: 'Cancel', style: 'cancel' },
-        ]
-      );
-      return;
-    }
-    proceedWithPhone(cleanDigits);
-  };
-
-  const proceedWithPhone = (cleanDigits: string) => {
-    // Strip leading zero if provided (e.g. 0771234567 -> 771234567)
-    const normalizedDigits = cleanDigits.startsWith('0') ? cleanDigits.slice(1) : cleanDigits;
-    const fullPhoneNumber = `${selectedCountry.dialCode}${normalizedDigits}`;
-    router.push({
-      pathname: '/(auth)/verify',
-      params: {
-        phone: fullPhoneNumber,
-        displayPhone: `${selectedCountry.code} ${selectedCountry.dialCode} ${phone.trim()}`,
-      },
-    });
-  };
 
   const handleEmailAuth = async () => {
     if (isLoading) return;
@@ -172,7 +131,6 @@ export default function SignInScreen() {
                 setIsNewAccount(!isNewAccount);
                 setHasAcceptedTerms(false);
                 if (!isNewAccount) {
-                  setTab('email');
                   setEmailAuthMode('PASSWORD');
                 }
               }}
@@ -182,107 +140,7 @@ export default function SignInScreen() {
           </View>
 
           <View>
-                {/* Tab switcher */}
-                <View className="flex-row bg-ink/5 rounded-xl p-1 mb-6">
-                  {(['email', 'phone'] as AuthTab[]).map((t) => (
-                    <TouchableOpacity
-                      key={t}
-                      testID={`auth-${t}-tab`}
-                      onPress={() => setTab(t)}
-                      className={`flex-1 flex-row items-center justify-center gap-2 py-3 rounded-xl ${
-                        tab === t ? 'bg-white shadow-sm' : ''
-                      }`}
-                    >
-                      {t === 'phone' ? (
-                        <Phone size={16} color={tab === t ? '#3906D2' : '#150256'} />
-                      ) : (
-                        <Mail size={16} color={tab === t ? '#3906D2' : '#150256'} />
-                      )}
-                      <Text
-                        className={`text-sm font-sans-bold`}
-                        style={{ color: tab === t ? '#0F0B2E' : 'rgba(15,11,46,0.5)' }}
-                      >
-                        {t === 'phone' ? 'SMS Code' : 'Email Code'}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <Text className="font-sans text-xs text-ink/50 mb-4">Customers can use email. Cleaners verify a phone number during registration.</Text>
-                {tab === 'phone' ? (
-                  <View className="gap-4">
-                    <View>
-                      <Text className="text-sm font-sans text-ink/60 mb-2">
-                        Phone Number
-                      </Text>
-                      <View className="flex-row items-center rounded-2xl overflow-hidden bg-ink/5">
-                        {/* Country code selector button */}
-                        <TouchableOpacity
-                          onPress={() => setIsCountryPickerOpen(true)}
-                          activeOpacity={0.7}
-                          className="flex-row items-center gap-1.5 px-3.5 py-4 border-r border-ink/10"
-                        >
-                          <Text className="font-display text-[10px] font-black text-accent">{selectedCountry.code}</Text>
-                          <Text className="font-sans text-sm font-bold text-ink">{selectedCountry.dialCode}</Text>
-                          <ChevronDown size={14} color="rgba(21,2,86,0.5)" />
-                        </TouchableOpacity>
-
-                        <TextInput
-                          className="font-sans flex-1 px-4 py-4 text-base font-medium text-ink"
-                          placeholder={selectedCountry.placeholder || '000 000 0000'}
-                          placeholderTextColor="rgba(21,2,86,0.35)"
-                          keyboardType="phone-pad"
-                          value={phone}
-                          onChangeText={setPhone}
-                        />
-                      </View>
-                      <Text className="font-sans text-xs text-ink/50 font-medium mt-2 px-1">
-                        We'll send a verification code to {selectedCountry.dialCode} {phone || '…'}
-                      </Text>
-                    </View>
-
-                    {/* Terms acceptance checkbox */}
-                    <TouchableOpacity
-                      onPress={() => setHasAcceptedTerms(!hasAcceptedTerms)}
-                      activeOpacity={0.7}
-                      className="flex-row items-start gap-3 py-1"
-                    >
-                      <View
-                        className={`w-5 h-5 rounded-md border items-center justify-center mt-0.5 ${
-                          hasAcceptedTerms ? 'bg-accent border-accent' : 'border-ink/30 bg-white/60'
-                        }`}
-                      >
-                        {hasAcceptedTerms && <Check size={14} color="#fff" strokeWidth={3} />}
-                      </View>
-                      <View className="flex-1">
-                        <Text className="font-sans text-xs text-ink/70 leading-relaxed font-medium">
-                          I agree to Detail's{' '}
-                          <Text
-                            onPress={() => router.push('/customer-agreement')}
-                            className="font-bold text-accent underline"
-                          >
-                            Terms of Service
-                          </Text>{' '}
-                          and{' '}
-                          <Text
-                            onPress={() => router.push('/privacy-policy')}
-                            className="font-bold text-accent underline"
-                          >
-                            Privacy Policy
-                          </Text>
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={handlePhoneContinue}
-                      activeOpacity={0.85}
-                      className="w-full bg-accent py-4 rounded-full items-center mt-2"
-                    >
-                      <Text className="text-white font-sans-bold text-base">Send Code</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
+                <Text className="font-sans text-xs text-ink/50 mb-4">Cleaners verify their phone number during registration.</Text>
                   <View className="gap-4">
                     <View className="flex-row bg-ink/5 rounded-xl p-1">
                       {([
@@ -392,7 +250,6 @@ export default function SignInScreen() {
                       )}
                     </TouchableOpacity>
                   </View>
-                )}
               </View>
 
               <View className="mt-6">
@@ -419,12 +276,6 @@ export default function SignInScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <CountryPickerModal
-        visible={isCountryPickerOpen}
-        selectedCountry={selectedCountry}
-        onSelect={(country) => setSelectedCountry(country)}
-        onClose={() => setIsCountryPickerOpen(false)}
-      />
     </SafeAreaView>
   );
 }

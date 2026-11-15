@@ -819,6 +819,10 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       }
       const { data, error } = await admin.rpc('cancel_booking',{p_job_id:jobId,p_actor_id:actor,p_reason:reason,p_idempotency_key:key});
       if (error) throw error;
+      if(data?.status==='REVIEW_REQUIRED'){
+        const other=actor===job.customerid?job.cleanerid:job.customerid;
+        if(other)await notify(other,{type:'CANCELLATION_REVIEW',title:'Cancellation needs review',body:'A cancellation was requested after arrival or work began. Support will review it before closing the booking.',jobId});
+      }
       return { success:true, refund:data };
     }
     case 'rescheduleBooking': {
@@ -844,7 +848,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if (!Array.isArray(job.completionphotos) || job.completionphotos.length < 1) fail(409,'Add at least one completion photo before submitting the finished booking.');
       const { error } = await admin.rpc('transition_booking',{p_job_id:jobId,p_actor_id:actor,p_new_status:'COMPLETED',p_idempotency_key:key,p_reason:null});
       if (error) throw error;
-      await notify(job.customerid,{type:'COMPLETED',title:'Booking completed',body:job.paymentmethod==='DIRECT_OFFLINE'?'Your cleaning is complete. Payment was arranged directly with the cleaner; Detail did not process or verify it. You can now leave a rating.':'Your cleaning is complete. Confirm delivery in Paynow BuySafe, then leave a rating.',jobId});
+      await notify(job.customerid,{type:'COMPLETED',title:'Booking completed',body:job.paymentmethod==='DIRECT_OFFLINE'?'Review the work and confirm completion within 48 hours, or report a problem. Pay your cleaner through the method you agreed on; Detail records its 10% commission after completion is confirmed.':'Your cleaning is complete. Confirm delivery in Paynow BuySafe, then leave a rating.',jobId});
       return { success:true };
     }
     case 'submitBid': {
@@ -910,9 +914,9 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         try { redirectUrl=await startPaynowCheckout(jobId,email,{reference:data.payment.reference,amount:data.payment.amount,cleanerName:data.cleanerName}); }
         catch(error){const {data:current}=await admin.from('payments').select('data').eq('id',`${jobId}_booking`).maybeSingle();await admin.from('payments').update({status:'FAILED',data:{...(current?.data??{}),failureReason:'INITIATION_FAILED'}}).eq('id',`${jobId}_booking`);await admin.from('jobs').update({paymentstatus:'FAILED'}).eq('id',jobId);throw error;}
       }
-      const offlineNotice='Booking confirmed. Detail is not processing payment or collecting commission yet. Please arrange payment directly with the customer; it will not be tracked, verified, refunded, or protected in Detail.';
+      const offlineNotice='Booking confirmed. Agree cash, EcoCash, InnBucks, or another offline payment method with the customer. Detail does not receive the customer’s payment. Detail’s 10% commission is recorded after completion is confirmed.';
       if(data.cleanerId && data.paymentMethod!=='PAYNOW'&&!data.replayed) await notify(data.cleanerId,{type:'BID_ACCEPTED',title:'Quote accepted',body:data.paymentMethod==='DIRECT_OFFLINE'?offlineNotice:'The customer accepted your quote.',jobId});
-      if(data.paymentMethod==='DIRECT_OFFLINE'&&!data.replayed) await notify(actor,{type:'PAYMENT_UNAVAILABLE',title:'Booking confirmed — arrange payment directly',body:'Your cleaner is selected. In-app payments are not available yet. Agree payment directly with your cleaner; Detail will not collect, verify, refund, or protect this payment.',jobId});
+      if(data.paymentMethod==='DIRECT_OFFLINE'&&!data.replayed) await notify(actor,{type:'PAYMENT_UNAVAILABLE',title:'Booking confirmed — agree payment with your cleaner',body:'Arrange cash, EcoCash, InnBucks, or another agreed payment method with your cleaner. Detail does not receive this payment. Detail’s commission is handled separately after completion is confirmed.',jobId});
       return {...data,redirectUrl,paymentUnavailable:data.paymentMethod==='DIRECT_OFFLINE'};
     }
     case 'refreshPaynowBookingPayment': {
@@ -973,9 +977,10 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       await enforceRateLimit(request, actor, 'wallet_topup', 6, 3600);
       await assertPaymentsAvailable();
       if(!Number.isFinite(amount)||amount<1||amount>1000||String(input.currency??'USD').toUpperCase()!=='USD')fail(400,'Wallet top-ups must be between $1 and $1,000 USD.');
-      const {data:profile}=await admin.from('users').select('email').eq('id',actor).single();
+      const {data:profile}=await admin.from('users').select('email,role').eq('id',actor).single();
       const email=user?.email??profile?.email; if(!email)fail(409,'Add an email address to your account before paying with Paynow.');
-      const stableId=(await hash(`${actor}:wallet_topup:${idempotencyKey}`)).slice(0,32),id=`topup_${stableId}`,reference=`wallet-${stableId}`,paymentKey=`wallet_topup_${stableId}`;
+      const topupType='wallet_topup';
+      const stableId=(await hash(`${actor}:${topupType}:${idempotencyKey}`)).slice(0,32),id=`topup_${stableId}`,reference=`wallet-${stableId}`,paymentKey=`${topupType}_${stableId}`;
       const {data:existing,error:existingError}=await admin.from('payments').select('customerid,reference,status,redirecturl,pollurl').eq('idempotencykey',paymentKey).maybeSingle();
       if(existingError)throw existingError;
       if(existing){
@@ -983,13 +988,13 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         if(existing.status==='PENDING'&&existing.redirecturl)return {redirectUrl:existing.redirecturl,referenceNumber:existing.reference};
         fail(409,'This top-up attempt already exists. Start a new checkout from your wallet.');
       }
-      const {error}=await admin.from('payments').insert({id,customerid:actor,provider:'PAYNOW',reference,amount,currency:'USD',status:'INITIATING',idempotencykey:paymentKey,data:{type:'wallet_topup'}});
+      const {error}=await admin.from('payments').insert({id,customerid:actor,provider:'PAYNOW',reference,amount,currency:'USD',status:'INITIATING',idempotencykey:paymentKey,data:{type:topupType}});
       if(error?.code==='23505'){
         const {data:retry}=await admin.from('payments').select('customerid,reference,status,redirecturl').eq('idempotencykey',paymentKey).maybeSingle();
         if(retry?.customerid===actor&&retry.status==='PENDING'&&retry.redirecturl)return {redirectUrl:retry.redirecturl,referenceNumber:retry.reference};
       }
       if(error)throw error;
-      const client=paynowClient(), checkout=client.createPayment(reference,email); checkout.add('Detail wallet top-up',amount);
+      const client=paynowClient(), checkout=client.createPayment(reference,email); checkout.add(topupType==='commission_topup'?'Detail cleaner commission payment':'Detail wallet top-up',amount);
       const result=await client.send(checkout);
       if(!result?.success||!result.redirectUrl||!result.pollUrl){await admin.from('payments').update({status:'FAILED'}).eq('id',id);fail(502,'Paynow could not start the wallet top-up.');}
       const redirectUrl=trustedPaynowUrl(String(result.redirectUrl));
@@ -999,6 +1004,12 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     }
     case 'settleJobPayment': {
       const actor=authed(); const jobId=text(input.jobId,80), method=text(input.paymentMethod,20).toUpperCase();
+      if(method==='DIRECT_OFFLINE'){
+        const {data,error}=await admin.rpc('report_direct_booking_payment',{p_job_id:jobId,p_actor_id:actor});if(error)throw error;
+        const {data:job}=await admin.from('jobs').select('cleanerid').eq('id',jobId).maybeSingle();
+        if(job?.cleanerid)await notify(job.cleanerid,{type:'DIRECT_PAYMENT_CONFIRMED',title:'Customer confirmed offline payment',body:'The customer reports paying you directly. Detail did not receive this booking payment; the 10% commission is recorded separately.',jobId});
+        return {success:true,...data};
+      }
       const {error}=await admin.rpc('settle_job_payment',{p_job_id:jobId,p_actor_id:actor,p_payment_method:method});
       if(error)throw error; return {success:true};
     }
@@ -1360,7 +1371,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const role=await requireAdmin(actor,'users.manage');
       const userId=text(input.userId,80);
       if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId))fail(400,'A valid user ID is required.');
-      const {data:profile,error:profileError}=await admin.from('users').select('id,email,displayname,photourl,phone,role,accounttype,organizationid,issuspended,isbanned,accountdeletedat,verificationstatus,verificationlevel,cleaneronboardingcomplete,cleaneragreementaccepted,servicecategories,serviceradiuskm,experienceyears,servicearea,status,jobscompleted,ratingaverage,ratingcount,responsetimeaverage,hasagreedtoterms,createdat,updatedat').eq('id',userId).maybeSingle();
+      const {data:profile,error:profileError}=await admin.from('users').select('id,email,displayname,photourl,phone,role,accounttype,organizationid,issuspended,isbanned,accountdeletedat,verificationstatus,verificationlevel,cleaneronboardingcomplete,cleaneragreementaccepted,servicecategories,serviceradiuskm,experienceyears,servicearea,status,jobscompleted,ratingaverage,ratingcount,responsetimeaverage,balance,earningsbalance,commissionbalance,commissionowed,hasagreedtoterms,createdat,updatedat').eq('id',userId).maybeSingle();
       if(profileError)throw profileError;if(!profile)fail(404,'User account not found.');
       const [jobResult,orgMemberResult,kycResult]=await Promise.all([
         admin.from('jobs').select('id,customerid,cleanerid,customername,cleanername,category,servicetype,scheduleddatetime,scheduledtime,status,budget,price,paymentmethod,paymentstatus,paidat,rating,ratedat,isfavoriterebook,createdat,updatedat,description', {count:'exact'}).or(`customerid.eq.${userId},cleanerid.eq.${userId}`).order('createdat',{ascending:false}).limit(100),
@@ -1392,6 +1403,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         canReadFinance?Promise.all([
           admin.from('payments').select('id,jobid,customerid,cleanerid,provider,reference,amount,currency,status,createdat,updatedat').or(`customerid.eq.${userId},cleanerid.eq.${userId}`).order('createdat',{ascending:false}).limit(100),
           admin.from('wallettransactions').select('id,jobid,paymentid,payoutrequestid,type,amount,balancetype,status,description,createdat').eq('userid',userId).order('createdat',{ascending:false}).limit(100),
+          jobIds.length?admin.from('platformtransactions').select('id,jobid,type,amount,status,createdat,data').in('jobid',jobIds).eq('type','COMMISSION').order('createdat',{ascending:false}).limit(100):Promise.resolve({data:[],error:null}),
         ]):Promise.resolve(null),
         canReadSupport?admin.from('supportcases').select('id,jobid,customerid,cleanerid,ownerid,status,reason,data,createdat').or(`customerid.eq.${userId},cleanerid.eq.${userId}`).order('createdat',{ascending:false}).limit(100):Promise.resolve({data:[],error:null}),
         canReadSupport&&jobIds.length?admin.from('messages').select('id,jobid,senderid,sendername,text,imageurl,createdat').in('jobid',jobIds).order('createdat',{ascending:false}).limit(200):Promise.resolve({data:[],error:null}),
@@ -1399,7 +1411,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       ]);
       const queryErrors=[counterpartyResult,reviewsResult,bidsAsCleanerResult,bidsOnCustomerJobsResult,eventsResult,organizationResult,supportResult,conversationResult,notificationResult].filter((result:any)=>result?.error);
       if(queryErrors.length)throw queryErrors[0].error;
-      const paymentRows=financeResult?.[0]?.data??[],walletRows=financeResult?.[1]?.data??[];
+      const paymentRows=financeResult?.[0]?.data??[],walletRows=financeResult?.[1]?.data??[],commissionRows=financeResult?.[2]?.data??[];
       const financeError=financeResult?.find((result:any)=>result.error)?.error;if(financeError)throw financeError;
       const counterpartyMap=new Map((counterpartyResult.data??[]).map((row:Json)=>[row.id,row.displayname||row.id]));
       const bidMap=new Map<string,Json>();for(const bid of [...(bidsAsCleanerResult.data??[]),...(bidsOnCustomerJobsResult.data??[])])bidMap.set(bid.id,bid);
@@ -1447,7 +1459,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         notifications:notificationResult.data??[],
         jobEvents:eventsResult.data??[],
         didit,
-        finance:canReadFinance?{payments:paymentRows,walletTransactions:walletRows}:null,
+        finance:canReadFinance?{balances:{wallet:profile.balance,earnings:profile.earningsbalance,commissionCredit:profile.commissionbalance,commissionDue:profile.commissionowed},payments:paymentRows,walletTransactions:walletRows,commissions:commissionRows}:null,
         support:canReadSupport?{cases:supportResult.data??[],messages:conversationResult.data??[]}:null,
         permissions:{finance:canReadFinance,support:canReadSupport,bookingEvents:canReadBookingEvents},
         timeline:timeline.slice(0,300),
@@ -1478,7 +1490,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
           admin.from('configuration').select('value').eq('key','beta').maybeSingle(),
         ]);
         if(operationsError)throw operationsError;if(betaError)throw betaError;
-        return {...(operations?.value??{switches:{},supportCopy:''}),voiceCallLimitSeconds:voiceCallLimitSeconds(operations?.value?.voiceCallLimitSeconds),bookingEnabled:beta?.value?.bookingEnabled===true};
+        return {...(operations?.value??{switches:{},supportCopy:''}),voiceCallLimitSeconds:voiceCallLimitSeconds(operations?.value?.voiceCallLimitSeconds),commissionDebtLimit:Number(operations?.value?.commissionDebtLimit)||10,bookingEnabled:beta?.value?.bookingEnabled===true};
       }
       const table:Record<string,string>={bookings:'jobs',customers:'users',cleaners:'users',payments:'payments',products:'productsales',analytics:'reportingaggregates',support:'supportcases',waitlist:'betawaitlist'};
       const target=table[module]; if(!target)fail(400,'Unknown dashboard module.');
@@ -1577,7 +1589,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(!targetId && action!=='update_kill_switch')fail(400,'Select a specific record before applying this action.');
       const now=new Date().toISOString();
       if(action==='update_kill_switch'){
-        const keyName=text(input.key,40);if(!['maintenance','bookingCreation','bidAcceptance','payments','supportCopy','bookingLaunch','voiceCallLimitSeconds'].includes(keyName))fail(400,'Unknown setting.');
+        const keyName=text(input.key,40);if(!['maintenance','bookingCreation','bidAcceptance','payments','supportCopy','bookingLaunch','voiceCallLimitSeconds','commissionDebtLimit'].includes(keyName))fail(400,'Unknown setting.');
         if(keyName==='bookingLaunch'){
           const {data:current,error:readError}=await admin.from('configuration').select('value').eq('key','beta').maybeSingle();if(readError)throw readError;
           const value={...(current?.value??{}),bookingEnabled:input.value===true};
@@ -1590,6 +1602,9 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
             const seconds=Number(input.value);
             if(!Number.isInteger(seconds)||seconds<60||seconds>3600)fail(400,'Call duration must be a whole number from 60 to 3,600 seconds.');
             value.voiceCallLimitSeconds=seconds;
+          }else if(keyName==='commissionDebtLimit'){
+            const amount=Number(input.value);if(!Number.isInteger(amount)||amount<1||amount>1000)fail(400,'Commission debt limit must be a whole USD amount from $1 to $1,000.');
+            value.commissionDebtLimit=amount;
           }else value.switches={...(value.switches??{}),[keyName]:input.value===true};
           const {error:updateError}=await admin.from('configuration').upsert({key:'operations',value,updatedby:actor,updatedat:now});if(updateError)throw updateError;
         }
@@ -1631,8 +1646,15 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
           if(!['RELEASE_EARNINGS','HOLD_FOR_REFUND'].includes(settlementDecision))fail(400,'Choose whether to release the cleaner earnings or keep them held for refund review.');
           patchData.settlementDecision=settlementDecision;
         }
+        let cancellationDecision='';
+        if(action==='resolve_case'&&record.data?.type==='LATE_DIRECT_CANCELLATION'){
+          cancellationDecision=text(input.cancellationDecision,40).toUpperCase();
+          if(!['HONOR_CANCELLATION','KEEP_BOOKING_OPEN'].includes(cancellationDecision))fail(400,'Choose whether to honor the cancellation or keep the booking open.');
+          patchData.cancellationDecision=cancellationDecision;
+        }
+        if(cancellationDecision==='HONOR_CANCELLATION'&&record.jobid){const {error:cancelError}=await admin.rpc('admin_cancel_booking',{p_job_id:record.jobid,p_actor_id:actor,p_reason:reason,p_idempotency_key:`support-${targetId}`});if(cancelError)throw cancelError;}
         const {error:updateError}=await admin.from('supportcases').update({status:action==='resolve_case'?'RESOLVED':'IN_PROGRESS',ownerid:actor,data:patchData}).eq('id',targetId);if(updateError)throw updateError;
-        if(settlementDecision==='RELEASE_EARNINGS'&&record.jobid){const {error:releaseError}=await admin.rpc('release_paynow_earnings',{p_job_id:record.jobid});if(releaseError)throw releaseError;}
+        if(settlementDecision==='RELEASE_EARNINGS'&&record.jobid){const {error:releaseError}=await admin.rpc('release_paynow_earnings',{p_job_id:record.jobid});if(releaseError)throw releaseError;const {error:commissionError}=await admin.rpc('accrue_direct_booking_commission',{p_job_id:record.jobid});if(commissionError)throw commissionError;}
         if(action==='resolve_case'){
           const {data:caseParties}=await admin.from('supportcases').select('customerid,cleanerid,jobid').eq('id',targetId).maybeSingle();
           const recipients=[...new Set([caseParties?.customerid,caseParties?.cleanerid].filter((id):id is string=>typeof id==='string'&&id!==actor))];

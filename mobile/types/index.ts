@@ -158,6 +158,7 @@ export interface Job {
   serviceStartedAt?: any;
   completionSubmittedAt?: any;
   customerResponseAt?: any;
+  directCommissionPolicyVersion?: number;
   matchExpiresAt?: any;
   lastMessage?: string;
   lastMessageAt?: any;

@@ -11,7 +11,7 @@ const configs: Record<ModuleKey, {title:string; subtitle:string; filters:string[
   payments:{title:'Payments / Refunds',subtitle:'Manual Paynow refund requests stay separate from provider-confirmed refund totals',filters:['Status','Date','Type'],actions:['Request refund','Record refund update'],columns:['Payment','Booking','Customer','Captured','Refunded','Refund request','Processor ref','Status']},
   products:{title:'After-sales Products',subtitle:'Catalog, cleaner inventory, attributed sales and commission',filters:['Cleaner','Product','Date','Status'],actions:[],columns:['Product / Sale','Cleaner','Inventory','Sold','Commission','Status']},
   analytics:{title:'Analytics',subtitle:'Operational aggregates are shown separately from behavioral analytics',filters:['Period'],actions:[],columns:['Metric','Source','Current','Previous','Change','Health']},
-  support:{title:'Support Cases',subtitle:'Review reporter details, booking/payment context and case history before resolving',filters:['Status','Reason','Owner'],actions:['View case','Assign to me','Resolve case'],columns:['Case','Booking','Reason','Opened','Owner','Status']},
+  support:{title:'Support Cases',subtitle:'Review reporter details, booking/payment context and case history before resolving',filters:['Status','Reason','Owner'],actions:['View case','Assign to me','Resolve case'],columns:['Case','Booking','Reason','Pattern','Opened','Owner','Status']},
 };
 
 const filterOptions: Partial<Record<ModuleKey, Record<string, string[]>>> = {
@@ -52,6 +52,13 @@ function DataModuleList({ kind, focusId, navigate }: {kind:ModuleKey; focusId?:s
         const normalized=decision.trim().toUpperCase();
         if(!['RELEASE_EARNINGS','HOLD_FOR_REFUND'].includes(normalized)){setError('Choose RELEASE_EARNINGS or HOLD_FOR_REFUND.');return;}
         extra.settlementDecision=normalized;
+      }
+      if(row?.data?.type==='LATE_DIRECT_CANCELLATION'){
+        const decision=window.prompt('Review result: enter HONOR_CANCELLATION or KEEP_BOOKING_OPEN');
+        if(!decision)return;
+        const normalized=decision.trim().toUpperCase();
+        if(!['HONOR_CANCELLATION','KEEP_BOOKING_OPEN'].includes(normalized)){setError('Choose HONOR_CANCELLATION or KEEP_BOOKING_OPEN.');return;}
+        extra.cancellationDecision=normalized;
       }
     }
     if(label==='Change account state'){extra.state=window.confirm('Suspend this account? Choose Cancel to reactivate.')?'SUSPENDED':'ACTIVE';}

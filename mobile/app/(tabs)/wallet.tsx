@@ -171,7 +171,7 @@ export default function WalletScreen() {
 
       {isCleaner && <View className="mx-5 mb-6 rounded-2xl bg-white p-4 border border-slate-100"><Text className="font-display font-black text-slate-900">How earnings and commission work</Text><Text className="font-sans text-sm text-slate-600 mt-2">Completed jobs may have a Detail commission. Commission credit covers eligible direct-payment jobs. Cleared earnings appear above when available; request a payout from this screen. Payouts are reviewed and sent manually while integrations are unavailable, so transfer timing is not guaranteed.</Text></View>}
 
-      {balance < 0 && (
+      {((isCleaner && Number(profile?.commissionOwed ?? 0) > 0) || (!isCleaner && balance < 0)) && (
         <TouchableOpacity
           onPress={() => setIsAddFundsOpen(true)}
           activeOpacity={0.85}
@@ -181,9 +181,9 @@ export default function WalletScreen() {
             <ArrowUpRight size={18} color="#ef4444" />
           </View>
           <View className="flex-1">
-            <Text className="text-sm font-display font-black text-red-700">Outstanding commission balance</Text>
+            <Text className="text-sm font-display font-black text-red-700">{isCleaner ? 'Outstanding commission due' : 'Outstanding balance'}</Text>
             <Text className="font-sans text-xs text-red-500 font-medium mt-0.5">
-              Add funds to bring your balance to $0 and keep bidding on jobs
+              {isCleaner ? `You owe $${Number(profile?.commissionOwed ?? 0).toFixed(2)}. Paynow top-ups clear commission due first; new bids may pause at the limit.` : 'Add funds to bring your balance to $0.'}
             </Text>
           </View>
         </TouchableOpacity>
@@ -278,7 +278,7 @@ export default function WalletScreen() {
               </TouchableOpacity>
             </View>
             <Text className="font-sans text-xs text-slate-400 font-medium mb-6">
-              {isCleaner ? 'Prepaid credit for direct-payment booking commissions' : 'Add USD credit to your Detail wallet'}
+              {isCleaner ? 'Paynow top-ups clear commission due first; remaining funds stay as commission credit.' : 'Add USD credit to your Detail wallet'}
             </Text>
 
             <View className="mb-5 flex-row items-center gap-3 rounded-2xl border border-violet-100 bg-[#F7F4FF] p-3.5"><View className="h-10 w-10 items-center justify-center rounded-xl bg-accent"><Text className="font-display text-lg font-black text-white">P</Text></View><View className="flex-1"><Text className="font-display text-sm font-black text-ink">Paynow secure checkout</Text><Text className="font-sans text-[11px] text-ink/55">Choose from the methods available on Paynow</Text></View></View>

@@ -37,8 +37,8 @@ const TERMS = [
     body: 'You must accurately represent your prices with no hidden fees. The standard Detail commission is currently 10% of the Transaction value. Detail reserves the right to change, increase, or decrease commission and other fees at any time, subject to applicable law — changes will be communicated through the Platform and apply prospectively from their effective date. Attempting to avoid commission through false reporting or off-platform transactions is a breach of this Agreement.',
   },
   {
-    title: '11. Direct Payments & Commission Credit',
-    body: 'Detail may permit Customers to pay you directly in cash, EcoCash, or InnBucks. Direct payments do not include Paynow BuySafe escrow. Before accepting a direct-payment booking, you must have prepaid commission credit equal to the 10% platform commission. Detail reserves that credit at booking acceptance and returns it if the booking is cancelled before travel or work begins. You must accurately record the payment and may not conceal transactions to avoid commission.',
+    title: '11. Offline Customer Payments & Detail Commission',
+    body: 'For eligible bookings, the customer pays you outside Detail using cash, EcoCash, InnBucks, or another method you both agree on. Detail does not receive or hold that customer payment, and Paynow BuySafe does not protect it. After the customer confirms completion, or the completion is otherwise resolved under Detail’s process, Detail records its 10% platform commission. Available commission credit is applied first; any remaining commission becomes due. Pay commission due through your Detail wallet using Paynow. New bids may be paused when your due reaches the limit shown in the app.',
   },
   {
     title: '12. Balance & Withdrawals',
