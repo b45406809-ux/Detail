@@ -994,7 +994,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         if(retry?.customerid===actor&&retry.status==='PENDING'&&retry.redirecturl)return {redirectUrl:retry.redirecturl,referenceNumber:retry.reference};
       }
       if(error)throw error;
-      const client=paynowClient(), checkout=client.createPayment(reference,email); checkout.add(topupType==='commission_topup'?'Detail cleaner commission payment':'Detail wallet top-up',amount);
+      const client=paynowClient(), checkout=client.createPayment(reference,email); checkout.add(profile?.role==='CLEANER'?'Detail cleaner commission payment':'Detail wallet top-up',amount);
       const result=await client.send(checkout);
       if(!result?.success||!result.redirectUrl||!result.pollUrl){await admin.from('payments').update({status:'FAILED'}).eq('id',id);fail(502,'Paynow could not start the wallet top-up.');}
       const redirectUrl=trustedPaynowUrl(String(result.redirectUrl));
