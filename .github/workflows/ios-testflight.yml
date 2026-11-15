@@ -1,0 +1,73 @@
+name: iOS TestFlight operations
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Check inputs, start an EAS build, or submit a completed EAS build
+        required: true
+        type: choice
+        options: [readiness, build, submit]
+      build_id:
+        description: Completed EAS iOS production build ID (required for submit)
+        required: false
+        type: string
+      confirm_testflight_submission:
+        description: Confirm submission to App Store Connect TestFlight
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-testflight-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ios:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN || secrets.EAS_BOT_ACCESS_TOKEN || secrets.EXPO_EAS_BOT_ACCESS_TOKEN || secrets.EAS_BOT_TOKEN_2 }}
+      GOOGLE_IOS_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || vars.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID }}
+      GOOGLE_WEB_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || vars.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
+      APPLE_CLIENT_SECRET: ${{ secrets.APPLE_CLIENT_SECRET }}
+      REQUESTED_OPERATION: ${{ inputs.operation }}
+      REQUESTED_BUILD_ID: ${{ inputs.build_id }}
+      CONFIRM_SUBMISSION: ${{ inputs.confirm_testflight_submission }}
+      CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Check GitHub input presence
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$EXPO_TOKEN" ]]; then echo 'Expo token: present'; else echo 'Expo token: missing'; exit 1; fi
+          if [[ -n "$GOOGLE_WEB_CLIENT_ID" ]]; then echo 'Google Web client ID: present in GitHub'; else echo 'Google Web client ID: missing in GitHub'; fi
+          if [[ -n "$GOOGLE_IOS_CLIENT_ID" ]]; then echo 'Google iOS client ID: present in GitHub'; else echo 'Google iOS client ID: missing in GitHub'; fi
+          if [[ -n "$APPLE_CLIENT_SECRET" ]]; then echo 'Apple account deletion client secret: present in GitHub'; else echo 'Apple account deletion client secret: missing in GitHub'; fi
+          echo 'This check does not verify EAS environment variables, Apple credentials, or Supabase provider configuration.'
+          if [[ "$REQUESTED_OPERATION" == submit ]]; then
+            [[ "$CONFIRM_SUBMISSION" == true ]] || { echo 'Submission confirmation is required.'; exit 1; }
+            [[ "$REQUESTED_BUILD_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || { echo 'Enter a valid EAS build UUID.'; exit 1; }
+          fi
+      - name: Install dependencies
+        run: npm ci --prefix mobile --no-audit --no-fund
+      - name: Check mobile types
+        run: npm run type-check --prefix mobile
+      - name: Start signed iOS production build on EAS
+        if: inputs.operation == 'build'
+        working-directory: mobile
+        run: npx --yes eas-cli@16.28.0 build --platform ios --profile production --non-interactive --no-wait
+      - name: Submit selected build to TestFlight
+        if: inputs.operation == 'submit'
+        working-directory: mobile
+        run: npx --yes eas-cli@16.28.0 submit --platform ios --profile production --id "$REQUESTED_BUILD_ID" --non-interactive --no-wait

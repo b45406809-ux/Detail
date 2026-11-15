@@ -1,5 +1,7 @@
 # iOS App Store readiness
 
+For the current step-by-step Apple setup, Google sign-in, EAS signing, and TestFlight workflow, see [iOS TestFlight setup](ios-testflight-setup.md). The snapshot below records an earlier review and should not be read as current provider configuration.
+
 ## Readiness snapshot — revision 3 (12 November 2026)
 
 The source review fixes are on `codex/separate-dashboard-into-routed-modules-fl7jlh`. The iOS app uses bundle ID `com.detail.app`, Sign in with Apple capability, Expo SDK 53, and a GitHub Actions simulator build pinned to macOS 26 / Xcode 26 or later. The production profile does not enable the client-side simulator. The simulator artifact built from `0282d535d5546c647ee9db003c6eb4f1728bb82d` was installed on a GitHub-hosted iPhone simulator and passed the welcome, sign-in, and create-account UI flow. The Appetize upload succeeded, but Appetize streaming was blocked by the account usage cap; screenshots and report are available in the [Maestro run artifacts](https://github.com/b45406809-ux/Detail/actions/runs/43133295332).
