@@ -35,6 +35,7 @@ on:
           - play-internal-bundle
           - play-internal-release
           - play-store-listing
+          - configure-paynow-sandbox
       android_version_code:
         description: Unused Google Play Android version code for the internal test bundle.
         required: false
@@ -63,6 +64,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  configure-paynow-sandbox:
+    if: github.event_name == 'workflow_dispatch' && inputs.task == 'configure-paynow-sandbox' && inputs.confirm_production_access == true && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      SANDBOX_ID: ${{ secrets.PAYNOW_SANDBOX_INTEGRATION_ID }}
+      SANDBOX_KEY: ${{ secrets.PAYNOW_SANDBOX_INTEGRATION_KEY }}
+    steps:
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.75.0
+      - name: Copy sandbox credentials without overwriting existing Paynow secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN" && test -n "$SUPABASE_PROJECT_REF" || { echo 'Missing Supabase access token or project reference.'; exit 1; }
+          test -n "$SANDBOX_ID" && test -n "$SANDBOX_KEY" || { echo 'Missing one or both Paynow sandbox GitHub secrets.'; exit 1; }
+          existing="$(supabase secrets list --project-ref "$SUPABASE_PROJECT_REF" --output json)"
+          if echo "$existing" | jq -e 'any(.[]; .name == "PAYNOW_INTEGRATION_ID" or .name == "PAYNOW_INTEGRATION_KEY")' >/dev/null; then
+            echo 'Paynow runtime secrets already exist; refusing to overwrite them.'
+            exit 1
+          fi
+          secret_file="$(mktemp)"
+          trap 'rm -f "$secret_file"' EXIT
+          chmod 600 "$secret_file"
+          printf 'PAYNOW_INTEGRATION_ID=%s\nPAYNOW_INTEGRATION_KEY=%s\n' "$SANDBOX_ID" "$SANDBOX_KEY" > "$secret_file"
+          supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" --env-file "$secret_file" --yes
+          echo 'Sandbox credentials configured. No payment was initiated.'
   play-store-listing:
     if: github.event_name == 'workflow_dispatch' && inputs.task == 'play-store-listing' && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
     runs-on: ubuntu-latest
