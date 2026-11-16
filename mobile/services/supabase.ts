@@ -130,6 +130,7 @@ export function authErrorMessage(error: unknown, fallback = 'Authentication fail
   const code = typeof candidate.code === 'string' ? candidate.code.toLowerCase() : '';
   const message = typeof candidate.message === 'string' ? candidate.message.toLowerCase() : '';
   if (code === 'invalid_credentials' || message.includes('invalid login credentials')) return 'Email or password was not recognized.';
+  if (code === 'otp_disabled') return 'Check your email address. If you are new to Detail, select Create account; otherwise try your password or contact support.';
   if (code === 'email_not_confirmed' || message.includes('email not confirmed')) return 'Confirm your email address before signing in. You can request another confirmation email.';
   if (code === 'user_already_exists' || message.includes('user already registered')) return 'An account already uses this email. Sign in or use account recovery.';
   if (code.includes('rate_limit') || message.includes('too many requests')) return 'Too many attempts. Wait a few minutes and try again.';

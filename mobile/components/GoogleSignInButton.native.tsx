@@ -62,7 +62,10 @@ export default function GoogleSignInButton() {
       await ensureProfileExists(data.user.id, data.user.email ?? null);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Please try again.';
-      appAlert('Google Sign-In Failed', message);
+      const missingProvider = /no provider dependencies found|no credential provider|provider configuration/i.test(message);
+      appAlert('Google Sign-In Failed', missingProvider
+        ? 'Google sign-in is unavailable on this device. Update Google Play services and make sure a Google account is added. If using an emulator, use one with Google Play, or sign in with email.'
+        : message);
     } finally {
       setIsLoading(false);
     }

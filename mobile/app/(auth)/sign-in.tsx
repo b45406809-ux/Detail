@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Check } from 'lucide-react-native';
+import { ArrowLeft, Check, Eye, EyeOff } from 'lucide-react-native';
 import {
   auth,
   signInWithEmailAndPassword,
@@ -22,15 +22,15 @@ import {
   authErrorMessage,
 } from '../../services/supabase';
 import { SocialSignInButtons } from '../../components/SocialSignInButtons';
-import { sendEmailLoginCode } from '../../services/emailAuth';
-
-type EmailAuthMode = 'CODE' | 'PASSWORD';
 
 export default function SignInScreen() {
   const passwordInputRef = useRef<TextInput>(null);
+  const passwordConfirmationInputRef = useRef<TextInput>(null);
   const [email, setEmail] = useState('');
-  const [emailAuthMode, setEmailAuthMode] = useState<EmailAuthMode>('CODE');
   const [password, setPassword] = useState('');
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirmation, setShowPasswordConfirmation] = useState(false);
   const [isNewAccount, setIsNewAccount] = useState(false);
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -41,24 +41,12 @@ export default function SignInScreen() {
       appAlert('Email required', 'Please enter your email address.');
       return;
     }
-    if (emailAuthMode === 'CODE') {
-      if (isNewAccount && !hasAcceptedTerms) {
-        appAlert(
-          'Accept Terms & Conditions',
-          'Please review and accept Detail’s Terms of Service and Privacy Policy to create an account.',
-          [
-            { text: 'Review Terms', onPress: () => router.push('/customer-agreement') },
-            { text: 'I Agree', onPress: () => { setHasAcceptedTerms(true); void sendEmailCode(); } },
-            { text: 'Cancel', style: 'cancel' },
-          ]
-        );
-        return;
-      }
-      await sendEmailCode();
-      return;
-    }
     if (!password.trim()) {
       appAlert('Password required', 'Please enter your password.');
+      return;
+    }
+    if (isNewAccount && password !== passwordConfirmation) {
+      appAlert('Passwords do not match', 'Enter the same password in both fields.');
       return;
     }
     if (isNewAccount && !hasAcceptedTerms) {
@@ -74,19 +62,6 @@ export default function SignInScreen() {
       return;
     }
     await proceedWithEmailAuth();
-  };
-
-  const sendEmailCode = async () => {
-    setIsLoading(true);
-    try {
-      const intent = isNewAccount ? 'REGISTER' : 'SIGN_IN';
-      await sendEmailLoginCode(email, intent, hasAcceptedTerms || isNewAccount);
-      router.push({ pathname: '/(auth)/verify-email', params: { email: email.trim().toLowerCase(), intent } });
-    } catch (err: any) {
-      appAlert('Could not send code', authErrorMessage(err, 'Please check the email address and try again.'));
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   const proceedWithEmailAuth = async () => {
@@ -130,9 +105,8 @@ export default function SignInScreen() {
               onPress={() => {
                 setIsNewAccount(!isNewAccount);
                 setHasAcceptedTerms(false);
-                if (!isNewAccount) {
-                  setEmailAuthMode('PASSWORD');
-                }
+                setPassword('');
+                setPasswordConfirmation('');
               }}
             >
               <Text className="font-display font-black text-sm text-accent">{isNewAccount ? 'Sign in' : 'Create account'}</Text>
@@ -140,18 +114,12 @@ export default function SignInScreen() {
           </View>
 
           <View>
-                <Text className="font-sans text-xs text-ink/50 mb-4">Cleaners verify their phone number during registration.</Text>
-                  <View className="gap-4">
-                    <View className="flex-row bg-ink/5 rounded-xl p-1">
-                      {([
-                        ['CODE', 'Email code'],
-                        ['PASSWORD', 'Password'],
-                      ] as const).map(([mode, label]) => (
-                        <TouchableOpacity key={mode} testID={`auth-email-mode-${mode.toLowerCase()}`} onPress={() => setEmailAuthMode(mode)} className={`flex-1 items-center py-2.5 rounded-lg ${emailAuthMode === mode ? 'bg-white shadow-sm' : ''}`}>
-                          <Text className={`text-xs font-black ${emailAuthMode === mode ? 'text-accent' : 'text-ink/50'}`}>{label}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
+            <Text className="font-sans text-xs text-ink/50 mb-4">
+              {isNewAccount
+                ? 'We’ll send one email verification code when you create your account. Cleaners verify their phone number during registration.'
+                : 'Sign in with your password, Google, or Apple.'}
+            </Text>
+            <View className="gap-4">
 
                     <View>
                       <Text className="text-sm font-sans text-ink/60 mb-2">Email</Text>
@@ -164,16 +132,14 @@ export default function SignInScreen() {
                         autoCapitalize="none"
                         value={email}
                         onChangeText={setEmail}
-                        returnKeyType={emailAuthMode === 'PASSWORD' ? 'next' : 'done'}
-                        blurOnSubmit={emailAuthMode !== 'PASSWORD'}
+                        returnKeyType="next"
                         onSubmitEditing={() => {
-                          if (emailAuthMode === 'PASSWORD') passwordInputRef.current?.focus();
-                          else void handleEmailAuth();
+                          passwordInputRef.current?.focus();
                         }}
                       />
                     </View>
 
-                    {emailAuthMode === 'PASSWORD' && <View>
+                    <View>
                       <View className="flex-row items-center justify-between mb-2">
                         <Text className="text-sm font-sans text-ink/60">Password</Text>
                         {!isNewAccount && (
@@ -185,18 +151,58 @@ export default function SignInScreen() {
                           </TouchableOpacity>
                         )}
                       </View>
+                      <View className="flex-row items-center rounded-2xl bg-ink/5">
                       <TextInput
                         ref={passwordInputRef}
                         testID="auth-password-input"
-                        className="font-sans rounded-2xl px-4 py-4 text-base text-ink bg-ink/5"
+                        className="flex-1 font-sans px-4 py-4 text-base text-ink"
                         placeholder="••••••••"
                         placeholderTextColor="rgba(21,2,86,0.35)"
-                        secureTextEntry
+                        secureTextEntry={!showPassword}
                         value={password}
                         onChangeText={setPassword}
-                        returnKeyType="done"
-                        onSubmitEditing={() => void handleEmailAuth()}
+                        returnKeyType={isNewAccount ? 'next' : 'done'}
+                        onSubmitEditing={() => {
+                          if (isNewAccount) passwordConfirmationInputRef.current?.focus();
+                          else void handleEmailAuth();
+                        }}
                       />
+                      <TouchableOpacity
+                        testID="auth-password-visibility-toggle"
+                        accessibilityRole="button"
+                        accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                        onPress={() => setShowPassword((visible) => !visible)}
+                        className="px-4 items-center justify-center"
+                      >
+                        {showPassword ? <EyeOff size={20} color="#150256" /> : <Eye size={20} color="#150256" />}
+                      </TouchableOpacity>
+                      </View>
+                    </View>
+                    {isNewAccount && <View>
+                      <Text className="text-sm font-sans text-ink/60 mb-2">Confirm password</Text>
+                      <View className="flex-row items-center rounded-2xl bg-ink/5">
+                        <TextInput
+                          ref={passwordConfirmationInputRef}
+                          testID="auth-password-confirmation-input"
+                          className="flex-1 font-sans px-4 py-4 text-base text-ink"
+                          placeholder="••••••••"
+                          placeholderTextColor="rgba(21,2,86,0.35)"
+                          secureTextEntry={!showPasswordConfirmation}
+                          value={passwordConfirmation}
+                          onChangeText={setPasswordConfirmation}
+                          returnKeyType="done"
+                          onSubmitEditing={() => void handleEmailAuth()}
+                        />
+                        <TouchableOpacity
+                          testID="auth-password-confirmation-visibility-toggle"
+                          accessibilityRole="button"
+                          accessibilityLabel={showPasswordConfirmation ? 'Hide confirm password' : 'Show confirm password'}
+                          onPress={() => setShowPasswordConfirmation((visible) => !visible)}
+                          className="px-4 items-center justify-center"
+                        >
+                          {showPasswordConfirmation ? <EyeOff size={20} color="#150256" /> : <Eye size={20} color="#150256" />}
+                        </TouchableOpacity>
+                      </View>
                     </View>}
 
                     {/* Terms acceptance checkbox */}
@@ -244,9 +250,7 @@ export default function SignInScreen() {
                       {isLoading ? (
                         <ActivityIndicator color="#fff" />
                       ) : (
-                        <Text className="text-white font-sans-bold text-base">
-                          {emailAuthMode === 'CODE' ? 'Send Email Code' : isNewAccount ? 'Create Account' : 'Sign In'}
-                        </Text>
+                        <Text className="text-white font-sans-bold text-base">{isNewAccount ? 'Create Account' : 'Sign In'}</Text>
                       )}
                     </TouchableOpacity>
                   </View>
