@@ -14,6 +14,7 @@ import {
 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { LoadingList } from '../../components/LoadingList';
 import { LoadingError } from '../../components/LoadingError';
 import {
@@ -36,12 +37,15 @@ import {
 } from '../../services/supabase';
 import { addFundsToWallet } from '../../services/payments';
 import { callFunction } from '../../services/functions';
-import { WalletTransaction } from '../../types';
+import { Job, WalletTransaction } from '../../types';
 import { formatDate } from '../../utils/date';
 
 export default function WalletScreen() {
   const { user, profile } = useAuth();
+  const isCleaner = profile?.role === 'CLEANER';
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
+  const [commissionJobs, setCommissionJobs] = useState<Job[]>([]);
+  const [commissionJobsLoading, setCommissionJobsLoading] = useState(false);
   const [transactionsLoading, setTransactionsLoading] = useState(true);
   const [transactionsError, setTransactionsError] = useState(false);
   const [transactionsRetry, setTransactionsRetry] = useState(0);
@@ -74,6 +78,18 @@ export default function WalletScreen() {
     }, () => { setTransactionsLoading(false); setTransactionsError(true); });
   }, [userId, transactionsRetry]);
 
+  useEffect(() => {
+    if (!userId || !isCleaner) { setCommissionJobs([]); setCommissionJobsLoading(false); return; }
+    setCommissionJobsLoading(true);
+    const q = query(collection(db, 'jobs'), where('cleanerId', '==', userId), where('status', '==', 'COMPLETED'), orderBy('createdAt', 'desc'), limit(50));
+    return onSnapshot(q, (snap) => {
+      setCommissionJobs(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Job)).filter((job) =>
+        job.earnings?.commission !== undefined || job.directCommissionPolicyVersion === 1
+      ));
+      setCommissionJobsLoading(false);
+    }, () => setCommissionJobsLoading(false));
+  }, [userId, isCleaner]);
+
   const handleAddFunds = async () => {
     const value = parseFloat(amount);
     if (isNaN(value) || value < 1) {
@@ -102,7 +118,6 @@ export default function WalletScreen() {
   };
 
   const balance = profile?.balance ?? 0;
-  const isCleaner = profile?.role === 'CLEANER';
   // Commission top-ups are tracked in a separate bucket and must not reduce
   // already-cleared earnings; payout holds debit earningsBalance atomically.
   const availableEarnings = isCleaner
@@ -132,7 +147,7 @@ export default function WalletScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-[#F2F1F5]">
+    <SafeAreaView className="flex-1 bg-canvas">
       {/* Header */}
       <View className="px-5 pt-4 pb-4">
         <Text className="text-2xl font-display font-black text-slate-900 tracking-tight">Wallet</Text>
@@ -189,7 +204,21 @@ export default function WalletScreen() {
         </TouchableOpacity>
       )}
 
-      <View className="mx-5 mb-6">
+      {isCleaner ? <View className="mx-5 mb-5 rounded-3xl border border-slate-100 bg-white p-4">
+        <View className="mb-3 flex-row items-center justify-between">
+          <View><Text className="font-display font-black text-slate-900">Jobs with Detail commission</Text><Text className="mt-1 font-sans text-xs text-slate-500">Completed bookings that added to your commission record</Text></View>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/activity')}><Text className="font-sans-bold text-xs text-accent">See all</Text></TouchableOpacity>
+        </View>
+        {commissionJobsLoading ? <ActivityIndicator color="#3906D2" /> : commissionJobs.length === 0 ? <Text className="font-sans text-sm text-slate-500">No completed jobs with commission yet.</Text> : commissionJobs.slice(0, 3).map((job) => {
+          const gross = Number(job.earnings?.gross ?? job.price ?? 0);
+          const fee = Number(job.earnings?.commission ?? 0);
+          const net = Number(job.earnings?.net ?? Math.max(0, gross - fee));
+          return <View key={job.id} className="flex-row items-center justify-between border-t border-slate-100 py-3">
+            <View className="flex-1 pr-3"><Text className="font-sans-bold text-sm text-slate-800" numberOfLines={1}>{job.serviceType || (job.category === 'CAR' ? 'Car cleaning' : 'House cleaning')}</Text><Text className="mt-0.5 font-sans text-xs text-slate-500">{formatDate(job.createdAt, 'Date unavailable')} · Job ${gross.toFixed(2)}</Text></View>
+            <View className="items-end"><Text className="font-sans-bold text-sm text-rose-700">-${fee.toFixed(2)}</Text><Text className="mt-0.5 font-sans text-[10px] text-slate-500">After fee ${net.toFixed(2)}</Text></View>
+          </View>;
+        })}
+      </View> : <View className="mx-5 mb-6">
         <Text className="text-xs font-display font-black text-slate-400 uppercase tracking-widest mb-3">PAYING WITH PAYNOW</Text>
         <View className="bg-white rounded-3xl border border-slate-100 p-4">
           <View className="flex-row items-center gap-3 mb-3">
@@ -199,7 +228,7 @@ export default function WalletScreen() {
           <Text className="text-sm font-display font-black text-slate-900">Choose your payment method at checkout</Text>
           <Text className="font-sans text-xs text-slate-500 mt-1 leading-5">Paynow shows the methods currently enabled for Detail, including any available mobile money and banking options.</Text>
         </View>
-      </View>
+      </View>}
 
       {/* Transactions */}
       <View className="flex-1 px-5">

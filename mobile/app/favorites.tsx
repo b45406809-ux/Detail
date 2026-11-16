@@ -43,7 +43,7 @@ export default function FavoritesScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-[#F3F1FC]">
+    <SafeAreaView className="flex-1 bg-canvas">
       <View className="flex-row items-center gap-3 px-5 pt-4 pb-4">
         <TouchableOpacity onPress={() => goBackSafely()} className="w-10 h-10 bg-white rounded-2xl items-center justify-center border border-ink/5">
           <ArrowLeft size={18} color="#150256" />

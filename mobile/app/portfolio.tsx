@@ -39,7 +39,7 @@ export default function CleanerPortfolioScreen() {
     { text: 'Remove', style: 'destructive', onPress: async () => { setBusy(true); try { await callFunction('removeCleanerPortfolioPhoto', { photoId: photo.id }); setPhotos(current => current.filter(item => item.id !== photo.id)); } catch (error: any) { appAlert('Could not remove photo', error.message || 'Please try again.'); } finally { setBusy(false); } } },
   ]);
 
-  return <SafeAreaView className="flex-1 bg-[#F8F7FC]">
+  return <SafeAreaView className="flex-1 bg-canvas">
     <View className="flex-row items-center px-5 py-4 bg-white border-b border-slate-100"><TouchableOpacity onPress={() => goBackSafely()} className="mr-4"><ArrowLeft size={22} color="#150256"/></TouchableOpacity><View><Text className="font-display text-xl font-black text-ink">My portfolio</Text><Text className="font-sans text-xs text-ink/50">Show customers examples of your work</Text></View></View>
     <ScrollView contentContainerClassName="p-5 pb-10">
       <View className="rounded-3xl bg-white p-5 mb-5"><Text className="font-display text-base font-black text-ink mb-1">Build trust with photos</Text><Text className="font-sans text-sm leading-5 text-ink/60">Upload up to 12 photos that you have permission to share. Avoid showing people, addresses, documents, or other private information.</Text><TouchableOpacity disabled={busy} onPress={() => void addPhoto()} className="mt-4 flex-row items-center justify-center gap-2 rounded-2xl bg-accent py-4">{busy ? <ActivityIndicator color="white"/> : <><Plus size={18} color="white"/><Text className="font-display font-black text-white">Add a photo</Text></>}</TouchableOpacity></View>

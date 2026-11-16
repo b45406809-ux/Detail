@@ -1,6 +1,6 @@
 import { showPermissionDenied } from '@/utils/permissionPrompt';
 import { appAlert } from '@/components/AppDialog';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -29,6 +29,7 @@ import {
   Camera,
   Building2,
   Mail,
+  DollarSign,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as AppleAuthentication from 'expo-apple-authentication';
@@ -45,22 +46,17 @@ import { configureNotificationChannels } from '../../services/notifications';
 import { StarRating } from '../../components/StarRating';
 
 export default function ProfileScreen() {
-  const { user, profile, updateProfile } = useAuth();
+  const { user, profile, updateProfile, refreshProfile } = useAuth();
   const [notificationsOn, setNotificationsOn] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
-  const [communication, setCommunication] = useState({emailEnabled:false,pushEnabled:false,inAppEnabled:false,smsEnabled:false,whatsappEnabled:false,inactivityRemindersEnabled:false});
-  const [savingCommunication, setSavingCommunication] = useState(false);
+  const [profilePhotoFailed, setProfilePhotoFailed] = useState(false);
+  const photoRefreshAttempted = useRef<string | null>(null);
+  const hasApprovedCleanerAccount = profile?.cleanerOnboardingComplete === true
+    && profile?.hasAgreedToTerms === true
+    && profile?.cleanerAgreementAccepted === true
+    && profile?.verificationStatus === 'VERIFIED';
+  useEffect(() => { setProfilePhotoFailed(false); }, [profile?.photoURL]);
   useEffect(() => { hasCurrentPushDevice().then(setNotificationsOn).catch(() => setNotificationsOn(false)); }, [user?.uid]);
-  useEffect(() => { if(user?.uid) callFunction<{}, {preferences:typeof communication}>('getCommunicationPreferences').then(result=>setCommunication(result.preferences)).catch(()=>undefined); }, [user?.uid]);
-
-  const setCommunicationPreference = async (key:keyof typeof communication,value:boolean) => {
-    const next={...communication,[key]:value};
-    if(value&&key==='inactivityRemindersEnabled'&&!next.pushEnabled&&!next.inAppEnabled){appAlert('Choose a reminder destination','Turn on push or in-app announcements before enabling inactivity reminders.');return;}
-    setSavingCommunication(true);
-    try{const result=await callFunction<Record<string,boolean>,{preferences:typeof communication}>('updateCommunicationPreferences',{[key]:value});setCommunication(result.preferences);}
-    catch(error){appAlert('Could not save communication choices',error instanceof Error?error.message:'Please try again.');}
-    finally{setSavingCommunication(false);}
-  };
 
   const setPushNotifications = async (enabled: boolean) => {
     if (!enabled) {
@@ -137,29 +133,24 @@ export default function ProfileScreen() {
       setIsUploadingPhoto(true);
       const photoUrl = await uploadProfilePhoto(result.assets[0].uri);
       await updateProfile({ photoURL: photoUrl });
-    } catch {
-      appAlert('Upload failed', 'Could not upload profile picture. Please try again.');
+      setProfilePhotoFailed(false);
+      photoRefreshAttempted.current = null;
+    } catch (error) {
+      appAlert('Upload failed', error instanceof Error ? error.message : 'Could not upload profile picture. Please try again.');
     } finally {
       setIsUploadingPhoto(false);
     }
   };
 
-  // Uber-style mode switch. Going CUSTOMER -> CLEANER is gated: the cleaner
-  // registration form (register-cleaner.tsx) and the Cleaner Agreement
-  // acceptance must both be done first. Once done, switching back and forth
-  // is instant. Going CLEANER -> CUSTOMER never needs a gate.
+  // Only approved cleaners can switch their active role. Customers start
+  // registration explicitly from this Account settings list.
   const handleSwitchRole = () => {
-    if (profile?.role === 'CUSTOMER') {
-      if (profile.cleanerOnboardingComplete && profile.hasAgreedToTerms
-        && profile.cleanerAgreementAccepted && profile.verificationStatus === 'VERIFIED') {
-        callFunction('setActiveRole', { role: 'CLEANER' }).catch((e:any) => appAlert('Could not switch role', e.message ?? 'Try again.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Cleaner registration', onPress: () => router.push('/register-cleaner') }]));
-      } else {
-        router.push('/register-cleaner');
-      }
-    } else if (profile?.role === 'CLEANER') {
+    if (profile?.role === 'CLEANER') {
       callFunction('setActiveRole', { role: 'CUSTOMER' }).then(() => {
         stopCleanerLocationUpdates().catch((error) => console.warn('[location] could not stop after role switch:', error));
       }).catch((e:any) => appAlert('Could not switch role', e.message ?? 'Try again.'));
+    } else if (hasApprovedCleanerAccount) {
+      callFunction('setActiveRole', { role: 'CLEANER' }).catch((e:any) => appAlert('Could not switch role', e.message ?? 'Try again.'));
     }
   };
 
@@ -284,15 +275,19 @@ export default function ProfileScreen() {
               }] : []),
             ]
           : []),
-        {
-          icon: Repeat,
-          label: profile?.role === 'CLEANER' ? 'Switch to Customer' : 'Switch to Cleaner',
-          sub:
-            profile?.role === 'CLEANER'
-              ? 'Go back to booking cleaners'
-              : 'Start earning by accepting jobs',
-          onPress: handleSwitchRole,
-        },
+        ...(profile?.role === 'CLEANER' || hasApprovedCleanerAccount
+          ? [{
+              icon: Repeat,
+              label: profile?.role === 'CLEANER' ? 'Switch to Customer' : 'Switch to Cleaner',
+              sub: profile?.role === 'CLEANER' ? 'Go back to booking cleaners' : 'Return to your cleaner workspace',
+              onPress: handleSwitchRole,
+            }]
+          : [{
+              icon: Briefcase,
+              label: 'Become a Cleaner',
+              sub: 'Register and complete verification to offer cleaning services',
+              onPress: () => router.push('/register-cleaner'),
+            }]),
       ],
     },
     {
@@ -340,7 +335,7 @@ export default function ProfileScreen() {
   ];
 
   return (
-    <SafeAreaView className="flex-1 bg-[#F2F1F5]">
+    <SafeAreaView className="flex-1 bg-canvas">
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View className="px-5 pt-4 pb-4">
@@ -359,8 +354,14 @@ export default function ProfileScreen() {
               <View className="w-16 h-16 bg-accent rounded-3xl items-center justify-center overflow-hidden border border-slate-200">
                 {isUploadingPhoto ? (
                   <ActivityIndicator color="#fff" size="small" />
-                ) : profile?.photoURL ? (
-                  <Image source={{ uri: profile.photoURL }} className="w-full h-full" />
+                ) : profile?.photoURL && !profilePhotoFailed ? (
+                  <Image source={{ uri: profile.photoURL }} className="w-full h-full" onError={() => {
+                    const photoKey = profile.photoURL?.split('?')[0] ?? '';
+                    if (photoKey && photoRefreshAttempted.current !== photoKey) {
+                      photoRefreshAttempted.current = photoKey;
+                      void refreshProfile().catch(() => setProfilePhotoFailed(true));
+                    } else setProfilePhotoFailed(true);
+                  }} />
                 ) : (
                   <Text className="text-2xl font-display font-black text-white">
                     {profile?.displayName?.charAt(0) ?? '?'}
@@ -404,12 +405,12 @@ export default function ProfileScreen() {
           {profile?.role === 'CLEANER' && (
             <View className="flex-row gap-3 mt-5 pt-5 border-t border-slate-100">
               {[
-                { label: 'Jobs', value: profile.jobsCompleted ?? 0 },
-                { label: 'Rating', value: profile.ratingAverage?.toFixed(1) ?? '—' },
-                { label: 'Balance', value: `$${profile.balance?.toFixed(0) ?? 0}` },
-              ].map(({ label, value }) => (
+                { label: 'Completed jobs', value: profile.jobsCompleted ?? 0, icon: Briefcase },
+                { label: 'Rating', value: profile.ratingAverage ? profile.ratingAverage.toFixed(1) : 'New', icon: Star },
+                { label: 'Commission due', value: `$${Number(profile.commissionOwed ?? 0).toFixed(2)}`, icon: DollarSign },
+              ].map(({ label, value, icon: Icon }) => (
                 <View key={label} className="flex-1 items-center">
-                  <Text className="text-lg font-display font-black text-slate-900">{String(value)}</Text>
+                  <View className="flex-row items-center gap-1"><Icon size={13} color={label === 'Rating' ? '#f59e0b' : '#3906d2'} fill={label === 'Rating' ? '#f59e0b' : 'transparent'} /><Text className="text-base font-display font-black text-slate-900">{String(value)}</Text></View>
                   <Text className="font-sans text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
                     {label}
                   </Text>
@@ -436,22 +437,6 @@ export default function ProfileScreen() {
             trackColor={{ false: '#e2e8f0', true: '#3906d2' }}
             thumbColor="#fff"
           />
-        </View>
-
-        <View className="mx-5 mb-4 bg-white rounded-3xl px-5 py-5 border border-slate-100">
-          <Text className="text-sm font-display font-black text-slate-900">Marketing and reminders</Text>
-          <Text className="font-sans text-xs leading-5 text-slate-500 mt-1 mb-3">Choose how Detail may send product news. These choices are separate from booking and payment alerts. You can change them here at any time.</Text>
-          {([
-            ['emailEnabled','Email','Product announcements and offers by email.'],
-            ['pushEnabled','Push announcements','Promotional push notifications on this device. Enable Notifications above too.'],
-            ['inAppEnabled','In-app announcements','Promotional messages in your Detail notifications inbox.'],
-            ['smsEnabled','SMS','Marketing texts from Detail. Carrier charges may apply. Each campaign includes a link to stop these messages.'],
-            ['whatsappEnabled','WhatsApp','Marketing messages from Detail on WhatsApp. Each campaign includes a link to stop these messages.'],
-            ['inactivityRemindersEnabled','Come-back reminders','A reminder after 7 days without opening Detail; at most once per inactive period.'],
-          ] as const).map(([key,title,description])=><View key={key} className="flex-row items-center justify-between gap-4 py-3 border-t border-slate-100">
-            <View className="flex-1"><Text className="font-sans-bold text-sm text-slate-800">{title}</Text><Text className="font-sans text-xs leading-4 text-slate-500 mt-0.5">{description}</Text></View>
-            <Switch disabled={savingCommunication} value={communication[key]} onValueChange={value=>void setCommunicationPreference(key,value)} trackColor={{false:'#e2e8f0',true:'#3906d2'}} thumbColor="#fff" />
-          </View>)}
         </View>
 
         {/* Menu groups */}

@@ -1,9 +1,9 @@
 import { appAlert } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, CheckCircle } from 'lucide-react-native';
 import { callFunction } from '../services/functions';
 
@@ -87,8 +87,27 @@ const TERMS = [
 ];
 
 export default function CleanerAgreementScreen() {
+  const params = useLocalSearchParams<{ organizationCode?: string }>();
   const [isAccepting, setIsAccepting] = useState(false);
   const [accepted, setAccepted] = useState(false);
+  const [organizationCode, setOrganizationCode] = useState(String(params.organizationCode ?? '').trim());
+  const [organizationJoined, setOrganizationJoined] = useState(false);
+  const [organizationError, setOrganizationError] = useState('');
+
+  const joinOrganization = async () => {
+    const code = organizationCode.trim();
+    if (!code) return;
+    setIsAccepting(true);
+    setOrganizationError('');
+    try {
+      await callFunction('joinOrganization', { code });
+      setOrganizationJoined(true);
+    } catch (error) {
+      setOrganizationError((error as { message?: string })?.message || 'The code could not be accepted. Ask the organization owner for a new code and try again.');
+    } finally {
+      setIsAccepting(false);
+    }
+  };
 
   const handleAccept = async () => {
     setIsAccepting(true);
@@ -96,6 +115,9 @@ export default function CleanerAgreementScreen() {
       // The server requires a successful Didit decision before granting cleaner access.
       await callFunction('acceptCleanerAgreement');
       setAccepted(true);
+      // The invitation is email-bound and the server only lets an activated,
+      // verified cleaner join. Accept the agreement first, then redeem it.
+      if (organizationCode.trim()) await joinOrganization();
     } catch (error) {
       appAlert('Could not activate cleaner account', (error as { message?: string })?.message || 'Complete identity verification and try again.');
     } finally {
@@ -126,6 +148,18 @@ export default function CleanerAgreementScreen() {
           <Text className="font-sans text-sm text-slate-500 font-medium text-center mb-8">
             You're now a verified Detail cleaner. Start accepting jobs!
           </Text>
+          {organizationCode.trim() ? organizationJoined ? (
+            <Text className="font-sans text-sm text-emerald-700 text-center mb-6">You’ve joined the organization successfully.</Text>
+          ) : (
+            <View className="w-full mb-6 gap-3">
+              <Text className="font-sans text-sm text-slate-600 text-center">Your cleaner account is active, but the organization invitation still needs to be accepted.</Text>
+              {organizationError ? <Text accessibilityRole="alert" className="font-sans text-xs text-red-600 text-center">{organizationError}</Text> : null}
+              <TextInput value={organizationCode} onChangeText={setOrganizationCode} autoCapitalize="characters" autoCorrect={false} placeholder="Organization invitation code" className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-ink" />
+              <TouchableOpacity disabled={isAccepting || !organizationCode.trim()} onPress={() => void joinOrganization()} className="rounded-2xl border border-accent py-4 items-center">
+                {isAccepting ? <ActivityIndicator color="#3906D2" /> : <Text className="font-display font-black text-accent">Join organization</Text>}
+              </TouchableOpacity>
+            </View>
+          ) : null}
           <TouchableOpacity
             onPress={() => router.replace('/home')}
             className="w-full bg-accent py-5 rounded-[32px] items-center shadow-lg shadow-accent/30"

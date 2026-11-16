@@ -40,6 +40,7 @@ const CATEGORY_OPTIONS: { id: ServiceCategory; label: string; icon: any }[] = [
   { id: 'HOUSE', label: 'House Cleaning', icon: HomeIcon },
   { id: 'CAR', label: 'Car Cleaning', icon: Car },
 ];
+const DEFAULT_SERVICE_RADIUS_KM = 15;
 
 export default function RegisterCleanerScreen() {
   const { profile } = useAuth();
@@ -49,7 +50,7 @@ export default function RegisterCleanerScreen() {
   const [address, setAddress] = useState('');
   const [serviceArea, setServiceArea] = useState('');
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
-  const [radius, setRadius] = useState('15');
+  const [radius, setRadius] = useState(String(DEFAULT_SERVICE_RADIUS_KM));
   const [experience, setExperience] = useState('');
   const [organizationCode, setOrganizationCode] = useState('');
   const [isCheckingIdentity, setIsCheckingIdentity] = useState(false);
@@ -179,6 +180,11 @@ export default function RegisterCleanerScreen() {
       appAlert('Pick a service', 'Choose at least one service you want to offer.');
       return;
     }
+    const serviceRadiusKm = Number(radius);
+    if (!Number.isFinite(serviceRadiusKm) || serviceRadiusKm < 1 || serviceRadiusKm > 100) {
+      appAlert('Check your service radius', 'Enter a radius between 1 and 100 km. The suggested starting radius is 15 km.');
+      return;
+    }
     if (!phoneIsVerified) { appAlert('Verify your phone', 'Verify your mobile number before applying as a cleaner.'); return; }
     if (!isIdentityVerified) {
       appAlert('Identity check required', 'Complete your Didit identity check before continuing.');
@@ -196,13 +202,9 @@ export default function RegisterCleanerScreen() {
       await callFunction('submitCleanerApplication', {
         fullName: fullName.trim(), phone: normalizedPhone, address: address.trim(),
         serviceArea: serviceArea.trim(), serviceCategories: categories,
-        serviceRadiusKm: Number(radius) || 15, experienceYears: Number(experience) || 0,
+        serviceRadiusKm, experienceYears: Number(experience) || 0,
       });
-      if (organizationCode.trim()) {
-        await auth.currentUser?.getIdToken(true);
-        await callFunction('joinOrganization', { code: organizationCode.trim() });
-      }
-      router.push('/cleaner-agreement');
+      router.push({ pathname: '/cleaner-agreement', params: organizationCode.trim() ? { organizationCode: organizationCode.trim() } : {} });
     } catch {
       appAlert('Error', 'Failed to submit your registration. Please try again.');
     } finally {
@@ -313,6 +315,7 @@ export default function RegisterCleanerScreen() {
           <View className="flex-row gap-3 mb-6">
             <View className="flex-1">
               <LabeledInput label="Service Radius (km)" value={radius} onChangeText={setRadius} keyboardType="number-pad" />
+              <Text className="font-sans text-[11px] text-slate-400 mt-1">Suggested starting radius: {DEFAULT_SERVICE_RADIUS_KM} km. Change it to match how far you’re willing to travel (1–100 km).</Text>
             </View>
             <View className="flex-1">
               <LabeledInput label="Years of Experience" value={experience} onChangeText={setExperience} keyboardType="number-pad" />
@@ -321,7 +324,7 @@ export default function RegisterCleanerScreen() {
 
           <View className="mb-6">
             <LabeledInput label="Organization invitation code (Optional)" value={organizationCode} onChangeText={setOrganizationCode} placeholder="Enter a code from your organization" />
-            <Text className="font-sans text-[11px] text-slate-400 font-medium mt-1">If an organization invited you, enter its code after completing your identity check.</Text>
+            <Text className="font-sans text-[11px] text-slate-400 font-medium mt-1">If an organization invited you, enter its code here. It will be applied after your identity check and cleaner agreement.</Text>
           </View>
 
           {/* Didit identity check */}

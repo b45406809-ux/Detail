@@ -41,6 +41,29 @@ const reply = (body: unknown, status = 200, origin: string | null = null) => new
   status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': origin ?? '*', 'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type', 'access-control-allow-methods': 'POST, OPTIONS', 'vary': 'Origin' },
 });
 function fail(status: number, message: string): never { throw new ApiError(status, message); }
+async function signedMediaUrl(value: unknown): Promise<string | null> {
+  if (typeof value !== 'string' || !value) return null;
+  if (!value.startsWith('detail-media/')) return value;
+  const path = value.slice('detail-media/'.length);
+  if (!path || path.includes('..') || path.startsWith('/')) return null;
+  try {
+    const s3 = r2Client();
+    await s3.send(new HeadObjectCommand({ Bucket: r2Bucket(), Key: path }));
+    return await getSignedUrl(s3, new GetObjectCommand({ Bucket: r2Bucket(), Key: path }), { expiresIn: 3600 });
+  } catch {
+    const { data, error } = await admin.storage.from('detail-media').createSignedUrl(path, 3600);
+    if (error) throw error;
+    return data.signedUrl;
+  }
+}
+async function cleanerBookingSummary(job: Json) {
+  const summary = toCleanerBookingSummary(job);
+  const paths = Array.isArray(job.photos)
+    ? job.photos.filter((path: unknown) => typeof path === 'string' && path.startsWith('detail-media/job-photos/')).slice(0, 6)
+    : [];
+  summary.photos = (await Promise.all(paths.map(signedMediaUrl))).filter((photo): photo is string => !!photo);
+  return summary;
+}
 const text = (value: unknown, max = 500) => typeof value === 'string' ? value.trim().slice(0, max) : '';
 const secret = (primary: string, alias: string) => Deno.env.get(primary) || Deno.env.get(alias) || '';
 const round2 = (value: number) => Math.round(value * 100) / 100;
@@ -1144,7 +1167,17 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(typeof lat!=='number'||typeof lng!=='number'||!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180) fail(400,'A valid location is required.');
       const {data,error}=await admin.rpc('nearby_cleaners_for_map',{p_lat:lat,p_lng:lng});
       if(error)throw error;
-      return {cleaners:data??[]};
+      const cleaners:Json[] = data ?? [];
+      const cleanerIds = cleaners.map((cleaner:Json) => cleaner.id).filter((id:unknown):id is string => typeof id === 'string');
+      const {data:profiles,error:profileError} = cleanerIds.length
+        ? await admin.from('users').select('id,photourl').in('id',cleanerIds)
+        : {data:[],error:null};
+      if(profileError)throw profileError;
+      const photoById = new Map((profiles ?? []).map((profile:Json) => [profile.id,profile.photourl]));
+      return {cleaners:await Promise.all(cleaners.map(async (cleaner:Json) => ({
+        ...cleaner,
+        photo_url:await signedMediaUrl(photoById.get(cleaner.id)),
+      })))};
     }
     case 'searchVerifiedCleaners': {
       const actor=authed();
@@ -1160,9 +1193,9 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const candidates=(data??[]).map((row:Json)=>{const point=row.location??{};const cleanerLat=Number(point.lat??point.latitude),cleanerLng=Number(point.lng??point.longitude);const online=cleanerLocationIsFresh(row.status,row.locationupdatedat);let distanceKm:number|null=null;if(useNearby&&online&&Number.isFinite(cleanerLat)&&Number.isFinite(cleanerLng)){const radians=(n:number)=>n*Math.PI/180;const dLat=radians(cleanerLat-lat),dLng=radians(cleanerLng-lng),a=Math.sin(dLat/2)**2+Math.cos(radians(lat))*Math.cos(radians(cleanerLat))*Math.sin(dLng/2)**2;distanceKm=6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}return {row,distanceKm,online};}).filter((item:any)=>!useNearby||(item.online&&item.distanceKm!==null&&item.distanceKm<=Math.min(radius,Number(item.row.serviceradiuskm)||radius))).sort((a:any,b:any)=>useNearby?(a.distanceKm??99999)-(b.distanceKm??99999):Number(b.row.ratingaverage??0)-Number(a.row.ratingaverage??0)).slice(0,100);
       const profiles=await Promise.all(candidates.map(async ({row,distanceKm}:any)=>{
         const {data:portfolio}=await admin.from('cleanerportfolio').select('imagepath,caption').eq('cleanerid',row.id).order('createdat',{ascending:false}).limit(6);
-        const photos=await Promise.all((portfolio??[]).map(async (photo:Json)=>{const {data:signed}=await admin.storage.from('detail-media').createSignedUrl(String(photo.imagepath),3600);return signed?.signedUrl?{url:signed.signedUrl,caption:photo.caption}:null;}));
-        const avatar=row.photourl?.startsWith('detail-media/')?await admin.storage.from('detail-media').createSignedUrl(String(row.photourl).slice('detail-media/'.length),3600):null;
-        return {uid:row.id,displayName:row.displayname,photoURL:avatar?.data?.signedUrl??row.photourl,portfolio:photos.filter(Boolean),serviceArea:row.servicearea,serviceCategories:row.servicecategories,ratingAverage:row.ratingaverage,ratingCount:row.ratingcount,jobsCompleted:row.jobscompleted,verificationStatus:row.verificationstatus,available:cleanerLocationIsFresh(row.status,row.locationupdatedat),distanceKm:distanceKm===null?null:Math.round(distanceKm)};
+        const photos=await Promise.all((portfolio??[]).map(async (photo:Json)=>{const url=await signedMediaUrl(`detail-media/${photo.imagepath}`);return url?{url,caption:photo.caption}:null;}));
+        const avatar=await signedMediaUrl(row.photourl);
+        return {uid:row.id,displayName:row.displayname,photoURL:avatar,portfolio:photos.filter(Boolean),serviceArea:row.servicearea,serviceCategories:row.servicecategories,ratingAverage:row.ratingaverage,ratingCount:row.ratingcount,jobsCompleted:row.jobscompleted,verificationStatus:row.verificationstatus,available:cleanerLocationIsFresh(row.status,row.locationupdatedat),distanceKm:distanceKm===null?null:Math.round(distanceKm)};
       }));
       return {cleaners:profiles};
     }
@@ -1170,7 +1203,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const actor=authed(), cleanerId=text(input.cleanerId,80)||actor;
       if(cleanerId!==actor){const {data:profile}=await admin.from('users').select('role,verificationstatus,issuspended,isbanned').eq('id',cleanerId).maybeSingle();if(!profile||profile.role!=='CLEANER'||profile.verificationstatus!=='VERIFIED'||profile.issuspended||profile.isbanned)fail(404,'Cleaner profile is unavailable.');}
       const {data,error}=await admin.from('cleanerportfolio').select('id,imagepath,caption,createdat').eq('cleanerid',cleanerId).order('createdat',{ascending:false}).limit(20);if(error)throw error;
-      const photos=await Promise.all((data??[]).map(async (photo:Json)=>{const {data:signed}=await admin.storage.from('detail-media').createSignedUrl(String(photo.imagepath),3600);return {...photo,url:signed?.signedUrl??null};}));
+      const photos=await Promise.all((data??[]).map(async (photo:Json)=>({ ...photo, url:await signedMediaUrl(`detail-media/${photo.imagepath}`) })));
       return {photos};
     }
     case 'getCleanerBookingPreview': {
@@ -1178,10 +1211,10 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(profile.role!=='CLEANER'||profile.verificationstatus!=='VERIFIED'||!profile.cleaneragreementaccepted||!profile.cleaneronboardingcomplete||profile.issuspended||profile.isbanned)fail(403,'Only active, verified cleaners can review open bookings.');
       const {data:openJob,error:openError}=await admin.from('openjobs').select('jobid,status').eq('jobid',jobId).eq('status','PENDING').maybeSingle();
       if(openError)throw openError;if(!openJob)fail(404,'This booking is no longer accepting quotes.');
-      const {data:job,error}=await admin.from('jobs').select('id,category,servicetype,checklist,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status,data').eq('id',openJob.jobid).maybeSingle();
+      const {data:job,error}=await admin.from('jobs').select('id,category,servicetype,checklist,description,photos,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status,data').eq('id',openJob.jobid).maybeSingle();
       if(error)throw error;if(!job||job.status!=='PENDING')fail(404,'This booking is no longer accepting quotes.');
       if(job.data?.serviceMode==='VISIT_WASH'&&job.data?.washSiteCleanerId!==actor)fail(404,'This booking is reserved for the selected car wash.');
-      return toCleanerBookingSummary(job as Json);
+      return await cleanerBookingSummary(job as Json);
     }
     case 'nearbyCleanerJobs': {
       const actor=authed(),profile=await userRow(actor);
@@ -1193,11 +1226,11 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(nearbyError)throw nearbyError;
       const ids:string[]=(nearby??[]).map((row:Json)=>row.jobid).filter((id:unknown):id is string=>typeof id==='string');
       if(!ids.length)return {jobs:[]};
-      const {data:jobs,error}=await admin.from('jobs').select('id,category,servicetype,checklist,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status,data').in('id',ids).eq('status','PENDING');
+      const {data:jobs,error}=await admin.from('jobs').select('id,category,servicetype,checklist,description,photos,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status,data').in('id',ids).eq('status','PENDING');
       if(error)throw error;
       const eligibleJobs=(jobs??[]).filter((job:Json)=>job.data?.serviceMode!=='VISIT_WASH'||job.data?.washSiteCleanerId===actor);
       const byId=new Map<string,Json>(eligibleJobs.map((job:Json):[string,Json]=>[String(job.id),job]));
-      return {jobs:ids.map(id=>byId.get(id)).filter((job):job is Json=>!!job).map(job=>toCleanerBookingSummary(job))};
+      return {jobs:await Promise.all(ids.map(id=>byId.get(id)).filter((job):job is Json=>!!job).map(job=>cleanerBookingSummary(job)))};
     }
     case 'getCleanerBookingPreviews': {
       const actor=authed(),profile=await userRow(actor);
@@ -1208,11 +1241,11 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(openError)throw openError;
       const openIds=(openJobs??[]).map((row:Json)=>row.jobid).filter((id:unknown):id is string=>typeof id==='string');
       if(!openIds.length)return {jobs:[]};
-      const {data:jobs,error}=await admin.from('jobs').select('id,category,servicetype,checklist,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status,data').in('id',openIds).eq('status','PENDING');
+      const {data:jobs,error}=await admin.from('jobs').select('id,category,servicetype,checklist,description,photos,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status,data').in('id',openIds).eq('status','PENDING');
       if(error)throw error;
       const eligibleJobs=(jobs??[]).filter((job:Json)=>job.data?.serviceMode!=='VISIT_WASH'||job.data?.washSiteCleanerId===actor);
       const byId=new Map<string,Json>(eligibleJobs.map((job:Json):[string,Json]=>[String(job.id),job]));
-      return {jobs:openIds.map(id=>byId.get(id)).filter((job):job is Json=>!!job).map(job=>toCleanerBookingSummary(job))};
+      return {jobs:await Promise.all(openIds.map(id=>byId.get(id)).filter((job):job is Json=>!!job).map(job=>cleanerBookingSummary(job)))};
     }
     case 'addCleanerPortfolioPhoto': {
       const actor=authed(), path=text(input.imagePath,500);const profile=await userRow(actor);

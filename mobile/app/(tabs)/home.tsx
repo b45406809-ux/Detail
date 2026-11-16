@@ -12,6 +12,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   Animated,
+  PanResponder,
   Image,
   Platform,
   Switch,
@@ -63,6 +64,12 @@ export default function HomeScreen() {
   const { user, profile, locationTrackingError } = useAuth();
   const userId = user?.uid;
   const insets = useSafeAreaInsets();
+  const [sheetHeight, setSheetHeight] = useState(0);
+  const [isSheetCollapsed, setIsSheetCollapsed] = useState(false);
+  const sheetInitialized = useRef(false);
+  const sheetTop = useRef(new Animated.Value(0)).current;
+  const sheetTopValue = useRef(0);
+  const panStartTop = useRef(0);
   const mapRef = useRef<React.ElementRef<typeof Mapbox.Camera>>(null);
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [recentJobs, setRecentJobs] = useState<Job[]>([]);
@@ -71,7 +78,7 @@ export default function HomeScreen() {
   const [jobsError, setJobsError] = useState(false);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [mapCleaners, setMapCleaners] = useState<{id:string;display_name:string;lat:number;lng:number}[]>([]);
+  const [mapCleaners, setMapCleaners] = useState<{id:string;display_name:string;lat:number;lng:number;photo_url?:string|null}[]>([]);
   const [mapVisibility, setMapVisibility] = useState(false);
   const [mapVisibilityBusy, setMapVisibilityBusy] = useState(false);
   const [canUseForegroundLocation, setCanUseForegroundLocation] = useState(false);
@@ -85,8 +92,66 @@ export default function HomeScreen() {
   );
 
   const isCustomer = viewRole === 'CUSTOMER';
+  const canSwitchRoles = profile?.cleanerOnboardingComplete === true
+    && profile?.hasAgreedToTerms === true
+    && profile?.cleanerAgreementAccepted === true
+    && profile?.verificationStatus === 'VERIFIED';
+  const sheetSnapPoints = {
+    expanded: Math.max(insets.top + 80, 104),
+    normal: sheetHeight * 0.58,
+    collapsed: Math.max(0, sheetHeight - 94),
+  };
   const mapSearchLat = currentLocation ? Math.round(currentLocation.lat * 100) / 100 : null;
   const mapSearchLng = currentLocation ? Math.round(currentLocation.lng * 100) / 100 : null;
+
+  useEffect(() => {
+    const listener = sheetTop.addListener(({ value }) => { sheetTopValue.current = value; });
+    return () => sheetTop.removeListener(listener);
+  }, [sheetTop]);
+
+  const snapSheet = useCallback((detent: 'expanded' | 'normal' | 'collapsed') => {
+    if (!sheetHeight) return;
+    if (detent !== 'collapsed') setIsSheetCollapsed(false);
+    Animated.spring(sheetTop, {
+      toValue: sheetSnapPoints[detent],
+      useNativeDriver: false,
+      damping: 26,
+      stiffness: 230,
+      mass: 0.9,
+    }).start(({ finished }) => {
+      if (finished) setIsSheetCollapsed(detent === 'collapsed');
+    });
+  }, [sheetHeight, sheetSnapPoints.collapsed, sheetSnapPoints.expanded, sheetSnapPoints.normal, sheetTop]);
+
+  const sheetPanResponder = React.useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_event, gesture) => Math.abs(gesture.dy) > 7 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+    onPanResponderGrant: () => {
+      sheetTop.stopAnimation(value => {
+        sheetTopValue.current = value;
+        panStartTop.current = value;
+      });
+    },
+    onPanResponderMove: (_event, gesture) => {
+      const next = Math.max(sheetSnapPoints.expanded, Math.min(sheetSnapPoints.collapsed, panStartTop.current + gesture.dy));
+      sheetTop.setValue(next);
+    },
+    onPanResponderRelease: (_event, gesture) => {
+      const releasePosition = Math.max(sheetSnapPoints.expanded, Math.min(sheetSnapPoints.collapsed, panStartTop.current + gesture.dy));
+      const detents = ['expanded', 'normal', 'collapsed'] as const;
+      const nearest = detents.reduce((closest, candidate) =>
+        Math.abs(sheetSnapPoints[candidate] - releasePosition) < Math.abs(sheetSnapPoints[closest] - releasePosition) ? candidate : closest,
+      'normal');
+      snapSheet(nearest);
+    },
+    onPanResponderTerminate: (_event, gesture) => {
+      const releasePosition = Math.max(sheetSnapPoints.expanded, Math.min(sheetSnapPoints.collapsed, panStartTop.current + gesture.dy));
+      const detents = ['expanded', 'normal', 'collapsed'] as const;
+      const nearest = detents.reduce((closest, candidate) =>
+        Math.abs(sheetSnapPoints[candidate] - releasePosition) < Math.abs(sheetSnapPoints[closest] - releasePosition) ? candidate : closest,
+      'normal');
+      snapSheet(nearest);
+    },
+  }), [sheetSnapPoints.collapsed, sheetSnapPoints.expanded, sheetSnapPoints.normal, sheetTop, snapSheet]);
 
   useEffect(() => {
     let active = true;
@@ -152,6 +217,17 @@ export default function HomeScreen() {
         setCleanerStatus('OFFLINE');
         await stopCleanerLocationUpdates().catch((error) => console.warn('[location] could not stop after role switch:', error));
       }).catch((e:any) => appAlert('Could not switch role', e.message ?? 'Try again.'));
+    }
+  };
+
+  const handleHomeLayout = (height: number) => {
+    if (height <= 0) return;
+    setSheetHeight(height);
+    if (!sheetInitialized.current) {
+      const initialTop = height * 0.58;
+      sheetTop.setValue(initialTop);
+      sheetTopValue.current = initialTop;
+      sheetInitialized.current = true;
     }
   };
 
@@ -308,7 +384,7 @@ export default function HomeScreen() {
     : { latitude: 0, longitude: 0, latitudeDelta: 120, longitudeDelta: 120 };
 
   return (
-    <View className="flex-1 bg-[#EDEBFA]">
+    <View className="flex-1 bg-[#EDEBFA]" onLayout={(event) => handleHomeLayout(event.nativeEvent.layout.height)}>
       {IS_DEMO || !IS_MAPBOX_AVAILABLE ? (
         <MapPlaceholder style={{ flex: 1 }} />
       ) : (
@@ -330,7 +406,11 @@ export default function HomeScreen() {
           <Mapbox.UserLocation visible />
           {isCustomer && mapCleaners.filter(cleaner => Number.isFinite(cleaner.lat) && Number.isFinite(cleaner.lng)).map(cleaner => (
             <Mapbox.PointAnnotation key={`cleaner-${cleaner.id}`} id={`cleaner-${cleaner.id}`} coordinate={[cleaner.lng, cleaner.lat]} onSelected={() => appAlert(cleaner.display_name || 'Nearby cleaner', 'This marker shows an approximate area. Open Find a cleaner to browse verified cleaners.', [{text:'Close',style:'cancel'},{text:'Find a cleaner',onPress:()=>router.push('/cleaners')}])}>
-              <View accessibilityLabel="Approximate cleaner area" style={{ backgroundColor:'#3906D2', borderColor:'#fff', borderWidth:2, borderRadius:20, padding:8 }}><Brush size={18} color="#fff" /></View>
+            <View accessibilityLabel="Approximate cleaner area" style={{ width:40, height:40, backgroundColor:'#3906D2', borderColor:'#fff', borderWidth:2, borderRadius:20, alignItems:'center', justifyContent:'center', overflow:'hidden' }}>
+              {cleaner.photo_url
+                ? <Image source={{ uri: cleaner.photo_url }} style={{ width:36, height:36, borderRadius:18 }} />
+                : <Brush size={18} color="#fff" />}
+            </View>
             </Mapbox.PointAnnotation>
           ))}
           {!isCustomer && cleanerStatus === 'AVAILABLE' && currentLocation && rankJobsByProximity(availableJobs, currentLocation)
@@ -367,7 +447,7 @@ export default function HomeScreen() {
         <View className="flex-row items-center justify-between px-5" pointerEvents="box-none">
           <View style={{ width: 44, height: 44 }} />
 
-          <RoleToggle value={viewRole} onChange={handleRoleToggle} />
+          {canSwitchRoles ? <RoleToggle value={viewRole} onChange={handleRoleToggle} /> : <View style={{ width: 44, height: 44 }} />}
 
           <GlassIconButton size={44} onPress={() => router.push('/notifications')}>
             <Bell size={18} color="#150256" />
@@ -433,21 +513,50 @@ export default function HomeScreen() {
       </View>
 
       {/* Bottom glass sheet */}
-      <View
-        className="absolute bottom-0 left-0 right-0"
-        style={{ top: '60%' }}
-        pointerEvents="box-none"
-      >
-        <GlassSheet style={{ flex: 1 }}>
+      {isCustomer ? (
+        <>
+          {!isSheetCollapsed && <Animated.View
+            className="absolute left-0 right-0 bottom-0"
+            style={{ top: sheetTop, zIndex: 20 }}
+          >
+            <GlassSheet style={{ flex: 1 }}>
+              <ScrollView
+                style={{ flex: 1 }}
+                showsVerticalScrollIndicator={false}
+                refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor="#3906D2" />}
+              >
+                <CustomerPanel favorites={favorites} recentJobs={recentJobs} />
+              </ScrollView>
+            </GlassSheet>
+            <View
+              {...sheetPanResponder.panHandlers}
+              accessibilityRole="adjustable"
+              accessibilityLabel="Booking panel. Drag up for more details or down to collapse."
+              style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 34, zIndex: 2, alignItems: 'center', justifyContent: 'center' }}
+            />
+          </Animated.View>}
+          {isSheetCollapsed && <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Open booking panel"
+            onPress={() => { setIsSheetCollapsed(false); snapSheet('normal'); }}
+            activeOpacity={0.9}
+            className="absolute left-5 right-5 bottom-3 bg-white rounded-2xl px-4 py-4 flex-row items-center gap-3 border border-white/80"
+            style={{ zIndex: 20, shadowColor: '#150256', shadowOpacity: 0.18, shadowRadius: 16, shadowOffset: { width: 0, height: 4 }, elevation: 10 }}
+          >
+            <View className="w-9 h-9 bg-accent rounded-xl items-center justify-center"><Plus size={18} color="#fff" /></View>
+            <Text className="flex-1 font-display font-black text-ink">Request cleaning</Text>
+            <ChevronRight size={18} color="#3906D2" />
+          </TouchableOpacity>}
+        </>
+      ) : (
+        <View className="absolute bottom-0 left-0 right-0" style={{ top: '60%' }} pointerEvents="box-none">
+          <GlassSheet style={{ flex: 1 }}>
           <ScrollView
             style={{ flex: 1 }}
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor="#3906D2" />}
           >
-            {isCustomer ? (
-              <CustomerPanel favorites={favorites} recentJobs={recentJobs} />
-            ) : (
-              <CleanerPanel
+            <CleanerPanel
                 profile={profile}
                 status={cleanerStatus}
                 trackingIssue={locationTrackingError}
@@ -461,11 +570,11 @@ export default function HomeScreen() {
                 mapVisibility={mapVisibility}
                 mapVisibilityBusy={mapVisibilityBusy}
                 onChangeMapVisibility={changeMapVisibility}
-              />
-            )}
+            />
           </ScrollView>
         </GlassSheet>
-      </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -500,6 +609,19 @@ function CustomerPanel({ favorites, recentJobs }: { favorites: Favorite[]; recen
         <View className="w-9 h-9 bg-accent/10 rounded-xl items-center justify-center"><Search size={17} color="#3906D2" /></View>
         <View className="flex-1"><Text className="text-sm font-display font-black text-ink">Find a cleaner</Text><Text className="font-sans text-[11px] text-ink/45">Search verified professionals and save favorites</Text></View>
         <ChevronRight size={17} color="#9C94C4" />
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        onPress={() => router.push('/booking/create')}
+        activeOpacity={0.88}
+        className="bg-accent rounded-3xl py-4 px-5 flex-row items-center gap-3 mb-5"
+        style={{ shadowColor: '#3906D2', shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 8 } }}
+      >
+        <View className="w-9 h-9 bg-white/20 rounded-xl items-center justify-center">
+          <Plus size={18} color="#fff" />
+        </View>
+        <Text className="text-white font-display font-black text-sm uppercase tracking-widest flex-1">Request Cleaning</Text>
+        <ChevronRight size={18} color="rgba(255,255,255,0.8)" />
       </TouchableOpacity>
 
       {favorites.length > 0 && (
@@ -545,18 +667,6 @@ function CustomerPanel({ favorites, recentJobs }: { favorites: Favorite[]; recen
         </View>
       )}
 
-      <TouchableOpacity
-        onPress={() => router.push('/booking/create')}
-        activeOpacity={0.88}
-        className="bg-accent rounded-3xl py-4 px-5 flex-row items-center gap-3 mt-5"
-        style={{ shadowColor: '#3906D2', shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 8 } }}
-      >
-        <View className="w-9 h-9 bg-white/20 rounded-xl items-center justify-center">
-          <Plus size={18} color="#fff" />
-        </View>
-        <Text className="text-white font-display font-black text-sm uppercase tracking-widest flex-1">Request Cleaning</Text>
-        <ChevronRight size={18} color="rgba(255,255,255,0.8)" />
-      </TouchableOpacity>
     </View>
   );
 }
@@ -683,7 +793,7 @@ function CleanerPanel({
           {jobsLoading ? (
             <View accessibilityRole="progressbar" accessibilityLabel="Loading nearby jobs" className="bg-white rounded-2xl p-5 border border-slate-100">
               <View className="h-4 w-2/3 rounded-full bg-[#EBE8F7] mb-3" />
-              <View className="h-3 w-4/5 rounded-full bg-[#F3F1FC]" />
+              <View className="h-3 w-4/5 rounded-full bg-canvas" />
             </View>
           ) : jobsError ? (
             <View className="bg-white rounded-2xl p-5 border border-slate-100 items-center">

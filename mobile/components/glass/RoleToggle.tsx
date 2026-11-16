@@ -30,10 +30,10 @@ export function RoleToggle({ value, onChange }: RoleToggleProps) {
         activeOpacity={0.8}
         onPress={() => onChange('CUSTOMER')}
       >
-        <Text style={[styles.label, value === 'CUSTOMER' && styles.labelActive]}>Customer</Text>
+        <Text style={[styles.label, value === 'CUSTOMER' && styles.labelActive]}>Find cleaners</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.tab} activeOpacity={0.8} onPress={() => onChange('CLEANER')}>
-        <Text style={[styles.label, value === 'CLEANER' && styles.labelActive]}>Cleaner</Text>
+        <Text style={[styles.label, value === 'CLEANER' && styles.labelActive]}>Nearby jobs</Text>
       </TouchableOpacity>
     </View>
   );

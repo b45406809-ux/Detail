@@ -125,9 +125,15 @@ export default function CleanerJobDetailScreen() {
   const budgetLabel = job.budget ? `$${job.budget}` : 'Open — send your best price';
 
   const checklistTags = getChecklistTags(job);
+  const checklist = job.checklist as any;
+  const conditionValue = String(checklist?.condition ?? '').replaceAll('_', ' ').toLowerCase();
+  const conditionLabel = conditionValue ? conditionValue.replace(/\b\w/g, character => character.toUpperCase()) : 'Not specified';
+  const houseLayout = job.category === 'HOUSE'
+    ? [checklist?.propertyType, checklist?.propertySize, checklist?.areaSize, checklist?.bedrooms ? `${checklist.bedrooms} bedrooms` : null, checklist?.bathrooms ? `${checklist.bathrooms} bathrooms` : null, checklist?.storiesCount ? `${checklist.storiesCount} stories` : null, checklist?.roomsCount ? `${checklist.roomsCount} rooms` : null, checklist?.bathroomsCount ? `${checklist.bathroomsCount} bathrooms to clean` : null, checklist?.propertySizeSqm ? `${checklist.propertySizeSqm} m²` : null].filter(Boolean).join(' · ')
+    : '';
 
   return (
-    <SafeAreaView className="flex-1 bg-[#F3F1FC]">
+    <SafeAreaView className="flex-1 bg-canvas">
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View className="flex-row items-center gap-3 px-5 pt-4 pb-4">
           <TouchableOpacity onPress={() => goBackSafely()} className="w-10 h-10 bg-white rounded-2xl items-center justify-center border border-ink/5">
@@ -157,28 +163,26 @@ export default function CleanerJobDetailScreen() {
               <DetailRow icon={MapPin} title="Location" value={job.location?.address ?? 'Address not provided'} accent={distance ?? undefined} />
               <DetailRow icon={DollarSign} title="Customer Budget" value={budgetLabel} />
               <DetailRow icon={Clock} title="Estimated Duration" value={formatDuration(job.estimatedDuration)} />
+              <DetailRow icon={Sparkles} title={job.category === 'HOUSE' ? 'Property condition' : 'Vehicle condition'} value={conditionLabel} highlight />
+              {!!job.suppliesRequired && <DetailRow icon={Sparkles} title="Cleaner supplies" value={job.suppliesFee ? `Customer offers $${Number(job.suppliesFee).toFixed(2)} for supplies` : 'Cleaner should bring supplies'} />}
+              {job.category === 'CAR' && job.serviceMode === 'VISIT_WASH' && <DetailRow icon={MapPin} title="Car wash location" value={job.washSiteName || 'Customer selected car wash'} />}
               {job.category === 'HOUSE' && (
                 <>
-                  {Boolean((job.checklist as HouseChecklist)?.storiesCount || (job.checklist as HouseChecklist)?.roomsCount) && (
+                  {Boolean(houseLayout) && (
                     <DetailRow
                       icon={Home}
                       title="Property Layout"
-                      value={[
-                        (job.checklist as HouseChecklist).storiesCount ? `${(job.checklist as HouseChecklist).storiesCount} Story` : null,
-                        (job.checklist as HouseChecklist).roomsCount ? `${(job.checklist as HouseChecklist).roomsCount} Rooms to clean` : null,
-                        (job.checklist as HouseChecklist).bathroomsCount ? `${(job.checklist as HouseChecklist).bathroomsCount} Baths` : null,
-                        (job.checklist as HouseChecklist).propertySizeSqm ? `${(job.checklist as HouseChecklist).propertySizeSqm} m²` : null,
-                      ].filter(Boolean).join(' · ')}
+                      value={houseLayout}
                       highlight
                     />
                   )}
                 </>
               )}
-              {job.category === 'CAR' && (job.checklist as CarChecklist)?.registrationNumber && (
+              {job.category === 'CAR' && checklist?.registrationNumber && (
                 <DetailRow
                   icon={Hash}
                   title="Vehicle Registration"
-                  value={(job.checklist as CarChecklist).registrationNumber!}
+                  value={checklist.registrationNumber}
                   highlight
                 />
               )}
@@ -380,10 +384,11 @@ function getChecklistTags(job: Job): string[] {
   if (!checklist) return [];
   if (checklist.category === 'HOUSE') {
     const c = checklist as HouseChecklist;
-    return [...(c.cleaningTypes ?? []), ...(c.areas ?? []).slice(0, 4), ...((checklist as any).attentionServices ?? []).slice(0, 6)];
+    const extra = checklist as any;
+    return [...(c.cleaningTypes ?? []), ...(c.areas ?? []), ...(extra.addOns ?? []), ...(extra.attentionServices ?? [])];
   }
   const c = checklist as CarChecklist;
-  return [...(c.cleaningTypes ?? []), ...(c.exteriorServices ?? []).slice(0, 2), ...(c.interiorServices ?? []).slice(0, 2), ...(c.deepServices ?? []).slice(0, 4)];
+  return [...(c.cleaningTypes ?? []), ...(c.exteriorServices ?? []), ...(c.interiorServices ?? []), ...(c.deepServices ?? [])];
 }
 
 function formatDuration(minutes?: number): string {

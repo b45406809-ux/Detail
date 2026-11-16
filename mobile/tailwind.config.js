@@ -13,6 +13,11 @@ module.exports = {
         accent: "#3906D2",
         "accent-dark": "#27049C",
         "accent-light": "#6B4FF0",
+        // Neutral, editorial surfaces keep the app crisp while purple remains
+        // the action color. These match the light cards in the identity intro.
+        canvas: "#F5F5F7",
+        surface: "#FFFFFF",
+        "surface-muted": "#EFEFF2",
         brand: {
           50: "#F0EDFE",
           100: "#DDD5FD",
@@ -26,7 +31,7 @@ module.exports = {
           900: "#150256",
         },
         "brand-lime": "#3906d2",
-        ink: "#0F0B2E",
+        ink: "#17171B",
         "bg-dark": "#0D0A24",
         "card-dark": "#17133A",
         "border-dark": "#2A2456",
@@ -38,7 +43,9 @@ module.exports = {
         glass: "0 8px 32px rgba(57, 6, 210, 0.15)",
       },
       fontFamily: {
-        sans: ["DMSans_400Regular"],
+        // Medium body copy reads more confidently at mobile sizes while the
+        // explicit display face carries the large, bold Detail headings.
+        sans: ["DMSans_500Medium"],
         "sans-medium": ["DMSans_500Medium"],
         "sans-bold": ["DMSans_700Bold"],
         "sans-black": ["DMSans_700Bold"],

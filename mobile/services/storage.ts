@@ -74,7 +74,7 @@ export function uploadProofOfResidence(uri: string) {
 }
 
 /** Private media URLs are issued by the authenticated marketplace gateway. */
-export async function signMediaValue(value: unknown): Promise<unknown> {
+export async function signMediaValue(value: unknown, context: { jobId?: string } = {}): Promise<unknown> {
   if (typeof value === 'string' && value.startsWith(`${BUCKET}/`)) {
     const path = value.slice(BUCKET.length + 1);
     const cacheKey = `${auth.currentUser?.uid ?? 'anonymous'}:${path}`;
@@ -88,7 +88,7 @@ export async function signMediaValue(value: unknown): Promise<unknown> {
     if (cached) signedUrlCache.delete(cacheKey);
     const pending = signedUrlRequests.get(cacheKey);
     if (pending) return pending;
-    const request = callFunction<{path:string},{url:string}>('mediaReadUrl',{path:`${BUCKET}/${path}`}).then(({url}) => {
+    const request = callFunction<{path:string;jobId?:string},{url:string}>('mediaReadUrl',{path:`${BUCKET}/${path}`, ...(context.jobId ? { jobId: context.jobId } : {})}).then(({url}) => {
       signedUrlCache.set(cacheKey, { url, expiresAt: Date.now() + SIGNED_URL_TTL_MS });
       while (signedUrlCache.size > SIGNED_URL_CACHE_LIMIT) {
         const oldest = signedUrlCache.keys().next().value;
@@ -100,9 +100,11 @@ export async function signMediaValue(value: unknown): Promise<unknown> {
     signedUrlRequests.set(cacheKey, request);
     return request;
   }
-  if (Array.isArray(value)) return Promise.all(value.map(signMediaValue));
+  if (Array.isArray(value)) return Promise.all(value.map(item => signMediaValue(item, context)));
   if (value && typeof value === 'object') {
-    const pairs = await Promise.all(Object.entries(value as Record<string, unknown>).map(async ([key, item]) => [key, await signMediaValue(item)] as const));
+    const object = value as Record<string, unknown>;
+    const nestedContext = typeof object.id === 'string' ? { ...context, jobId: object.id } : context;
+    const pairs = await Promise.all(Object.entries(object).map(async ([key, item]) => [key, await signMediaValue(item, nestedContext)] as const));
     return Object.fromEntries(pairs);
   }
   return value;

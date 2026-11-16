@@ -61,6 +61,7 @@ export function toCleanerBookingSummary(job: Json) {
     : {
         category,
         vehicleType: safeStrings([source.vehicleType ?? choices.vehicleType], CAR_TYPES)[0] ?? '',
+        registrationNumber: safeText(source.registrationNumber, 16),
         vehicleSize: safeStrings([choices.vehicleSize], ['Small', 'Medium', 'Large', 'Extra Large'])[0],
         seats: safeStrings([choices.seats], ['2', '4', '5', '6', '7+'])[0],
         cleaningTypes: packageIds.map(id => CAR_SERVICES[id]),
@@ -84,7 +85,7 @@ export function toCleanerBookingSummary(job: Json) {
     category,
     serviceType: safeText(job.servicetype, 120),
     checklist,
-    description: '',
+    description: safeText(job.description, 1000),
     location: {
       lat: Number.isFinite(lat) && Math.abs(lat) <= 90 ? Math.round(lat * 100) / 100 : 0,
       lng: Number.isFinite(lng) && Math.abs(lng) <= 180 ? Math.round(lng * 100) / 100 : 0,
@@ -103,7 +104,7 @@ export function toCleanerBookingSummary(job: Json) {
     suppliesFee: job.suppliesfee,
     createdAt: job.createdat,
     status: job.status,
-    photos: [],
+    photos: Array.isArray(job.photos) ? job.photos.filter((photo): photo is string => typeof photo === 'string').slice(0, 6) : [],
     completionPhotos: [],
   };
 }

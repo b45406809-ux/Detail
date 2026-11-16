@@ -261,6 +261,9 @@ export interface WalletTransaction {
   type: 'CREDIT' | 'DEBIT';
   amount: number;
   description: string;
+  jobId?: string;
+  balanceType?: string;
+  status?: string;
   createdAt: any;
 }
 

@@ -69,7 +69,7 @@ export default function CleanersScreen() {
     }
   };
 
-  return <SafeAreaView className="flex-1 bg-[#F3F1FC]">
+  return <SafeAreaView className="flex-1 bg-canvas">
     <View className="flex-row items-center gap-3 px-5 pt-4 pb-4 bg-white">
       <TouchableOpacity onPress={() => goBackSafely()} className="w-10 h-10 bg-ink/5 rounded-2xl items-center justify-center"><ArrowLeft size={18} color="#150256" /></TouchableOpacity>
       <View><Text className="text-xl font-display font-black text-ink">Find Cleaners</Text><Text className="font-sans text-xs text-ink/40">Search verified professionals</Text></View>

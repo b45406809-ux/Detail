@@ -749,7 +749,7 @@ export default function MessagesScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-[#F2F1F5]">
+    <SafeAreaView className="flex-1 bg-canvas">
       {/* Header */}
       <View className="px-5 pt-4 pb-4">
         <Text className="text-2xl font-display font-black text-slate-900 tracking-tight">Messages</Text>

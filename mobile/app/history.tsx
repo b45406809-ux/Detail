@@ -102,7 +102,7 @@ export default function HistoryScreen() {
   }, [userId, role, retry]);
 
   return (
-    <SafeAreaView className="flex-1 bg-[#F2F1F5]">
+    <SafeAreaView className="flex-1 bg-canvas">
       {/* Header */}
       <View className="flex-row items-center gap-3 px-5 pt-4 pb-4">
         <TouchableOpacity

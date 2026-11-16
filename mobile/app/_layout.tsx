@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Stack, router, useLocalSearchParams, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Platform, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
 import * as Notifications from 'expo-notifications';
@@ -17,9 +17,10 @@ import { Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrop
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { AppDialogHost } from '../components/AppDialog';
-import { LoadingList } from '../components/LoadingList';
+import { Wordmark } from '../components/Wordmark';
 import { handleAuthCallback, supabase } from '../services/supabase';
 import { APP_ENVIRONMENT } from '../utils/env';
+import { VideoView, useVideoPlayer } from 'expo-video';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -58,10 +59,61 @@ function AuthGuard() {
 
   const overlayStyle = { position: 'absolute' as const, top: 0, bottom: 0, left: 0, right: 0, zIndex: 1000, elevation: 1000 };
   if (profileError && user) return <View style={overlayStyle} className="items-center justify-center bg-white px-8"><Text accessibilityRole="alert" className="text-center text-base font-sans text-ink mb-5">{profileError}</Text><Pressable accessibilityRole="button" onPress={() => void refreshProfile().catch(() => undefined)} className="rounded-2xl bg-accent px-6 py-4"><Text className="font-display font-bold text-white">Try again</Text></Pressable></View>;
-  if (isLoading) return <View style={overlayStyle} className="bg-[#F3F1FC] pt-20"><Text accessibilityLiveRegion="polite" className="px-5 pb-5 text-xl font-display font-black text-ink">Opening your account…</Text><LoadingList rows={3} /></View>;
+  if (isLoading) return <AuthLoadingOverlay style={overlayStyle} />;
 
   return null;
 }
+
+/** Reuse the brand intro during session restoration, then leave a simple
+ * branded loading state visible if account data takes longer to arrive. */
+function AuthLoadingOverlay({ style }: { style: object }) {
+  const [introFinished, setIntroFinished] = useState(false);
+  const player = useVideoPlayer(require('../assets/intro.mp4'), (videoPlayer) => {
+    videoPlayer.loop = false;
+    videoPlayer.muted = false;
+    videoPlayer.play();
+  });
+
+  useEffect(() => {
+    const finishIntro = () => setIntroFinished(true);
+    const subscription = player.addListener('playToEnd', finishIntro);
+    // Fall back to the branded loader if video startup or playback stalls.
+    const timer = setTimeout(finishIntro, 8000);
+    return () => {
+      subscription.remove();
+      clearTimeout(timer);
+    };
+  }, [player]);
+
+  return (
+    <View style={[style, styles.authLoadingRoot]} accessibilityLabel="Loading Detail">
+      {!introFinished ? (
+        <VideoView
+          style={StyleSheet.absoluteFill}
+          player={player}
+          nativeControls={false}
+          contentFit="cover"
+          allowsFullscreen={false}
+          allowsPictureInPicture={false}
+        />
+      ) : (
+        <View className="flex-1 items-center justify-center">
+          <Wordmark size={48} />
+          <ActivityIndicator
+            accessibilityLabel="Loading"
+            color="#FFFFFF"
+            size="large"
+            style={{ marginTop: 28 }}
+          />
+        </View>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  authLoadingRoot: { backgroundColor: '#3906D2' },
+});
 
 function NotificationRouter({ response, onConsumed }: { response: Notifications.NotificationResponse | null; onConsumed: () => void }) {
   const { user, profile, isLoading, profileError } = useAuth();

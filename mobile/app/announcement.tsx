@@ -8,7 +8,7 @@ export default function AnnouncementScreen() {
   const params=useLocalSearchParams<{title?:string;body?:string}>();
   const title=String(params.title??'Detail announcement');
   const body=String(params.body??'');
-  return <SafeAreaView className="flex-1 bg-[#F3F1FC]">
+  return <SafeAreaView className="flex-1 bg-canvas">
     <View className="flex-row items-center px-5 pt-4 pb-4">
       <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back to Detail" onPress={()=>router.back()} className="w-10 h-10 bg-white rounded-2xl items-center justify-center border border-ink/5">
         <ArrowLeft size={18} color="#150256" />
