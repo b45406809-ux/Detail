@@ -1,4 +1,4 @@
-appId: com.detail.app
+appId: zw.co.detailapp.mobile
 ---
 - launchApp:
     clearState: true

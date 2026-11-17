@@ -1,6 +1,6 @@
 # Android Play internal testing
 
-The Android application ID is `zw.co.detailapp.mobile`. The iOS bundle ID stays `com.detail.app`. Changing the Android ID makes Android builds a separate install from older `com.detail.app` builds. Play Console package IDs are permanent once an app is created.
+The Android application ID and iOS bundle ID are both `zw.co.detailapp.mobile`. Older builds using `com.detail.app` are separate apps and will not update in place. Play Console package IDs are permanent once an app is created.
 
 ## One-time provider setup
 

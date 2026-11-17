@@ -229,7 +229,7 @@ function decodeAppleJwtPart(value:string):Json{
   return JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length/4)*4,'=')));
 }
 async function revokeAppleAuthorizationCode(code:string,expectedSubject:string):Promise<boolean>{
-  const clientId=Deno.env.get('APPLE_CLIENT_ID')||'com.detail.app';
+  const clientId=Deno.env.get('APPLE_CLIENT_ID')||'zw.co.detailapp.mobile';
   const clientSecret=Deno.env.get('APPLE_CLIENT_SECRET')||'';
   if(!code||!clientSecret||!expectedSubject)return false;
   const tokenResponse=await fetch('https://appleid.apple.com/auth/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:clientId,client_secret:clientSecret,code,grant_type:'authorization_code'}),signal:AbortSignal.timeout(12000)});

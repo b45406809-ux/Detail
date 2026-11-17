@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.detail.app",
+      "bundleIdentifier": "zw.co.detailapp.mobile",
       "usesAppleSignIn": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Detail uses your location to find nearby cleaners.",
