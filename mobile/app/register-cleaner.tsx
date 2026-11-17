@@ -136,7 +136,7 @@ export default function RegisterCleanerScreen() {
     try {
       const result = await callFunction<undefined, { status: string }>('refreshCleanerIdentityVerification');
       if (result.status === 'VERIFIED') appAlert('Identity verified', 'Your identity check is complete.');
-      else if (result.status === 'REJECTED') appAlert('Verification needs attention', 'Didit could not verify your identity. You can try again.');
+      else if (result.status === 'REJECTED') appAlert('Verification needs attention', 'You cannot accept jobs until Didit verifies you. Check your details and contact Detail support if you believe this is a mistake. You can retry without paying the one-time fee again. The fee is non-refundable where permitted by law, except when the verification service was not provided.');
       else appAlert('Verification pending', 'Your check is still being reviewed.');
     } catch (error) {
       appAlert('Could not check status', (error as { message?: string })?.message || 'Please try again.');
@@ -148,7 +148,7 @@ export default function RegisterCleanerScreen() {
   const startIdentityCheck = async () => {
     appAlert(
       'Identity check with Didit',
-      'Didit will ask you to provide identity information and documents. Didit processes that information under its privacy policy; Detail receives the verification result. Continue only if you agree.',
+      'Cleaners must pass Didit identity verification before accepting jobs. The one-time fee is $0.50 from your Detail wallet. Keep at least $1.00 in prepaid commission credit to accept up to $10 of offline work; that credit is separate from the verification fee. Once a Didit session starts, the fee is non-refundable where permitted by law, except where the verification service was not provided. If Didit rejects your check, you cannot accept jobs; contact Detail support to correct your details or appeal. You can retry without paying the one-time fee again. Didit processes your identity documents under its privacy policy; Detail receives the decision, not your ID images.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Continue', onPress: () => { void launchIdentityCheck(); } },
@@ -159,8 +159,8 @@ export default function RegisterCleanerScreen() {
   const launchIdentityCheck = async () => {
     setIsCheckingIdentity(true);
     try {
-      const session = await callFunction<{ consent: true }, { sessionUrl: string }>(
-        'startCleanerIdentityVerification', { consent: true }
+      const session = await callFunction<{ consent: true; feeConsent: true }, { sessionUrl: string }>(
+        'startCleanerIdentityVerification', { consent: true, feeConsent: true }
       );
       await WebBrowser.openBrowserAsync(session.sessionUrl);
       await refreshIdentityCheck();
@@ -214,9 +214,10 @@ export default function RegisterCleanerScreen() {
 
   const introSlides = [
     { title: 'Work with Detail', body: 'Choose the cleaning services and areas you offer. Complete identity verification and the cleaner agreement before accepting bookings.' },
-    { title: 'Your earnings', body: 'Detail currently charges a 10% platform commission. For example, on a $30 job the commission is $3 and your share is $27. Changes are communicated in advance.' },
-    { title: 'When you get paid', body: 'For Paynow BuySafe bookings, the customer confirms delivery in Paynow. After Paynow releases funds following its 24-hour dispute window, Detail credits your 90% share to your in-app balance.' },
-    { title: 'Offline payments and commission', body: 'For eligible bookings, the customer pays you directly using cash, EcoCash, InnBucks, or another agreed method. Detail records its 10% commission after completion is confirmed. Commission credit is used first; any remainder is due and can be paid through your Detail wallet.' },
+    { title: 'Your earnings', body: 'Detail charges a 10% platform commission. For a $30 Paynow booking, $3 is taken from the payment and your $27 share is credited after settlement. For offline bookings, the customer pays you directly and the 10% commission is reserved from your prepaid commission credit when they accept your quote.' },
+    { title: 'When you get paid', body: 'For now, customers pay you directly using cash, EcoCash, InnBucks, or another method you both agree on. Detail does not receive or hold customer booking payments. You keep the remaining 90% after your prepaid 10% commission is reserved.' },
+    { title: 'Prepaid commission', body: 'Keep prepaid commission credit to accept offline bookings. At least $1 credit lets you accept up to $10 of offline work; a $20 accepted quote reserves $2. Detail returns the reserve if the booking is cancelled before completion. Paynow bookings do not use this reserve because the 10% is taken from your payout.' },
+    { title: 'Identity verification fee', body: 'Didit verification costs a one-time $0.50 from your Detail wallet. This is separate from prepaid commission credit: keep $1 in commission credit to accept up to $10 of offline bookings. You must be verified before accepting jobs. A rejection does not unlock job access; contact support to correct your details or appeal. You can retry without paying again. The fee is non-refundable where permitted by law, except if the verification service was not provided.' },
     { title: 'Deliver with care', body: 'Keep your availability accurate, arrive on time, communicate through Detail and provide the required completion photos. Review the full cleaner agreement before joining.' },
   ];
   if (introStep < introSlides.length) {
@@ -340,7 +341,7 @@ export default function RegisterCleanerScreen() {
                 {isIdentityVerified ? 'Identity verified' : verificationStatus === 'REJECTED' ? 'Verification needs attention' : 'Verify with Didit'}
               </Text>
               <Text className="font-sans text-xs text-slate-500 font-medium mt-0.5">
-                {isIdentityVerified ? 'Your identity check is complete.' : 'Complete a secure identity check to register as a cleaner.'}
+                {isIdentityVerified ? 'Verified cleaners can accept jobs.' : verificationStatus === 'REJECTED' ? 'You cannot accept jobs yet. Contact support to correct details or appeal; a retry does not cost again.' : 'A one-time $0.50 fee comes from commission credit. Keep $1 available to accept up to $10 of offline bookings.'}
               </Text>
             </View>
             {!isIdentityVerified && (
@@ -356,7 +357,7 @@ export default function RegisterCleanerScreen() {
             )}
           </View>
           <Text className="font-sans text-[11px] text-slate-400 font-medium mb-8 leading-relaxed">
-            Didit securely checks your identity. Detail receives the verification result and does not store your ID images.
+            Didit checks your identity. Detail receives the decision, not your ID images. The $0.50 fee comes from your Detail wallet. Keep a separate $1 commission credit to accept up to $10 of offline work. The verification fee is non-refundable where permitted by law, except if the service was not provided. Rejected cleaners remain unable to accept jobs and can contact support to appeal or correct their details.
           </Text>
 
           <TouchableOpacity

@@ -280,6 +280,15 @@ export default function CleanerJobDetailScreen() {
                 onChangeText={setBidPrice}
               />
 
+              {Number.isFinite(Number(bidPrice)) && Number(bidPrice) > 0 && (
+                <View className="-mt-2 mb-4 rounded-2xl border border-violet-100 bg-violet-50 p-3">
+                  <Text className="font-display text-xs font-black text-violet-900">Offline commission reserve · ${(Math.round(Number(bidPrice) * 10) / 100).toFixed(2)}</Text>
+                  <Text className="mt-1 font-sans text-[11px] leading-4 text-violet-800/80">
+                    If the customer pays you directly, this 10% is reserved from your prepaid commission credit when they accept. $1 credit covers up to $10 of accepted offline jobs. Paynow bookings take 10% from your payout instead.
+                  </Text>
+                </View>
+              )}
+
               <Text className="text-xs font-display font-black text-ink/50 uppercase tracking-widest mb-1.5">Estimated Arrival (minutes)</Text>
               <TextInput
                 className="font-sans border-2 border-ink/10 rounded-2xl px-4 py-3.5 text-base font-bold text-ink bg-ink/[0.02] mb-4"

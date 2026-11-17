@@ -162,7 +162,7 @@ export default function WalletScreen() {
           </Text>
         </View>
         <Text className="text-4xl font-display font-black text-white mb-1">${(isCleaner ? availableEarnings : balance).toFixed(2)}</Text>
-        <Text className="font-sans text-sm text-white/60 font-medium">{isCleaner ? `Cleared earnings · $${Number(profile?.commissionBalance ?? 0).toFixed(2)} commission credit` : 'Detail Wallet'}</Text>
+        <Text className="font-sans text-sm text-white/60 font-medium">{isCleaner ? `Prepaid commission · $${Number(profile?.commissionBalance ?? 0).toFixed(2)} available` : 'Detail Wallet'}</Text>
 
         <View className="flex-row gap-3 mt-6">
           <TouchableOpacity
@@ -184,7 +184,7 @@ export default function WalletScreen() {
         </View>
       </View>
 
-      {isCleaner && <View className="mx-5 mb-6 rounded-2xl bg-white p-4 border border-slate-100"><Text className="font-display font-black text-slate-900">How earnings and commission work</Text><Text className="font-sans text-sm text-slate-600 mt-2">Completed jobs may have a Detail commission. Commission credit covers eligible direct-payment jobs. Cleared earnings appear above when available; request a payout from this screen. Payouts are reviewed and sent manually while integrations are unavailable, so transfer timing is not guaranteed.</Text></View>}
+      {isCleaner && <View className="mx-5 mb-6 rounded-2xl bg-white p-4 border border-slate-100"><Text className="font-display font-black text-slate-900">How earnings and commission work</Text><Text className="font-sans text-sm text-slate-600 mt-2">Offline bookings reserve 10% from this prepaid credit when a customer accepts your quote. Keep $1 to accept up to $10 in offline work. Paynow bookings deduct 10% from your payout instead. Cleared earnings appear above when available; request a payout from this screen. Payouts are reviewed and sent manually while integrations are unavailable, so transfer timing is not guaranteed.</Text></View>}
 
       {((isCleaner && Number(profile?.commissionOwed ?? 0) > 0) || (!isCleaner && balance < 0)) && (
         <TouchableOpacity
@@ -198,7 +198,7 @@ export default function WalletScreen() {
           <View className="flex-1">
             <Text className="text-sm font-display font-black text-red-700">{isCleaner ? 'Outstanding commission due' : 'Outstanding balance'}</Text>
             <Text className="font-sans text-xs text-red-500 font-medium mt-0.5">
-              {isCleaner ? `You owe $${Number(profile?.commissionOwed ?? 0).toFixed(2)}. Paynow top-ups clear commission due first; new bids may pause at the limit.` : 'Add funds to bring your balance to $0.'}
+              {isCleaner ? `You owe $${Number(profile?.commissionOwed ?? 0).toFixed(2)} from earlier bookings. Clear this before accepting new jobs; offline bookings also require prepaid credit for their 10% commission.` : 'Add funds to bring your balance to $0.'}
             </Text>
           </View>
         </TouchableOpacity>

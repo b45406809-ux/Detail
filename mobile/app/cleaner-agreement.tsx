@@ -22,7 +22,7 @@ const TERMS = [
   },
   {
     title: '4. Registration and Verification',
-    body: 'You must provide accurate, complete, and current information when registering, including identity documents and any other information reasonably required for verification. Detail may conduct lawful background/verification checks and may refuse registration or restrict access where information is missing, inaccurate, fraudulent, or otherwise unsatisfactory. You must immediately update information that changes.',
+    body: 'You must provide accurate, complete, and current information when registering, including identity documents and any other information reasonably required for verification. Cleaner accounts must pass identity verification through Didit before accepting jobs. The one-time verification fee is $0.50 and is charged to your Detail wallet. Keep a separate $1.00 prepaid commission credit to accept up to $10 of offline bookings. Where permitted by law, the fee is non-refundable after a Didit session starts, except where the verification service was not provided or a refund is required by law. If Didit rejects your check, you cannot accept jobs; contact Detail support to correct your information or appeal. A retry does not incur another verification fee.',
   },
   {
     title: '5. Cleaner Account',
@@ -38,7 +38,7 @@ const TERMS = [
   },
   {
     title: '11. Offline Customer Payments & Detail Commission',
-    body: 'For eligible bookings, the customer pays you outside Detail using cash, EcoCash, InnBucks, or another method you both agree on. Detail does not receive or hold that customer payment, and Paynow BuySafe does not protect it. After the customer confirms completion, or the completion is otherwise resolved under Detail’s process, Detail records its 10% platform commission. Available commission credit is applied first; any remaining commission becomes due. Pay commission due through your Detail wallet using Paynow. New bids may be paused when your due reaches the limit shown in the app.',
+    body: 'For bookings, the customer pays you directly using cash, EcoCash, InnBucks, or another method you both agree on. Detail does not receive or hold that customer payment. When the customer accepts your quote, Detail reserves 10% of the quoted amount from your prepaid commission credit. For example, a $20 booking reserves $2; a $1 credit covers up to $10 of accepted work. After completion is confirmed, that reserve is recorded as the platform commission. If the booking is cancelled, Detail returns the reserve according to the cancellation process. Paynow is used to top up your Detail wallet, not to collect customer booking payments. Keep enough prepaid credit to cover the commission on each booking you accept.',
   },
   {
     title: '12. Balance & Withdrawals',
@@ -112,7 +112,7 @@ export default function CleanerAgreementScreen() {
   const handleAccept = async () => {
     setIsAccepting(true);
     try {
-      // The server requires a successful Didit decision before granting cleaner access.
+      // The server requires a successful Didit decision and acceptance of the updated prepaid commission terms.
       await callFunction('acceptCleanerAgreement');
       setAccepted(true);
       // The invitation is email-bound and the server only lets an activated,

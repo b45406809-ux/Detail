@@ -438,20 +438,53 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const actor = authed();
       await enforceRateLimit(request, actor, 'didit_session', 5, 3600);
       if (input.consent !== true) fail(400, 'Consent to the Didit privacy notice is required.');
+      if (input.feeConsent !== true) fail(400, 'Consent to the one-time $0.50 identity verification fee is required.');
       const apiKey = secret('DIDIT_API_KEY','DIDIT_KYC_SECRET_KEY'); const workflow = Deno.env.get('DIDIT_WORKFLOW_ID');
       if (!apiKey || !workflow) fail(503, 'Identity verification is not configured.');
       const profile = await userRow(actor);
       if (profile.verificationstatus === 'VERIFIED') fail(409, 'Your identity is already verified.');
       const { data: existing } = await admin.from('privatekyc').select('*').eq('userid', actor).maybeSingle();
-      if (existing?.sessionid && existing?.sessionurl && isDiditVerificationPending(existing.status)) return { sessionUrl: existing.sessionurl, status: String(existing.status) };
-      const response = await fetch('https://verification.didit.me/v3/session/', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': apiKey }, body: JSON.stringify({ workflow_id: workflow, vendor_data: actor }) });
+      const verificationFeeBalance = profile.role === 'CLEANER' ? Number(profile.commissionbalance ?? 0) : Number(profile.balance ?? 0);
+      if (!profile.cleanerverificationfeepaidat && verificationFeeBalance < 0.5) {
+        fail(402, 'Add at least $0.50 to your Detail wallet to start the one-time identity check.');
+      }
+      if (existing?.sessionid && existing?.sessionurl && isDiditVerificationPending(existing.status)) {
+        const { error: feeError } = await admin.rpc('charge_cleaner_verification_fee', { p_user_id: actor });
+        if (feeError) {
+          const message = String(feeError.message ?? 'Could not charge the verification fee.');
+          fail(message.includes('Add at least $0.50') ? 402 : 409, message);
+        }
+        return { sessionUrl: existing.sessionurl, status: String(existing.status) };
+      }
+      const { data: feeReceipt, error: feeError } = await admin.rpc('charge_cleaner_verification_fee', { p_user_id: actor });
+      if (feeError) {
+        const message = String(feeError.message ?? 'Could not charge the verification fee.');
+        fail(message.includes('Add at least $0.50') ? 402 : 409, message);
+      }
+      const refundFeeOnLaunchFailure = async () => {
+        if (feeReceipt?.alreadyPaid !== true) await admin.rpc('refund_failed_cleaner_verification_fee', { p_user_id: actor });
+      };
+      let response: Response;
+      try {
+        response = await fetch('https://verification.didit.me/v3/session/', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': apiKey }, body: JSON.stringify({ workflow_id: workflow, vendor_data: actor }) });
+      } catch {
+        await refundFeeOnLaunchFailure();
+        fail(503, 'Could not reach Didit. The verification fee was returned to your wallet; try again later.');
+      }
       const body = await response.json().catch(() => ({}));
       const sessionUrl = body.session_url ?? body.url;
       let valid = false; try { const parsed = new URL(sessionUrl); valid = parsed.protocol === 'https:' && (parsed.hostname === 'didit.me' || parsed.hostname.endsWith('.didit.me')); } catch { /* invalid provider URL */ }
-      if (!response.ok || !body.session_id || !valid) fail(503, 'Could not start identity verification.');
+      if (!response.ok || !body.session_id || !valid) {
+        await refundFeeOnLaunchFailure();
+        fail(503, 'Could not start identity verification. The verification fee was returned to your wallet; try again later.');
+      }
       const now = new Date().toISOString();
-      await admin.from('privatekyc').upsert({ userid: actor, provider: 'didit', sessionid: body.session_id, sessionurl: sessionUrl, status: 'Pending', consentedat: now, updatedat: now });
-      await admin.from('users').update({ verificationstatus: 'PENDING', updatedat: now }).eq('id', actor);
+      const { error: kycError } = await admin.from('privatekyc').upsert({ userid: actor, provider: 'didit', sessionid: body.session_id, sessionurl: sessionUrl, status: 'Pending', consentedat: now, updatedat: now });
+      const { error: profileError } = await admin.from('users').update({ verificationstatus: 'PENDING', updatedat: now }).eq('id', actor);
+      if (kycError || profileError) {
+        await refundFeeOnLaunchFailure();
+        fail(503, 'Could not save the Didit session. The verification fee was returned to your wallet; try again later.');
+      }
       return { sessionUrl, status: 'Pending' };
     }
     case 'refreshCleanerIdentityVerification': {
@@ -918,15 +951,10 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const {data:operations,error:operationsError}=await admin.from('configuration').select('value').eq('key','operations').maybeSingle();
       if(operationsError)throw operationsError;
       if(operations?.value?.switches?.maintenance===true||operations?.value?.switches?.bidAcceptance===true)fail(503,'Booking acceptance is temporarily paused. Please try again later.');
-      const paynowConfigured=Boolean(Deno.env.get('PAYNOW_INTEGRATION_ID')&&Deno.env.get('PAYNOW_INTEGRATION_KEY'));
-      const paymentUnavailable=method==='DIRECT_OFFLINE'||(method==='PAYNOW'&&!paynowConfigured);
-      const acceptedMethod=paymentUnavailable?'DIRECT_OFFLINE':method;
-      if(!['PAYNOW','WALLET','CASH','ECOCASH','INNBUCKS','DIRECT_OFFLINE'].includes(acceptedMethod))fail(400,'Unsupported payment method.');
-      if(acceptedMethod!=='DIRECT_OFFLINE'){
-        const {data:beta,error:betaError}=await admin.from('configuration').select('value').eq('key','beta').maybeSingle();
-        if(betaError)throw betaError;
-        if(isPaymentGateClosed(beta?.value,operations?.value))fail(503,'Payments are temporarily unavailable.');
-      }
+      if(!['PAYNOW','WALLET','CASH','ECOCASH','INNBUCKS','DIRECT_OFFLINE'].includes(method))fail(400,'Unsupported payment method.');
+      // Booking payments stay between customer and cleaner for now. Paynow is
+      // used for commission-credit top-ups, not BuySafe/customer checkout.
+      const acceptedMethod='DIRECT_OFFLINE';
       const {data,error}=await admin.rpc('accept_bid',{p_actor_id:actor,p_job_id:jobId,p_bid_id:bidId,p_payment_method:acceptedMethod,p_idempotency_key:key});
       if(error)throw error;
       let redirectUrl: string | null=data.redirectUrl??null;
@@ -937,9 +965,9 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         try { redirectUrl=await startPaynowCheckout(jobId,email,{reference:data.payment.reference,amount:data.payment.amount,cleanerName:data.cleanerName}); }
         catch(error){const {data:current}=await admin.from('payments').select('data').eq('id',`${jobId}_booking`).maybeSingle();await admin.from('payments').update({status:'FAILED',data:{...(current?.data??{}),failureReason:'INITIATION_FAILED'}}).eq('id',`${jobId}_booking`);await admin.from('jobs').update({paymentstatus:'FAILED'}).eq('id',jobId);throw error;}
       }
-      const offlineNotice='Booking confirmed. Agree cash, EcoCash, InnBucks, or another offline payment method with the customer. Detail does not receive the customer’s payment. Detail’s 10% commission is recorded after completion is confirmed.';
+      const offlineNotice=`Booking confirmed. Agree cash, EcoCash, InnBucks, or another offline payment method with the customer. Detail does not receive the customer’s payment. $${Number(data.commissionReserved ?? 0).toFixed(2)} (10%) has been reserved from your prepaid commission credit for this booking; it is returned if the booking is cancelled under the cancellation process.`;
       if(data.cleanerId && data.paymentMethod!=='PAYNOW'&&!data.replayed) await notify(data.cleanerId,{type:'BID_ACCEPTED',title:'Quote accepted',body:data.paymentMethod==='DIRECT_OFFLINE'?offlineNotice:'The customer accepted your quote.',jobId});
-      if(data.paymentMethod==='DIRECT_OFFLINE'&&!data.replayed) await notify(actor,{type:'PAYMENT_UNAVAILABLE',title:'Booking confirmed — agree payment with your cleaner',body:'Arrange cash, EcoCash, InnBucks, or another agreed payment method with your cleaner. Detail does not receive this payment. Detail’s commission is handled separately after completion is confirmed.',jobId});
+      if(data.paymentMethod==='DIRECT_OFFLINE'&&!data.replayed) await notify(actor,{type:'PAYMENT_UNAVAILABLE',title:'Booking confirmed — agree payment with your cleaner',body:'Arrange cash, EcoCash, InnBucks, or another agreed payment method with your cleaner. Detail does not receive this payment. The cleaner’s 10% commission is reserved from their prepaid credit when you accept.',jobId});
       return {...data,redirectUrl,paymentUnavailable:data.paymentMethod==='DIRECT_OFFLINE'};
     }
     case 'refreshPaynowBookingPayment': {

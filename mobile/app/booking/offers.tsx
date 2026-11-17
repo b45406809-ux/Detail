@@ -19,8 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
-import { ArrowLeft, Clock, Star, ShieldCheck, X, Check, TrendingUp, Timer, ChevronRight, Brush, CreditCard, Banknote, MapPin, Navigation } from 'lucide-react-native';
+import { ArrowLeft, Clock, Star, ShieldCheck, X, Check, TrendingUp, Timer, ChevronRight, Brush, Banknote, MapPin, Navigation } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { db, doc, collection, query, where, onSnapshot } from '../../services/supabase';
 import { callFunction } from '../../services/functions';
@@ -47,7 +46,6 @@ export default function OffersScreen() {
   const [newBudgetValue, setNewBudgetValue] = useState('');
   const [isSavingBudget, setIsSavingBudget] = useState(false);
   const [msRemaining, setMsRemaining] = useState<number | null>(null);
-  const [paynowConfigured, setPaynowConfigured] = useState(false);
   const acceptedLocally = useRef(false);
 
   useEffect(() => {
@@ -63,21 +61,13 @@ export default function OffersScreen() {
   }, [jobId]);
 
   useEffect(() => {
-    let active = true;
-    callFunction<{}, { paynowConfigured?: boolean }>('getBetaConfig', {}).then((config) => {
-      if (active) setPaynowConfigured(config.paynowConfigured === true);
-    }).catch(() => { if (active) setPaynowConfigured(false); });
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => {
     if (!jobId) return;
     const q = query(collection(db, 'bids'), where('jobId', '==', jobId), where('status', 'in', ['PENDING', 'COUNTERED']));
     return onSnapshot(q, (snap) => setBids(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Bid))));
   }, [jobId]);
 
   // Redirect when a bid is accepted elsewhere. During our own acceptance we
-  // wait for the Paynow checkout sheet to finish before navigating.
+  // wait for the server response before navigating.
   useEffect(() => {
     if (job && job.status !== JobStatus.PENDING && !busyBidId && !acceptedLocally.current) {
       router.replace({ pathname: '/tracking/[jobId]', params: { jobId: jobId! } });
@@ -114,15 +104,9 @@ export default function OffersScreen() {
           if (!user) return;
           setBusyBidId(bid.id);
           try {
-            const result = await callFunction<{ jobId: string; bidId: string; paymentMethod: string; idempotencyKey: string }, { redirectUrl?: string | null }>(
+            await callFunction<{ jobId: string; bidId: string; paymentMethod: string; idempotencyKey: string }, { success: boolean }>(
               'acceptBid', { jobId, bidId: bid.id, paymentMethod, idempotencyKey: `accept-${jobId}-${bid.id}` }
             );
-            if (result.redirectUrl) {
-              await WebBrowser.openBrowserAsync(result.redirectUrl, {
-                presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET,
-              });
-              try { await callFunction('refreshPaynowBookingPayment', { jobId }); } catch { /* status remains visible and refreshable on the Detail confirmation screen */ }
-            }
             acceptedLocally.current = true;
             router.replace({ pathname: '/booking/confirmation', params: { jobId: jobId! } });
           } catch (err: any) {
@@ -387,16 +371,12 @@ export default function OffersScreen() {
         {!!paymentChoiceBid && <AppDialogHost />}
         <View className="flex-1 justify-center bg-[#150256]/55 px-5"><View className="rounded-[28px] bg-white px-5 pb-9 pt-6">
           <View className="mb-5 h-1 w-12 self-center rounded-full bg-slate-200" />
-          <Text className="text-2xl font-display font-black text-ink">{paynowConfigured || IS_MOCK ? 'Choose how to pay' : 'Payment isn’t available in Detail yet'}</Text>
-          <Text className="mt-1 mb-5 font-sans text-sm leading-5 text-slate-500">Cleaner quote and booking total: ${Number(paymentChoiceBid?.bidPrice ?? 0).toFixed(2)}. {paynowConfigured || IS_MOCK ? 'Pay through Paynow; available mobile money and other methods appear in its checkout.' : 'You can still confirm this booking. Arrange payment directly with your cleaner by cash, EcoCash, InnBucks, or another agreed method. Detail does not receive or hold that payment. Detail’s 10% commission is recorded after the completed work is confirmed; commission credit is used first, then any remainder is due.'}</Text>
-          <TouchableOpacity disabled={!!busyBidId} onPress={() => { const bid = paymentChoiceBid; setPaymentChoiceBid(null); if (bid) void submitAcceptance(bid, IS_MOCK ? 'WALLET' : paynowConfigured ? 'PAYNOW' : 'DIRECT_OFFLINE'); }} activeOpacity={0.85} className="rounded-3xl border border-violet-100 bg-[#F7F4FF] p-4">
-            <View className="flex-row items-center"><View className="mr-3 h-12 w-12 items-center justify-center rounded-2xl bg-accent">{paynowConfigured || IS_MOCK ? <CreditCard size={22} color="#fff" /> : <Banknote size={22} color="#fff" />}</View><View className="flex-1"><Text className="font-display text-base font-black text-ink">{IS_MOCK ? 'Detail Wallet (test)' : paynowConfigured ? 'Paynow BuySafe' : 'Confirm and arrange payment directly'}</Text><Text className="mt-0.5 font-sans text-xs text-ink/60">{paynowConfigured || IS_MOCK ? 'Protected checkout • payment status updates in Detail' : 'Booking is confirmed; payment stays unpaid in Detail'}</Text></View><ChevronRight size={20} color="#3906D2"/></View>
-            {(paynowConfigured || IS_MOCK) && <View className="mt-4 rounded-2xl bg-white/80 px-3 py-2.5"><Text className="font-sans text-xs leading-4 text-ink/70">Paynow opens in a secure checkout. BuySafe holds eligible payments; after the clean, confirm delivery in Paynow. Detail never asks for your payment PIN.</Text></View>}
-            <View className="mt-3 items-center rounded-2xl bg-accent py-3.5"><Text className="font-display text-sm font-black uppercase tracking-wider text-white">{paynowConfigured || IS_MOCK ? 'Continue securely with Paynow' : 'Accept quote and confirm booking'}</Text></View>
+          <Text className="text-2xl font-display font-black text-ink">Agree payment with your cleaner</Text>
+          <Text className="mt-1 mb-5 font-sans text-sm leading-5 text-slate-500">Your cleaner quoted ${Number(paymentChoiceBid?.bidPrice ?? 0).toFixed(2)}. Pay them directly by cash, EcoCash, InnBucks, or another method you both agree on. Detail does not receive or hold the booking payment. The cleaner’s 10% commission is reserved from their prepaid credit when you accept.</Text>
+          <TouchableOpacity disabled={!!busyBidId} onPress={() => { const bid = paymentChoiceBid; setPaymentChoiceBid(null); if (bid) void submitAcceptance(bid, 'DIRECT_OFFLINE'); }} activeOpacity={0.85} className="rounded-3xl border border-violet-100 bg-[#F7F4FF] p-4">
+            <View className="flex-row items-center"><View className="mr-3 h-12 w-12 items-center justify-center rounded-2xl bg-accent"><Banknote size={22} color="#fff" /></View><View className="flex-1"><Text className="font-display text-base font-black text-ink">Confirm and arrange payment directly</Text><Text className="mt-0.5 font-sans text-xs text-ink/60">Detail records the prepaid commission reserve when you accept.</Text></View><ChevronRight size={20} color="#3906D2"/></View>
+            <View className="mt-3 items-center rounded-2xl bg-accent py-3.5"><Text className="font-display text-sm font-black uppercase tracking-wider text-white">Accept quote and confirm booking</Text></View>
           </TouchableOpacity>
-          {paynowConfigured&&!IS_MOCK&&<TouchableOpacity disabled={!!busyBidId} onPress={() => { const bid=paymentChoiceBid;setPaymentChoiceBid(null);if(bid)void submitAcceptance(bid,'DIRECT_OFFLINE'); }} activeOpacity={0.85} className="mt-3 rounded-3xl border border-amber-200 bg-amber-50 p-4">
-            <View className="flex-row items-center"><View className="mr-3 h-11 w-11 items-center justify-center rounded-2xl bg-amber-600"><Banknote size={21} color="#fff"/></View><View className="flex-1"><Text className="font-display text-base font-black text-amber-950">Arrange payment offline</Text><Text className="mt-0.5 font-sans text-xs text-amber-900">Pay the cleaner by cash, EcoCash, or another agreed method. Detail records its 10% commission after completion.</Text></View><ChevronRight size={20} color="#92400e"/></View>
-          </TouchableOpacity>}
           <TouchableOpacity onPress={() => setPaymentChoiceBid(null)} className="pt-5"><Text className="font-sans text-center font-bold text-slate-400">Cancel</Text></TouchableOpacity>
         </View></View>
       </Modal>
