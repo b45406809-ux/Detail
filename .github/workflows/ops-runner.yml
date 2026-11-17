@@ -581,6 +581,7 @@ jobs:
           supabase db push --dry-run > "$dry_run" 2>&1 || { cat "$dry_run" >> "$OPS_LOG"; echo 'Supabase migration dry-run failed.' >> "$OPS_LOG"; exit 1; }
           cat "$dry_run" >> "$OPS_LOG"
           mapfile -t pending_ids < <(grep -oE '[0-9]{14}' "$dry_run" | sort -u || true)
+          printf 'Supabase dry-run pending migration IDs: %s\n' "${pending_ids[*]:-none}"
           if [[ "${#pending_ids[@]}" -ne 1 || "${pending_ids[0]:-}" != '20261117010000' ]]; then
             echo 'Deployment stopped: expected only migration 20261117010000 to be pending.' >> "$OPS_LOG"
             printf 'Detected pending migration IDs: %s\n' "${pending_ids[*]:-none}" >> "$OPS_LOG"
