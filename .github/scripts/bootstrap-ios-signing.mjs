@@ -1,4 +1,4 @@
-import { sign as cryptoSign } from 'node:crypto';
+import { createPrivateKey, sign as cryptoSign } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -28,8 +28,19 @@ function createAppleJwt() {
     aud: 'appstoreconnect-v1',
   }));
   const unsigned = `${header}.${payload}`;
+  let privateKey;
+  try {
+    let pem = readFileSync(process.env.ASC_KEY_PATH, 'utf8').replace(/^\uFEFF/, '').trim();
+    if ((pem.startsWith('"') && pem.endsWith('"')) || (pem.startsWith("'") && pem.endsWith("'"))) {
+      pem = pem.slice(1, -1);
+    }
+    pem = pem.replace(/\\r?\\n/g, '\n');
+    privateKey = createPrivateKey(pem);
+  } catch {
+    throw new Error('EXPO_ASC_API_KEY_P8 is not a readable App Store Connect API private key. Upload the downloaded AuthKey_*.p8 contents (the PEM private key), not an APNs push key, certificate, or key ID.');
+  }
   const signature = cryptoSign('sha256', Buffer.from(unsigned), {
-    key: readFileSync(process.env.ASC_KEY_PATH),
+    key: privateKey,
     dsaEncoding: 'ieee-p1363',
   });
   return `${unsigned}.${base64url(signature)}`;
