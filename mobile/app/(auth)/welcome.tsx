@@ -9,22 +9,22 @@ const SLIDES = [
   {
     icon: ShieldCheck,
     badge: 'Identity status',
-    title: 'Choose with confidence',
-    sub: 'Browse cleaner profiles and look for the verified badge when choosing who to book.',
-    note: 'A verified badge confirms identity, not a background check.',
+    title: 'Know who you are booking',
+    sub: 'Some cleaner accounts complete identity verification through Didit. A verified badge reflects identity status; it is not a background check or a guarantee.',
+    note: '',
   },
   {
     icon: ClipboardList,
-    badge: 'Compare quotes',
-    title: 'Compare quotes with ease',
-    sub: 'Tell us what needs cleaning. Nearby cleaners can send quotes, and you choose the one that works for you.',
+    badge: 'You set the price',
+    title: 'Bid-Based Pricing',
+    sub: 'Post a job for house or car cleaning and let nearby pros compete with their best offer.',
     note: '',
   },
   {
     icon: MapPinned,
-    badge: 'Booking updates',
-    title: 'Stay in the loop',
-    sub: 'Keep up with your booking, chat with your cleaner and review payment options before you confirm.',
+    badge: 'Payment choices',
+    title: 'Job updates, clear terms',
+    sub: 'Share location while online or working, and review the available payment method and booking terms before you confirm.',
     note: '',
   },
 ];
@@ -72,25 +72,25 @@ export default function WelcomeScreen() {
             <View style={{ height: Math.max(250, Math.min(310, height * 0.36)), backgroundColor: '#F3F2F6' }} className="rounded-[28px] px-6 justify-center overflow-hidden">
               <View className="absolute top-5 left-5 rounded-full bg-white px-3 py-1.5"><Text className="font-sans-bold text-xs text-ink">{badge}</Text></View>
               <View className="absolute self-center w-3/5 h-28 rounded-[22px] bg-white/40" style={{ top: '32%' }} />
-              <View className="self-center w-full max-w-[260px] rounded-[22px] bg-white p-5" style={{ marginTop: 35 }}>
+              <View className="self-center w-full max-w-[260px] rounded-[22px] bg-white p-5" style={{ marginTop: 35, shadowColor: '#111827', shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 5 }}>
                 {i === 2 && <View className="h-14 rounded-xl bg-ink/5 mb-4 items-center justify-center"><View className="absolute w-full h-1 bg-white" style={{ transform: [{ rotate: '-12deg' }] }} /><MapPinned size={24} color="#3906D2" /></View>}
                 <View className="flex-row items-center">
                   <View className="w-12 h-12 rounded-2xl bg-brand-50 items-center justify-center">
                     {i === 0 ? <UserRound size={24} color="#3906D2" strokeWidth={1.7} /> : <Icon size={24} color="#3906D2" strokeWidth={1.7} />}
                   </View>
                   <View className="ml-3 flex-1">
-                    <Text className="font-sans-bold text-sm text-ink">{i === 0 ? 'Identity verified' : i === 1 ? 'Your cleaning request' : 'Your booking'}</Text>
-                    <Text className="font-sans text-xs text-ink/50 mt-1">{i === 0 ? 'Through Didit' : i === 1 ? 'Share what you need' : 'Updates in one place'}</Text>
+                    <Text className="font-sans-bold text-sm text-ink">{i === 0 ? 'Identity verified' : i === 1 ? 'Nearby pro' : 'Live location'}</Text>
+                    <Text className="font-sans text-xs text-ink/50 mt-1">{i === 0 ? 'Through Didit' : i === 1 ? 'Arrives in ~10 min' : 'Shared while online or working'}</Text>
                   </View>
                 </View>
                 <View className="mt-5 pt-4 border-t border-brand-50 flex-row items-center gap-2">
                   {i === 0 ? <ShieldCheck size={18} color="#3906D2" /> : <MessageCircle size={18} color="#3906D2" />}
-                  <Text className="font-sans-bold text-sm text-ink flex-1">{i === 0 ? 'Not a background check or a guarantee' : i === 1 ? 'Compare quotes from cleaners' : 'Chat with your cleaner'}</Text>
+                  <Text className="font-sans-bold text-sm text-ink flex-1">{i === 0 ? 'Not a background check or a guarantee' : i === 1 ? 'Your quote, your choice' : 'Payment and terms'}</Text>
                 </View>
               </View>
             </View>
 
-            <Text className="mt-7 text-ink text-[30px] leading-[36px] font-display tracking-tight mb-3">
+            <Text className="mt-7 text-ink text-[30px] leading-[36px] font-display font-black tracking-tight mb-3">
               {title}
             </Text>
             <Text className="font-sans text-ink/60 text-base leading-6">{sub}</Text>
