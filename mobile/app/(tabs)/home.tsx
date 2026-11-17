@@ -92,10 +92,6 @@ export default function HomeScreen() {
   );
 
   const isCustomer = viewRole === 'CUSTOMER';
-  const canSwitchRoles = profile?.cleanerOnboardingComplete === true
-    && profile?.hasAgreedToTerms === true
-    && profile?.cleanerAgreementAccepted === true
-    && profile?.verificationStatus === 'VERIFIED';
   const sheetSnapPoints = {
     expanded: Math.max(insets.top + 80, 104),
     normal: sheetHeight * 0.58,
@@ -198,7 +194,7 @@ export default function HomeScreen() {
       if (!isRegistered) {
         appAlert(
           'Cleaner Registration Required',
-          'To start earning and accept cleaning jobs, please complete your cleaner registration first.',
+          'To work as a cleaner, complete registration, the one-time $0.50 Didit identity check, and the cleaner agreement. The verification fee is charged from your Detail wallet; $1 of prepaid commission credit is also needed to accept up to $10 of offline work.',
           [
             { text: 'Cancel', style: 'cancel' },
             {
@@ -447,7 +443,7 @@ export default function HomeScreen() {
         <View className="flex-row items-center justify-between px-5" pointerEvents="box-none">
           <View style={{ width: 44, height: 44 }} />
 
-          {canSwitchRoles ? <RoleToggle value={viewRole} onChange={handleRoleToggle} /> : <View style={{ width: 44, height: 44 }} />}
+          <RoleToggle value={viewRole} onChange={handleRoleToggle} />
 
           <GlassIconButton size={44} onPress={() => router.push('/notifications')}>
             <Bell size={18} color="#150256" />

@@ -18,7 +18,9 @@ import { LoadingList } from '../components/LoadingList';
 import { LoadingError } from '../components/LoadingError';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { ArrowLeft, MapPin, Flag, X, ImagePlus, ClipboardList, Brush } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
+import { ArrowLeft, MapPin, Flag, X, ImagePlus, ClipboardList, Brush, RotateCcw, ChevronRight } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import {
   db,
@@ -32,6 +34,7 @@ import {
 import { callFunction } from '../services/functions';
 import { removeSupportEvidence, uploadSupportEvidence } from '../services/storage';
 import { Job, JobStatus } from '../types';
+import { IS_DEMO } from '../utils/env';
 
 const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }> = {
   COMPLETED: { label: 'Completed', color: 'text-emerald-700', bg: 'bg-emerald-50' },
@@ -51,6 +54,34 @@ export default function HistoryScreen() {
   const [reportReason, setReportReason] = useState('');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [evidenceUris, setEvidenceUris] = useState<string[]>([]);
+  const [rebookingJobId, setRebookingJobId] = useState<string | null>(null);
+
+  const requestRebook = async (job: Job) => {
+    if (!user || !job.cleanerId || !job.price || rebookingJobId) return;
+    if (IS_DEMO) {
+      appAlert('Rebooking unavailable', 'Rebooking is not available in demo mode.');
+      return;
+    }
+    setRebookingJobId(job.id);
+    const storageKey = `detail:rebook-intent:${user.uid}:${job.id}`;
+    try {
+      let idempotencyKey = await AsyncStorage.getItem(storageKey);
+      if (!idempotencyKey) {
+        idempotencyKey = Crypto.randomUUID();
+        await AsyncStorage.setItem(storageKey, idempotencyKey);
+      }
+      const result = await callFunction<{ sourceJobId: string; idempotencyKey: string }, { jobId: string }>(
+        'createFavoriteRebook',
+        { sourceJobId: job.id, idempotencyKey },
+      );
+      await AsyncStorage.removeItem(storageKey);
+      router.push({ pathname: '/booking/offers', params: { jobId: result.jobId } });
+    } catch (error) {
+      appAlert('Could not request this job again', error instanceof Error ? error.message : 'Check your connection and try again.');
+    } finally {
+      setRebookingJobId(null);
+    }
+  };
 
   const chooseEvidence = async () => {
     if (evidenceUris.length >= 3) { appAlert('Photo limit', 'Attach up to three photos.'); return; }
@@ -193,6 +224,29 @@ export default function HistoryScreen() {
                     <Text className="text-xs font-display font-black text-red-500 uppercase tracking-wider">
                       Report an Issue
                     </Text>
+                  </TouchableOpacity>
+                )}
+
+                {profile?.role === 'CUSTOMER' && job.status === JobStatus.COMPLETED && job.cleanerId && Number(job.price) > 0 && (
+                  <TouchableOpacity
+                    onPress={() => void requestRebook(job)}
+                    disabled={rebookingJobId !== null}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Request this ${job.serviceType} job again from ${job.cleanerName ?? 'your previous cleaner'}`}
+                    activeOpacity={0.85}
+                    className="mt-3 flex-row items-center gap-3 rounded-2xl border border-accent/20 bg-accent/5 p-4"
+                  >
+                    <View className="h-10 w-10 items-center justify-center rounded-2xl bg-accent/10">
+                      {rebookingJobId === job.id ? <ActivityIndicator color="#3906D2" /> : <RotateCcw size={18} color="#3906D2" />}
+                    </View>
+                    <View className="flex-1">
+                      <Text className="font-display text-sm font-black text-ink">
+                        {rebookingJobId === job.id ? 'Sending request…' : 'Request this job again'}
+                      </Text>
+                      <Text className="mt-1 font-sans text-xs text-ink/55">Same job details · target ${Number(job.price).toFixed(2)}</Text>
+                      <Text className="mt-0.5 font-sans text-[10px] text-ink/40">Your cleaner confirms availability and the final price.</Text>
+                    </View>
+                    {rebookingJobId !== job.id && <ChevronRight size={17} color="#9C94C4" />}
                   </TouchableOpacity>
                 )}
               </View>
