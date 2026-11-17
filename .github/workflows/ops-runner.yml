@@ -600,7 +600,7 @@ jobs:
       - name: Deploy marketplace API Edge Function
         run: |
           set -euo pipefail
-          supabase functions deploy marketplace-api --project-ref "$SUPABASE_PROJECT_REF" >> "$OPS_LOG" 2>&1
+          supabase functions deploy marketplace-api --project-ref "$SUPABASE_PROJECT_REF" --use-api >> "$OPS_LOG" 2>&1
           echo 'marketplace-api Edge Function deployed.' >> "$OPS_LOG"
 
       - name: Redact and summarize deployment output
@@ -668,7 +668,7 @@ jobs:
         run: |
           set -euo pipefail
           output="$RUNNER_TEMP/marketplace-api-deploy.txt"
-          if supabase functions deploy marketplace-api --project-ref "$SUPABASE_PROJECT_REF" > "$output" 2>&1; then
+          if supabase functions deploy marketplace-api --project-ref "$SUPABASE_PROJECT_REF" --use-api > "$output" 2>&1; then
             cat "$output" >> "$OPS_LOG"
             echo 'marketplace-api Edge Function deployed.' >> "$OPS_LOG"
           else
