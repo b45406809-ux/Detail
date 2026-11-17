@@ -582,18 +582,19 @@ jobs:
           cat "$dry_run" >> "$OPS_LOG"
           mapfile -t pending_ids < <(grep -oE '[0-9]{14}' "$dry_run" | sort -u || true)
           printf 'Supabase dry-run pending migration IDs: %s\n' "${pending_ids[*]:-none}"
-          if [[ "${#pending_ids[@]}" -ne 1 || "${pending_ids[0]:-}" != '20261117010000' ]]; then
-            echo 'Deployment stopped: expected only migration 20261117010000 to be pending.' >> "$OPS_LOG"
+          expected_ids='20261109030000 20261109040000 20261109050000 20261109060000 20261112000000 20261113000000 20261113010000 20261113020000 20261114010000 20261117010000'
+          if [[ "${pending_ids[*]:-}" != "$expected_ids" ]]; then
+            echo 'Deployment stopped: the pending migrations differ from the reviewed feature-branch migration set.' >> "$OPS_LOG"
             printf 'Detected pending migration IDs: %s\n' "${pending_ids[*]:-none}" >> "$OPS_LOG"
             exit 1
           fi
-          echo 'Preflight passed: only 20261117010000_prepaid_cleaner_commission_and_kyc_fee.sql is pending.' >> "$OPS_LOG"
+          echo 'Preflight passed: all ten reviewed feature-branch migrations are the only pending migrations.' >> "$OPS_LOG"
 
       - name: Apply the reviewed migration
         run: |
           set -euo pipefail
           supabase db push --yes >> "$OPS_LOG" 2>&1
-          echo 'Prepaid cleaner commission migration applied.' >> "$OPS_LOG"
+          echo 'All ten reviewed feature-branch migrations applied.' >> "$OPS_LOG"
 
       - name: Deploy marketplace API Edge Function
         run: |
