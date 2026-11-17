@@ -44,6 +44,11 @@
       "ios": { "buildConfiguration": "Release" },
       "autoIncrement": true
     },
+    "production-github": {
+      "extends": "production",
+      "environment": "production",
+      "credentialsSource": "local"
+    },
     "production-apk": {
       "extends": "production",
       "distribution": "internal",

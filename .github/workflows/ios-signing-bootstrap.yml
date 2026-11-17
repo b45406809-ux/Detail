@@ -1,0 +1,99 @@
+name: Bootstrap iOS signing and build on GitHub
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-signing-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  bootstrap-and-build:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN || secrets.EAS_BOT_ACCESS_TOKEN || secrets.EXPO_EAS_BOT_ACCESS_TOKEN || secrets.EAS_BOT_TOKEN_2 }}
+      EXPO_ASC_KEY_ID: ${{ secrets.EXPO_ASC_KEY_ID }}
+      EXPO_ASC_ISSUER_ID: ${{ secrets.EXPO_ASC_ISSUER_ID }}
+      EXPO_APPLE_TEAM_ID: ${{ secrets.EXPO_APPLE_TEAM_ID }}
+      EXPO_APPLE_TEAM_TYPE: ${{ secrets.EXPO_APPLE_TEAM_TYPE }}
+      CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Validate signing inputs and install Apple API key
+        shell: bash
+        env:
+          ASC_API_KEY_P8: ${{ secrets.EXPO_ASC_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          test -n "$EXPO_TOKEN" || { echo 'Expo token is missing from production.'; exit 1; }
+          test -n "$ASC_API_KEY_P8" || { echo 'EXPO_ASC_API_KEY_P8 is missing from production.'; exit 1; }
+          [[ "$EXPO_ASC_KEY_ID" =~ ^[A-Z0-9]{10}$ ]] || { echo 'EXPO_ASC_KEY_ID must be the 10-character App Store Connect key ID.'; exit 1; }
+          [[ "$EXPO_ASC_ISSUER_ID" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo 'EXPO_ASC_ISSUER_ID must be the App Store Connect issuer UUID.'; exit 1; }
+          [[ "$EXPO_APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ ]] || { echo 'EXPO_APPLE_TEAM_ID must be the 10-character Apple Developer Team ID, not the Issuer ID.'; exit 1; }
+          case "$EXPO_APPLE_TEAM_TYPE" in
+            IN_HOUSE|COMPANY_OR_ORGANIZATION|INDIVIDUAL) ;;
+            *) echo 'EXPO_APPLE_TEAM_TYPE must be IN_HOUSE, COMPANY_OR_ORGANIZATION, or INDIVIDUAL.'; exit 1 ;;
+          esac
+          umask 077
+          printf '%s' "$ASC_API_KEY_P8" > "$RUNNER_TEMP/AuthKey_${EXPO_ASC_KEY_ID}.p8"
+          echo "EXPO_ASC_API_KEY_PATH=$RUNNER_TEMP/AuthKey_${EXPO_ASC_KEY_ID}.p8" >> "$GITHUB_ENV"
+          echo 'Required Apple and Expo settings are present.'
+
+      - name: Install mobile dependencies
+        run: npm ci --prefix mobile --no-audit --no-fund
+
+      - name: Create Apple distribution certificate and App Store profile
+        env:
+          ASC_KEY_PATH: ${{ runner.temp }}/AuthKey_${{ secrets.EXPO_ASC_KEY_ID }}.p8
+          ASC_KEY_ID: ${{ secrets.EXPO_ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.EXPO_ASC_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.EXPO_APPLE_TEAM_ID }}
+          BUNDLE_ID: zw.co.detailapp.mobile
+          SIGNING_DIR: ${{ runner.temp }}/detail-ios-signing
+        run: node .github/scripts/bootstrap-ios-signing.mjs
+
+      - name: Upload short-lived signing artifact for Expo dashboard import
+        uses: actions/upload-artifact@v4
+        with:
+          name: detail-ios-signing-${{ github.run_id }}
+          path: ${{ runner.temp }}/detail-ios-signing/import/
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Check mobile types
+        run: npm run type-check --prefix mobile
+
+      - name: Configure local signing files for this build
+        shell: bash
+        env:
+          SIGNING_DIR: ${{ runner.temp }}/detail-ios-signing
+        run: |
+          set -euo pipefail
+          mkdir -p mobile/.eas/credentials
+          cp "$SIGNING_DIR/distribution.p12" mobile/.eas/credentials/distribution.p12
+          cp "$SIGNING_DIR/profile.mobileprovision" mobile/.eas/credentials/profile.mobileprovision
+          node -e 'const fs=require("node:fs"); const password=fs.readFileSync(process.env.SIGNING_DIR+"/p12-password.txt","utf8").trim(); fs.writeFileSync("mobile/credentials.json", JSON.stringify({ios:{provisioningProfilePath:".eas/credentials/profile.mobileprovision",distributionCertificate:{path:".eas/credentials/distribution.p12",password}},}, null, 2));' 
+
+      - name: Start signed iOS production build with local credentials
+        working-directory: mobile
+        run: npx --yes eas-cli@16.28.0 build --platform ios --profile production-github --non-interactive --no-wait
+
+      - name: Remove signing material from the runner
+        if: always()
+        shell: bash
+        run: |
+          rm -f mobile/credentials.json mobile/.eas/credentials/distribution.p12 mobile/.eas/credentials/profile.mobileprovision
+          rm -rf "$RUNNER_TEMP/detail-ios-signing"
+          rm -f "$RUNNER_TEMP/AuthKey_${EXPO_ASC_KEY_ID}.p8"
