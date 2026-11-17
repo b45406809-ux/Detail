@@ -23,6 +23,7 @@ on:
           - supabase-migration-list
           - supabase-migration-dry-run
           - deploy-prepaid-commission
+          - deploy-marketplace-api
           - waitlist-migration-dry-run
           - live-readiness
           - live-core-readiness
@@ -613,18 +614,92 @@ jobs:
           else
             printf 'Deployment did not reach the Supabase operation steps.\n' > "$RUNNER_TEMP/detail-ops-result.txt"
           fi
+          cat "$RUNNER_TEMP/detail-ops-result.txt"
           {
             echo '## Supabase deployment result'
             echo
             echo "- Task: \`$TASK\`"
             echo "- Workflow result: \`$JOB_STATUS\`"
-            echo '- Detailed output: available in the attached redacted artifact.'
+            echo
+            echo '```text'
+            cat "$RUNNER_TEMP/detail-ops-result.txt"
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: detail-supabase-deploy-${{ github.run_id }}
+          path: ${{ runner.temp }}/detail-ops-result.txt
+          if-no-files-found: warn
+          retention-days: 3
+
+  deploy-marketplace-api:
+    if: github.event_name == 'workflow_dispatch' && inputs.task == 'deploy-marketplace-api' && inputs.confirm_production_access == true && inputs.confirm_live_side_effects == true && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
+    name: Deploy marketplace API Edge Function
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    env:
+      OPS_LOG: ${{ github.workspace }}/detail-ops.log
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.75.0
+
+      - name: Validate deployment target and credentials
+        env:
+          REF: ${{ github.ref }}
+          CONFIRM_PRODUCTION: ${{ inputs.confirm_production_access }}
+          CONFIRM_SIDE_EFFECTS: ${{ inputs.confirm_live_side_effects }}
+        run: |
+          set -euo pipefail
+          [[ "$REF" == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh' ]]
+          [[ "$CONFIRM_PRODUCTION" == 'true' && "$CONFIRM_SIDE_EFFECTS" == 'true' ]]
+          test -n "$SUPABASE_ACCESS_TOKEN" || { echo 'Missing SUPABASE_ACCESS_TOKEN.'; exit 1; }
+          test -n "$SUPABASE_PROJECT_REF" || { echo 'Missing SUPABASE_PROJECT_REF.'; exit 1; }
+          printf 'Deploying marketplace-api Edge Function to the configured production project.\n' > "$OPS_LOG"
+
+      - name: Deploy marketplace API Edge Function
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/marketplace-api-deploy.txt"
+          if supabase functions deploy marketplace-api --project-ref "$SUPABASE_PROJECT_REF" > "$output" 2>&1; then
+            cat "$output" >> "$OPS_LOG"
+            echo 'marketplace-api Edge Function deployed.' >> "$OPS_LOG"
+          else
+            cat "$output" >> "$OPS_LOG"
+            echo 'marketplace-api Edge Function deployment failed.' >> "$OPS_LOG"
+            exit 1
+          fi
+
+      - name: Redact and summarize function deployment output
+        if: always()
+        env:
+          TASK: deploy-marketplace-api
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          python scripts/redact_gha_ops_log.py "$OPS_LOG" "$RUNNER_TEMP/detail-ops-result.txt"
+          cat "$RUNNER_TEMP/detail-ops-result.txt"
+          {
+            echo '## Supabase function deployment result'
+            echo
+            echo "- Task: \`$TASK\`"
+            echo "- Workflow result: \`$JOB_STATUS\`"
+            echo
+            echo '```text'
+            cat "$RUNNER_TEMP/detail-ops-result.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: detail-supabase-function-${{ github.run_id }}
           path: ${{ runner.temp }}/detail-ops-result.txt
           if-no-files-found: warn
           retention-days: 3
