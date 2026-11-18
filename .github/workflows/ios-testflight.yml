@@ -29,7 +29,7 @@ jobs:
   ios:
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 20
+    timeout-minutes: 90
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN || secrets.EAS_BOT_ACCESS_TOKEN || secrets.EXPO_EAS_BOT_ACCESS_TOKEN || secrets.EAS_BOT_TOKEN_2 }}
       EXPO_ASC_KEY_ID: ${{ secrets.EXPO_ASC_KEY_ID }}
@@ -96,6 +96,32 @@ jobs:
         if: inputs.operation == 'build'
         working-directory: mobile
         run: npx --yes eas-cli@16.28.0 build --platform ios --profile production --non-interactive --no-wait
+      - name: Wait for selected EAS build to finish
+        if: inputs.operation == 'submit'
+        working-directory: mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            build_json="$(npx --yes eas-cli@16.28.0 build:view "$REQUESTED_BUILD_ID" --json)"
+            build_status="$(printf '%s' "$build_json" | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const b=JSON.parse(s);process.stdout.write(String(b.status ?? "unknown").toLowerCase())})')"
+            case "$build_status" in
+              finished)
+                echo 'The EAS iOS build finished successfully.'
+                exit 0
+                ;;
+              errored|canceled)
+                echo "The EAS iOS build ended with status: $build_status"
+                exit 1
+                ;;
+              *)
+                echo "EAS build status: $build_status; checking again in 30 seconds."
+                sleep 30
+                ;;
+            esac
+          done
+          echo 'The EAS build did not finish within 30 minutes.'
+          exit 1
       - name: Submit selected build to TestFlight
         if: inputs.operation == 'submit'
         working-directory: mobile
