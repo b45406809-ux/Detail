@@ -13,7 +13,7 @@ module.exports = function withFollyConfigStub(config) {
       throw new Error('Unable to locate react_native_post_install in the generated Podfile.');
     }
 
-    const workaround = `\n    ${marker}\n    require 'fileutils'\n    folly_config_paths = [\n      File.join(installer.sandbox.root, 'RCT-Folly', 'folly', 'folly-config.h'),\n      File.join(installer.sandbox.root, 'Headers', 'Public', 'RCT-Folly', 'folly', 'folly-config.h')\n    ]\n    folly_config_paths.each do |folly_config|\n      FileUtils.mkdir_p(File.dirname(folly_config))\n      File.write(folly_config, "#pragma once\\n#define FOLLY_HAS_COROUTINES 0\\n") unless File.exist?(folly_config)\n    end\n`;
+    const workaround = `\n    ${marker}\n    require 'fileutils'\n    folly_config_paths = [\n      File.join(installer.sandbox.root, 'RCT-Folly', 'folly', 'folly-config.h'),\n      File.join(installer.sandbox.root, 'Headers', 'Public', 'RCT-Folly', 'folly', 'folly-config.h')\n    ]\n    folly_config_paths.each do |folly_config|\n      FileUtils.mkdir_p(File.dirname(folly_config))\n      File.write(folly_config, "#pragma once\\n#define FOLLY_HAS_COROUTINES 0\\n")\n    end\n`;
     config.modResults.contents = config.modResults.contents.replace(
       postInstall,
       (_match, hook) => `${hook}${workaround}`,
