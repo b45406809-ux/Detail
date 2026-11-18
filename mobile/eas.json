@@ -41,7 +41,10 @@
       "android": {
         "buildType": "app-bundle"
       },
-      "ios": { "buildConfiguration": "Release" },
+      "ios": {
+        "buildConfiguration": "Release",
+        "image": "macos-sequoia-15.6-xcode-26.2"
+      },
       "autoIncrement": true
     },
     "production-github": {
