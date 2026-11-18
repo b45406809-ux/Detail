@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Check inputs, start an EAS build, or submit a completed EAS build
+        description: Check inputs, start a build, inspect a build, or submit it to TestFlight
         required: true
         type: choice
-        options: [readiness, build, submit]
+        options: [readiness, build, inspect, submit]
       build_id:
         description: Completed EAS iOS production build ID (required for submit)
         required: false
@@ -84,9 +84,11 @@ jobs:
           if [[ -n "$GOOGLE_IOS_CLIENT_ID" ]]; then echo 'Google iOS client ID: present in GitHub'; else echo 'Google iOS client ID: missing in GitHub'; fi
           if [[ -n "$APPLE_CLIENT_SECRET" ]]; then echo 'Apple account deletion client secret: present in GitHub'; else echo 'Apple account deletion client secret: missing in GitHub'; fi
           echo 'This check does not verify EAS environment variables, Apple credentials, or Supabase provider configuration.'
+          if [[ "$REQUESTED_OPERATION" == submit || "$REQUESTED_OPERATION" == inspect ]]; then
+            [[ "$REQUESTED_BUILD_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || { echo 'Enter a valid EAS build UUID.'; exit 1; }
+          fi
           if [[ "$REQUESTED_OPERATION" == submit ]]; then
             [[ "$CONFIRM_SUBMISSION" == true ]] || { echo 'Submission confirmation is required.'; exit 1; }
-            [[ "$REQUESTED_BUILD_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || { echo 'Enter a valid EAS build UUID.'; exit 1; }
           fi
       - name: Install dependencies
         run: npm ci --prefix mobile --no-audit --no-fund
@@ -96,6 +98,14 @@ jobs:
         if: inputs.operation == 'build'
         working-directory: mobile
         run: npx --yes eas-cli@16.28.0 build --platform ios --profile production --non-interactive --no-wait
+      - name: Inspect selected EAS build
+        if: inputs.operation == 'inspect'
+        working-directory: mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes eas-cli@16.28.0 build:view "$REQUESTED_BUILD_ID" --json > "$RUNNER_TEMP/eas-build.json"
+          node -e 'const b=require(process.env.RUNNER_TEMP+"/eas-build.json"); console.log(JSON.stringify({id:b.id,status:b.status,profile:b.buildProfile,sdkVersion:b.sdkVersion,error:b.error,logFiles:b.logFiles,artifacts:b.artifacts},null,2))'
       - name: Wait for selected EAS build to finish
         if: inputs.operation == 'submit'
         working-directory: mobile
