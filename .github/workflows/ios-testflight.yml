@@ -190,7 +190,15 @@ jobs:
             });
             const body = await response.json();
             if (!response.ok) throw new Error(`App Store Connect app lookup failed (${response.status}): ${JSON.stringify(body.errors ?? body)}`);
-            if (body.data?.length !== 1) throw new Error(`Expected one App Store Connect app for ${bundleId}, found ${body.data?.length ?? 0}.`);
+            if (body.data?.length !== 1) {
+              const allResponse = await fetch('https://api.appstoreconnect.apple.com/v1/apps?limit=200', {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              const allApps = await allResponse.json();
+              if (!allResponse.ok) throw new Error(`App Store Connect app listing failed (${allResponse.status}): ${JSON.stringify(allApps.errors ?? allApps)}`);
+              console.log(`No app record matches ${bundleId}. Apps visible to this API key: ${JSON.stringify((allApps.data ?? []).map(({ id, attributes }) => ({ id, name: attributes.name, bundleId: attributes.bundleId })))}`);
+              throw new Error(`Expected one App Store Connect app for ${bundleId}, found ${body.data?.length ?? 0}. Create the app record in App Store Connect, then rerun submission.`);
+            }
             const configPath = 'eas.json';
             const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
             config.submit ??= {};
