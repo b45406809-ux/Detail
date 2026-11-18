@@ -205,6 +205,9 @@ jobs:
             config.submit.production ??= {};
             config.submit.production.ios ??= {};
             config.submit.production.ios.ascAppId = body.data[0].id;
+            config.submit.production.ios.ascApiKeyId = keyId;
+            config.submit.production.ios.ascApiKeyIssuerId = issuerId;
+            config.submit.production.ios.ascApiKeyPath = process.env.EXPO_ASC_API_KEY_PATH;
             fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
             console.log(`Resolved the App Store Connect app for ${bundleId}.`);
           })().catch((error) => { console.error(error.message); process.exitCode = 1; });
