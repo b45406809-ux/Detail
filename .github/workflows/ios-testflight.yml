@@ -12,6 +12,10 @@ on:
         description: Completed EAS iOS production build ID (required for submit)
         required: false
         type: string
+      signing_run_id:
+        description: GitHub run ID that created the Apple signing artifact (required for build)
+        required: false
+        type: string
       confirm_testflight_submission:
         description: Confirm submission to App Store Connect TestFlight
         required: true
@@ -20,6 +24,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ios-testflight-${{ github.ref }}
@@ -41,6 +46,7 @@ jobs:
       APPLE_CLIENT_SECRET: ${{ secrets.APPLE_CLIENT_SECRET }}
       REQUESTED_OPERATION: ${{ inputs.operation }}
       REQUESTED_BUILD_ID: ${{ inputs.build_id }}
+      SIGNING_RUN_ID: ${{ inputs.signing_run_id }}
       CONFIRM_SUBMISSION: ${{ inputs.confirm_testflight_submission }}
       CI: '1'
     steps:
@@ -87,6 +93,9 @@ jobs:
           if [[ "$REQUESTED_OPERATION" == submit || "$REQUESTED_OPERATION" == inspect ]]; then
             [[ "$REQUESTED_BUILD_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || { echo 'Enter a valid EAS build UUID.'; exit 1; }
           fi
+          if [[ "$REQUESTED_OPERATION" == build ]]; then
+            [[ "${SIGNING_RUN_ID:-}" =~ ^[0-9]+$ ]] || { echo 'Enter the GitHub run ID that created the iOS signing artifact.'; exit 1; }
+          fi
           if [[ "$REQUESTED_OPERATION" == submit ]]; then
             [[ "$CONFIRM_SUBMISSION" == true ]] || { echo 'Submission confirmation is required.'; exit 1; }
           fi
@@ -94,10 +103,35 @@ jobs:
         run: npm ci --prefix mobile --no-audit --no-fund
       - name: Check mobile types
         run: npm run type-check --prefix mobile
+      - name: Download Apple signing artifact
+        if: inputs.operation == 'build'
+        uses: actions/download-artifact@v4
+        with:
+          name: detail-ios-signing-${{ inputs.signing_run_id }}
+          path: ${{ runner.temp }}/detail-ios-signing
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.signing_run_id }}
+      - name: Repackage signing certificate for macOS and configure local EAS credentials
+        if: inputs.operation == 'build'
+        shell: bash
+        env:
+          SIGNING_DIR: ${{ runner.temp }}/detail-ios-signing
+        run: |
+          set -euo pipefail
+          openssl pkcs12 -provider default -provider legacy -in "$SIGNING_DIR/distribution.p12" -passin "file:$SIGNING_DIR/p12-password.txt" -nocerts -nodes -out "$SIGNING_DIR/distribution-key.pem"
+          openssl pkcs12 -provider default -provider legacy -in "$SIGNING_DIR/distribution.p12" -passin "file:$SIGNING_DIR/p12-password.txt" -clcerts -nokeys -out "$SIGNING_DIR/distribution-cert.pem"
+          openssl pkcs12 -export -provider default -provider legacy -inkey "$SIGNING_DIR/distribution-key.pem" -in "$SIGNING_DIR/distribution-cert.pem" \
+            -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1 -iter 2048 \
+            -out "$SIGNING_DIR/distribution-macos.p12" -passout "file:$SIGNING_DIR/p12-password.txt"
+          openssl pkcs12 -in "$SIGNING_DIR/distribution-macos.p12" -passin "file:$SIGNING_DIR/p12-password.txt" -noout
+          mkdir -p mobile/.eas/credentials
+          cp "$SIGNING_DIR/distribution-macos.p12" mobile/.eas/credentials/distribution.p12
+          cp "$SIGNING_DIR/profile.mobileprovision" mobile/.eas/credentials/profile.mobileprovision
+          node -e 'const fs=require("node:fs"); const password=fs.readFileSync(process.env.SIGNING_DIR+"/p12-password.txt","utf8").trim(); fs.writeFileSync("mobile/credentials.json", JSON.stringify({ios:{provisioningProfilePath:".eas/credentials/profile.mobileprovision",distributionCertificate:{path:".eas/credentials/distribution.p12",password}}},null,2));'
       - name: Start signed iOS production build on EAS
         if: inputs.operation == 'build'
         working-directory: mobile
-        run: npx --yes eas-cli@16.28.0 build --platform ios --profile production --non-interactive --no-wait
+        run: npx --yes eas-cli@16.28.0 build --platform ios --profile production-github --non-interactive --no-wait
       - name: Inspect selected EAS build
         if: inputs.operation == 'inspect'
         working-directory: mobile
@@ -136,3 +170,9 @@ jobs:
         if: inputs.operation == 'submit'
         working-directory: mobile
         run: npx --yes eas-cli@16.28.0 submit --platform ios --profile production --id "$REQUESTED_BUILD_ID" --non-interactive --no-wait
+      - name: Remove local signing material
+        if: always()
+        shell: bash
+        run: |
+          rm -f mobile/credentials.json mobile/.eas/credentials/distribution.p12 mobile/.eas/credentials/profile.mobileprovision
+          rm -rf "$RUNNER_TEMP/detail-ios-signing"
