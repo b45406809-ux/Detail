@@ -2,7 +2,8 @@ const { withPodfile } = require('@expo/config-plugins');
 
 // React Native's RCT-Folly pod intentionally omits its generated config header
 // when FOLLY_NO_CONFIG is set. NitroModules' Clang module scan can still look
-// for the header, so provide the empty stub that this no-config mode expects.
+// for the header, so disable coroutines in the stub because RCT-Folly omits
+// folly/coro headers from its CocoaPods public header set.
 module.exports = function withFollyConfigStub(config) {
   return withPodfile(config, (config) => {
     const marker = '# Detail Folly no-config header for NitroModules';
@@ -13,7 +14,7 @@ module.exports = function withFollyConfigStub(config) {
       throw new Error('Unable to locate react_native_post_install in the generated Podfile.');
     }
 
-    const workaround = `\n    ${marker}\n    require 'fileutils'\n    folly_config_paths = [\n      File.join(installer.sandbox.root, 'RCT-Folly', 'folly', 'folly-config.h'),\n      File.join(installer.sandbox.root, 'Headers', 'Public', 'RCT-Folly', 'folly', 'folly-config.h')\n    ]\n    folly_config_paths.each do |folly_config|\n      FileUtils.mkdir_p(File.dirname(folly_config))\n      File.write(folly_config, "#pragma once\\n#define FOLLY_HAS_COROUTINES 0\\n")\n    end\n`;
+    const workaround = `\n    ${marker}\n    require 'fileutils'\n    folly_config_paths = [\n      File.join(installer.sandbox.root, 'RCT-Folly', 'folly', 'folly-config.h'),\n      File.join(installer.sandbox.root, 'Headers', 'Public', 'RCT-Folly', 'folly', 'folly-config.h')\n    ]\n    folly_config_paths.each do |folly_config|\n      FileUtils.mkdir_p(File.dirname(folly_config))\n      File.write(folly_config, "#pragma once\\n#define FOLLY_CFG_NO_COROUTINES 1\\n")\n    end\n`;
     config.modResults.contents = config.modResults.contents.replace(
       postInstall,
       (_match, hook) => `${hook}${workaround}`,
