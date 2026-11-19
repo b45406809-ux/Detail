@@ -7,7 +7,7 @@ on:
         description: Check inputs, start a build, inspect a build, or submit it to TestFlight
         required: true
         type: choice
-        options: [readiness, build, inspect, submit]
+        options: [readiness, build, inspect, submit, asc-check]
       build_id:
         description: Completed EAS iOS production build ID (required for submit)
         required: false
@@ -216,6 +216,46 @@ jobs:
         if: inputs.operation == 'submit'
         working-directory: mobile
         run: npx --yes eas-cli@16.28.0 submit --platform ios --profile production --id "$REQUESTED_BUILD_ID" --non-interactive --no-wait
+      - name: Check App Store Connect build processing
+        if: inputs.operation == 'asc-check'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto = require('node:crypto');
+          const fs = require('node:fs');
+          const keyId = process.env.EXPO_ASC_KEY_ID;
+          const issuerId = process.env.EXPO_ASC_ISSUER_ID;
+          const key = fs.readFileSync(process.env.EXPO_ASC_API_KEY_PATH);
+          const bundleId = 'zw.co.detailapp.mobile';
+          const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+          const now = Math.floor(Date.now() / 1000);
+          const signingInput = `${encode({ alg: 'ES256', kid: keyId, typ: 'JWT' })}.${encode({ iss: issuerId, iat: now, exp: now + 300, aud: 'appstoreconnect-v1' })}`;
+          const signature = crypto.sign('sha256', Buffer.from(signingInput), { key, dsaEncoding: 'ieee-p1363' }).toString('base64url');
+          const token = `${signingInput}.${signature}`;
+          const request = async (url) => {
+            const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+            const body = await response.json();
+            if (!response.ok) throw new Error(`App Store Connect request failed (${response.status}): ${JSON.stringify(body.errors ?? body)}`);
+            return body;
+          };
+          (async () => {
+            const apps = await request(`https://api.appstoreconnect.apple.com/v1/apps?filter[bundleId]=${encodeURIComponent(bundleId)}`);
+            if (apps.data?.length !== 1) throw new Error(`Expected one App Store Connect app for ${bundleId}, found ${apps.data?.length ?? 0}.`);
+            const appId = apps.data[0].id;
+            const builds = await request(`https://api.appstoreconnect.apple.com/v1/builds?filter[app]=${encodeURIComponent(appId)}&sort=-uploadedDate&limit=20`);
+            const result = (builds.data ?? []).map(({ id, attributes }) => ({
+              buildId: id,
+              version: attributes.version,
+              uploadedDate: attributes.uploadedDate,
+              processingState: attributes.processingState,
+              expirationDate: attributes.expirationDate,
+              expired: attributes.expired,
+            }));
+            console.log(JSON.stringify({ appName: apps.data[0].attributes.name, bundleId, builds: result }, null, 2));
+            if (result.length === 0) console.log('Apple has not listed any uploaded builds for this app yet.');
+          })().catch((error) => { console.error(error.message); process.exitCode = 1; });
+          NODE
       - name: Remove local signing material
         if: always()
         shell: bash
