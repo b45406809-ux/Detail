@@ -83,8 +83,9 @@ const bundleId = bundleMatches[0].id;
 const certQuery = new URLSearchParams({ 'filter[certificateType]': 'IOS_DISTRIBUTION' });
 const certsResponse = await appleRequest(`/certificates?${certQuery}`);
 const certificates = certsResponse.data ?? [];
-if (certificates.some(cert => JSON.stringify(cert.attributes ?? {}).includes('Detail GitHub App Store Signing'))) {
-  throw new Error('The dedicated Detail GitHub signing certificate already exists. Do not create another; retrieve the existing signing artifact before rerunning bootstrap.');
+const certificateName = `Detail GitHub App Store Signing ${process.env.GITHUB_RUN_ID ?? 'GHA'}`;
+if (certificates.some(cert => JSON.stringify(cert.attributes ?? {}).includes(certificateName))) {
+  throw new Error(`The signing certificate for run ${process.env.GITHUB_RUN_ID ?? 'GHA'} already exists. Do not create another for this run.`);
 }
 if (certificates.length >= 3) {
   throw new Error('Apple reports three iOS distribution certificates already exist. No new certificate was created; an authorized Apple user must identify a reusable certificate or revoke one that is confirmed unused.');
@@ -93,7 +94,7 @@ if (certificates.length >= 3) {
 const privateKeyPath = path.join(signingDir, 'distribution-private-key.pem');
 const csrPath = path.join(signingDir, 'distribution.csr');
 execFileSync('openssl', ['genrsa', '-out', privateKeyPath, '2048'], { stdio: 'ignore' });
-execFileSync('openssl', ['req', '-new', '-key', privateKeyPath, '-out', csrPath, '-subj', '/CN=Detail GitHub App Store Signing'], { stdio: 'ignore' });
+execFileSync('openssl', ['req', '-new', '-key', privateKeyPath, '-out', csrPath, '-subj', `/CN=${certificateName}`], { stdio: 'ignore' });
 const csrContent = await readFile(csrPath, 'utf8');
 
 const certResponse = await appleRequest('/certificates', {
@@ -153,7 +154,7 @@ await writeFile(path.join(importDir, 'p12-password.txt'), `${p12Password}\n`, { 
 await writeFile(path.join(importDir, 'IMPORT-TO-EXPO.txt'), [
   'Detail iOS signing credentials',
   `Bundle ID: ${process.env.BUNDLE_ID}`,
-  'Certificate: Detail GitHub App Store Signing',
+  `Certificate: ${certificateName}`,
   `Provisioning profile: ${profileName}`,
   'The .p12 has a generated export password. Use the value in p12-password.txt when importing it.',
   'These files are signing secrets. Import them into Expo promptly, then delete the downloaded artifact.',
