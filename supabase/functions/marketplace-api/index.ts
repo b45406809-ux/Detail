@@ -1047,7 +1047,15 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(error)throw error;
       const client=paynowClient(), checkout=client.createPayment(reference,email); checkout.add(profile?.role==='CLEANER'?'Detail cleaner commission payment':'Detail wallet top-up',amount);
       const result=await client.send(checkout);
-      if(!result?.success||!result.redirectUrl||!result.pollUrl){await admin.from('payments').update({status:'FAILED'}).eq('id',id);fail(502,'Paynow could not start the wallet top-up.');}
+      if(!result?.success){
+        await admin.from('payments').update({status:'FAILED',updatedat:new Date().toISOString()}).eq('id',id);
+        const providerError=typeof result?.error==='string'?result.error.replace(/[\u0000-\u001f\u007f]+/g,' ').trim().slice(0,240):'';
+        fail(502,providerError?`Paynow rejected the wallet top-up: ${providerError}`:'Paynow declined the wallet top-up. Please try again later.');
+      }
+      if(!result.redirectUrl||!result.pollUrl){
+        await admin.from('payments').update({status:'FAILED',updatedat:new Date().toISOString()}).eq('id',id);
+        fail(502,'Paynow returned an incomplete checkout response. Please contact Detail support if this continues.');
+      }
       const redirectUrl=trustedPaynowUrl(String(result.redirectUrl));
       const poll=new URL(String(result.pollUrl)); if(poll.protocol!=='https:'||!['paynow.co.zw','www.paynow.co.zw'].includes(poll.hostname))fail(502,'Paynow returned an untrusted poll URL.');
       await admin.from('payments').update({status:'PENDING',pollurl:String(result.pollUrl),redirecturl:redirectUrl,updatedat:new Date().toISOString()}).eq('id',id);
