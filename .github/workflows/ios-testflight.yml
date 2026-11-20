@@ -7,7 +7,7 @@ on:
         description: Check inputs, start a build, inspect a build, or submit it to TestFlight
         required: true
         type: choice
-        options: [readiness, build, inspect, submit, asc-check]
+        options: [readiness, build, eas-build, inspect, submit, asc-check]
       build_id:
         description: Completed EAS iOS production build ID (required for submit)
         required: false
@@ -132,6 +132,10 @@ jobs:
         if: inputs.operation == 'build'
         working-directory: mobile
         run: npx --yes eas-cli@16.28.0 build --platform ios --profile production-github --non-interactive --no-wait
+      - name: Start iOS production build using Expo account credentials
+        if: inputs.operation == 'eas-build'
+        working-directory: mobile
+        run: npx --yes eas-cli@16.28.0 build --platform ios --profile production --non-interactive --no-wait
       - name: Inspect selected EAS build
         if: inputs.operation == 'inspect'
         working-directory: mobile
