@@ -43,6 +43,7 @@ import { db, addDoc, collection, serverTimestamp, Timestamp } from '../../servic
 import { uploadJobPhoto } from '../../services/storage';
 import { Mapbox, IS_MAPBOX_AVAILABLE, MAPBOX_ACCESS_TOKEN } from '../../services/mapbox';
 import { buildAddressSuggestionUrl } from '../../services/geocoding';
+import { recordMapboxUsage } from '../../services/usageMetrics';
 import { JobStatus, ServiceCategory, HouseChecklist, CarChecklist } from '../../types';
 import * as Catalog from '../../constants/services';
 
@@ -128,6 +129,7 @@ export default function CreateBookingScreen() {
     const controller = new AbortController();
     const timer = setTimeout(() => {
       const url = buildAddressSuggestionUrl(address, MAPBOX_ACCESS_TOKEN, searchProximity);
+      recordMapboxUsage('geocoding');
       fetch(url, { signal: controller.signal }).then(response => {
         if (!response.ok) throw new Error('Address search unavailable');
         return response.json();
@@ -604,7 +606,7 @@ export default function CreateBookingScreen() {
               </View>
 
               {addressSuggestions.length > 0 && <View className="mb-4 rounded-2xl border border-ink/10 bg-white">{addressSuggestions.map(item => <TouchableOpacity key={item.id} onPress={() => { setAddress(item.label); setCoordinates({ lat: item.lat, lng: item.lng }); setAddressSuggestions([]); }} className="px-4 py-3 border-b border-ink/5"><Text className="font-sans text-sm text-ink">{item.label}</Text></TouchableOpacity>)}</View>}
-              {IS_MAPBOX_AVAILABLE && <View className="mb-4"><TouchableOpacity onPress={() => setShowMapPicker(value => !value)} className="rounded-2xl border border-accent/20 bg-accent/5 px-4 py-4"><Text className="font-display font-black text-accent">{showMapPicker ? 'Hide map' : 'Select on map'}</Text></TouchableOpacity>{showMapPicker && <View className="mt-2 overflow-hidden rounded-2xl" style={{ height: 240 }}><Mapbox.MapView style={{ flex: 1 }} styleURL={Mapbox.StyleURL.Street} onPress={feature => { const point = feature.geometry?.type === 'Point' ? feature.geometry.coordinates : undefined; if (point && point.length >= 2) void selectMapLocation(point[0], point[1]); }}><Mapbox.Camera defaultSettings={{ centerCoordinate: coordinates ? [coordinates.lng, coordinates.lat] : [31.0522, -17.8292], zoomLevel: coordinates ? 15 : 11 }} />{coordinates && <Mapbox.PointAnnotation id="booking-location" coordinate={[coordinates.lng, coordinates.lat]}><View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#3906D2', borderWidth: 2, borderColor: 'white' }} /></Mapbox.PointAnnotation>}</Mapbox.MapView></View>}{showMapPicker && <Text className="font-sans text-xs text-ink/60 mt-2">Tap the map to choose the job location.</Text>}</View>}
+              {IS_MAPBOX_AVAILABLE && <View className="mb-4"><TouchableOpacity onPress={() => setShowMapPicker(value => !value)} className="rounded-2xl border border-accent/20 bg-accent/5 px-4 py-4"><Text className="font-display font-black text-accent">{showMapPicker ? 'Hide map' : 'Select on map'}</Text></TouchableOpacity>{showMapPicker && <View className="mt-2 overflow-hidden rounded-2xl" style={{ height: 240 }}><Mapbox.MapView style={{ flex: 1 }} styleURL={Mapbox.StyleURL.Street} onDidFinishLoadingMap={() => recordMapboxUsage('map_view')} onPress={feature => { const point = feature.geometry?.type === 'Point' ? feature.geometry.coordinates : undefined; if (point && point.length >= 2) void selectMapLocation(point[0], point[1]); }}><Mapbox.Camera defaultSettings={{ centerCoordinate: coordinates ? [coordinates.lng, coordinates.lat] : [31.0522, -17.8292], zoomLevel: coordinates ? 15 : 11 }} />{coordinates && <Mapbox.PointAnnotation id="booking-location" coordinate={[coordinates.lng, coordinates.lat]}><View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#3906D2', borderWidth: 2, borderColor: 'white' }} /></Mapbox.PointAnnotation>}</Mapbox.MapView></View>}{showMapPicker && <Text className="font-sans text-xs text-ink/60 mt-2">Tap the map to choose the job location.</Text>}</View>}
               <TouchableOpacity
                 onPress={useCurrentLocation}
                 disabled={isFetchingLocation}

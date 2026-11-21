@@ -223,6 +223,42 @@ if (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_R2_API_TOKEN) {
 }
 providerMeters.cloudflareR2 = cloudflareR2;
 
+const mapboxMonth = `${new Date().toISOString().slice(0, 7)}-01`;
+let mapbox = {
+  status: 'not connected',
+  interval: 'current calendar month',
+  usageMonth: mapboxMonth,
+  note: 'Mapbox app-side usage is not available yet; deploy the Mapbox usage migration and release the instrumented app.',
+};
+try {
+  const response = await fetch(`${base}/rest/v1/mapbox_usage_monthly?usage_month=eq.${mapboxMonth}&select=map_loaded,geocoding_requests,directions_requests`, { headers });
+  if (response.ok) {
+    const rows = await response.json();
+    const mapUsers = rows.filter(row => row.map_loaded === true).length;
+    const geocodingRequests = rows.reduce((sum, row) => sum + Number(row.geocoding_requests ?? 0), 0);
+    const directionsRequests = rows.reduce((sum, row) => sum + Number(row.directions_requests ?? 0), 0);
+    const rates = { mapUserPerThousand: 4, geocodingPerThousand: 0.75, directionsPerThousand: 2 };
+    const quotas = { mapUsers: 25_000, geocodingRequests: 100_000, directionsRequests: 100_000 };
+    const grossCostUsd = mapUsers * rates.mapUserPerThousand / 1000
+      + geocodingRequests * rates.geocodingPerThousand / 1000
+      + directionsRequests * rates.directionsPerThousand / 1000;
+    const estimatedOverageUsd = Math.max(0, mapUsers - quotas.mapUsers) * rates.mapUserPerThousand / 1000
+      + Math.max(0, geocodingRequests - quotas.geocodingRequests) * rates.geocodingPerThousand / 1000
+      + Math.max(0, directionsRequests - quotas.directionsRequests) * rates.directionsPerThousand / 1000;
+    mapbox = {
+      status: 'measured', interval: 'current calendar month', usageMonth: mapboxMonth, asOf: new Date().toISOString(),
+      mapUsers, geocodingRequests, directionsRequests, quotas, rates,
+      grossCostUsd: Number(grossCostUsd.toFixed(4)), estimatedOverageUsd: Number(estimatedOverageUsd.toFixed(4)), currency: 'USD',
+      note: 'App-side request counts; estimates use published standard unit rates. Free allowances are used only in estimatedOverageUsd. Not provider-reported billing; usage can be undercounted if the app is offline or closed before a counter flushes.',
+    };
+  } else if (response.status !== 404) {
+    mapbox = { ...mapbox, status: 'unavailable', note: `Supabase returned HTTP ${response.status} while reading Mapbox app-side usage.` };
+  }
+} catch {
+  mapbox = { ...mapbox, status: 'unavailable', note: 'Supabase request for Mapbox app-side usage failed.' };
+}
+providerMeters.mapbox = mapbox;
+
 const capturedAt = new Date().toISOString();
 const snapshot = { captured_date: capturedAt.slice(0, 10), captured_at: capturedAt, metrics, provider_meters: providerMeters };
 const upsert = await fetch(`${base}/rest/v1/usage_snapshots?on_conflict=captured_date`, {
@@ -242,6 +278,7 @@ const summary = [
   `PostHog event usage: ${providerMeters.posthog.status}`,
   `Resend email usage: ${providerMeters.resend.status}`,
   `Cloudflare R2 usage: ${providerMeters.cloudflareR2.status}`,
+  `Mapbox usage: ${providerMeters.mapbox.status}`,
 ].join('\n');
 const smsPopSummary = providerMeters.smspop.status === 'measured'
   ? `\nSMSPoP accepted recipients (30d): ${providerMeters.smspop.sent}; delivered: ${providerMeters.smspop.delivered}; campaigns: ${providerMeters.smspop.campaigns}. Credits/balance are not available from the campaign list.`

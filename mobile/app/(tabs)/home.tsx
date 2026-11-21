@@ -58,6 +58,7 @@ import { MapPlaceholder } from '../../components/MapPlaceholder';
 import { IS_DEMO } from '../../utils/env';
 import { callFunction } from '../../services/functions';
 import { Mapbox, IS_MAPBOX_AVAILABLE } from '../../services/mapbox';
+import { recordMapboxUsage } from '../../services/usageMetrics';
 import { CleanerLocationPermissionError, completeCleanerPresenceStart, startCleanerLocationUpdates, stopCleanerLocationUpdates } from '../../services/locationTracking';
 
 export default function HomeScreen() {
@@ -389,6 +390,7 @@ export default function HomeScreen() {
           styleURL={Mapbox.StyleURL.Street}
           compassEnabled={false}
           scaleBarEnabled={false}
+          onDidFinishLoadingMap={() => recordMapboxUsage('map_view')}
         >
           <Mapbox.Camera
             ref={mapRef}

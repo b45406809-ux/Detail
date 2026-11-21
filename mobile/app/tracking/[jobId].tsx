@@ -69,6 +69,7 @@ import { GlassCard, GlassSheet, GlassIconButton } from '../../components/glass';
 import { MapPlaceholder } from '../../components/MapPlaceholder';
 import { haversineDistanceKm } from '../../services/matching';
 import { Mapbox, IS_MAPBOX_AVAILABLE, getDrivingRoute } from '../../services/mapbox';
+import { recordMapboxUsage } from '../../services/usageMetrics';
 
 const STATUS_LABELS: Record<string, string> = {
   ACCEPTED: 'Job Confirmed',
@@ -732,7 +733,7 @@ export default function TrackingScreen() {
       {IS_DEMO || !IS_MAPBOX_AVAILABLE ? (
         <MapPlaceholder style={{ flex: 1 }} />
       ) : mapRegion ? (
-        <Mapbox.MapView style={{ flex: 1 }} styleURL={Mapbox.StyleURL.Street} compassEnabled={false} scaleBarEnabled={false}>
+        <Mapbox.MapView style={{ flex: 1 }} styleURL={Mapbox.StyleURL.Street} compassEnabled={false} scaleBarEnabled={false} onDidFinishLoadingMap={() => recordMapboxUsage('map_view')}>
           <Mapbox.Camera
             ref={trackingCameraRef}
             defaultSettings={{

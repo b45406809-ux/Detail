@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { IS_MOCK } from '../utils/env';
+import { recordMapboxUsage } from './usageMetrics';
 
 export const MAPBOX_ACCESS_TOKEN = IS_MOCK ? '' : String(Constants.expoConfig?.extra?.mapboxAccessToken ?? '');
 export const IS_MAPBOX_AVAILABLE = Platform.OS !== 'web' && Boolean(MAPBOX_ACCESS_TOKEN)
@@ -15,6 +16,7 @@ export async function getDrivingRoute(origin:{lat:number;lng:number},destination
   if(!MAPBOX_ACCESS_TOKEN)throw new Error('Mapbox directions are not configured.');
   const coordinates=`${origin.lng},${origin.lat};${destination.lng},${destination.lat}`;
   const url=`https://api.mapbox.com/directions/v5/mapbox/driving/${coordinates}?overview=full&geometries=geojson&access_token=${encodeURIComponent(MAPBOX_ACCESS_TOKEN)}`;
+  recordMapboxUsage('directions');
   const response=await fetch(url);if(!response.ok)throw new Error(`Mapbox directions returned ${response.status}.`);
   const body=await response.json();const route=body.routes?.[0];
   if(!route||!Number.isFinite(route.duration)||!Array.isArray(route.geometry?.coordinates))throw new Error('No driving route is available.');
