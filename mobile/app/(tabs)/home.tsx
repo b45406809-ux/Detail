@@ -195,7 +195,7 @@ export default function HomeScreen() {
       if (!isRegistered) {
         appAlert(
           'Cleaner Registration Required',
-          'To work as a cleaner, complete registration, the one-time $0.50 Didit identity check, and the cleaner agreement. The verification fee is charged from your Detail wallet; $1 of prepaid commission credit is also needed to accept up to $10 of offline work.',
+          'To work as a cleaner, complete registration, the one-time $0.50 Didit identity check, and the cleaner agreement. Fund verification with EcoCash. Once approved, keep enough prepaid credit to cover 10% of each booking you accept.',
           [
             { text: 'Cancel', style: 'cancel' },
             {

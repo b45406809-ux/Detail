@@ -1,57 +1,50 @@
-import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import { auth } from './supabase';
 import { callFunction } from './functions';
 
-export interface PaymentResult {
-  success: boolean;
-  transactionId?: string;
-  referenceNumber?: string;
-  pending?: boolean;
+type TopupPurpose = 'VERIFICATION' | 'COMMISSION';
+type Topup = { referenceNumber: string; status: string };
+type TopupIntent = { key: string; referenceNumber?: string };
+
+const storageKey = (uid: string) => `detail:ecocash-intent:${uid}`;
+const readIntent = async (uid: string): Promise<TopupIntent | null> => {
+  const saved = await AsyncStorage.getItem(storageKey(uid));
+  try { return JSON.parse(saved ?? 'null'); } catch { return null; }
+};
+export const isTopupFinished = (status: string) => ['PAID', 'FAILED', 'CANCELLED', 'REFUNDED'].includes(status);
+
+export async function pendingEcoCashTopup(uid: string) {
+  return (await readIntent(uid))?.referenceNumber;
 }
 
-/**
- * Adds funds to the current user's wallet.
- *
- * No balance is ever written from the client — that would let a tampered build
- * mint money. The wallet is only ever credited by trusted server code:
- *
- * Paynow handles checkout. A verified Paynow result callback credits the wallet
- * server-side; the client never writes a balance directly.
- */
-export async function addFundsToWallet(amountUSD: number): Promise<PaymentResult> {
+export async function addFundsToWallet(amount: number, phone: string, purpose: TopupPurpose): Promise<Topup> {
   const user = auth.currentUser;
-  if (!user) throw new Error('Not authenticated');
-  const storageKey = `detail:topup-intent:${user.uid}`;
-  const signature = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, String(Math.round(amountUSD * 100)));
-  let idempotencyKey = '';
-  try {
-    const saved = JSON.parse((await AsyncStorage.getItem(storageKey)) ?? 'null') as { signature?: string; key?: string } | null;
-    if (saved?.signature === signature && typeof saved.key === 'string') idempotencyKey = saved.key;
-  } catch { /* replace a corrupt retry record */ }
-  if (!idempotencyKey) {
-    idempotencyKey = Crypto.randomUUID();
-    await AsyncStorage.setItem(storageKey, JSON.stringify({ signature, key: idempotencyKey }));
+  if (!user) throw new Error('Sign in to pay.');
+  const key = storageKey(user.uid);
+  const saved = await readIntent(user.uid);
+  if (saved?.referenceNumber) return { referenceNumber: saved.referenceNumber, status: 'PENDING' };
+
+  const intent = saved ?? { key: Crypto.randomUUID() };
+  await AsyncStorage.setItem(key, JSON.stringify(intent));
+  const result = await callFunction<
+    { amount: number; phone: string; purpose: TopupPurpose; currency: string; idempotencyKey: string },
+    Topup
+  >('createPaynowWalletTopup', { amount, phone, purpose, currency: 'USD', idempotencyKey: intent.key });
+  if (isTopupFinished(result.status)) await AsyncStorage.removeItem(key);
+  else await AsyncStorage.setItem(key, JSON.stringify({ ...intent, referenceNumber: result.referenceNumber }));
+  return result;
+}
+
+export async function refreshEcoCashTopup(referenceNumber: string) {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sign in to check your payment.');
+  const result = await callFunction<{ referenceNumber: string }, { status: string }>(
+    'refreshPaynowWalletTopup', { referenceNumber },
+  );
+  if (isTopupFinished(result.status)) {
+    const saved = await readIntent(user.uid);
+    if (saved?.referenceNumber === referenceNumber) await AsyncStorage.removeItem(storageKey(user.uid));
   }
-
-  const data = await callFunction<
-    { amount: number; currency: string; idempotencyKey: string },
-    { redirectUrl: string; referenceNumber: string }
-  >('createPaynowWalletTopup', { amount: amountUSD, currency: 'USD', idempotencyKey });
-  // Keep the key through network failures. Once the server confirms checkout
-  // creation, a later deliberate top-up should create a new payment attempt.
-  await AsyncStorage.removeItem(storageKey);
-
-  await WebBrowser.openBrowserAsync(data.redirectUrl, {
-    presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET,
-  });
-
-  // Poll the signed Paynow status endpoint after the hosted checkout returns.
-  // A BuySafe top-up is credited only when Paynow reports Paid.
-  try { await callFunction('refreshPaynowWalletTopup', { referenceNumber: data.referenceNumber }); } catch { /* the signed callback remains the source of truth */ }
-
-  // The Paynow result callback settles the balance server-side. Return pending
-  // because the user may have dismissed the hosted checkout before paying.
-  return { success: true, referenceNumber: data.referenceNumber, pending: true };
+  return result.status;
 }

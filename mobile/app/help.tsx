@@ -39,11 +39,11 @@ const FAQS = [
   },
   {
     q: 'How does payment work?',
-    a: 'New bookings are paid through Paynow BuySafe. Paynow holds the payment while the service is underway. After cleaning, confirm delivery in your Paynow account; Paynow releases funds to Detail after its 24-hour dispute window. Detail then credits the cleaner’s 90% share to their in-app balance. Existing Detail Wallet balances and permitted cash bookings may also be used.',
+    a: 'Agree on a payment method with your cleaner and pay them directly. Detail reserves a 10% commission from the cleaner’s prepaid credit when you accept their quote. Cleaners use EcoCash in Detail to top up that credit.',
   },
   {
     q: 'How do I become a cleaner on Detail?',
-    a: 'Sign up with the Cleaner role during registration, complete your profile, and agree to the Cleaner Agreement. Once approved you can start accepting jobs.',
+    a: 'Open Become a Cleaner, pay the one-time $0.50 identity verification fee, complete your Didit check, and accept the Cleaner Agreement. Add commission credit before taking bookings.',
   },
   {
     q: 'I have a dispute — what do I do?',

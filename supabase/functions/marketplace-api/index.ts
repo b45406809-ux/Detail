@@ -1017,49 +1017,81 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'refreshPaynowWalletTopup': {
       const actor=authed(), reference=text(input.referenceNumber,160);await enforceRateLimit(request,actor,'wallet_topup_refresh',12,300);
       const {data:payment}=await admin.from('payments').select('*').eq('reference',reference).maybeSingle();
-      if(!payment||payment.customerid!==actor||payment.jobid||payment.provider!=='PAYNOW'||payment.data?.type!=='wallet_topup'||!payment.pollurl)fail(404,'Wallet payment not found.');
+      if(!payment||payment.customerid!==actor||payment.jobid||payment.provider!=='PAYNOW'||payment.data?.type!=='wallet_topup')fail(404,'Wallet payment not found.');
+      if (!payment.pollurl || ['PAID','FAILED','CANCELLED','REFUNDED'].includes(payment.status)) return {success:true,status:payment.status};
       const poll=new URL(payment.pollurl); if(poll.protocol!=='https:'||!['paynow.co.zw','www.paynow.co.zw'].includes(poll.hostname))fail(400,'Untrusted Paynow poll URL.');
       const result=await paynowClient().pollTransaction(payment.pollurl);
       const applied=await applyPaynowStatus(String(result.reference),String(result.status),String(result.amount));
-      return {success:true,status:applied.status};
+      return {success:true,status:applied.status === 'IGNORED' ? payment.status : applied.status};
     }
     case 'createPaynowWalletTopup': {
-      const actor=authed(); const amount=round2(Number(input.amount)),idempotencyKey=requireKey(input.idempotencyKey);
-      await enforceRateLimit(request, actor, 'wallet_topup', 6, 3600);
+      const actor = authed();
+      const amount = Number(input.amount);
+      const idempotencyKey = requireKey(input.idempotencyKey);
+      const digits = text(input.phone, 40).replace(/[ +().-]/g, '');
+      const phone = digits.replace(/^263/, '0');
+      if (!Number.isFinite(amount) || amount !== round2(amount) || amount < 0.50 || amount > 1000 ||
+          String(input.currency ?? 'USD').toUpperCase() !== 'USD') {
+        fail(400, 'Top-ups must be between $0.50 and $1,000 USD.');
+      }
+      if (!/^07[78][0-9]{7}$/.test(phone)) fail(400, 'Enter a valid EcoCash mobile number.');
+      const profile = await requireActiveMarketplaceAccount(actor);
+      const verification = input.purpose === 'VERIFICATION';
+      if (verification ? profile.role !== 'CUSTOMER' : profile.role !== 'CLEANER') {
+        fail(403, 'Open cleaner registration for verification or switch to Cleaner to top up commission.');
+      }
+      const email = user?.email ?? profile.email;
+      if (!email) fail(409, 'Add an email address to your account before paying.');
+
+      const stableId = (await hash(`${actor}:ecocash_topup:${idempotencyKey}`)).slice(0, 32);
+      const id = `topup_${stableId}`, reference = `wallet-${stableId}`;
+      const intent = await hash(`${amount}:${phone}:${verification}`);
+      const existingPayment = async () => {
+        const { data, error } = await admin.from('payments').select('status,data').eq('id', id).maybeSingle();
+        if (error) throw error;
+        if (data && data.data?.intent !== intent) fail(409, 'A payment request already exists. Re-enter the original amount and EcoCash number to recover its status.');
+        return data;
+      };
+      const existing = await existingPayment();
+      if (existing) return { referenceNumber: reference, status: existing.status };
+
+      if (verification && (amount !== 0.50 || Number(profile.balance) >= 0.50 ||
+          profile.cleanerverificationfeepaidat || profile.verificationstatus === 'VERIFIED')) {
+        fail(409, 'Return to cleaner registration to start or check your identity verification.');
+      }
       await assertPaymentsAvailable();
-      if(!Number.isFinite(amount)||amount<1||amount>1000||String(input.currency??'USD').toUpperCase()!=='USD')fail(400,'Wallet top-ups must be between $1 and $1,000 USD.');
-      const {data:profile}=await admin.from('users').select('email,role').eq('id',actor).single();
-      const email=user?.email??profile?.email; if(!email)fail(409,'Add an email address to your account before paying with Paynow.');
-      const topupType='wallet_topup';
-      const stableId=(await hash(`${actor}:${topupType}:${idempotencyKey}`)).slice(0,32),id=`topup_${stableId}`,reference=`wallet-${stableId}`,paymentKey=`${topupType}_${stableId}`;
-      const {data:existing,error:existingError}=await admin.from('payments').select('customerid,reference,status,redirecturl,pollurl').eq('idempotencykey',paymentKey).maybeSingle();
-      if(existingError)throw existingError;
-      if(existing){
-        if(existing.customerid!==actor)fail(409,'This checkout key is already in use.');
-        if(existing.status==='PENDING'&&existing.redirecturl)return {redirectUrl:existing.redirecturl,referenceNumber:existing.reference};
-        fail(409,'This top-up attempt already exists. Start a new checkout from your wallet.');
+      await enforceRateLimit(request, actor, 'wallet_topup', 6, 3600);
+      const client = paynowClient();
+      const checkout = client.createPayment(reference, email);
+      checkout.add(verification ? 'Detail identity verification' : 'Detail commission credit', amount);
+      const { error } = await admin.from('payments').insert({
+        id, customerid: actor, provider: 'PAYNOW', reference, amount, currency: 'USD',
+        status: 'INITIATING', idempotencykey: `wallet_topup_${stableId}`,
+        data: { type: 'wallet_topup', channel: 'ECOCASH', balanceType: verification ? 'GENERAL' : 'COMMISSION', intent },
+      });
+      if (error?.code === '23505') {
+        const retry = await existingPayment();
+        if (retry) return { referenceNumber: reference, status: retry.status };
       }
-      const {error}=await admin.from('payments').insert({id,customerid:actor,provider:'PAYNOW',reference,amount,currency:'USD',status:'INITIATING',idempotencykey:paymentKey,data:{type:topupType}});
-      if(error?.code==='23505'){
-        const {data:retry}=await admin.from('payments').select('customerid,reference,status,redirecturl').eq('idempotencykey',paymentKey).maybeSingle();
-        if(retry?.customerid===actor&&retry.status==='PENDING'&&retry.redirecturl)return {redirectUrl:retry.redirecturl,referenceNumber:retry.reference};
+      if (error) throw error;
+
+      const result = await client.sendMobile(checkout, phone, 'ecocash');
+      if (result?.success === false) {
+        const { error: updateError } = await admin.from('payments').update({
+          status: 'FAILED', updatedat: new Date().toISOString(),
+        }).eq('id', id).eq('status', 'INITIATING');
+        if (updateError) throw updateError;
+        return { referenceNumber: reference, status: 'FAILED' };
       }
-      if(error)throw error;
-      const client=paynowClient(), checkout=client.createPayment(reference,email); checkout.add(profile?.role==='CLEANER'?'Detail cleaner commission payment':'Detail wallet top-up',amount);
-      const result=await client.send(checkout);
-      if(!result?.success){
-        await admin.from('payments').update({status:'FAILED',updatedat:new Date().toISOString()}).eq('id',id);
-        const providerError=typeof result?.error==='string'?result.error.replace(/[\u0000-\u001f\u007f]+/g,' ').trim().slice(0,240):'';
-        fail(502,providerError?`Paynow rejected the wallet top-up: ${providerError}`:'Paynow declined the wallet top-up. Please try again later.');
-      }
-      if(!result.redirectUrl||!result.pollUrl){
-        await admin.from('payments').update({status:'FAILED',updatedat:new Date().toISOString()}).eq('id',id);
-        fail(502,'Paynow returned an incomplete checkout response. Please contact Detail support if this continues.');
-      }
-      const redirectUrl=trustedPaynowUrl(String(result.redirectUrl));
-      const poll=new URL(String(result.pollUrl)); if(poll.protocol!=='https:'||!['paynow.co.zw','www.paynow.co.zw'].includes(poll.hostname))fail(502,'Paynow returned an untrusted poll URL.');
-      await admin.from('payments').update({status:'PENDING',pollurl:String(result.pollUrl),redirecturl:redirectUrl,updatedat:new Date().toISOString()}).eq('id',id);
-      return {redirectUrl,referenceNumber:reference};
+      // An ambiguous provider response may still have triggered a prompt.
+      // Preserve the reference so callbacks can reconcile it and retries cannot send a second prompt.
+      if (!result?.pollUrl) return { referenceNumber: reference, status: 'INITIATING' };
+      const pollurl = trustedPaynowUrl(String(result.pollUrl));
+      const { error: pollError } = await admin.from('payments').update({ pollurl, updatedat: new Date().toISOString() }).eq('id', id);
+      if (pollError) throw pollError;
+      const { error: statusError } = await admin.from('payments').update({ status: 'PENDING' }).eq('id', id).eq('status', 'INITIATING');
+      if (statusError) throw statusError;
+      return { referenceNumber: reference, status: 'PENDING' };
     }
     case 'settleJobPayment': {
       const actor=authed(); const jobId=text(input.jobId,80), method=text(input.paymentMethod,20).toUpperCase();

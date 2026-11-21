@@ -10,15 +10,17 @@ import {
   Modal,
   TextInput,
   ActivityIndicator,
-  Image,
+  KeyboardAvoidingView,
+  Platform,
 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { LoadingList } from '../../components/LoadingList';
 import { LoadingError } from '../../components/LoadingError';
 import {
   ArrowUpRight,
+  ArrowLeft,
   ArrowDownLeft,
   Plus,
   X,
@@ -35,7 +37,7 @@ import {
   orderBy,
   limit,
 } from '../../services/supabase';
-import { addFundsToWallet } from '../../services/payments';
+import { addFundsToWallet, isTopupFinished, pendingEcoCashTopup, refreshEcoCashTopup } from '../../services/payments';
 import { callFunction } from '../../services/functions';
 import { Job, WalletTransaction } from '../../types';
 import { formatDate } from '../../utils/date';
@@ -43,6 +45,8 @@ import { formatDate } from '../../utils/date';
 export default function WalletScreen() {
   const { user, profile } = useAuth();
   const isCleaner = profile?.role === 'CLEANER';
+  const { verification } = useLocalSearchParams<{ verification?: string }>();
+  const isVerification = verification === '1' && !isCleaner;
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [commissionJobs, setCommissionJobs] = useState<Job[]>([]);
   const [commissionJobsLoading, setCommissionJobsLoading] = useState(false);
@@ -52,6 +56,16 @@ export default function WalletScreen() {
   const userId = user?.uid;
   const [isAddFundsOpen, setIsAddFundsOpen] = useState(false);
   const [amount, setAmount] = useState('');
+  const [ecoCashPhone, setEcoCashPhone] = useState('');
+  const [pendingReference, setPendingReference] = useState<string>();
+  useEffect(() => {
+    let active = true;
+    setPendingReference(undefined);
+    if (userId) void pendingEcoCashTopup(userId).then(reference => {
+      if (active) setPendingReference(reference);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [userId]);
   const [isLoading, setIsLoading] = useState(false);
   const [isPayoutOpen, setIsPayoutOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('');
@@ -91,27 +105,39 @@ export default function WalletScreen() {
   }, [userId, isCleaner]);
 
   const handleAddFunds = async () => {
-    const value = parseFloat(amount);
-    if (isNaN(value) || value < 1) {
-      appAlert('Invalid amount', 'Minimum top-up is $1.00');
+    const value = isVerification ? 0.50 : Number(amount);
+    const phone = ecoCashPhone.trim().replace(/[ +().-]/g, '').replace(/^263/, '0');
+    if (!pendingReference && (!Number.isFinite(value) || value < 0.50 || value > 1000 || Math.round(value * 100) / 100 !== value)) {
+      appAlert('Invalid amount', 'Enter an amount from $0.50 to $1,000 USD.');
+      return;
+    }
+    if (!pendingReference && !/^07[78][0-9]{7}$/.test(phone)) {
+      appAlert('Invalid number', 'Enter your EcoCash mobile number.');
       return;
     }
     setIsLoading(true);
     try {
-      const result = await addFundsToWallet(value);
-      setIsAddFundsOpen(false);
-      setAmount('');
-
-      if (result.pending) {
-        appAlert(
-          'Payment Processing',
-          'Your payment is being confirmed. Your balance will update automatically once the transaction is complete.'
-        );
+      let status: string;
+      if (pendingReference) {
+        status = await refreshEcoCashTopup(pendingReference);
+        if (!isTopupFinished(status)) appAlert('Payment pending', 'Approve the EcoCash prompt and check again in a moment.');
+      } else {
+        const topup = await addFundsToWallet(value, phone, isVerification ? 'VERIFICATION' : 'COMMISSION');
+        status = topup.status;
+        if (!isTopupFinished(status)) setPendingReference(topup.referenceNumber);
       }
-    } catch (err: any) {
-      if (err.message !== 'CANCELED') {
-        appAlert('Payment Failed', err.message || 'Please try again.');
+      if (isTopupFinished(status)) {
+        setPendingReference(undefined);
+        if (status === 'PAID') {
+          setIsAddFundsOpen(false);
+          setAmount('');
+          appAlert('Payment confirmed', isVerification ? 'Return to cleaner registration to continue.' : 'Your payment has been applied.');
+        } else {
+          appAlert('Payment not completed', 'Check your EcoCash number and USD balance before trying again.');
+        }
       }
+    } catch (error) {
+      appAlert('Could not check payment', (error as Error).message || 'Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -150,7 +176,10 @@ export default function WalletScreen() {
     <SafeAreaView className="flex-1 bg-canvas">
       {/* Header */}
       <View className="px-5 pt-4 pb-4">
-        <Text className="text-2xl font-display font-black text-slate-900 tracking-tight">Wallet</Text>
+        <View className="flex-row items-center gap-3">
+          {isVerification && <TouchableOpacity accessibilityLabel="Back to cleaner registration" onPress={() => router.back()} className="p-2"><ArrowLeft size={22} color="#150256" /></TouchableOpacity>}
+          <Text className="text-2xl font-display font-black text-slate-900 tracking-tight">{isVerification ? 'Verification payment' : 'Wallet'}</Text>
+        </View>
       </View>
 
       {/* Balance card */}
@@ -165,28 +194,28 @@ export default function WalletScreen() {
         <Text className="font-sans text-sm text-white/60 font-medium">{isCleaner ? `Prepaid commission · $${Number(profile?.commissionBalance ?? 0).toFixed(2)} available` : 'Detail Wallet'}</Text>
 
         <View className="flex-row gap-3 mt-6">
-          <TouchableOpacity
+          {(isCleaner || isVerification || pendingReference) && <TouchableOpacity
             onPress={() => setIsAddFundsOpen(true)}
             className="flex-1 bg-white/20 py-3 rounded-2xl flex-row items-center justify-center gap-2"
             activeOpacity={0.8}
           >
             <Plus size={16} color="#fff" />
-            <Text className="text-white font-display font-black text-xs uppercase tracking-wider">{isCleaner ? 'Top up commission' : 'Add Funds'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => isCleaner ? setIsPayoutOpen(true) : appAlert('Withdraw', 'Withdrawals are available for cleaner earnings.')}
+            <Text className="text-white font-display font-black text-xs uppercase tracking-wider">{pendingReference ? 'Check EcoCash payment' : isCleaner ? 'Top up commission' : 'Fund verification'}</Text>
+          </TouchableOpacity>}
+          {isCleaner && <TouchableOpacity
+            onPress={() => setIsPayoutOpen(true)}
             className="flex-1 bg-white/20 py-3 rounded-2xl flex-row items-center justify-center gap-2"
             activeOpacity={0.8}
           >
             <ArrowUpRight size={16} color="#fff" />
-            <Text className="text-white font-display font-black text-xs uppercase tracking-wider">{isCleaner ? 'Request payout' : 'Withdraw'}</Text>
-          </TouchableOpacity>
+            <Text className="text-white font-display font-black text-xs uppercase tracking-wider">Request payout</Text>
+          </TouchableOpacity>}
         </View>
       </View>
 
-      {isCleaner && <View className="mx-5 mb-6 rounded-2xl bg-white p-4 border border-slate-100"><Text className="font-display font-black text-slate-900">How earnings and commission work</Text><Text className="font-sans text-sm text-slate-600 mt-2">Offline bookings reserve 10% from this prepaid credit when a customer accepts your quote. Keep $1 to accept up to $10 in offline work. Paynow bookings deduct 10% from your payout instead. Cleared earnings appear above when available; request a payout from this screen. Payouts are reviewed and sent manually while integrations are unavailable, so transfer timing is not guaranteed.</Text></View>}
+      {isCleaner && <View className="mx-5 mb-6 rounded-2xl bg-white p-4 border border-slate-100"><Text className="font-display font-black text-slate-900">How earnings and commission work</Text><Text className="font-sans text-sm text-slate-600 mt-2">Offline bookings reserve 10% from this prepaid credit when a customer accepts your quote. A $0.50 commission credit covers a $5 booking. Cleared earnings appear above when available; request a payout from this screen. Payouts are reviewed and sent manually while integrations are unavailable, so transfer timing is not guaranteed.</Text></View>}
 
-      {((isCleaner && Number(profile?.commissionOwed ?? 0) > 0) || (!isCleaner && balance < 0)) && (
+      {(isCleaner && Number(profile?.commissionOwed ?? 0) > 0) && (
         <TouchableOpacity
           onPress={() => setIsAddFundsOpen(true)}
           activeOpacity={0.85}
@@ -196,9 +225,9 @@ export default function WalletScreen() {
             <ArrowUpRight size={18} color="#ef4444" />
           </View>
           <View className="flex-1">
-            <Text className="text-sm font-display font-black text-red-700">{isCleaner ? 'Outstanding commission due' : 'Outstanding balance'}</Text>
+            <Text className="text-sm font-display font-black text-red-700">Outstanding commission due</Text>
             <Text className="font-sans text-xs text-red-500 font-medium mt-0.5">
-              {isCleaner ? `You owe $${Number(profile?.commissionOwed ?? 0).toFixed(2)} from earlier bookings. Clear this before accepting new jobs; offline bookings also require prepaid credit for their 10% commission.` : 'Add funds to bring your balance to $0.'}
+              {`You owe $${Number(profile?.commissionOwed ?? 0).toFixed(2)} from earlier bookings. Clear this before accepting new jobs.`}
             </Text>
           </View>
         </TouchableOpacity>
@@ -218,17 +247,7 @@ export default function WalletScreen() {
             <View className="items-end"><Text className="font-sans-bold text-sm text-rose-700">-${fee.toFixed(2)}</Text><Text className="mt-0.5 font-sans text-[10px] text-slate-500">After fee ${net.toFixed(2)}</Text></View>
           </View>;
         })}
-      </View> : <View className="mx-5 mb-6">
-        <Text className="text-xs font-display font-black text-slate-400 uppercase tracking-widest mb-3">PAYING WITH PAYNOW</Text>
-        <View className="bg-white rounded-3xl border border-slate-100 p-4">
-          <View className="flex-row items-center gap-3 mb-3">
-            <Image source={require('../../assets/payment/ecocash.png')} resizeMode="contain" style={{ width: 68, height: 38 }} accessibilityLabel="EcoCash" />
-            <Image source={require('../../assets/payment/zimswitch.png')} resizeMode="contain" style={{ width: 68, height: 38 }} accessibilityLabel="Zimswitch" />
-          </View>
-          <Text className="text-sm font-display font-black text-slate-900">Choose your payment method at checkout</Text>
-          <Text className="font-sans text-xs text-slate-500 mt-1 leading-5">Paynow shows the methods currently enabled for Detail, including any available mobile money and banking options.</Text>
-        </View>
-      </View>}
+      </View> : null}
 
       {/* Transactions */}
       <View className="flex-1 px-5">
@@ -292,76 +311,43 @@ export default function WalletScreen() {
       </View>
 
       {/* Add Funds Modal */}
-      <Modal visible={isAddFundsOpen} transparent animationType="slide">
+      <Modal visible={isAddFundsOpen} transparent animationType="slide" onRequestClose={() => setIsAddFundsOpen(false)}>
         {isAddFundsOpen && <AppDialogHost />}
-        <View className="flex-1 justify-center bg-[#150256]/55 px-5">
-          <TouchableOpacity
-            className="absolute inset-0"
-            onPress={() => setIsAddFundsOpen(false)}
-          />
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 justify-center bg-[#150256]/55 px-5">
           <View className="bg-white rounded-[28px] p-6">
-            <View className="flex-row items-center justify-between mb-1">
-              <Text className="text-xl font-display font-black text-slate-900">{isCleaner ? 'Top up commission credit' : 'Add Funds'}</Text>
-              <TouchableOpacity onPress={() => setIsAddFundsOpen(false)}>
+            <View className="flex-row items-center justify-between mb-2">
+              <Text className="text-xl font-display font-black text-slate-900">Pay with EcoCash</Text>
+              <TouchableOpacity accessibilityLabel="Close payment" onPress={() => setIsAddFundsOpen(false)}>
                 <X size={22} color="#94a3b8" />
               </TouchableOpacity>
             </View>
-            <Text className="font-sans text-xs text-slate-400 font-medium mb-6">
-              {isCleaner ? 'Paynow top-ups clear commission due first; remaining funds stay as commission credit.' : 'Add USD credit to your Detail wallet'}
-            </Text>
-
-            <View className="mb-5 flex-row items-center gap-3 rounded-2xl border border-violet-100 bg-[#F7F4FF] p-3.5"><View className="h-10 w-10 items-center justify-center rounded-xl bg-accent"><Text className="font-display text-lg font-black text-white">P</Text></View><View className="flex-1"><Text className="font-display text-sm font-black text-ink">Paynow secure checkout</Text><Text className="font-sans text-[11px] text-ink/55">Choose from the methods available on Paynow</Text></View></View>
-
-            <Text className="text-xs font-display font-black text-slate-500 uppercase tracking-widest mb-2">
-              Amount (USD)
-            </Text>
-            <TextInput
-              className="border-2 border-slate-100 rounded-2xl px-4 py-4 text-2xl font-display font-black text-slate-900 bg-slate-50 mb-4"
-              placeholder="0.00"
-              placeholderTextColor="#94a3b8"
-              keyboardType="decimal-pad"
-              value={amount}
-              onChangeText={setAmount}
-              autoFocus
-            />
-
-            {/* Quick-amount chips */}
-            <View className="flex-row gap-2 mb-5">
-              {['5', '10', '25', '50'].map((preset) => (
-                <TouchableOpacity
-                  key={preset}
-                  onPress={() => setAmount(preset)}
-                  className={`flex-1 py-2.5 rounded-2xl items-center border ${
-                    amount === preset ? 'bg-accent border-accent' : 'bg-slate-50 border-slate-100'
-                  }`}
-                >
-                  <Text
-                    className={`text-xs font-black ${
-                      amount === preset ? 'text-white' : 'text-slate-600'
-                    }`}
-                  >
-                    ${preset}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <TouchableOpacity
-              onPress={handleAddFunds}
-              disabled={isLoading || !amount}
-              className="bg-accent py-5 rounded-[32px] items-center shadow-lg shadow-accent/30"
-              activeOpacity={0.85}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text className="text-white font-display font-black text-sm uppercase tracking-widest">
-                  {`Continue securely · $${amount || '0.00'}`}
+            {pendingReference ? (
+              <Text className="font-sans text-sm text-slate-600 mb-5">Approve the request on your EcoCash phone, then check the payment status here.</Text>
+            ) : (
+              <>
+                <Text className="font-sans text-sm text-slate-600 mb-5">
+                  {isVerification ? 'Add $0.50 USD for your one-time identity check.' : 'Top-ups start at $0.50 USD and clear commission due first.'}
+                </Text>
+                {!isVerification && <>
+                  <Text className="font-sans-bold text-sm text-slate-700 mb-2">Amount (USD)</Text>
+                  <TextInput accessibilityLabel="Amount in US dollars" className="bg-slate-50 rounded-2xl px-4 py-4 mb-4 font-sans text-slate-900"
+                    placeholder="0.50" keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
+                </>}
+                <Text className="font-sans-bold text-sm text-slate-700 mb-2">EcoCash mobile number</Text>
+                <TextInput accessibilityLabel="EcoCash mobile number" className="bg-slate-50 rounded-2xl px-4 py-4 mb-5 font-sans text-slate-900"
+                  placeholder="077 123 4567" keyboardType="phone-pad" value={ecoCashPhone} onChangeText={setEcoCashPhone} />
+              </>
+            )}
+            <TouchableOpacity onPress={handleAddFunds} disabled={isLoading || (!pendingReference && (!ecoCashPhone || (!isVerification && !amount)))}
+              className="bg-accent py-5 rounded-[32px] items-center">
+              {isLoading ? <ActivityIndicator color="#fff" /> : (
+                <Text className="text-white font-display font-black text-sm">
+                  {pendingReference ? 'Check payment status' : `Pay $${isVerification ? '0.50' : amount || '0.00'}`}
                 </Text>
               )}
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
       <Modal visible={isPayoutOpen} transparent animationType="slide">
         {isPayoutOpen && <AppDialogHost />}
