@@ -287,4 +287,46 @@ const posthogSummary = providerMeters.posthog.status === 'measured' ? `\nPostHog
 const resendSummary = providerMeters.resend.status === 'measured' ? `\nResend email logs (30d): ${providerMeters.resend.emails}.${providerMeters.resend.truncated ? ' History capped at 2,000 emails.' : ''}` : '';
 if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + smsPopSummary + posthogSummary + resendSummary + '\n');
 console.log(`Usage provider status: Supabase requests=${providerMeters.supabaseApiRequests.status} (${providerMeters.supabaseApiRequests.note}); Twilio SMS=${providerMeters.twilio.status}; SMSPoP=${providerMeters.smspop.status}; PostHog=${providerMeters.posthog.status}; Resend=${providerMeters.resend.status}; Cloudflare R2=${providerMeters.cloudflareR2.status} (${providerMeters.cloudflareR2.note}).`);
+
+const usageReferences = [
+  { key: 'supabase_database', label: 'Supabase database size', value: Number(metrics.databaseBytes), limit: 500_000_000 },
+  { key: 'supabase_storage', label: 'Supabase file storage', value: Number(metrics.fileStorageBytes), limit: 1_073_741_824 },
+  { key: 'supabase_active_users', label: 'Monthly active users', value: Number(metrics.activeUsers30d), limit: 50_000 },
+  { key: 'mapbox_map_users', label: 'Mapbox map users', value: Number(mapbox.mapUsers), limit: Number(mapbox.quotas?.mapUsers) || 25_000 },
+  { key: 'mapbox_geocoding', label: 'Mapbox address searches', value: Number(mapbox.geocodingRequests), limit: Number(mapbox.quotas?.geocodingRequests) || 100_000 },
+  { key: 'mapbox_directions', label: 'Mapbox directions requests', value: Number(mapbox.directionsRequests), limit: Number(mapbox.quotas?.directionsRequests) || 100_000 },
+  { key: 'cloudflare_r2_storage', label: 'Cloudflare R2 storage', value: Number(cloudflareR2.storageBytes), limit: Number(cloudflareR2.freeStorageBytes) || 10_000_000_000 },
+].filter(item => Number.isFinite(item.value) && Number.isFinite(item.limit) && item.limit > 0);
+
+const reachedMilestones = usageReferences.flatMap(item => {
+  const latest = Math.min(100, Math.floor(item.value / item.limit * 10) * 10);
+  return Array.from({ length: latest / 10 }, (_, index) => ({ ...item, milestone: (index + 1) * 10 }));
+});
+for (const item of reachedMilestones) {
+  const claim = await fetch(`${base}/rest/v1/usage_alert_milestones`, {
+    method: 'POST',
+    headers: { ...headers, prefer: 'resolution=ignore-duplicates,return=representation' },
+    body: JSON.stringify({ provider: item.key, milestone: item.milestone, usage_month: mapboxMonth }),
+  });
+  if (!claim.ok) throw new Error(`Usage alert milestone claim failed (HTTP ${claim.status}).`);
+  if ((await claim.json()).length === 0) continue;
+  const current = item.key.includes('storage') ? `${(item.value / 1_000_000_000).toFixed(2)} GB` : item.value.toLocaleString();
+  const limit = item.key.includes('storage') ? `${(item.limit / 1_000_000_000).toFixed(2)} GB` : item.limit.toLocaleString();
+  const email = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      from: 'Detail Usage Alerts <hello@detailapp.co.zw>',
+      to: [process.env.USAGE_ALERT_TO || 'crzzphillip@gmail.com'],
+      subject: `Detail usage alert: ${item.label} reached ${item.milestone}%`,
+      text: `${item.label} has reached ${(item.value / item.limit * 100).toFixed(1)}% of its monitoring reference. Usage is ${current} of ${limit}. Snapshot time: ${capturedAt} UTC.`,
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!email.ok) {
+    await fetch(`${base}/rest/v1/usage_alert_milestones?provider=eq.${encodeURIComponent(item.key)}&milestone=eq.${item.milestone}&usage_month=eq.${mapboxMonth}`, { method: 'DELETE', headers });
+    throw new Error(`Resend usage alert delivery failed (HTTP ${email.status}).`);
+  }
+}
+
 console.log('Daily aggregate usage snapshot saved.');
