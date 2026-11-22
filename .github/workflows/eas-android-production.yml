@@ -28,6 +28,11 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Validate build credentials are configured
         run: |
           set -euo pipefail
