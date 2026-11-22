@@ -16,16 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 30
-    env:
-      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN || secrets.EAS_BOT_ACCESS_TOKEN || secrets.EXPO_EAS_BOT_ACCESS_TOKEN }}
-      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
       - name: Download the successful Android build artifact
         uses: actions/download-artifact@v4
         with:
@@ -34,17 +25,20 @@ jobs:
           github-token: ${{ github.token }}
           run-id: 44988636438
 
-      - name: Install mobile dependencies
-        run: npm ci --prefix mobile --no-audit --no-fund
-
-      - name: Submit bundle to Google Play internal testing
-        working-directory: mobile
+      - name: Locate Android app bundle
+        id: bundle
+        shell: bash
         run: |
           set -euo pipefail
           bundle="$(find "$RUNNER_TEMP/detail-android" -maxdepth 2 -type f -name '*.aab' -print -quit)"
           test -n "$bundle"
-          test -n "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"
-          key_path="$RUNNER_TEMP/google-play-service-account.json"
-          umask 077
-          printf '%s' "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON" > "$key_path"
-          npx --yes eas-cli@16.28.0 submit --platform android --profile production --path "$bundle" --key "$key_path" --non-interactive --no-wait
+          echo "path=$bundle" >> "$GITHUB_OUTPUT"
+
+      - name: Upload bundle to Google Play internal testing
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: zw.co.detailapp.mobile
+          releaseFiles: ${{ steps.bundle.outputs.path }}
+          track: internal
+          status: completed
