@@ -1,6 +1,7 @@
 import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
 import {
   buildSmsPopCampaign,
+  normalizeSmsRecipient,
   smsPopAcceptedRecipient,
   type SmsPopCampaignResponse,
   type SupabaseSmsHookEvent,
@@ -43,7 +44,7 @@ Deno.serve(async (request) => {
   }
 
   let campaign: ReturnType<typeof buildSmsPopCampaign>;
-  const recipient = event.user?.new_phone ?? event.user?.phone ?? "";
+  const recipient = normalizeSmsRecipient(event.user?.new_phone ?? event.user?.phone);
   try {
     campaign = buildSmsPopCampaign(event, senderId);
   } catch (error) {
