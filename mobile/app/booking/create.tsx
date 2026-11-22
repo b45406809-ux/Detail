@@ -163,13 +163,12 @@ export default function CreateBookingScreen() {
   const [bookingEnabled, setBookingEnabled] = useState(false);
   const [bookingConfigStatus, setBookingConfigStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [suppliesRequired, setSuppliesRequired] = useState(false);
-  const [suppliesFee, setSuppliesFee] = useState(10);
+  const suppliesFee = 0;
 
   useEffect(() => {
     callFunction<{}, {suppliesFeeUsd?:number;bookingEnabled?:boolean;instantBookingEnabled?:boolean}>('getBetaConfig',{}).then(value=>{
       setBookingEnabled(value.bookingEnabled===true);
       setInstantBookingEnabled(value.instantBookingEnabled===true);
-      if(Number.isFinite(Number(value.suppliesFeeUsd)))setSuppliesFee(Math.max(0,Number(value.suppliesFeeUsd)));
       setBookingConfigStatus('ready');
     }).catch(()=>setBookingConfigStatus('error'));
   },[]);
@@ -471,13 +470,7 @@ export default function CreateBookingScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-              <Text className="text-sm font-sans text-ink/60 mt-7 mb-2">How would you like to book?</Text>
-              {([
-                {id:'SCHEDULED' as const,title:'Schedule and compare quotes',copy:'Cleaners send a price for you to review.'},
-                ...(instantBookingEnabled?[{id:'INSTANT' as const,title:'Book now',copy:'Find an available nearby cleaner at the listed starting price.'}]:[]),
-              ]).map(option=><TouchableOpacity key={option.id} onPress={()=>setBookingMode(option.id)} className={`p-4 rounded-2xl border-2 mb-2 flex-row items-center ${bookingMode===option.id?'border-accent bg-white':'border-transparent bg-ink/5'}`}><View className="flex-1"><Text className="font-sans-bold text-ink">{option.title}</Text><Text className="font-sans text-xs text-ink/50 mt-1">{option.copy}</Text></View>{bookingMode===option.id&&<View className="w-6 h-6 rounded-full bg-accent items-center justify-center"><Check size={14} color="#fff" /></View>}</TouchableOpacity>)}
-              <Text className="font-sans text-xs text-ink/50 mt-1">{bookingMode === 'SCHEDULED' ? 'Selected. Choose Next to describe the job and schedule it.' : 'Selected. Choose Next to describe the job.'}</Text>
-              {!instantBookingEnabled&&<Text className="font-sans text-xs text-ink/50 mt-2">Book Now will open after service pricing and estimated cleaning times are finalized.</Text>}
+              {instantBookingEnabled && <TouchableOpacity onPress={() => setBookingMode(bookingMode === 'INSTANT' ? 'SCHEDULED' : 'INSTANT')} className="p-4 rounded-2xl border-2 border-accent mt-6"><Text className="font-sans-bold text-ink">{bookingMode === 'INSTANT' ? 'Book now selected' : 'Book now'}</Text><Text className="font-sans text-xs text-ink/50 mt-1">Find an available nearby cleaner at the listed starting price.</Text></TouchableOpacity>}
             </View>
           )}
 
@@ -739,10 +732,10 @@ export default function CreateBookingScreen() {
               {bookingMode==='INSTANT'?<>
                 <Text className="text-2xl font-display font-black text-ink mb-2">Confirm your price</Text>
                 <Text className="font-sans text-sm text-ink/50 mb-5">Book Now uses the listed starting price. A cleaner can accept or decline; the cleaner’s estimated platform payout is 90% of this amount.</Text>
-                <View className="rounded-2xl border border-ink/10 bg-white p-4 gap-2"><Text className="font-sans text-sm text-ink">{serviceLabel()} starting price: ${Number(Catalog.SERVICE_PACKAGES[category!].find(item=>item.id===serviceId)?.price.replace('$','')??0).toFixed(2)}</Text>{suppliesRequired&&<Text className="font-sans text-sm text-ink">Supplies: ${suppliesFee.toFixed(2)}</Text>}<Text className="font-display font-black text-lg text-ink">Total: ${(Number(Catalog.SERVICE_PACKAGES[category!].find(item=>item.id===serviceId)?.price.replace('$','')??0)+(suppliesRequired?suppliesFee:0)).toFixed(2)}</Text></View>
+                <View className="rounded-2xl border border-ink/10 bg-white p-4 gap-2"><Text className="font-sans text-sm text-ink">{serviceLabel()} starting price: ${Number(Catalog.SERVICE_PACKAGES[category!].find(item=>item.id===serviceId)?.price.replace('$','')??0).toFixed(2)}</Text><Text className="font-display font-black text-lg text-ink">Total: ${(Number(Catalog.SERVICE_PACKAGES[category!].find(item=>item.id===serviceId)?.price.replace('$','')??0)+(suppliesRequired?suppliesFee:0)).toFixed(2)}</Text></View>
               </>:<>
               <Text className="text-2xl font-display font-black text-ink mb-1">Set your budget</Text>
-              {suppliesRequired && <Text className="font-sans text-sm text-ink/70 mb-3">Supplies fee: ${suppliesFee.toFixed(2)}. This fee is added to the booking.</Text>}
+              
               <Text className="font-sans text-sm text-ink/50 font-medium mb-6">
                 Choose how you want to price your job. Your request stays open for 30 minutes to receive competitive bids from local pros.
               </Text>

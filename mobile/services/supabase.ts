@@ -285,14 +285,15 @@ function applyConstraints(builder: any, constraints: Constraint[]) {
   for (const constraint of constraints) {
     if (constraint.type === 'where') {
       const column = physicalColumn(constraint.field);
-      if (constraint.operator === '==') builder = builder.eq(column, constraint.value);
-      else if (constraint.operator === '!=') builder = builder.neq(column, constraint.value);
+      const value = constraint.value instanceof Date ? constraint.value.toISOString() : constraint.value;
+      if (constraint.operator === '==') builder = builder.eq(column, value);
+      else if (constraint.operator === '!=') builder = builder.neq(column, value);
       else if (constraint.operator === 'in') builder = builder.in(column, constraint.value as unknown[]);
       else if (constraint.operator === 'array-contains') builder = builder.contains(column, [constraint.value]);
-      else if (constraint.operator === '<') builder = builder.lt(column, constraint.value);
-      else if (constraint.operator === '<=') builder = builder.lte(column, constraint.value);
-      else if (constraint.operator === '>') builder = builder.gt(column, constraint.value);
-      else if (constraint.operator === '>=') builder = builder.gte(column, constraint.value);
+      else if (constraint.operator === '<') builder = builder.lt(column, value);
+      else if (constraint.operator === '<=') builder = builder.lte(column, value);
+      else if (constraint.operator === '>') builder = builder.gt(column, value);
+      else if (constraint.operator === '>=') builder = builder.gte(column, value);
     } else if (constraint.type === 'order') builder = builder.order(physicalColumn(constraint.field), { ascending: constraint.direction === 'asc' });
     else if (constraint.type === 'limit') builder = builder.limit(constraint.count);
   }

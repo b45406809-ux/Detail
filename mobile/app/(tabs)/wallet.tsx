@@ -58,6 +58,7 @@ export default function WalletScreen() {
   const [amount, setAmount] = useState('');
   const [ecoCashPhone, setEcoCashPhone] = useState('');
   const [pendingReference, setPendingReference] = useState<string>();
+  const [canRetryPayment, setCanRetryPayment] = useState(false);
   useEffect(() => {
     let active = true;
     setPendingReference(undefined);
@@ -133,6 +134,7 @@ export default function WalletScreen() {
       if (isTopupFinished(status)) {
         setPendingReference(undefined);
         if (status === 'PAID') {
+          setCanRetryPayment(false);
           setIsAddFundsOpen(false);
           setAmount('');
           if (isVerification && returnToCleaner === '1') {
@@ -143,7 +145,8 @@ export default function WalletScreen() {
             appAlert('Payment confirmed', isVerification ? 'Return to cleaner registration to continue.' : 'Your payment has been applied.');
           }
         } else {
-          appAlert('Payment not completed', 'Check your EcoCash number and USD balance before trying again.');
+          setCanRetryPayment(true);
+          appAlert('Payment not completed', 'Check your EcoCash number and USD balance, then tap Retry payment.');
         }
       }
     } catch (error) {
@@ -332,7 +335,7 @@ export default function WalletScreen() {
               </TouchableOpacity>
             </View>
             {pendingReference ? (
-              <Text className="font-sans text-sm text-slate-600 mb-5">Approve the request on your EcoCash phone, then check the payment status here.</Text>
+              <Text className="font-sans text-sm text-slate-600 mb-5">Approve the request on your EcoCash phone, then check the payment status here. If it fails or is cancelled, you can retry.</Text>
             ) : (
               <>
                 <Text className="font-sans text-sm text-slate-600 mb-5">
@@ -352,7 +355,7 @@ export default function WalletScreen() {
               className="bg-accent py-5 rounded-[32px] items-center">
               {isLoading ? <ActivityIndicator color="#fff" /> : (
                 <Text className="text-white font-display font-black text-sm">
-                  {pendingReference ? 'Check payment status' : `Pay $${isVerification ? '0.50' : amount || '0.00'}`}
+                  {pendingReference ? 'Check payment status' : canRetryPayment ? 'Retry payment' : `Pay $${isVerification ? '0.50' : amount || '0.00'}`}
                 </Text>
               )}
             </TouchableOpacity>

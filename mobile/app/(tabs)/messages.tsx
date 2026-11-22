@@ -127,6 +127,7 @@ export default function MessagesScreen() {
   const connectedAtRef = useRef(0);
   const callDurationLimitRef = useRef(DEFAULT_CALL_LIMIT_SECONDS);
   const activeConversation = conversations.find(conversation => conversation.jobId === activeJobId);
+  const chatReadOnly = !activeConversation?.otherUserId || ['CANCELLED', 'CANCELED'].includes(activeConversation.jobStatus);
 
   useEffect(() => {
     if (!activeJobId || !userId) { setBlockedByMe(false); setBlockedMe(false); return; }
@@ -515,7 +516,7 @@ export default function MessagesScreen() {
 
   const sendMessage = async (override?: string) => {
     const text = (override ?? inputText).trim();
-    if (!text || !activeJobId || !user) return;
+    if (!text || !activeJobId || !user || chatReadOnly || conversationBlocked) return;
     try {
       const { intent, pending } = await getPendingMessageIntent('text', text);
       const { error } = await supabase.rpc('send_job_message', { p_job_id: activeJobId, p_text: text, p_image_path: null, p_idempotency_key: pending.key });
@@ -536,7 +537,7 @@ export default function MessagesScreen() {
   const [isSendingPhoto, setIsSendingPhoto] = useState(false);
 
   const uploadAndSend = async (uri: string) => {
-    if (!activeJobId || !user) return;
+    if (!activeJobId || !user || chatReadOnly || conversationBlocked) return;
     setIsSendingPhoto(true);
     try {
       const { intent, pending } = await getPendingMessageIntent('photo', uri);
@@ -555,7 +556,7 @@ export default function MessagesScreen() {
   };
 
   const sendPhoto = async () => {
-    if (!activeJobId || !user) return;
+    if (!activeJobId || !user || chatReadOnly || conversationBlocked) return;
 
     const pickFromLibrary = async () => {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -661,6 +662,7 @@ export default function MessagesScreen() {
 
           {/* Messages */}
           {chatError ? <View className="items-center px-4 py-2"><Text accessibilityRole="alert" className="text-center text-xs text-rose-700">{chatError}</Text><TouchableOpacity accessibilityRole="button" onPress={() => setChatRetry(value => value + 1)} className="mt-1 rounded-full bg-rose-50 px-3 py-1"><Text className="text-xs font-bold text-rose-800">Retry messages</Text></TouchableOpacity></View> : null}
+        {chatReadOnly ? <View className="mx-4 mt-3 rounded-2xl bg-slate-100 px-4 py-3"><Text className="text-xs font-bold text-slate-700">{activeConversation ? 'This booking is cancelled. Recent messages are read-only.' : 'Chat is available once a cleaner is assigned.'}</Text></View> : null}
         {conversationBlocked ? <View className="mx-4 mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3"><Text className="text-xs font-bold text-rose-900">{blockedByMe ? 'You blocked this person' : 'This person blocked you'}</Text><Text className="mt-1 text-xs leading-5 text-rose-800">Existing history stays available. New messages, photos, and calls are disabled{blockedByMe ? ' until you unblock them from the conversation menu.' : ' in this conversation.'}</Text></View> : null}
         <View className="mx-4 mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
           <Text className="text-xs font-bold text-amber-950">Stay safe on Detail</Text>
@@ -703,7 +705,7 @@ export default function MessagesScreen() {
               renderItem={({ item: reply }) => (
                 <TouchableOpacity
                   onPress={() => sendMessage(reply)}
-                  disabled={conversationBlocked}
+                  disabled={conversationBlocked || chatReadOnly}
                   className="bg-slate-100 px-4 py-2 rounded-full border border-slate-200"
                 >
                   <Text className="font-sans text-xs font-bold text-slate-600">{reply}</Text>
@@ -716,7 +718,7 @@ export default function MessagesScreen() {
           <View className="flex-row items-center gap-3 px-4 py-3 border-t border-slate-100">
             <TouchableOpacity
               onPress={sendPhoto}
-              disabled={isSendingPhoto || conversationBlocked}
+              disabled={isSendingPhoto || conversationBlocked || chatReadOnly}
               className="w-11 h-11 rounded-2xl items-center justify-center bg-accent/10"
             >
               {isSendingPhoto ? <ActivityIndicator size="small" color="#3906D2" /> : <ImagePlus size={18} color="#3906D2" />}
@@ -727,7 +729,7 @@ export default function MessagesScreen() {
               placeholderTextColor="#94a3b8"
               value={inputText}
               onChangeText={setInputText}
-              editable={!conversationBlocked}
+              editable={!conversationBlocked && !chatReadOnly}
               multiline
               maxLength={500}
               onSubmitEditing={() => sendMessage()}
@@ -735,7 +737,7 @@ export default function MessagesScreen() {
             />
             <TouchableOpacity
               onPress={() => sendMessage()}
-              disabled={!inputText.trim() || conversationBlocked}
+              disabled={!inputText.trim() || conversationBlocked || chatReadOnly}
               className={`w-11 h-11 rounded-2xl items-center justify-center ${
                 inputText.trim() ? 'bg-accent' : 'bg-slate-100'
               }`}

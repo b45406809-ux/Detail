@@ -750,8 +750,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         fail(400,'Choose a valid booking time. Custom bookings must be at least 30 minutes from now and within the next 180 days.');
       }
       const suppliesRequired = booking.suppliesRequired === true;
-      const configuredSuppliesFee=Number(config?.value?.suppliesFeeUsd ?? 10);
-      const suppliesFee = suppliesRequired ? (Number.isFinite(configuredSuppliesFee)?Math.max(0,Math.min(100,configuredSuppliesFee)):10) : 0;
+      const suppliesFee = 0;
       const prices: Record<string,number> = { BASIC_HOUSE:10,SPECIFIC_ROOM:15,STANDARD_HOUSE:35,DEEP_HOUSE:80,EXTERIOR_WASH:3,FULL_CAR:12,DEEP_DETAIL:65 };
       const basePrice=prices[text(booking.serviceId,40)];
       if(bookingMode==='INSTANT'&&!basePrice)fail(400,'Choose a supported fixed-price service for Book Now.');
