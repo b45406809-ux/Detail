@@ -93,6 +93,7 @@ export interface UserProfile {
   balance: number;
   earningsBalance?: number;
   commissionBalance?: number;
+  cleanerVerificationFeePaidAt?: string | null;
   status: 'AVAILABLE' | 'BUSY' | 'OFFLINE';
   hasAgreedToTerms?: boolean;
   commissionOwed?: number;

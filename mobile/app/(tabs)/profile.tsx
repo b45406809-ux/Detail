@@ -44,6 +44,7 @@ import { uploadProfilePhoto } from '../../services/storage';
 import { hasCurrentPushDevice, registerCurrentPushDevice, unregisterCurrentPushDevice } from '../../services/pushRegistration';
 import { configureNotificationChannels } from '../../services/notifications';
 import { StarRating } from '../../components/StarRating';
+import { needsCleanerVerificationTopUp } from '../../utils/cleanerVerification';
 
 export default function ProfileScreen() {
   const { user, profile, updateProfile, refreshProfile } = useAuth();
@@ -152,6 +153,17 @@ export default function ProfileScreen() {
     } else if (hasApprovedCleanerAccount) {
       callFunction('setActiveRole', { role: 'CLEANER' }).catch((e:any) => appAlert('Could not switch role', e.message ?? 'Try again.'));
     }
+  };
+
+  const handleBecomeCleaner = () => {
+    if (needsCleanerVerificationTopUp(profile)) {
+      appAlert('Add verification funds', 'Add at least $0.50 to your Detail wallet before starting cleaner registration. This one-time fee covers identity verification.', [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'Add $0.50', onPress: () => router.push({ pathname: '/(tabs)/wallet', params: { verification: '1', returnToCleaner: '1' } }) },
+      ]);
+      return;
+    }
+    router.push('/register-cleaner');
   };
 
   const handleDeleteAccount = () => {
@@ -286,7 +298,7 @@ export default function ProfileScreen() {
               icon: Briefcase,
               label: 'Become a Cleaner',
               sub: 'Register and complete verification to offer cleaning services',
-              onPress: () => router.push('/register-cleaner'),
+              onPress: handleBecomeCleaner,
             }]),
       ],
     },

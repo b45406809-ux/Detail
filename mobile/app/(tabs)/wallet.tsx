@@ -45,7 +45,7 @@ import { formatDate } from '../../utils/date';
 export default function WalletScreen() {
   const { user, profile } = useAuth();
   const isCleaner = profile?.role === 'CLEANER';
-  const { verification } = useLocalSearchParams<{ verification?: string }>();
+  const { verification, returnToCleaner } = useLocalSearchParams<{ verification?: string; returnToCleaner?: string }>();
   const isVerification = verification === '1' && !isCleaner;
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [commissionJobs, setCommissionJobs] = useState<Job[]>([]);
@@ -72,6 +72,10 @@ export default function WalletScreen() {
   const [payoutMethod, setPayoutMethod] = useState<'ECOCASH' | 'INNBUCKS' | 'BANK'>('ECOCASH');
   const [payoutName, setPayoutName] = useState('');
   const [payoutDestination, setPayoutDestination] = useState('');
+
+  useEffect(() => {
+    if (isVerification) setIsAddFundsOpen(true);
+  }, [isVerification]);
 
 
   // Real-time transaction feed from Firestore
@@ -131,7 +135,13 @@ export default function WalletScreen() {
         if (status === 'PAID') {
           setIsAddFundsOpen(false);
           setAmount('');
-          appAlert('Payment confirmed', isVerification ? 'Return to cleaner registration to continue.' : 'Your payment has been applied.');
+          if (isVerification && returnToCleaner === '1') {
+            appAlert('Payment confirmed', 'Your verification funds are ready. Continue cleaner registration.', [
+              { text: 'Continue', onPress: () => router.replace('/register-cleaner') },
+            ]);
+          } else {
+            appAlert('Payment confirmed', isVerification ? 'Return to cleaner registration to continue.' : 'Your payment has been applied.');
+          }
         } else {
           appAlert('Payment not completed', 'Check your EcoCash number and USD balance before trying again.');
         }

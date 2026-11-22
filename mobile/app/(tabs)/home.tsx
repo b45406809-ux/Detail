@@ -60,6 +60,7 @@ import { callFunction } from '../../services/functions';
 import { Mapbox, IS_MAPBOX_AVAILABLE } from '../../services/mapbox';
 import { recordMapboxUsage } from '../../services/usageMetrics';
 import { CleanerLocationPermissionError, completeCleanerPresenceStart, startCleanerLocationUpdates, stopCleanerLocationUpdates } from '../../services/locationTracking';
+import { needsCleanerVerificationTopUp } from '../../utils/cleanerVerification';
 
 export default function HomeScreen() {
   const { user, profile, locationTrackingError } = useAuth();
@@ -193,9 +194,16 @@ export default function HomeScreen() {
         && profile?.cleanerAgreementAccepted
         && profile?.verificationStatus === 'VERIFIED';
       if (!isRegistered) {
+        if (needsCleanerVerificationTopUp(profile)) {
+          appAlert('Add verification funds', 'Add at least $0.50 to your Detail wallet before starting cleaner registration. This one-time fee covers identity verification.', [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Add $0.50', onPress: () => router.push({ pathname: '/(tabs)/wallet', params: { verification: '1', returnToCleaner: '1' } }) },
+          ]);
+          return;
+        }
         appAlert(
           'Cleaner Registration Required',
-          'To work as a cleaner, complete registration, the one-time $0.50 Didit identity check, and the cleaner agreement. Fund verification with EcoCash. Once approved, keep enough prepaid credit to cover 10% of each booking you accept.',
+          'To work as a cleaner, complete registration, pay the one-time $0.50 identity verification fee from your Detail wallet, verify your mobile and email, and accept the cleaner agreement. Once approved, keep enough prepaid credit to cover 10% of each booking you accept.',
           [
             { text: 'Cancel', style: 'cancel' },
             {
