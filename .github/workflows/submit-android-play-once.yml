@@ -32,7 +32,10 @@ jobs:
           github-token: ${{ github.token }}
           run-id: 44988636438
 
-      - name: Install mobile dependencies\n        run: npm ci --prefix mobile --no-audit --no-fund\n\n      - name: Submit bundle to Google Play internal testing
+      - name: Install mobile dependencies
+        run: npm ci --prefix mobile --no-audit --no-fund
+
+      - name: Submit bundle to Google Play internal testing
         working-directory: mobile
         run: |
           set -euo pipefail
