@@ -23,7 +23,7 @@ port = 54323
 [auth]
 enabled = true
 site_url = "http://localhost:8081"
-additional_redirect_urls = ["detail://", "http://localhost:8081", "http://localhost:5173"]
+additional_redirect_urls = ["detail://", "http://localhost:8081", "http://localhost:5173", "https://dashboard.detailapp.co.zw/admin/accept-invite"]
 enable_signup = true
 
 [auth.email]

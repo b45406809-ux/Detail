@@ -1950,7 +1950,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(actorRole.elevated!==true&&permissions.some((permission:string)=>!(actorRole.permissions??[]).includes(permission)))fail(403,'You cannot grant permissions you do not hold.');
       const token=crypto.randomUUID()+crypto.randomUUID(); const {error}=await admin.from('admininvites').insert({email,tokenhash:await hash(token),permissions,elevated:false,status:'PENDING',createdby:actor,expiresat:new Date(Date.now()+7*86400000).toISOString()});
       if(error)throw error;
-      return {inviteUrl:`https://dashboard.detail.co.zw/admin/accept-invite?token=${encodeURIComponent(token)}`};
+      return {inviteUrl:`https://dashboard.detailapp.co.zw/admin/accept-invite?token=${encodeURIComponent(token)}`};
     }
     case 'revokeAdminInvite': {
       const actor=authed(); await requireAdmin(actor,'admins.manage'); await requireRecentAdminAuth(actor);
@@ -1974,6 +1974,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'acceptAdminInvite': {
       const actor=authed();const token=text(input.token,200);const {data:invite}=await admin.from('admininvites').select('*').eq('tokenhash',await hash(token)).eq('status','PENDING').gt('expiresat',new Date().toISOString()).maybeSingle();
       if(!invite||invite.email!==String(user?.email??'').toLowerCase())fail(403,'Invitation is invalid, expired, or belongs to another email.');
+      if(!user?.email_confirmed_at)fail(403,'Confirm your email address before accepting this invitation.');
       await admin.from('adminroles').upsert({userid:actor,elevated:invite.elevated,permissions:invite.permissions},{onConflict:'userid'});
       await admin.from('admininvites').update({status:'ACCEPTED'}).eq('id',invite.id);
       await admin.auth.admin.updateUserById(actor,{app_metadata:{admin:true,elevated:invite.elevated,permissions:invite.permissions}});

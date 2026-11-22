@@ -1249,7 +1249,7 @@ export const createAdminInvite = onCall(async request => {
   const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 7 * 24 * 60 * 60 * 1000);
   await db.collection('adminInvites').doc(inviteId).create({email,permissions,elevated:false,status:'PENDING',createdBy:actorId,createdAt:FieldValue.serverTimestamp(),expiresAt});
   await db.collection('adminAuditEvents').doc(`invite_${inviteId}`).create({action:'admin_invite_created',actorId,targetId:inviteId,inviteEmail:email,permissions,createdAt:FieldValue.serverTimestamp(),immutable:true});
-  return {inviteId,email,expiresAt:expiresAt.toDate().toISOString(),inviteUrl:`https://dashboard.detail.co.zw/admin/accept-invite?token=${encodeURIComponent(token)}`};
+  return {inviteId,email,expiresAt:expiresAt.toDate().toISOString(),inviteUrl:`https://dashboard.detailapp.co.zw/admin/accept-invite?token=${encodeURIComponent(token)}`};
 });
 
 export const acceptAdminInvite = onCall(async request => {
