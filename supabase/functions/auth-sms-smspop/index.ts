@@ -43,9 +43,7 @@ Deno.serve(async (request) => {
   }
 
   let campaign: ReturnType<typeof buildSmsPopCampaign>;
-  const recipient = typeof event.user?.phone === "string"
-    ? event.user.phone.trim()
-    : "";
+  const recipient = event.user?.new_phone ?? event.user?.phone ?? "";
   try {
     campaign = buildSmsPopCampaign(event, senderId);
   } catch (error) {

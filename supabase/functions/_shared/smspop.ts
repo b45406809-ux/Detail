@@ -1,5 +1,5 @@
 export interface SupabaseSmsHookEvent {
-  user?: { phone?: unknown };
+  user?: { phone?: unknown; new_phone?: unknown };
   sms?: { otp?: unknown };
 }
 
@@ -20,16 +20,35 @@ const E164_PHONE = /^\+[1-9]\d{7,14}$/;
 const OTP = /^\d{4,10}$/;
 const SENDER_ID = /^[A-Za-z0-9]{3,13}$/;
 
+/** Convert common phone formats to E.164 before passing them to SMSPoP.
+ * Supabase normally sends E.164, but Auth hooks can contain national-format
+ * Zimbabwe numbers when the phone was entered with a local trunk prefix.
+ */
+export function normalizeSmsRecipient(value: unknown): string {
+  if (typeof value !== "string" && typeof value !== "number") return "";
+  const raw = String(value).trim();
+  if (!raw) return "";
+
+  let digits = raw.replace(/[^0-9]/g, "");
+  if (!digits) return "";
+
+  // International dialing prefix, e.g. 00263789398653.
+  if (raw.startsWith("00")) digits = digits.slice(2);
+  // Zimbabwe national mobile format, e.g. 0789398653 -> +263789398653.
+  else if (digits.startsWith("0") && digits.length === 10) digits = `263${digits.slice(1)}`;
+
+  if (digits.length < 8 || digits.length > 15 || digits.startsWith("0")) return "";
+  return `+${digits}`;
+}
+
 export function buildSmsPopCampaign(
   event: SupabaseSmsHookEvent,
   senderId: string,
   campaignName = "Detail verification",
 ) {
-  const rawPhone = typeof event.user?.phone === "string"
-    ? event.user.phone.trim()
-    : "";
-  // Supabase Auth stores phone numbers as international digits without '+'.
-  const phone = /^\d+$/.test(rawPhone) ? `+${rawPhone}` : rawPhone;
+  // Supabase supplies `new_phone` for phone-change OTPs. Prefer it over the
+  // existing `phone`, which may be empty or still contain the previous value.
+  const phone = normalizeSmsRecipient(event.user?.new_phone ?? event.user?.phone);
   const otpValue = event.sms?.otp;
   // Keep OTPs as strings so leading zeroes are preserved.
   const otp = typeof otpValue === "string" ? otpValue : "";
@@ -72,7 +91,7 @@ export function smsPopAcceptedRecipient(
   if (response.success !== true) return false;
   const contacts = response.data?.contacts;
   if (!Array.isArray(contacts)) return false;
-  const expected = digits(recipient);
+  const expected = digits(normalizeSmsRecipient(recipient));
   return contacts.some((contact) =>
     digits(contact.phone) === expected && contact.status === "sent"
   );
