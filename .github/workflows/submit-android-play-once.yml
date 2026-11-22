@@ -14,9 +14,11 @@ permissions:
 jobs:
   submit:
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 30
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN || secrets.EAS_BOT_ACCESS_TOKEN || secrets.EXPO_EAS_BOT_ACCESS_TOKEN }}
+      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
     steps:
       - uses: actions/checkout@v4
 
@@ -41,4 +43,8 @@ jobs:
           set -euo pipefail
           bundle="$(find "$RUNNER_TEMP/detail-android" -maxdepth 2 -type f -name '*.aab' -print -quit)"
           test -n "$bundle"
-          npx --yes eas-cli@16.28.0 submit --platform android --profile production --path "$bundle" --non-interactive --no-wait
+          test -n "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"
+          key_path="$RUNNER_TEMP/google-play-service-account.json"
+          umask 077
+          printf '%s' "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON" > "$key_path"
+          npx --yes eas-cli@16.28.0 submit --platform android --profile production --path "$bundle" --key "$key_path" --non-interactive --no-wait
