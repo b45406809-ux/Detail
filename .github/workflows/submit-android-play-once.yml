@@ -1,0 +1,39 @@
+name: Submit Android bundle to Google Play internal testing
+
+on:
+  push:
+    branches:
+      - codex/separate-dashboard-into-routed-modules-fl7jlh
+    paths:
+      - .github/workflows/submit-android-play-once.yml
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN || secrets.EAS_BOT_ACCESS_TOKEN || secrets.EXPO_EAS_BOT_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download the successful Android build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: detail-android-production-44988636438
+          path: ${{ runner.temp }}/detail-android
+          github-token: ${{ github.token }}
+          run-id: 44988636438
+
+      - name: Submit bundle to Google Play internal testing
+        working-directory: ${{ runner.temp }}/detail-android
+        run: |
+          set -euo pipefail
+          bundle="$(find . -maxdepth 2 -type f -name '*.aab' -print -quit)"
+          test -n "$bundle"
+          npx --yes eas-cli@16.28.0 submit --platform android --profile production --path "$bundle" --non-interactive --no-wait
