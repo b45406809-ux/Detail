@@ -730,12 +730,25 @@ function CleanerPanel({
   onChangeMapVisibility: (enabled:boolean) => void;
 }) {
   const isAvailable = status === 'AVAILABLE';
-  // Uber-style "match nearby first" — once we know where the cleaner is,
-  // show the closest jobs first instead of just the most recently posted.
-  const displayJobs = (currentLocation ? rankJobsByProximity(availableJobs, currentLocation) : availableJobs).slice(
-    0,
-    10
-  );
+  const [jobSort, setJobSort] = useState<'latest' | 'nearest' | 'budget-high' | 'budget-low' | 'duration'>('latest');
+  const [jobCategory, setJobCategory] = useState<'ALL' | 'HOUSE' | 'CAR'>('ALL');
+  const eligibleJobs = availableJobs.filter(job => jobCategory === 'ALL' || job.category === jobCategory);
+  const timestamp = (value: unknown) => {
+    const date = value instanceof Date ? value : new Date(typeof value === 'string' || typeof value === 'number' ? value : 0);
+    return Number.isFinite(date.getTime()) ? date.getTime() : 0;
+  };
+  const displayJobs = jobSort === 'nearest' && currentLocation
+    ? rankJobsByProximity(eligibleJobs, currentLocation)
+    : [...eligibleJobs].sort((a, b) => {
+      if (jobSort === 'latest' || jobSort === 'nearest') return timestamp(b.createdAt) - timestamp(a.createdAt);
+      const aValue = Number(jobSort === 'duration' ? a.estimatedDuration : a.budget);
+      const bValue = Number(jobSort === 'duration' ? b.estimatedDuration : b.budget);
+      const aKnown = Number.isFinite(aValue) && aValue > 0;
+      const bKnown = Number.isFinite(bValue) && bValue > 0;
+      if (aKnown !== bKnown) return aKnown ? -1 : 1;
+      if (!aKnown) return timestamp(b.createdAt) - timestamp(a.createdAt);
+      return (jobSort === 'budget-high' ? bValue - aValue : aValue - bValue) || timestamp(b.createdAt) - timestamp(a.createdAt);
+    });
 
   return (
     <View className="pb-6">
@@ -793,9 +806,15 @@ function CleanerPanel({
       {isAvailable && (
         <View>
           <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest mb-3">
-            Incoming Jobs{displayJobs.length > 0 ? ` (${displayJobs.length}) · Nearest first` : ''}
+            Available requests{displayJobs.length > 0 ? ` (${displayJobs.length})` : ''}
           </Text>
-          <Text className="font-sans text-xs text-ink/50 mb-3">Map pins show approximate job areas.</Text>
+          <Text className="font-sans text-xs text-ink/50 mb-2">Nearby requests you can quote on. Budgets are customer estimates.</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 8 }}>
+            {([['ALL', 'All services'], ['HOUSE', 'House'], ['CAR', 'Car']] as const).map(([value, label]) => <TouchableOpacity key={value} accessibilityRole="button" accessibilityState={{ selected: jobCategory === value }} onPress={() => setJobCategory(value)} className={`rounded-full px-4 py-2 ${jobCategory === value ? 'bg-accent' : 'bg-white border border-slate-200'}`}><Text className={`text-xs font-sans-bold ${jobCategory === value ? 'text-white' : 'text-slate-700'}`}>{label}</Text></TouchableOpacity>)}
+          </ScrollView>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 12 }}>
+            {([['latest', 'Newest'], ['nearest', 'Nearest'], ['budget-high', 'Budget: high'], ['budget-low', 'Budget: low'], ['duration', 'Shortest job']] as const).map(([value, label]) => <TouchableOpacity key={value} accessibilityRole="button" accessibilityState={{ selected: jobSort === value }} onPress={() => setJobSort(value)} className={`rounded-full px-4 py-2 ${jobSort === value ? 'bg-accent' : 'bg-white border border-slate-200'}`}><Text className={`text-xs font-sans-bold ${jobSort === value ? 'text-white' : 'text-slate-700'}`}>{label}</Text></TouchableOpacity>)}
+          </ScrollView>
           {jobsLoading ? (
             <View accessibilityRole="progressbar" accessibilityLabel="Loading nearby jobs" className="bg-white rounded-2xl p-5 border border-slate-100">
               <View className="h-4 w-2/3 rounded-full bg-[#EBE8F7] mb-3" />
@@ -813,9 +832,9 @@ function CleanerPanel({
               <View className="w-14 h-14 bg-accent/10 rounded-2xl items-center justify-center mb-3">
                 <CheckCircle size={28} color="#3906D2" />
               </View>
-              <Text className="text-sm font-display font-black text-slate-900 text-center">No jobs nearby right now</Text>
+              <Text className="text-sm font-display font-black text-slate-900 text-center">{availableJobs.length ? 'No requests match this filter' : 'No jobs nearby right now'}</Text>
               <Text className="font-sans text-xs text-slate-400 font-medium text-center mt-1">
-                You'll get a notification as soon as one is posted
+                {availableJobs.length ? 'Choose another service to see more requests.' : "You'll get a notification as soon as one is posted"}
               </Text>
             </View>
           ) : (
