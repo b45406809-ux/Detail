@@ -55,4 +55,28 @@ jobs:
 
       - name: Build Android production app on EAS
         working-directory: mobile
-        run: npx eas-cli@latest build --platform android --profile production --non-interactive --wait
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_log="$RUNNER_TEMP/detail-android-eas.log"
+          if npx eas-cli@latest build --platform android --profile production --non-interactive --wait >"$build_log" 2>&1; then
+            cat "$build_log"
+            echo 'EAS remote Android build completed.'
+          else
+            build_status=$?
+            tail -n 35 "$build_log"
+            if ! grep -Fq 'This account has used its Android builds from the Free plan this month' "$build_log"; then
+              exit "$build_status"
+            fi
+            echo 'Expo free Android build quota is exhausted; falling back to a local signed production build.'
+            npx eas-cli@latest build --platform android --profile production --non-interactive --local --output "$RUNNER_TEMP/detail-production.aab"
+          fi
+
+      - name: Upload locally built Android app bundle
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: detail-android-production-${{ github.run_id }}
+          path: ${{ runner.temp }}/detail-production.aab
+          if-no-files-found: ignore
+          retention-days: 7
