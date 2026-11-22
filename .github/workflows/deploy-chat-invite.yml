@@ -1,0 +1,55 @@
+name: Deploy chat guard and invitation redirect
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Preview and apply only the chat guard migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$SUPABASE_PROJECT_REF" = yiyhmueospjwbaywzusp
+          supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          supabase db push --dry-run > "$RUNNER_TEMP/chat-preview" 2>&1
+          cat "$RUNNER_TEMP/chat-preview"
+          mapfile -t pending < <(grep -oE '[0-9]{14}' "$RUNNER_TEMP/chat-preview" | sort -u || true)
+          if [[ "${pending[*]:-}" == '20261122010000' ]]; then
+            supabase db push --yes
+          elif [[ ${#pending[@]} -eq 0 ]] && grep -qi 'up to date' "$RUNNER_TEMP/chat-preview"; then
+            echo 'No migrations pending.'
+          else
+            echo 'Unexpected pending migrations; stopping for review.'
+            exit 1
+          fi
+      - name: Add invitation callback to Auth redirect allowlist
+        run: |
+          node <<'NODE'
+          const base = `https://api.supabase.com/v1/projects/${process.env.SUPABASE_PROJECT_REF}/config/auth`;
+          const headers = { authorization: `Bearer ${process.env.SUPABASE_ACCESS_TOKEN}`, 'content-type': 'application/json' };
+          (async () => {
+            const get = await fetch(base, { headers });
+            if (!get.ok) throw new Error(`Auth config read failed: ${get.status}`);
+            const config = await get.json();
+            if (typeof config.uri_allow_list !== 'string') throw new Error('Unexpected redirect allowlist format.');
+            const entries = config.uri_allow_list.split(',').map(x => x.trim()).filter(Boolean);
+            const uri = 'https://dashboard.detailapp.co.zw/admin/accept-invite';
+            if (entries.includes(uri)) { console.log('Invitation redirect is already allowed.'); return; }
+            entries.push(uri);
+            const update = await fetch(base, { method: 'PATCH', headers, body: JSON.stringify({ uri_allow_list: entries.join(',') }) });
+            if (!update.ok) throw new Error(`Auth config update failed: ${update.status}`);
+            console.log('Invitation redirect added.');
+          })().catch(err => { console.error(err.message); process.exitCode = 1; });
+          NODE
