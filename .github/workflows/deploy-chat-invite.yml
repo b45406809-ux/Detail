@@ -1,6 +1,9 @@
 name: Deploy chat guard and invitation redirect
 on:
   workflow_dispatch:
+  push:
+    branches: [codex/separate-dashboard-into-routed-modules-fl7jlh]
+    paths: [.github/workflows/deploy-chat-invite.yml]
 permissions:
   contents: read
 jobs:
