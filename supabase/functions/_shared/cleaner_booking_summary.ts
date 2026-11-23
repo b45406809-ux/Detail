@@ -103,7 +103,7 @@ export function toCleanerBookingSummary(job: Json) {
     suppliesFee: job.suppliesfee,
     createdAt: job.createdat,
     status: job.status,
-    photos: [],
+    photos: [] as string[],
     completionPhotos: [],
   };
 }

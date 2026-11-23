@@ -57,13 +57,9 @@ async function signedMediaUrl(value: unknown): Promise<string | null> {
   }
 }
 async function cleanerBookingSummary(job: Json) {
-  const summary = toCleanerBookingSummary(job);
-  const paths = Array.isArray(job.photos)
-    ? job.photos.filter((path: unknown) => typeof path === 'string' && path.startsWith('detail-media/job-photos/')).slice(0, 6)
-    : [];
-  summary.photos = (await Promise.all(paths.map(signedMediaUrl))).filter((photo): photo is string => !!photo);
-  return summary;
+  return toCleanerBookingSummary(job);
 }
+
 const text = (value: unknown, max = 500) => typeof value === 'string' ? value.trim().slice(0, max) : '';
 const secret = (primary: string, alias: string) => Deno.env.get(primary) || Deno.env.get(alias) || '';
 const round2 = (value: number) => Math.round(value * 100) / 100;
