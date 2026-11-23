@@ -11,7 +11,7 @@ on conflict(id) do nothing;
 insert into public.users(id,email,displayName,role,status,verificationStatus,cleanerAgreementAccepted,cleanerOnboardingComplete,balance,commissionBalance)
 values
   ('35f3162f-0ea7-4e36-a02e-c98525a5fc18','accept-customer@detail.invalid','Accept Customer','CUSTOMER','OFFLINE','NOT_STARTED',false,false,100,0),
-  ('f97f2526-06b2-4c34-a42d-2fbb66984ea7','accept-cleaner@detail.invalid','Accept Cleaner','CLEANER','AVAILABLE','VERIFIED',true,true,0,2.50),
+  ('f97f2526-06b2-4c34-a42d-2fbb66984ea7','accept-cleaner@detail.invalid','Accept Cleaner','CLEANER','AVAILABLE','VERIFIED',true,true,2.50,2.50),
   ('2267252c-2a14-45e2-a9f3-bfcb2caa8652','accept-stranger@detail.invalid','Accept Stranger','CUSTOMER','OFFLINE','NOT_STARTED',false,false,0,0)
 on conflict(id) do update set email=excluded.email,displayName=excluded.displayName,role=excluded.role,status=excluded.status,
   verificationStatus=excluded.verificationStatus,cleanerAgreementAccepted=excluded.cleanerAgreementAccepted,
