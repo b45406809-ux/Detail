@@ -37,7 +37,7 @@ import {
   orderBy,
   limit,
 } from '../../services/supabase';
-import { addFundsToWallet, isTopupFinished, pendingEcoCashTopup, refreshEcoCashTopup } from '../../services/payments';
+import { addFundsToWallet, dismissPendingEcoCashTopup, isTopupFinished, pendingEcoCashTopup, refreshEcoCashTopup } from '../../services/payments';
 import { callFunction } from '../../services/functions';
 import { Job, WalletTransaction } from '../../types';
 import { formatDate } from '../../utils/date';
@@ -154,6 +154,38 @@ export default function WalletScreen() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const startAnotherPayment = () => {
+    const reference = pendingReference;
+    if (!reference || isLoading) return;
+    appAlert('Start another payment?', 'The previous request is not cancelled at EcoCash or Paynow. If both requests succeed, both can be charged and credited. Check your EcoCash transactions before continuing.', [
+      { text: 'Keep checking', style: 'cancel' },
+      { text: 'Start another payment', onPress: () => {
+        void (async () => {
+          setIsLoading(true);
+          try {
+            const status = await refreshEcoCashTopup(reference);
+            if (status === 'PAID') {
+              setPendingReference(undefined);
+              setIsAddFundsOpen(false);
+              appAlert('Payment confirmed', 'The previous payment succeeded and was applied to your wallet.');
+              return;
+            }
+            if (!isTopupFinished(status)) await dismissPendingEcoCashTopup(reference);
+            setPendingReference(undefined);
+            setCanRetryPayment(true);
+          } catch {
+            appAlert('Payment status unavailable', 'We could not verify the earlier payment. If it succeeds later, you may be charged twice. Check your EcoCash transactions before starting again.', [
+              { text: 'Keep checking', style: 'cancel' },
+              { text: 'Start another anyway', onPress: () => {
+                void dismissPendingEcoCashTopup(reference).then(() => { setPendingReference(undefined); setCanRetryPayment(true); }).catch(() => appAlert('Could not start again', 'Reopen your wallet and try again.'));
+              } },
+            ]);
+          } finally { setIsLoading(false); }
+        })();
+      } },
+    ]);
   };
 
   const balance = profile?.balance ?? 0;
@@ -359,6 +391,7 @@ export default function WalletScreen() {
                 </Text>
               )}
             </TouchableOpacity>
+            {pendingReference && <TouchableOpacity accessibilityRole="button" onPress={startAnotherPayment} disabled={isLoading} className="mt-3 rounded-full border border-slate-200 py-4 items-center"><Text className="font-sans-bold text-sm text-accent">Start another payment</Text></TouchableOpacity>}
           </View>
         </KeyboardAvoidingView>
       </Modal>

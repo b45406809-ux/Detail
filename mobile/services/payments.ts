@@ -48,3 +48,13 @@ export async function refreshEcoCashTopup(referenceNumber: string) {
   }
   return result.status;
 }
+
+/** Stop showing a pending attempt on this device without changing its provider status. */
+export async function dismissPendingEcoCashTopup(referenceNumber: string) {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sign in to manage your payment.');
+  const key = storageKey(user.uid);
+  const saved = await readIntent(user.uid);
+  if (saved?.referenceNumber !== referenceNumber) throw new Error('The payment changed. Reopen your wallet and try again.');
+  await AsyncStorage.removeItem(key);
+}
