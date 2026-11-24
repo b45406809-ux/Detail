@@ -1,0 +1,30 @@
+name: Check Cloudflare Paynow connectivity
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  probe:
+    if: github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Probe Paynow with an empty form from a temporary Worker
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID" && test -n "$CLOUDFLARE_API_TOKEN"
+          cd "$RUNNER_TEMP"
+          printf '%s\n' 'export default {async fetch(){try {const r=await fetch("https://www.paynow.co.zw/interface/remotetransaction",{method:"POST",body:"",headers:{"content-type":"application/x-www-form-urlencoded"},redirect:"manual",signal:AbortSignal.timeout(8000)});const fields=new URLSearchParams(await r.text());return Response.json({upstream:r.status,providerError:[...fields].some(([k,v])=>k.toLowerCase()==="status"&&v.toLowerCase()==="error")});}catch{return Response.json({upstream:null});}}};' > worker.mjs
+          worker="detail-paynow-probe-${GITHUB_RUN_ID}"
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers"
+          auth="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+          subdomain="$(curl -fsS -H "$auth" "$api/subdomain" | jq -er '.result.subdomain')"
+          curl -fsS -H "$auth" -X PUT \
+            -F 'metadata={"main_module":"worker.mjs","compatibility_date":"2026-09-18"};type=application/json' \
+            -F 'worker.mjs=@worker.mjs;type=application/javascript+module' "$api/scripts/$worker" | jq -e '.success'
+          trap 'curl -fsS -H "$auth" -X DELETE "$api/scripts/$worker" | jq -e .success' EXIT
+          curl -fsS -H "$auth" -H 'Content-Type: application/json' \
+            --data '{"enabled":true,"previews_enabled":false}' "$api/scripts/$worker/subdomain" | jq -e '.success'
+          curl -fsS --max-time 15 --retry 2 --retry-all-errors --retry-delay 3 "https://$worker.$subdomain.workers.dev/"
