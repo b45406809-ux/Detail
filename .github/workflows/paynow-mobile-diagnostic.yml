@@ -42,3 +42,9 @@ jobs:
           deno-version: v2.x
       - name: Send one EcoCash request and check its status
         run: deno run --allow-env --allow-net --allow-read supabase/functions/_shared/paynow_live_diagnostic.ts
+      - name: Compare Node and curl connectivity
+        if: always() && inputs.connectivity_only == true
+        run: |
+          node -e 'fetch("https://www.paynow.co.zw/interface/remotetransaction", {method:"HEAD",signal:AbortSignal.timeout(10000)}).then(r => console.log("Node HTTPS status:",r.status)).catch(e => console.log("Node HTTPS error:",e.message,"cause:",e.cause?.message))'
+          curl -4 -sS -I --max-time 10 -o /dev/null -w 'curl IPv4 HTTPS status: %{http_code}\n' https://www.paynow.co.zw/interface/remotetransaction || true
+          curl -6 -sS -I --max-time 10 -o /dev/null -w 'curl IPv6 HTTPS status: %{http_code}\n' https://www.paynow.co.zw/interface/remotetransaction || true
