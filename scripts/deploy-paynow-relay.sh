@@ -41,8 +41,12 @@ trap cleanup EXIT
 subdomain="$(curl -fsS -H "$auth" "$api/subdomain" | jq -er '.result.subdomain')"
 relay="https://$worker.$subdomain.workers.dev"
 jq -n --arg token "$token" '{main_module:"worker.mjs",compatibility_date:"2026-09-18",bindings:[{type:"secret_text",name:"PAYNOW_RELAY_TOKEN",text:$token}]}' > "$temp/metadata"
-curl -fsS -H "$auth" -X PUT -F "metadata=@$temp/metadata;type=application/json" \
-  -F 'worker.mjs=@cloudflare/paynow-relay.mjs;type=application/javascript+module' "$api/scripts/$worker" | jq -e '.success'
+echo 'Uploading relay Worker.'
+if ! curl -sS --fail-with-body -H "$auth" -X PUT -F "metadata=<$temp/metadata;type=application/json" \
+  -F 'worker.mjs=@cloudflare/paynow-relay.mjs;type=application/javascript+module' "$api/scripts/$worker" > "$temp/upload" || ! jq -e '.success == true' "$temp/upload"; then
+  jq -r '.errors[]? | "Cloudflare error code: \(.code)"' "$temp/upload"
+  exit 1
+fi
 worker_created=true
 curl -fsS -H "$auth" -H 'Content-Type: application/json' \
   --data '{"enabled":true,"previews_enabled":false}' "$api/scripts/$worker/subdomain" | jq -e '.success'
