@@ -20,6 +20,12 @@ on:
         required: false
         type: boolean
         default: false
+      runtime:
+        description: Runtime for the payment request
+        required: true
+        type: choice
+        options: [deno, node]
+        default: deno
 permissions:
   contents: read
 jobs:
@@ -40,8 +46,19 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+      - uses: actions/setup-node@v4
+        if: inputs.runtime == 'node' && inputs.connectivity_only == false
+        with:
+          node-version: 22
+      - name: Install Paynow SDK for Node diagnostic
+        if: inputs.runtime == 'node' && inputs.connectivity_only == false
+        run: npm ci --prefix functions --no-audit --no-fund
       - name: Send one EcoCash request and check its status
+        if: inputs.runtime == 'deno' || inputs.connectivity_only == true
         run: deno run --allow-env --allow-net --allow-read supabase/functions/_shared/paynow_live_diagnostic.ts
+      - name: Send one EcoCash request with Node and check its status
+        if: inputs.runtime == 'node' && inputs.connectivity_only == false
+        run: node --experimental-strip-types scripts/paynow_node_diagnostic.mjs
       - name: Compare Node and curl connectivity
         if: always() && inputs.connectivity_only == true
         run: |
