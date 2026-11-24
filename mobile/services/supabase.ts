@@ -102,6 +102,9 @@ export async function createUserWithEmailAndPassword(_auth: typeof auth, email: 
   const { data, error } = await supabase.auth.signUp({ email: email.trim().toLowerCase(), password, options: { ...options, emailRedirectTo: options.emailRedirectTo ?? 'detail://auth/callback' } });
   if (error) throw error;
   if (!data.user) throw new Error('Account creation did not return a user.');
+  if (Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    throw Object.assign(new Error('This email may already be in use.'), { code: 'user_already_exists' });
+  }
   return { user: compatUser(data.user)! };
 }
 export async function signOut(_auth: typeof auth) {
