@@ -50,6 +50,10 @@ fi
 worker_created=true
 curl -fsS -H "$auth" -H 'Content-Type: application/json' \
   --data '{"enabled":true,"previews_enabled":false}' "$api/scripts/$worker/subdomain" | jq -e '.success'
+echo 'Checking the Worker directly from GitHub before verifying from Supabase.'
+curl -sS --max-time 16 -H "Authorization: Bearer $token" --data '' \
+  -D "$temp/direct-headers" -o /dev/null -w 'Worker HTTP status: %{http_code}\n' "$relay/initiate"
+awk 'tolower($1) == "x-detail-relay:" { print }' "$temp/direct-headers"
 printf 'PAYNOW_RELAY_URL=%s\nPAYNOW_RELAY_TOKEN=%s\nPAYNOW_PROBE_ONETIME_SECRET=%s\n' "$relay" "$token" "$probe_token" > "$temp/env"
 supabase secrets set "${sb[@]}" --env-file "$temp/env" --yes
 secrets_created=true

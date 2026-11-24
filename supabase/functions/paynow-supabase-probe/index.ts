@@ -10,5 +10,5 @@ Deno.serve(async request => {
   });
   const fields = new URLSearchParams(await result.text());
   const providerError = [...fields].some(([key, value]) => key.toLowerCase() === 'status' && value.toLowerCase() === 'error');
-  return Response.json({ region: Deno.env.get('SB_REGION'), upstream: result.status, providerError });
+  return Response.json({ region: Deno.env.get('SB_REGION'), upstream: result.status, providerError, relay: result.headers.get('x-detail-relay') });
 });

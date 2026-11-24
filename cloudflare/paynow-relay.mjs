@@ -32,15 +32,15 @@ export default {
       const upstream = await fetch(url, {
         method: 'POST',
         ...(path === '/initiate' ? { body, headers: { 'content-type': 'application/x-www-form-urlencoded' } } : {}),
-        redirect: 'error',
+        redirect: 'manual',
         signal: AbortSignal.timeout(12000),
       });
       return new Response(upstream.body, {
         status: upstream.status,
-        headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+        headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'x-detail-relay': 'upstream' },
       });
     } catch {
-      return new Response(null, { status: 502 });
+      return new Response(null, { status: 502, headers: { 'x-detail-relay': 'connect-failed' } });
     }
   },
 };
