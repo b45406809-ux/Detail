@@ -15,11 +15,16 @@ on:
         required: true
         type: boolean
         default: false
+      connectivity_only:
+        description: Check connectivity without creating a payment
+        required: false
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
   diagnostic:
-    if: inputs.confirm_live_payment == true && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
+    if: (inputs.confirm_live_payment == true || inputs.connectivity_only == true) && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 5
@@ -29,6 +34,7 @@ jobs:
       PAYNOW_TEST_PHONE: ${{ inputs.phone }}
       PAYNOW_TEST_EMAIL: ${{ inputs.email }}
       PAYNOW_TEST_RUN: ${{ github.run_id }}-${{ github.run_attempt }}
+      PAYNOW_CONNECTIVITY_ONLY: ${{ inputs.connectivity_only }}
     steps:
       - uses: actions/checkout@v4
       - uses: denoland/setup-deno@v2

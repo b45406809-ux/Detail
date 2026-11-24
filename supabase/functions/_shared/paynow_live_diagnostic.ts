@@ -6,6 +6,17 @@ const key = Deno.env.get('PAYNOW_TEST_KEY') ?? '';
 const phone = (Deno.env.get('PAYNOW_TEST_PHONE') ?? '').replace(/[ +().-]/g, '').replace(/^263/, '0');
 const email = Deno.env.get('PAYNOW_TEST_EMAIL') ?? '';
 const reference = `DETAIL-DIAG-${Deno.env.get('PAYNOW_TEST_RUN') ?? ''}`;
+if (Deno.env.get('PAYNOW_CONNECTIVITY_ONLY') === 'true') {
+  try {
+    const response = await fetch('https://www.paynow.co.zw/interface/remotetransaction', { method: 'HEAD', signal: AbortSignal.timeout(10000) });
+    console.log(`Paynow HTTPS connectivity: HTTP ${response.status}. No payment was initiated.`);
+  } catch (error) {
+    const cause = error instanceof Error ? error : new Error('Unknown error');
+    console.log(`Paynow HTTPS connectivity failed: ${cause.name}: ${cause.message.slice(0, 250)}. No payment was initiated.`);
+    Deno.exit(1);
+  }
+  Deno.exit(0);
+}
 if (id !== '27890' || !key || !/^07[78][0-9]{7}$/.test(phone) || !email || !Deno.env.get('PAYNOW_TEST_RUN')) {
   throw new Error('Invalid diagnostic configuration.');
 }
