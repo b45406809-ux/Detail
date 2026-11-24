@@ -44,7 +44,7 @@ jq -n --arg token "$token" '{main_module:"worker.mjs",compatibility_date:"2026-0
 echo 'Uploading relay Worker.'
 if ! curl -sS --fail-with-body -H "$auth" -X PUT -F "metadata=<$temp/metadata;type=application/json" \
   -F 'worker.mjs=@cloudflare/paynow-relay.mjs;type=application/javascript+module' "$api/scripts/$worker" > "$temp/upload" || ! jq -e '.success == true' "$temp/upload"; then
-  jq -r '.errors[]? | "Cloudflare error code: \(.code)"' "$temp/upload"
+  jq -r '.errors[]? | "Cloudflare error \(.code): \(.message)"' "$temp/upload"
   exit 1
 fi
 worker_created=true
