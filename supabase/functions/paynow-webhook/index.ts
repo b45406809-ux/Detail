@@ -73,7 +73,7 @@ Deno.serve(async request => {
         if(before?.jobid){await admin.from('supportcases').upsert({id:`paynow_refund_reconcile_${payment.id}`,jobid:before.jobid,customerid:before.customerid,cleanerid:before.cleanerid,reason:'Paynow reported REFUNDED without refund-specific amount/reference evidence. Reconcile the provider transaction before confirming the refund ledger.',status:'URGENT',data:{type:'PAYNOW_REFUND_RECONCILIATION',paymentId:payment.id,providerStatus:'REFUNDED'}},{onConflict:'id'});}
       }
     }
-    if(before&&data?.status){
+    if(before&&data?.status&&!data.lateAccountPayment){
       const booking=!!before.jobid;
       const messages:Record<string,{title:string;body:string;type:string}>={
         ESCROWED:{title:'Payment protected with BuySafe',body:'Paynow is holding the booking payment. Open Detail to follow the service.',type:'PAYMENT_ESCROWED'},

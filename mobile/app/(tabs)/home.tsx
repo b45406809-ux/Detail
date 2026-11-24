@@ -195,9 +195,9 @@ export default function HomeScreen() {
         && profile?.verificationStatus === 'VERIFIED';
       if (!isRegistered) {
         if (needsCleanerVerificationTopUp(profile)) {
-          appAlert('Add verification funds', 'Add at least $0.50 to your Detail wallet before starting cleaner registration. This one-time fee covers identity verification.', [
+          appAlert('Add verification funds', 'Add $1.00 to your Detail wallet. Identity verification costs $0.50 and the remaining $0.50 stays in your wallet.', [
             { text: 'Not now', style: 'cancel' },
-            { text: 'Add $0.50', onPress: () => router.push({ pathname: '/(tabs)/wallet', params: { verification: '1', returnToCleaner: '1' } }) },
+            { text: 'Add $1.00', onPress: () => router.push({ pathname: '/(tabs)/wallet', params: { verification: '1', returnToCleaner: '1' } }) },
           ]);
           return;
         }

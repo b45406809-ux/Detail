@@ -5,6 +5,12 @@ import { callFunction } from './functions';
 
 type TopupPurpose = 'VERIFICATION' | 'COMMISSION';
 type Topup = { referenceNumber: string; status: string };
+export type EcoCashPayment = Topup & {
+  amount: number;
+  createdAt: string;
+  providerStatus?: string | null;
+  canCheck: boolean;
+};
 type TopupIntent = { key: string; referenceNumber?: string };
 
 const storageKey = (uid: string) => `detail:ecocash-intent:${uid}`;
@@ -12,7 +18,13 @@ const readIntent = async (uid: string): Promise<TopupIntent | null> => {
   const saved = await AsyncStorage.getItem(storageKey(uid));
   try { return JSON.parse(saved ?? 'null'); } catch { return null; }
 };
-export const isTopupFinished = (status: string) => ['PAID', 'FAILED', 'CANCELLED', 'REFUNDED'].includes(status);
+export const isTopupFinished = (status: string) => ['PAID', 'FAILED', 'CANCELLED', 'APP_CANCELLED', 'EXPIRED', 'REFUNDED'].includes(status);
+
+export function listEcoCashWalletPayments(offset: number) {
+  return callFunction<{ offset: number }, { payments: EcoCashPayment[]; nextOffset: number | null }>(
+    'listEcoCashWalletPayments', { offset },
+  );
+}
 
 export async function pendingEcoCashTopup(uid: string) {
   return (await readIntent(uid))?.referenceNumber;
@@ -49,12 +61,19 @@ export async function refreshEcoCashTopup(referenceNumber: string) {
   return result.status;
 }
 
-/** Stop showing a pending attempt on this device without changing its provider status. */
+export async function cancelEcoCashWalletPayment(referenceNumber: string) {
+  const { status } = await callFunction<{ referenceNumber: string }, { status: string }>(
+    'cancelEcoCashWalletPayment', { referenceNumber },
+  );
+  if (isTopupFinished(status)) await dismissPendingEcoCashTopup(referenceNumber);
+  return status;
+}
+
+/** Clear the saved attempt when it matches the reference being handled. */
 export async function dismissPendingEcoCashTopup(referenceNumber: string) {
   const user = auth.currentUser;
   if (!user) throw new Error('Sign in to manage your payment.');
   const key = storageKey(user.uid);
   const saved = await readIntent(user.uid);
-  if (saved?.referenceNumber !== referenceNumber) throw new Error('The payment changed. Reopen your wallet and try again.');
-  await AsyncStorage.removeItem(key);
+  if (saved?.referenceNumber === referenceNumber) await AsyncStorage.removeItem(key);
 }

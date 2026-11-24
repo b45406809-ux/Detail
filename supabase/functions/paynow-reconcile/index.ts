@@ -112,7 +112,7 @@ async function processPayment(payment: Record<string, any>) {
     DISPUTED: { title: 'Paynow dispute opened', body: 'Paynow reported a dispute. Detail support will review the booking.', type: 'PAYMENT_DISPUTED' },
     REFUNDED: { title: 'Paynow refund reported', body: 'Paynow reported a refunded payment. Detail support is reconciling the amount and transaction reference.', type: 'PAYMENT_REFUNDED' },
   };
-  const message = messages[data?.status];
+  const message = data?.lateAccountPayment ? undefined : messages[data?.status];
   if (message) {
     const recipients = new Set([payment.customerid, payment.cleanerid].filter(Boolean).map(String));
     for (const recipient of recipients) await notifyOnce(recipient, reference, String(data.status), { ...message, jobId: payment.jobid });

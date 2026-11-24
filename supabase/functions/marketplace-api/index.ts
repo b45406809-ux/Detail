@@ -1009,13 +1009,49 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         throw error;
       }
     }
+    case 'listEcoCashWalletPayments': {
+      const actor = authed();
+      const offset = Number(input.offset ?? 0);
+      if (!Number.isSafeInteger(offset) || offset < 0) fail(400, 'Invalid payment history page.');
+      const { data, error } = await admin.from('payments')
+        .select('reference,amount,status,wallet_attempt_status,providerstatus,createdat,pollurl')
+        .eq('customerid', actor).is('jobid', null).eq('provider', 'PAYNOW')
+        .eq('data->>type', 'wallet_topup').eq('data->>channel', 'ECOCASH')
+        .order('createdat', { ascending: false }).order('id', { ascending: false })
+        .range(offset, offset + 24);
+      if (error) throw error;
+      return {
+        payments: (data ?? []).map(payment => ({
+          referenceNumber: payment.reference,
+          amount: Number(payment.amount),
+          status: payment.wallet_attempt_status ?? payment.status,
+          providerStatus: payment.providerstatus,
+          createdAt: payment.createdat,
+          canCheck: Boolean(payment.pollurl),
+        })),
+        nextOffset: data?.length === 25 ? offset + 25 : null,
+      };
+    }
+    case 'cancelEcoCashWalletPayment': {
+      const actor = authed();
+      const reference = text(input.referenceNumber, 160);
+      const { data: status, error } = await admin.rpc('cancel_ecocash_wallet_attempt', {
+        p_actor: actor, p_reference: reference,
+      });
+      if (error) throw error;
+      if (!status) fail(404, 'Wallet payment not found.');
+      return { status };
+    }
     case 'refreshPaynowWalletTopup': {
       const actor=authed(), reference=text(input.referenceNumber,160);await enforceRateLimit(request,actor,'wallet_topup_refresh',12,300);
-      const {data:payment}=await admin.from('payments').select('*').eq('reference',reference).maybeSingle();
+      const {data:payment,error}=await admin.from('payments').select('*,wallet_attempt_status').eq('reference',reference).maybeSingle();
+      if(error)throw error;
       if(!payment||payment.customerid!==actor||payment.jobid||payment.provider!=='PAYNOW'||payment.data?.type!=='wallet_topup')fail(404,'Wallet payment not found.');
-      if (!payment.pollurl || ['PAID','FAILED','CANCELLED','REFUNDED'].includes(payment.status)) return {success:true,status:payment.status};
+      const status = payment.wallet_attempt_status ?? payment.status;
+      if (!payment.pollurl || ['PAID','FAILED','CANCELLED','APP_CANCELLED','EXPIRED','REFUNDED'].includes(status)) return {success:true,status};
       const poll=new URL(payment.pollurl); if(poll.protocol!=='https:'||!['paynow.co.zw','www.paynow.co.zw'].includes(poll.hostname))fail(400,'Untrusted Paynow poll URL.');
       const result=await paynowClient().pollTransaction(payment.pollurl);
+      if(String(result.reference)!==reference)fail(502,'Paynow did not return the expected payment reference. Try again later.');
       const applied=await applyPaynowStatus(String(result.reference),String(result.status),String(result.amount));
       return {success:true,status:applied.status === 'IGNORED' ? payment.status : applied.status};
     }
@@ -1042,15 +1078,15 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const id = `topup_${stableId}`, reference = `wallet-${stableId}`;
       const intent = await hash(`${amount}:${phone}:${verification}`);
       const existingPayment = async () => {
-        const { data, error } = await admin.from('payments').select('status,data').eq('id', id).maybeSingle();
+        const { data, error } = await admin.from('payments').select('status,wallet_attempt_status,data').eq('id', id).maybeSingle();
         if (error) throw error;
         if (data && data.data?.intent !== intent) fail(409, 'A payment request already exists. Re-enter the original amount and EcoCash number to recover its status.');
         return data;
       };
       const existing = await existingPayment();
-      if (existing) return { referenceNumber: reference, status: existing.status };
+      if (existing) return { referenceNumber: reference, status: existing.wallet_attempt_status ?? existing.status };
 
-      if (verification && (amount !== 0.50 || Number(profile.balance) >= 0.50 ||
+      if (verification && (![0.50, 1.00].includes(amount) || Number(profile.balance) >= 0.50 ||
           profile.cleanerverificationfeepaidat || profile.verificationstatus === 'VERIFIED')) {
         fail(409, 'Return to cleaner registration to start or check your identity verification.');
       }
@@ -1066,7 +1102,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       });
       if (error?.code === '23505') {
         const retry = await existingPayment();
-        if (retry) return { referenceNumber: reference, status: retry.status };
+        if (retry) return { referenceNumber: reference, status: retry.wallet_attempt_status ?? retry.status };
       }
       if (error) throw error;
 
@@ -1393,8 +1429,27 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const [profileResult,payoutResult,bookingResult]=await Promise.all([admin.from('users').select('balance,earningsbalance,commissionbalance,commissionowed,walletrestricted').eq('id',actor).single(),admin.from('payoutrequests').select('id').eq('cleanerid',actor).in('status',['PENDING','APPROVED']).limit(1).maybeSingle(),admin.from('jobs').select('id').or(`customerid.eq.${actor},cleanerid.eq.${actor}`)]);
       if(profileResult.error)throw profileResult.error;if(payoutResult.error)throw payoutResult.error;if(bookingResult.error)throw bookingResult.error;
       const profile=profileResult.data,pendingPayout=payoutResult.data,bookings=bookingResult.data;
-      if(Number(profile?.balance??0)>0||Number(profile?.earningsbalance??0)>0||Number(profile?.commissionbalance??0)>0||Number(profile?.commissionowed??0)>0||profile?.walletrestricted||pendingPayout)fail(409,'Settle all wallet balances, commission and pending payouts before deleting the account.');
-      const {error}=await admin.rpc('close_account',{p_user_id:actor}); if(error)throw error;
+      if(pendingPayout)fail(409,'A payout is still pending or approved. Wait for it to be settled before deleting your account.');
+      if(Number(profile?.balance??0)>0||Number(profile?.earningsbalance??0)>0||Number(profile?.commissionbalance??0)>0||Number(profile?.commissionowed??0)>0||profile?.walletrestricted)fail(409,'Settle your wallet balances, commission or wallet restriction before deleting your account.');
+      const {error}=await admin.rpc('close_account',{p_user_id:actor});
+      if(error){
+        if (error.message === 'Outstanding payment records must be resolved before account deletion') {
+          const { data: topup } = await admin.from('payments').select('reference')
+            .eq('customerid', actor).is('jobid', null).eq('provider', 'PAYNOW')
+            .eq('data->>type', 'wallet_topup').in('wallet_attempt_status', ['PENDING', 'INITIATING', 'AUTHORIZED', 'CAPTURED', 'ESCROWED', 'DELIVERED', 'DISPUTED'])
+            .limit(1).maybeSingle();
+          if (topup) fail(409, `Your EcoCash payment ${topup.reference} is unresolved. Check it in Wallet before deleting your account.`);
+        }
+        const reasons = [
+          'Outstanding wallet funds or restrictions must be settled before account deletion',
+          'Pending or approved payouts must be settled before account deletion',
+          'Active bookings or payments must be resolved before account deletion',
+          'Outstanding payment records must be resolved before account deletion',
+        ];
+        if (reasons.includes(error.message)) fail(409, error.message);
+        console.error('Account deletion failed during account closure', error.code, error.message);
+        fail(503,'Account deletion could not be completed. Please contact support and try again.');
+      }
       const prefixes=[`profile-photos/${actor}`,`verification/${actor}`,`job-photos/${actor}`,`cleaner-portfolio/${actor}`,...(bookings??[]).flatMap((booking:Json)=>[`job-completion/${booking.id}/${actor}`,`chat-photos/${booking.id}/${actor}`])];
       const storage=admin.storage.from('detail-media');
       for(const prefix of prefixes){
@@ -1407,8 +1462,16 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       }
       // Soft deletion anonymizes Auth while preserving UUID references held by
       // retained bookings, support cases, payouts and accounting records.
-      const {error:blockCleanupError}=await admin.from('userblocks').delete().or(`blockerid.eq.${actor},blockeduserid.eq.${actor}`);if(blockCleanupError)throw blockCleanupError;
-      const {error:deleteError}=await admin.auth.admin.deleteUser(actor,true); if(deleteError)throw deleteError;
+      const {error:blockCleanupError}=await admin.from('userblocks').delete().or(`blockerid.eq.${actor},blockeduserid.eq.${actor}`);
+      if(blockCleanupError){
+        console.error('Account deletion failed during block cleanup', blockCleanupError.code);
+        fail(503, 'Detail could not remove your blocked accounts list. Retry account deletion.');
+      }
+      const {error:deleteError}=await admin.auth.admin.deleteUser(actor,true);
+      if(deleteError){
+        console.error('Account deletion failed during sign-in removal', deleteError.code);
+        fail(503, 'Detail could not remove your sign-in. Retry account deletion or contact support.');
+      }
       let appleRevocation=appleIdentity?'MANUAL_REQUIRED':'NOT_REQUIRED';
       if(appleIdentity&&appleAuthorizationCode&&appleSubject){
         try{if(await revokeAppleAuthorizationCode(appleAuthorizationCode,appleSubject))appleRevocation='REVOKED';}

@@ -24,6 +24,7 @@ on:
           - supabase-migration-dry-run
           - deploy-prepaid-commission
           - deploy-marketplace-api
+          - deploy-wallet-payment-fixes
           - waitlist-migration-dry-run
           - live-readiness
           - live-core-readiness
@@ -700,6 +701,77 @@ jobs:
         if: always()
         with:
           name: detail-supabase-function-${{ github.run_id }}
+          path: ${{ runner.temp }}/detail-ops-result.txt
+          if-no-files-found: warn
+          retention-days: 3
+
+  deploy-wallet-payment-fixes:
+    if: github.event_name == 'workflow_dispatch' && inputs.task == 'deploy-wallet-payment-fixes' && inputs.confirm_production_access == true && inputs.confirm_live_side_effects == true && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
+    name: Deploy wallet cancellation migration and Paynow functions
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 25
+    env:
+      OPS_LOG: ${{ github.workspace }}/detail-ops.log
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.75.0
+      - name: Validate production target
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$REF" == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh' ]]
+          test -n "$SUPABASE_ACCESS_TOKEN" && test -n "$SUPABASE_PROJECT_REF" && test -n "$SUPABASE_DB_PASSWORD"
+          printf 'Checking the pending production migration before deploying wallet cancellation support.\n' > "$OPS_LOG"
+      - name: Preview and apply only the reviewed migration
+        run: |
+          set -euo pipefail
+          supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD" >> "$OPS_LOG" 2>&1
+          supabase migration list --linked >> "$OPS_LOG" 2>&1
+          dry_run="$RUNNER_TEMP/wallet-migration-dry-run.txt"
+          supabase db push --dry-run > "$dry_run" 2>&1 || { cat "$dry_run" >> "$OPS_LOG"; exit 1; }
+          cat "$dry_run" >> "$OPS_LOG"
+          mapfile -t pending_ids < <(grep -oE '[0-9]{14}' "$dry_run" | sort -u || true)
+          if [[ "${pending_ids[*]:-}" != '20261124090000' ]]; then
+            echo "Deployment stopped: expected only migration 20261124090000, found ${pending_ids[*]:-none}." >> "$OPS_LOG"
+            exit 1
+          fi
+          supabase db push --yes >> "$OPS_LOG" 2>&1
+          echo 'Wallet cancellation migration applied.' >> "$OPS_LOG"
+      - name: Deploy marketplace and Paynow functions
+        run: |
+          set -euo pipefail
+          for function in marketplace-api paynow-webhook paynow-reconcile; do
+            supabase functions deploy "$function" --project-ref "$SUPABASE_PROJECT_REF" --use-api >> "$OPS_LOG" 2>&1
+          done
+          echo 'Marketplace API and Paynow webhook/reconciliation functions deployed.' >> "$OPS_LOG"
+      - name: Redact and summarize deployment output
+        if: always()
+        env:
+          TASK: deploy-wallet-payment-fixes
+          JOB_STATUS: ${{ job.status }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          python scripts/redact_gha_ops_log.py "$OPS_LOG" "$RUNNER_TEMP/detail-ops-result.txt"
+          cat "$RUNNER_TEMP/detail-ops-result.txt"
+          {
+            echo '## Wallet payment deployment result'
+            echo
+            echo "- Task: \`$TASK\`"
+            echo "- Workflow result: \`$JOB_STATUS\`"
+            echo
+            cat "$RUNNER_TEMP/detail-ops-result.txt"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: detail-wallet-payment-deploy-${{ github.run_id }}
           path: ${{ runner.temp }}/detail-ops-result.txt
           if-no-files-found: warn
           retention-days: 3
