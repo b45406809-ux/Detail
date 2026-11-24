@@ -59,10 +59,8 @@ probe_url="https://$SUPABASE_PROJECT_REF.supabase.co/functions/v1/$probe"
 verified=false
 for attempt in 1 2 3; do
   if curl -fsS --max-time 22 -H "Authorization: Bearer $probe_token" --data '{}' "$probe_url" > "$temp/result" &&
-     jq -e '.upstream == 200 and .providerError == true' "$temp/result"; then
+     jq -ce 'if .upstream == 200 and .providerError == true then . else . , (false | halt_error(1)) end' "$temp/result"; then
     verified=true
-    cat "$temp/result"
-    echo
     break
   fi
   sleep 3
