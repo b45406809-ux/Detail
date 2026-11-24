@@ -1,0 +1,67 @@
+name: Build and upload iOS on GitHub
+on:
+  workflow_dispatch:
+    inputs:
+      signing_run_id:
+        description: Run containing the existing iOS signing artifact
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  release:
+    runs-on: macos-26
+    environment: production
+    timeout-minutes: 90
+    env:
+      CI: '1'
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN || secrets.EAS_BOT_ACCESS_TOKEN || secrets.EXPO_EAS_BOT_ACCESS_TOKEN || secrets.EAS_BOT_TOKEN_2 }}
+      EXPO_ASC_KEY_ID: ${{ secrets.EXPO_ASC_KEY_ID }}
+      EXPO_ASC_ISSUER_ID: ${{ secrets.EXPO_ASC_ISSUER_ID }}
+      MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/download-artifact@v4
+        with:
+          name: detail-ios-signing-${{ inputs.signing_run_id }}
+          path: ${{ runner.temp }}/detail-ios-signing
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.signing_run_id }}
+      - name: Prepare signing credentials
+        env:
+          SIGNING_DIR: ${{ runner.temp }}/detail-ios-signing
+        run: |
+          set -euo pipefail
+          OPENSSL_BIN="$(brew --prefix openssl@3)/bin/openssl"
+          "$OPENSSL_BIN" pkcs12 -provider default -provider legacy -in "$SIGNING_DIR/distribution.p12" -passin "file:$SIGNING_DIR/p12-password.txt" -nocerts -nodes -out "$SIGNING_DIR/key.pem"
+          "$OPENSSL_BIN" pkcs12 -provider default -provider legacy -in "$SIGNING_DIR/distribution.p12" -passin "file:$SIGNING_DIR/p12-password.txt" -clcerts -nokeys -out "$SIGNING_DIR/cert.pem"
+          "$OPENSSL_BIN" pkcs12 -export -provider default -provider legacy -inkey "$SIGNING_DIR/key.pem" -in "$SIGNING_DIR/cert.pem" -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1 -iter 2048 -out "$SIGNING_DIR/macos.p12" -passout "file:$SIGNING_DIR/p12-password.txt"
+          mkdir -p mobile/.eas/credentials
+          cp "$SIGNING_DIR/macos.p12" mobile/.eas/credentials/distribution.p12
+          cp "$SIGNING_DIR/profile.mobileprovision" mobile/.eas/credentials/profile.mobileprovision
+          node -e 'const fs=require("fs");const password=fs.readFileSync(process.env.SIGNING_DIR+"/p12-password.txt","utf8").trim();fs.writeFileSync("mobile/credentials.json",JSON.stringify({ios:{provisioningProfilePath:".eas/credentials/profile.mobileprovision",distributionCertificate:{path:".eas/credentials/distribution.p12",password}}}));'
+      - name: Install dependencies
+        run: npm ci --prefix mobile --no-audit --no-fund
+      - name: Build signed iOS app locally
+        working-directory: mobile
+        run: npx --yes eas-cli@16.28.0 build --platform ios --profile production-github --local --non-interactive --output "$RUNNER_TEMP/detail.ipa"
+      - name: Upload to App Store Connect
+        env:
+          ASC_API_KEY_P8: ${{ secrets.EXPO_ASC_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          test -n "$ASC_API_KEY_P8" && test -n "$EXPO_ASC_KEY_ID" && test -n "$EXPO_ASC_ISSUER_ID"
+          mkdir -p "$RUNNER_TEMP/asc-keys"
+          chmod 700 "$RUNNER_TEMP/asc-keys"
+          printf '%s' "$ASC_API_KEY_P8" > "$RUNNER_TEMP/asc-keys/AuthKey_${EXPO_ASC_KEY_ID}.p8"
+          chmod 600 "$RUNNER_TEMP/asc-keys/AuthKey_${EXPO_ASC_KEY_ID}.p8"
+          API_PRIVATE_KEYS_DIR="$RUNNER_TEMP/asc-keys" xcrun altool --upload-app --type ios --file "$RUNNER_TEMP/detail.ipa" --apiKey "$EXPO_ASC_KEY_ID" --apiIssuer "$EXPO_ASC_ISSUER_ID"
+      - name: Remove signing material
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/detail-ios-signing" "$RUNNER_TEMP/asc-keys" mobile/credentials.json mobile/.eas/credentials
