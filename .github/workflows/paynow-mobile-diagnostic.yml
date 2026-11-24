@@ -1,0 +1,38 @@
+name: Paynow mobile payment diagnostic
+on:
+  workflow_dispatch:
+    inputs:
+      phone:
+        description: EcoCash phone number for one real payment request
+        required: true
+        type: string
+      email:
+        description: Payer email
+        required: true
+        type: string
+      confirm_live_payment:
+        description: Confirm a real USD 2 payment prompt may be sent
+        required: true
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  diagnostic:
+    if: inputs.confirm_live_payment == true && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    env:
+      PAYNOW_TEST_ID: ${{ secrets.PAYNOW_SANDBOX_INTEGRATION_ID }}
+      PAYNOW_TEST_KEY: ${{ secrets.PAYNOW_SANDBOX_INTEGRATION_KEY }}
+      PAYNOW_TEST_PHONE: ${{ inputs.phone }}
+      PAYNOW_TEST_EMAIL: ${{ inputs.email }}
+      PAYNOW_TEST_RUN: ${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Send one EcoCash request and check its status
+        run: deno run --allow-env --allow-net --allow-read supabase/functions/_shared/paynow_live_diagnostic.ts
