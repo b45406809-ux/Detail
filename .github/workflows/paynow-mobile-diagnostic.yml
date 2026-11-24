@@ -48,3 +48,4 @@ jobs:
           node -e 'fetch("https://www.paynow.co.zw/interface/remotetransaction", {method:"HEAD",signal:AbortSignal.timeout(10000)}).then(r => console.log("Node HTTPS status:",r.status)).catch(e => console.log("Node HTTPS error:",e.message,"cause:",e.cause?.message))'
           curl -4 -sS -I --max-time 10 -o /dev/null -w 'curl IPv4 HTTPS status: %{http_code}\n' https://www.paynow.co.zw/interface/remotetransaction || true
           curl -6 -sS -I --max-time 10 -o /dev/null -w 'curl IPv6 HTTPS status: %{http_code}\n' https://www.paynow.co.zw/interface/remotetransaction || true
+          deno eval 'try { const client = Deno.createHttpClient({http2: false}); const r = await fetch("https://www.paynow.co.zw/interface/remotetransaction", {method:"HEAD",client,signal:AbortSignal.timeout(10000)}); console.log("Deno HTTP/1.1 status:", r.status); client.close(); } catch(e) { console.log("Deno HTTP/1.1 error:",e.message,"cause:",e.cause?.message); }'
