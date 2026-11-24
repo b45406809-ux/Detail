@@ -157,9 +157,9 @@ export default function ProfileScreen() {
 
   const handleBecomeCleaner = () => {
     if (needsCleanerVerificationTopUp(profile)) {
-      appAlert('Add verification funds', 'Add $1.00 to your Detail wallet to start identity verification.', [
+      appAlert('Add registration funds', 'Add $2.00: $1.00 pays for your identity check and $1.00 remains as commission credit.', [
         { text: 'Not now', style: 'cancel' },
-        { text: 'Add $1.00', onPress: () => router.push({ pathname: '/(tabs)/wallet', params: { verification: '1', returnToCleaner: '1' } }) },
+        { text: 'Add $2.00', onPress: () => router.push({ pathname: '/(tabs)/wallet', params: { verification: '1', returnToCleaner: '1' } }) },
       ]);
       return;
     }

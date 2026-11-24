@@ -159,7 +159,7 @@ export default function WalletScreen() {
       router.push({ pathname: '/(tabs)/wallet', params: { verification: '1', returnToCleaner: '1' } });
       return;
     }
-    const value = isVerification ? 1.00 : Number(amount);
+    const value = isVerification ? 2.00 : Number(amount);
     const phone = ecoCashPhone.trim().replace(/[ +().-]/g, '').replace(/^263/, '0');
     if (!pendingReference && (!Number.isFinite(value) || value < 0.50 || value > 1000 || Math.round(value * 100) / 100 !== value)) {
       appAlert('Invalid amount', 'Enter an amount from $0.50 to $1,000 USD.');
@@ -264,7 +264,7 @@ export default function WalletScreen() {
     ]);
   };
 
-  const balance = profile?.balance ?? 0;
+  const balance = isVerification ? Number(profile?.commissionBalance ?? 0) : Number(profile?.balance ?? 0);
   // Commission top-ups are tracked in a separate bucket and must not reduce
   // already-cleared earnings; payout holds debit earningsBalance atomically.
   const availableEarnings = isCleaner
@@ -312,7 +312,7 @@ export default function WalletScreen() {
           </Text>
         </View>
         <Text className="text-4xl font-display font-black text-white mb-1">${(isCleaner ? availableEarnings : balance).toFixed(2)}</Text>
-        <Text className="font-sans text-sm text-white/60 font-medium">{isCleaner ? `Prepaid commission · $${Number(profile?.commissionBalance ?? 0).toFixed(2)} available` : 'Detail Wallet'}</Text>
+        <Text className="font-sans text-sm text-white/60 font-medium">{isCleaner || isVerification ? `Cleaner commission deposit · $${Number(profile?.commissionBalance ?? 0).toFixed(2)} available` : 'Detail Wallet'}</Text>
 
         <View className="flex-row gap-3 mt-6">
           {(isCleaner || isVerification || pendingReference) && <TouchableOpacity
@@ -334,7 +334,7 @@ export default function WalletScreen() {
         </View>
       </View>
 
-      {isCleaner && <View className="mx-5 mb-6 rounded-2xl bg-white p-4 border border-slate-100"><Text className="font-display font-black text-slate-900">How earnings and commission work</Text><Text className="font-sans text-sm text-slate-600 mt-2">Offline bookings reserve 10% from this prepaid credit when a customer accepts your quote. A $0.50 commission credit covers a $5 booking. Cleared earnings appear above when available; request a payout from this screen. Payouts are reviewed and sent manually while integrations are unavailable, so transfer timing is not guaranteed.</Text></View>}
+      {isCleaner && <View className="mx-5 mb-6 rounded-2xl bg-white p-4 border border-slate-100"><Text className="font-display font-black text-slate-900">How earnings and commission work</Text><Text className="font-sans text-sm text-slate-600 mt-2">Offline bookings reserve 10% from this prepaid credit when a customer accepts your quote. Your $1 minimum commission deposit covers up to $10 of offline bookings. Cleared earnings appear above when available; request a payout from this screen. Payouts are reviewed and sent manually while integrations are unavailable, so transfer timing is not guaranteed.</Text></View>}
 
       {(isCleaner && Number(profile?.commissionOwed ?? 0) > 0) && (
         <TouchableOpacity
@@ -482,7 +482,7 @@ export default function WalletScreen() {
             ) : (
               <>
                 <Text className="font-sans text-sm text-slate-600 mb-5">
-                  {isVerification ? 'Add $1.00 USD to your wallet to start identity verification.' : 'Top-ups start at $0.50 USD and clear commission due first.'}
+                  {isVerification ? 'Pay $2.00 USD: $1.00 covers your identity check and $1.00 remains as your minimum cleaner commission deposit.' : 'Top-ups start at $0.50 USD and clear commission due first.'}
                 </Text>
                 {!isVerification && <>
                   <Text className="font-sans-bold text-sm text-slate-700 mb-2">Amount (USD)</Text>
@@ -498,7 +498,7 @@ export default function WalletScreen() {
               className="bg-accent py-5 rounded-[32px] items-center">
               {isLoading ? <ActivityIndicator color="#fff" /> : (
                 <Text className="text-white font-display font-black text-sm">
-                  {pendingReference ? 'Check payment status' : canRetryPayment ? 'Retry payment' : `Pay $${isVerification ? '1.00' : amount || '0.00'}`}
+                  {pendingReference ? 'Check payment status' : canRetryPayment ? 'Retry payment' : `Pay $${isVerification ? '2.00' : amount || '0.00'}`}
                 </Text>
               )}
             </TouchableOpacity>

@@ -22,7 +22,7 @@ const TERMS = [
   },
   {
     title: '4. Registration and Verification',
-    body: 'You must provide accurate, complete, and current information when registering, including identity documents and any other information reasonably required for verification. Cleaner accounts must pass identity verification through Didit before accepting jobs. The one-time $1.00 verification fee is charged to your Detail wallet. Keep separate prepaid credit to cover 10% of each booking you accept. Where permitted by law, the fee is non-refundable after a Didit session starts, except where the verification service was not provided or a refund is required by law. If Didit rejects your check, you cannot accept jobs; contact Detail support to correct your information or appeal. A retry does not incur another verification fee.',
+    body: 'You must provide accurate, complete, and current information when registering, including identity documents and any other information reasonably required for verification. Cleaner accounts must pass identity verification through Didit before accepting jobs. Cleaner registration requires a $2.00 wallet deposit: $1.00 pays the one-time identity check and $1.00 remains as minimum prepaid commission credit, covering up to $10 of offline bookings. Where permitted by law, the identity fee is non-refundable after a Didit session starts, except where the verification service was not provided or a refund is required by law. If Didit rejects your check, you cannot accept jobs; contact Detail support to correct your information or appeal. A retry does not incur another verification fee.',
   },
   {
     title: '5. Cleaner Account',

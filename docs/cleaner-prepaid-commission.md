@@ -14,7 +14,7 @@ The cleaner bid screen shows the 10% amount before a quote is submitted. The acc
 ## Didit verification fee
 
 - Cleaners must be Didit verified before they can accept jobs.
-- Starting verification costs a one-time $0.50, charged from the Detail wallet. For existing cleaners, the fee uses the commission balance; during cleaner registration it uses the general wallet balance.
+- Cleaner registration requires a $2.00 wallet deposit. The one-time $1.00 identity verification fee is charged from commission credit, leaving $1.00 as the minimum cleaner commission deposit (enough to cover up to $10 of offline bookings).
 - If Didit cannot start a session or Detail cannot save it, the launch fee is returned. That failed launch counts as the one-time fee allowance, so the next attempt is complimentary.
 - A successful Didit session consumes the one-time fee even if Didit rejects the check. A rejected cleaner remains unable to accept jobs. They can correct their details, retry without another fee, or contact Detail support to appeal.
 - The fee is non-refundable only where permitted by law; the app terms also preserve refunds required by law or where the verification service was not provided.

@@ -440,22 +440,22 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const profile = await userRow(actor);
       if (profile.verificationstatus === 'VERIFIED') fail(409, 'Your identity is already verified.');
       const { data: existing } = await admin.from('privatekyc').select('*').eq('userid', actor).maybeSingle();
-      const verificationFeeBalance = profile.role === 'CLEANER' ? Number(profile.commissionbalance ?? 0) : Number(profile.balance ?? 0);
-      if (!profile.cleanerverificationfeepaidat && verificationFeeBalance < 1.00) {
-        fail(402, 'Add at least $1.00 to your Detail wallet to start the one-time identity check.');
+      const verificationFeeBalance = Number(profile.commissionbalance ?? 0);
+      if (!profile.cleanerverificationfeepaidat && verificationFeeBalance < 2.00) {
+        fail(402, 'Add $2.00 to your Detail wallet: $1.00 pays the one-time identity check and $1.00 remains as your minimum cleaner commission deposit.');
       }
       if (existing?.sessionid && existing?.sessionurl && isDiditVerificationPending(existing.status)) {
         const { error: feeError } = await admin.rpc('charge_cleaner_verification_fee', { p_user_id: actor });
         if (feeError) {
           const message = String(feeError.message ?? 'Could not charge the verification fee.');
-          fail(message.includes('Add at least $1.00') ? 402 : 409, message);
+          fail(message.includes('Add $2.00') ? 402 : 409, message);
         }
         return { sessionUrl: existing.sessionurl, status: String(existing.status) };
       }
       const { data: feeReceipt, error: feeError } = await admin.rpc('charge_cleaner_verification_fee', { p_user_id: actor });
       if (feeError) {
         const message = String(feeError.message ?? 'Could not charge the verification fee.');
-        fail(message.includes('Add at least $1.00') ? 402 : 409, message);
+        fail(message.includes('Add $2.00') ? 402 : 409, message);
       }
       const refundFeeOnLaunchFailure = async () => {
         if (feeReceipt?.alreadyPaid !== true) await admin.rpc('refund_failed_cleaner_verification_fee', { p_user_id: actor });
@@ -1086,7 +1086,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const existing = await existingPayment();
       if (existing) return { referenceNumber: reference, status: existing.wallet_attempt_status ?? existing.status };
 
-      if (verification && (amount !== 1.00 || Number(profile.balance) >= 1.00 ||
+      if (verification && (amount !== 2.00 || Number(profile.commissionbalance) >= 2.00 ||
           profile.cleanerverificationfeepaidat || profile.verificationstatus === 'VERIFIED')) {
         fail(409, 'Return to cleaner registration to start or check your identity verification.');
       }
@@ -1094,11 +1094,11 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       await enforceRateLimit(request, actor, 'wallet_topup', 6, 3600);
       const client = paynowClient();
       const checkout = client.createPayment(reference, email);
-      checkout.add(verification ? 'Detail identity verification' : 'Detail commission credit', amount);
+      checkout.add(verification ? 'Cleaner registration deposit' : 'Detail commission credit', amount);
       const { error } = await admin.from('payments').insert({
         id, customerid: actor, provider: 'PAYNOW', reference, amount, currency: 'USD',
         status: 'INITIATING', idempotencykey: `wallet_topup_${stableId}`,
-        data: { type: 'wallet_topup', channel: 'ECOCASH', balanceType: verification ? 'GENERAL' : 'COMMISSION', intent },
+        data: { type: 'wallet_topup', channel: 'ECOCASH', balanceType: 'COMMISSION', intent },
       });
       if (error?.code === '23505') {
         const retry = await existingPayment();
