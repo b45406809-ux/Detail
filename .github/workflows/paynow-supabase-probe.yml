@@ -50,6 +50,10 @@ jobs:
           secret_set=true
           supabase functions deploy paynow-supabase-probe --project-ref "$SUPABASE_PROJECT_REF" --use-api --no-verify-jwt --yes
           function_deployed=true
-          curl --silent --show-error --fail-with-body --max-time 35 --retry 0 \
-            -H "Authorization: Bearer $token" --data '{}' \
-            "https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/paynow-supabase-probe"
+          for region in us-east-1 eu-west-1 eu-west-2 eu-central-1 ap-south-1; do
+            echo "Requested region $region"
+            curl --silent --show-error --fail-with-body --max-time 25 --retry 0 \
+              -H "Authorization: Bearer $token" -H "x-region: $region" --data '{}' \
+              "https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/paynow-supabase-probe?forceFunctionRegion=$region" || true
+            echo
+          done
