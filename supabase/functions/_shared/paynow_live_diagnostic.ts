@@ -12,7 +12,13 @@ if (Deno.env.get('PAYNOW_CONNECTIVITY_ONLY') === 'true') {
     console.log(`Paynow HTTPS connectivity: HTTP ${response.status}. No payment was initiated.`);
   } catch (error) {
     const cause = error instanceof Error ? error : new Error('Unknown error');
-    console.log(`Paynow HTTPS connectivity failed: ${cause.name}: ${cause.message.slice(0, 250)}. No payment was initiated.`);
+    const details: string[] = [];
+    let current: unknown = cause;
+    for (let depth = 0; depth < 4 && current instanceof Error; depth++) {
+      details.push(`${current.name}: ${current.message.slice(0, 200)}`);
+      current = current.cause;
+    }
+    console.log(`Paynow HTTPS connectivity failed: ${details.join(' <- ')}. No payment was initiated.`);
     Deno.exit(1);
   }
   Deno.exit(0);
