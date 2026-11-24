@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient, type User } from 'npm:@supabase/supa
 import { Paynow } from 'npm:paynow@2.2.2';
 import { initiatePaynowMobile } from '../_shared/paynow_mobile.ts';
 import { pollPaynowStatus } from '../_shared/paynow_poll.ts';
+import { paynowFetch } from '../_shared/paynow_relay.ts';
 import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from 'npm:@aws-sdk/client-s3@3.840.0';
 import { getSignedUrl } from 'npm:@aws-sdk/s3-request-presigner@3.840.0';
 import { hasRecentSupabaseAuthentication } from '../_shared/session_auth.ts';
@@ -974,7 +975,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const {data:payment}=await admin.from('payments').select('*').eq('id',`${jobId}_booking`).maybeSingle();
       if(!payment||payment.provider!=='PAYNOW'||!payment.pollurl)fail(409,'Paynow checkout has not been created.');
       const poll=new URL(payment.pollurl); if(poll.protocol!=='https:'||!['paynow.co.zw','www.paynow.co.zw'].includes(poll.hostname))fail(400,'Untrusted Paynow poll URL.');
-      const result=await pollPaynowStatus(paynowClient(),payment.pollurl);
+      const result=await pollPaynowStatus(paynowClient(), payment.pollurl, paynowFetch);
       const applied=await applyPaynowStatus(String(result.reference),String(result.status),String(result.amount));
       return {success:true,status:applied.status};
     }
@@ -1052,7 +1053,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const status = payment.wallet_attempt_status ?? payment.status;
       if (!payment.pollurl || ['PAID','FAILED','CANCELLED','APP_CANCELLED','EXPIRED','REFUNDED'].includes(status)) return {success:true,status};
       const poll=new URL(payment.pollurl); if(poll.protocol!=='https:'||!['paynow.co.zw','www.paynow.co.zw'].includes(poll.hostname))fail(400,'Untrusted Paynow poll URL.');
-      const result=await pollPaynowStatus(paynowClient(),payment.pollurl);
+      const result=await pollPaynowStatus(paynowClient(), payment.pollurl, paynowFetch);
       if(String(result.reference)!==reference)fail(502,'Paynow did not return the expected payment reference. Try again later.');
       const applied=await applyPaynowStatus(String(result.reference),String(result.status),String(result.amount));
       return {success:true,status:applied.status === 'IGNORED' ? payment.status : applied.status};
@@ -1108,7 +1109,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       }
       if (error) throw error;
 
-      const result = await initiatePaynowMobile(client, checkout, phone);
+      const result = await initiatePaynowMobile(client, checkout, phone, paynowFetch);
       if (result.kind === 'rejected') {
         const { error: updateError } = await admin.from('payments').update({
           status: 'FAILED', updatedat: new Date().toISOString(),
