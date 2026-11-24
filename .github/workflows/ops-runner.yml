@@ -44,6 +44,10 @@ on:
         description: Recipient of the Play internal test link
         required: false
         type: string
+      paynow_test_email:
+        description: Paynow merchant login email for the simulated EcoCash payment
+        required: false
+        type: string
       android_version_code:
         description: Unused Google Play Android version code for the internal test bundle.
         required: false
@@ -887,11 +891,14 @@ jobs:
           MAPBOX_PUBLIC_TOKEN: ${{ secrets.MAPBOX_PUBLIC_TOKEN }}
         run: node scripts/live_provider_checks.mjs mapbox
 
-      - name: Initialize an unpaid Paynow checkout
+      - name: Check Paynow checkout or simulate an EcoCash payment
         id: paynow
         if: always() && steps.preflight.outputs.authorized == 'true' && (inputs.task == 'live-paynow-e2e' || inputs.task == 'live-provider-e2e')
         continue-on-error: true
         env:
+          PAYNOW_TEST_EMAIL: ${{ inputs.task == 'live-paynow-e2e' && inputs.paynow_test_email || '' }}
+          PAYNOW_SANDBOX_INTEGRATION_ID: ${{ secrets.PAYNOW_SANDBOX_INTEGRATION_ID }}
+          PAYNOW_SANDBOX_INTEGRATION_KEY: ${{ secrets.PAYNOW_SANDBOX_INTEGRATION_KEY }}
           PAYNOW_INTEGRATION_ID: ${{ secrets.PAYNOW_INTEGRATION_ID }}
           PAYNOW_INTEGRATION_KEY: ${{ secrets.PAYNOW_INTEGRATION_KEY }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}

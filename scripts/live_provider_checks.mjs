@@ -141,6 +141,7 @@ async function mapboxCheck() {
 }
 
 async function paynowE2E() {
+  if (process.env.PAYNOW_TEST_EMAIL?.trim()) return paynowEcoCashSandbox();
   return check('PAYNOW_CHECKOUT_INIT', async () => {
     const id = process.env.PAYNOW_INTEGRATION_ID;
     const key = process.env.PAYNOW_INTEGRATION_KEY;
@@ -166,6 +167,56 @@ async function paynowE2E() {
     const redirectUrl = new URL(String(result.redirectUrl));
     return pollUrl.protocol === 'https:' && ['paynow.co.zw', 'www.paynow.co.zw'].includes(pollUrl.hostname)
       && redirectUrl.protocol === 'https:' && ['paynow.co.zw', 'www.paynow.co.zw'].includes(redirectUrl.hostname);
+  });
+}
+
+async function paynowEcoCashSandbox() {
+  return check('PAYNOW_ECOCASH_SANDBOX', async () => {
+    const id = secretValue('PAYNOW_SANDBOX_INTEGRATION_ID');
+    const key = secretValue('PAYNOW_SANDBOX_INTEGRATION_KEY');
+    if (!id || !key) {
+      console.log('Sandbox integration credentials are missing.');
+      return false;
+    }
+
+    const { Paynow } = require('paynow');
+    const axios = require('axios');
+    axios.defaults.timeout = 15000;
+    axios.defaults.maxRedirects = 0;
+    const client = new Paynow(id, key, 'https://example.com/paynow-test-result', 'https://example.com/paynow-test-return');
+    const reference = `DETAIL-ECOCASH-TEST-${runId}-${process.env.GITHUB_RUN_ATTEMPT || '1'}`;
+    const payment = client.createPayment(reference, process.env.PAYNOW_TEST_EMAIL.trim());
+    payment.add('Detail EcoCash sandbox test', 1.00);
+
+    // The SDK logs request details on errors, including the signed payload.
+    const originalLog = console.log;
+    console.log = () => {};
+    let result;
+    try {
+      result = await client.sendMobile(payment, '0771111111', 'ecocash');
+    } finally {
+      console.log = originalLog;
+    }
+    if (!result?.success || !result?.pollUrl) {
+      const error = String(result?.error ?? '');
+      console.log(/email/i.test(error) ? 'Paynow rejected the merchant email.' : 'Paynow did not accept the EcoCash request.');
+      return false;
+    }
+    const pollUrl = new URL(String(result.pollUrl));
+    if (pollUrl.protocol !== 'https:' || !['paynow.co.zw', 'www.paynow.co.zw'].includes(pollUrl.host)) return false;
+    console.log(`Paynow accepted test reference ${reference}.`);
+
+    // The documented success number settles after about five seconds.
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      const response = await client.pollTransaction(pollUrl.href);
+      const status = String(response.status).toLowerCase();
+      const knownStatuses = ['paid', 'created', 'sent', 'unconfirmed', 'pending', 'cancelled', 'failed'];
+      console.log(`Paynow poll status: ${knownStatuses.includes(status) ? status : 'other'}.`);
+      if (status === 'paid') return true;
+      if (['cancelled', 'failed', 'error'].includes(status)) return false;
+    }
+    return false;
   });
 }
 
