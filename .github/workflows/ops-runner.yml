@@ -738,8 +738,8 @@ jobs:
           supabase db push --dry-run > "$dry_run" 2>&1 || { cat "$dry_run" >> "$OPS_LOG"; exit 1; }
           cat "$dry_run" >> "$OPS_LOG"
           mapfile -t pending_ids < <(grep -oE '[0-9]{14}' "$dry_run" | sort -u || true)
-          if [[ "${pending_ids[*]:-}" != '20261124150000' ]]; then
-            echo "Deployment stopped: expected only migration 20261124150000, found ${pending_ids[*]:-none}." >> "$OPS_LOG"
+          if [[ "${pending_ids[*]:-}" != '20261124210000' ]]; then
+            echo "Deployment stopped: expected only migration 20261124210000, found ${pending_ids[*]:-none}." >> "$OPS_LOG"
             exit 1
           fi
           supabase db push --yes >> "$OPS_LOG" 2>&1

@@ -1,5 +1,5 @@
 begin;
-select plan(11);
+select plan(13);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('f994a4ab-a43b-4c26-ae97-225f93422c88','authenticated','authenticated','account-delete-test@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now());
@@ -35,9 +35,11 @@ delete from public.payments where id='account-delete-authorized';
 
 insert into public.payments(id,customerId,reference,amount,status,createdAt,data) values
   ('account-delete-ecocash','f994a4ab-a43b-4c26-ae97-225f93422c88',
-    'account-delete-ecocash',1,'PENDING',now(),'{"type":"wallet_topup","channel":"ECOCASH"}'),
+    'account-delete-ecocash',1,'PENDING',now()-interval '4 minutes 59 seconds','{"type":"wallet_topup","channel":"ECOCASH"}'),
   ('account-delete-expired','f994a4ab-a43b-4c26-ae97-225f93422c88',
-    'account-delete-expired',1,'INITIATING',now()-interval '31 minutes','{"type":"wallet_topup","channel":"ECOCASH"}');
+    'account-delete-expired',1,'INITIATING',now()-interval '5 minutes 1 second','{"type":"wallet_topup","channel":"ECOCASH"}');
+select is(public.wallet_attempt_status(p),'PENDING','EcoCash requests stay pending before five minutes')
+  from public.payments p where p.id='account-delete-ecocash';
 select is(public.wallet_attempt_status(p),'EXPIRED','old EcoCash requests expire in Detail')
   from public.payments p where p.id='account-delete-expired';
 select throws_ok(
@@ -55,6 +57,8 @@ select ok((select locationPoint is null and locationUpdatedAt is null from publi
 select ok((select location='{}'::jsonb and description='' and data->'location' is null from public.jobs where id='0587c8d6-e371-4b8a-9ed6-7d13a35ad2ee'),'retained booking no longer contains customer address or instructions');
 select is(public.apply_paynow_status('account-delete-ecocash','Paid',1)->>'status',
   'PAID','late Paynow confirmation remains recorded after account closure');
+select is(public.apply_paynow_status('account-delete-expired','Paid',1)->>'status',
+  'PAID','a payment confirmed after five-minute expiry remains reconcilable');
 select ok(exists(select 1 from public.supportCases where id='late_wallet_payment_account-delete-ecocash')
   and (select balance=0 from public.users where id='f994a4ab-a43b-4c26-ae97-225f93422c88'),
   'late payment goes to refund review without crediting a closed wallet');

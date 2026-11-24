@@ -513,7 +513,7 @@ export default function WalletScreen() {
               </TouchableOpacity>
             </View>
             {pendingReference ? (
-              <Text className="font-sans text-sm text-slate-600 mb-5">Approve the request on your EcoCash phone, then check its status here. Pending requests expire in Detail after 30 minutes.</Text>
+              <Text className="font-sans text-sm text-slate-600 mb-5">Approve the request on your EcoCash phone, then check its status here. Pending requests expire in Detail after 5 minutes.</Text>
             ) : (
               <>
                 <Text className="font-sans text-sm text-slate-600 mb-5">
