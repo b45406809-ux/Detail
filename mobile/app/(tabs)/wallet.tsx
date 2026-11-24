@@ -118,6 +118,39 @@ export default function WalletScreen() {
   const [payoutName, setPayoutName] = useState('');
   const [payoutDestination, setPayoutDestination] = useState('');
 
+  // EcoCash completes outside the app. Refresh the active attempt while the
+  // wallet is open so a declined prompt does not remain pending on screen.
+  useFocusEffect(React.useCallback(() => {
+    if (!userId || !pendingReference || isLoading || checkingPayment) return;
+    let active = true;
+    let checking = false;
+    const refresh = async () => {
+      if (checking || auth.currentUser?.uid !== userId) return;
+      checking = true;
+      try {
+        const status = await refreshEcoCashTopup(pendingReference);
+        if (!active || auth.currentUser?.uid !== userId || !isTopupFinished(status)) return;
+        setPendingReference(current => current === pendingReference ? undefined : current);
+        setPaymentHistory(current => current.map(payment => payment.referenceNumber === pendingReference ? { ...payment, status } : payment));
+        setCanRetryPayment(status !== 'PAID');
+        void loadPaymentHistory();
+        if (status === 'PAID') {
+          setIsAddFundsOpen(false);
+          appAlert('Payment confirmed', isVerification ? 'Return to cleaner registration to continue.' : 'Your payment has been applied.');
+        } else if (status === 'CANCELLED' || status === 'FAILED') {
+          appAlert('Payment not completed', 'Paynow reports this payment was cancelled or failed. You can retry.');
+        }
+      } catch {
+        // Keep the attempt pending until Paynow can confirm its outcome.
+      } finally {
+        checking = false;
+      }
+    };
+    const timer = setInterval(() => { void refresh(); }, 30000);
+    void refresh();
+    return () => { active = false; clearInterval(timer); };
+  }, [userId, pendingReference, isVerification, loadPaymentHistory, isLoading, checkingPayment]));
+
   useEffect(() => {
     if (isVerification) setIsAddFundsOpen(true);
   }, [isVerification]);
