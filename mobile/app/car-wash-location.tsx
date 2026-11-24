@@ -12,12 +12,19 @@ import { recordMapboxUsage } from '../services/usageMetrics';
 
 type WashSite={id?:string;name:string;address:string;lat:number;lng:number;enabled:boolean};
 type Suggestion={id:string;label:string;lat:number;lng:number};
+type WashBooking={id:string;serviceType:string;status:string;scheduledDateTime?:string|null;scheduledTime?:string|null;timePreference?:string|null;createdAt:string;assignedToMe:boolean};
 
 export default function CarWashLocationScreen(){
   const [site,setSite]=useState<WashSite>({name:'',address:'',lat:0,lng:0,enabled:true});
   const [suggestions,setSuggestions]=useState<Suggestion[]>([]);
   const [saving,setSaving]=useState(false);
   const [loading,setLoading]=useState(true);
+  const [bookings,setBookings]=useState<WashBooking[]>([]);
+  const [nextOffset,setNextOffset]=useState<number|null>(null);
+  const [bookingLoading,setBookingLoading]=useState(false);
+  const [bookingError,setBookingError]=useState('');
+  const loadBookings=async(offset=0)=>{setBookingLoading(true);setBookingError('');try{const result=await callFunction<{offset:number},{bookings:WashBooking[];nextOffset:number|null}>('listMyCarWashBookings',{offset});setBookings(current=>offset===0?result.bookings:[...current,...result.bookings]);setNextOffset(result.nextOffset);}catch(error){setBookingError(error instanceof Error?error.message:'Could not load bookings.');}finally{setBookingLoading(false);}};
+  useEffect(()=>{void loadBookings();},[]);
   useEffect(()=>{let active=true;callFunction<{}, {site:WashSite|null}>('getMyCarWashSite',{}).then(({site:current})=>{if(active&&current)setSite(current);}).catch(error=>{if(active)appAlert('Wash location unavailable',error instanceof Error?error.message:'Try again.');}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[]);
   useEffect(()=>{if(!MAPBOX_ACCESS_TOKEN||site.address.trim().length<3||site.lat!==0||site.lng!==0){setSuggestions([]);return;}const controller=new AbortController();const timer=setTimeout(()=>{recordMapboxUsage('geocoding');fetch(buildAddressSuggestionUrl(site.address,MAPBOX_ACCESS_TOKEN,null),{signal:controller.signal}).then(response=>response.json()).then(data=>setSuggestions((data.features??[]).filter((item:any)=>Array.isArray(item.center)&&item.center.length>=2).slice(0,5).map((item:any)=>({id:String(item.id),label:String(item.place_name),lng:Number(item.center[0]),lat:Number(item.center[1])})).filter((item:Suggestion)=>Number.isFinite(item.lat)&&Number.isFinite(item.lng)))).catch(()=>setSuggestions([]));},350);return()=>{clearTimeout(timer);controller.abort();};},[site.address,site.lat,site.lng]);
   const save=async()=>{if(site.name.trim().length<2||site.address.trim().length<4||!Number.isFinite(site.lat)||!Number.isFinite(site.lng)||site.lat===0&&site.lng===0){appAlert('Complete the wash details','Enter its business name and address, then choose a map result or place the pin on the map.');return;}setSaving(true);try{await callFunction('saveMyCarWashSite',{name:site.name,address:site.address,lat:site.lat,lng:site.lng,enabled:site.enabled});appAlert('Wash location saved',site.enabled?'Customers can now select this wash when booking car cleaning.':'This wash is hidden from new bookings.');}catch(error){appAlert('Could not save wash location',error instanceof Error?error.message:'Please try again.');}finally{setSaving(false);}};
@@ -33,5 +40,15 @@ export default function CarWashLocationScreen(){
       <TouchableOpacity onPress={useCurrent} className="flex-row items-center gap-2 mt-4 p-3 rounded-xl bg-accent/5"><MapPin size={17} color="#3906D2"/><Text className="font-display font-bold text-accent">Use this device’s current location</Text></TouchableOpacity>
       <TouchableOpacity onPress={()=>setSite(current=>({...current,enabled:!current.enabled}))} className="flex-row items-center gap-3 mt-5 rounded-2xl border border-ink/10 p-4"><View className={`w-6 h-6 rounded-md items-center justify-center ${site.enabled?'bg-accent':'border border-ink/20'}`}>{site.enabled&&<Check size={15} color="white"/>}</View><View className="flex-1"><Text className="font-display font-black text-ink">Show in car wash search</Text><Text className="font-sans text-xs text-ink/50 mt-1">Turn off to hide this wash from new bookings.</Text></View></TouchableOpacity>
       <TouchableOpacity disabled={saving} onPress={()=>void save()} className="rounded-2xl bg-accent p-4 items-center mt-6">{saving?<ActivityIndicator color="white"/>:<Text className="font-display font-black text-white">Save wash location</Text>}</TouchableOpacity>
+      <View className="mt-8">
+        <Text className="font-display text-lg font-black text-ink">Car wash bookings</Text>
+        <Text className="font-sans text-sm text-ink/60 mt-2 mb-4">Prioritize customers who booked ahead and start washing promptly when they arrive. Good service helps earn positive reviews.</Text>
+        <TouchableOpacity accessibilityRole="button" disabled={bookingLoading} onPress={()=>void loadBookings()} className="self-start mb-3"><Text className="font-display font-bold text-accent">Refresh bookings</Text></TouchableOpacity>
+        {bookingError ? <Text className="font-sans text-sm text-red-700 mb-3">{bookingError}</Text> : null}
+        {!bookingLoading&&!bookingError&&bookings.length===0&&<Text className="font-sans text-sm text-ink/50">No pending or active wash bookings.</Text>}
+        {bookings.map(booking=><TouchableOpacity key={booking.id} accessibilityRole="button" onPress={()=>router.push(booking.status==='PENDING'?{pathname:'/job/[jobId]',params:{jobId:booking.id}}:{pathname:'/tracking/[jobId]',params:{jobId:booking.id}})} className="rounded-2xl border border-ink/10 p-4 mb-3"><Text className="font-display font-black text-ink">{booking.serviceType||'Car cleaning'}</Text><Text className="font-sans text-sm text-ink/60 mt-1">{booking.status==='PENDING'?'Request awaiting quote':booking.status.replace(/_/g,' ')}</Text><Text className="font-sans text-sm text-ink/60 mt-1">{booking.scheduledDateTime?new Date(booking.scheduledDateTime).toLocaleString():booking.scheduledTime||booking.timePreference||'Time to be agreed'}</Text><Text className="font-sans text-xs text-accent mt-2">View booking</Text></TouchableOpacity>)}
+        {bookingLoading&&<ActivityIndicator color="#3906D2"/>}
+        {nextOffset!==null&&!bookingLoading&&<TouchableOpacity onPress={()=>void loadBookings(nextOffset)} className="items-center p-3"><Text className="font-display font-bold text-accent">Load more bookings</Text></TouchableOpacity>}
+      </View>
     </ScrollView>}</SafeAreaView>;
 }

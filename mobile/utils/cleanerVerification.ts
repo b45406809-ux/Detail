@@ -1,8 +1,8 @@
 import { UserProfile } from '../types';
 
-/** Customer accounts need $0.50 in the general wallet before starting KYC. */
+/** Customer accounts need $1.00 in the general wallet before starting KYC. */
 export function needsCleanerVerificationTopUp(profile: UserProfile | null | undefined): boolean {
   if (!profile) return true;
   if (profile.cleanerVerificationFeePaidAt || profile.verificationStatus === 'VERIFIED') return false;
-  return Number(profile.balance ?? 0) < 0.5;
+  return Number(profile.balance ?? 0) < 1.00;
 }

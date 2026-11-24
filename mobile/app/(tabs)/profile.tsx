@@ -157,7 +157,7 @@ export default function ProfileScreen() {
 
   const handleBecomeCleaner = () => {
     if (needsCleanerVerificationTopUp(profile)) {
-      appAlert('Add verification funds', 'Add $1.00 to your Detail wallet. Identity verification costs $0.50 and the remaining $0.50 stays in your wallet.', [
+      appAlert('Add verification funds', 'Add $1.00 to your Detail wallet to start identity verification.', [
         { text: 'Not now', style: 'cancel' },
         { text: 'Add $1.00', onPress: () => router.push({ pathname: '/(tabs)/wallet', params: { verification: '1', returnToCleaner: '1' } }) },
       ]);

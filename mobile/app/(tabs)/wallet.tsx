@@ -482,7 +482,7 @@ export default function WalletScreen() {
             ) : (
               <>
                 <Text className="font-sans text-sm text-slate-600 mb-5">
-                  {isVerification ? 'Add $1.00 USD to your wallet. The identity check costs $0.50; the remaining $0.50 stays in your wallet.' : 'Top-ups start at $0.50 USD and clear commission due first.'}
+                  {isVerification ? 'Add $1.00 USD to your wallet to start identity verification.' : 'Top-ups start at $0.50 USD and clear commission due first.'}
                 </Text>
                 {!isVerification && <>
                   <Text className="font-sans-bold text-sm text-slate-700 mb-2">Amount (USD)</Text>

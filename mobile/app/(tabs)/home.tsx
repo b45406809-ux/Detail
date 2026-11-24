@@ -195,7 +195,7 @@ export default function HomeScreen() {
         && profile?.verificationStatus === 'VERIFIED';
       if (!isRegistered) {
         if (needsCleanerVerificationTopUp(profile)) {
-          appAlert('Add verification funds', 'Add $1.00 to your Detail wallet. Identity verification costs $0.50 and the remaining $0.50 stays in your wallet.', [
+          appAlert('Add verification funds', 'Add $1.00 to your Detail wallet to start identity verification.', [
             { text: 'Not now', style: 'cancel' },
             { text: 'Add $1.00', onPress: () => router.push({ pathname: '/(tabs)/wallet', params: { verification: '1', returnToCleaner: '1' } }) },
           ]);
@@ -203,7 +203,7 @@ export default function HomeScreen() {
         }
         appAlert(
           'Cleaner Registration Required',
-          'To work as a cleaner, complete registration, pay the one-time $0.50 identity verification fee from your Detail wallet, verify your mobile and email, and accept the cleaner agreement. Once approved, keep enough prepaid credit to cover 10% of each booking you accept.',
+          'To work as a cleaner, complete registration, pay the one-time $1.00 identity verification fee from your Detail wallet, verify your mobile and email, and accept the cleaner agreement. Once approved, keep enough prepaid credit to cover 10% of each booking you accept.',
           [
             { text: 'Cancel', style: 'cancel' },
             {

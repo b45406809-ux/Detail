@@ -43,7 +43,7 @@ const FAQS = [
   },
   {
     q: 'How do I become a cleaner on Detail?',
-    a: 'Open Become a Cleaner, pay the one-time $0.50 identity verification fee, complete your Didit check, and accept the Cleaner Agreement. Add commission credit before taking bookings.',
+    a: 'Open Become a Cleaner, pay the one-time $1.00 identity verification fee, complete your Didit check, and accept the Cleaner Agreement. Add commission credit before taking bookings.',
   },
   {
     q: 'I have a dispute — what do I do?',

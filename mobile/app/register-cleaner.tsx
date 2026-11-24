@@ -148,7 +148,7 @@ export default function RegisterCleanerScreen() {
   const startIdentityCheck = async () => {
     appAlert(
       'Identity verification',
-      'Cleaners must pass identity verification before accepting jobs. The one-time fee is $0.50 from your Detail wallet. A $0.50 commission credit covers a $5 booking; that credit is separate from the verification fee. Once verification starts, the fee is non-refundable where permitted by law, except where the verification service was not provided. If your check is declined, you cannot accept jobs; contact Detail support to correct your details or appeal. You can retry without paying the one-time fee again. Your identity documents are handled by our verification provider; Detail receives the decision, not your ID images.',
+      'Cleaners must pass identity verification before accepting jobs. The one-time verification fee is $1.00 from your Detail wallet. A $0.50 commission credit covers a $5 booking; that credit is separate from the verification fee. Once verification starts, the fee is non-refundable where permitted by law, except where the verification service was not provided. If your check is declined, you cannot accept jobs; contact Detail support to correct your details or appeal. You can retry without paying the one-time fee again. Your identity documents are handled by our verification provider; Detail receives the decision, not your ID images.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Continue', onPress: () => { void launchIdentityCheck(); } },
@@ -159,8 +159,8 @@ export default function RegisterCleanerScreen() {
   const launchIdentityCheck = async () => {
     setIsCheckingIdentity(true);
     try {
-      const session = await callFunction<{ consent: true; feeConsent: true }, { sessionUrl: string }>(
-        'startCleanerIdentityVerification', { consent: true, feeConsent: true }
+      const session = await callFunction<{ consent: true; feeConsent: true; feeAmount: number }, { sessionUrl: string }>(
+        'startCleanerIdentityVerification', { consent: true, feeConsent: true, feeAmount: 1 }
       );
       await WebBrowser.openBrowserAsync(session.sessionUrl);
       await refreshIdentityCheck();
@@ -217,7 +217,7 @@ export default function RegisterCleanerScreen() {
     { title: 'Your earnings', body: 'Detail charges a 10% platform commission. For a $30 Paynow booking, $3 is taken from the payment and your $27 share is credited after settlement. For offline bookings, the customer pays you directly and the 10% commission is reserved from your prepaid commission credit when they accept your quote.' },
     { title: 'When you get paid', body: 'For now, customers pay you directly using cash, EcoCash, InnBucks, or another method you both agree on. Detail does not receive or hold customer booking payments. You keep the remaining 90% after your prepaid 10% commission is reserved.' },
     { title: 'Prepaid commission', body: 'Keep prepaid commission credit to accept offline bookings. At least $1 credit lets you accept up to $10 of offline work; a $20 accepted quote reserves $2. Detail returns the reserve if the booking is cancelled before completion. Paynow bookings do not use this reserve because the 10% is taken from your payout.' },
-    { title: 'Identity verification fee', body: 'Identity verification costs a one-time $0.50 from your Detail wallet. This is separate from prepaid commission credit: a $0.50 commission credit covers a $5 booking. You must be verified before accepting jobs. If your check is declined, you cannot accept jobs; contact support to correct your details or appeal. You can retry without paying again. The fee is non-refundable where permitted by law, except if the verification service was not provided.' },
+    { title: 'Identity verification fee', body: 'Identity verification has a one-time $1.00 fee from your Detail wallet. This is separate from prepaid commission credit: a $0.50 commission credit covers a $5 booking. You must be verified before accepting jobs. If your check is declined, you cannot accept jobs; contact support to correct your details or appeal. You can retry without paying again. The fee is non-refundable where permitted by law, except if the verification service was not provided.' },
     { title: 'Deliver with care', body: 'Keep your availability accurate, arrive on time, communicate through Detail and provide the required completion photos. Review the full cleaner agreement before joining.' },
   ];
   if (introStep < introSlides.length) {
@@ -341,7 +341,7 @@ export default function RegisterCleanerScreen() {
                 {isIdentityVerified ? 'Identity verified' : verificationStatus === 'REJECTED' ? 'Verification needs attention' : 'Identity verification'}
               </Text>
               <Text className="font-sans text-xs text-slate-500 font-medium mt-0.5">
-                {isIdentityVerified ? 'Verified cleaners can accept jobs.' : verificationStatus === 'REJECTED' ? 'You cannot accept jobs yet. Contact support to correct details or appeal; a retry does not cost again.' : 'A one-time $0.50 fee comes from commission credit. Keep $1 available to accept up to $10 of offline bookings.'}
+                {isIdentityVerified ? 'Verified cleaners can accept jobs.' : verificationStatus === 'REJECTED' ? 'You cannot accept jobs yet. Contact support to correct details or appeal; a retry does not cost again.' : 'A one-time $1.00 verification fee comes from your Detail wallet. Keep $1 available to accept up to $10 of offline bookings.'}
               </Text>
             </View>
             {!isIdentityVerified && (
@@ -362,7 +362,7 @@ export default function RegisterCleanerScreen() {
             </TouchableOpacity>
           )}
           <Text className="font-sans text-[11px] text-slate-400 font-medium mb-8 leading-relaxed">
-            Our verification provider checks your identity. Detail receives the decision, not your ID images. The $0.50 fee comes from your Detail wallet. A separate $0.50 commission credit covers a $5 booking. The verification fee is non-refundable where permitted by law, except if the service was not provided. If your check is declined, you cannot accept jobs and can contact support to appeal or correct your details.
+            Our verification provider checks your identity. Detail receives the decision, not your ID images. The $1.00 verification fee comes from your Detail wallet. A separate $0.50 commission credit covers a $5 booking. The verification fee is non-refundable where permitted by law, except if the service was not provided. If your check is declined, you cannot accept jobs and can contact support to appeal or correct your details.
           </Text>
 
           <TouchableOpacity

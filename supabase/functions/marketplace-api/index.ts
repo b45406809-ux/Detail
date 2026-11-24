@@ -434,28 +434,28 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const actor = authed();
       await enforceRateLimit(request, actor, 'didit_session', 5, 3600);
       if (input.consent !== true) fail(400, 'Consent to the Didit privacy notice is required.');
-      if (input.feeConsent !== true) fail(400, 'Consent to the one-time $0.50 identity verification fee is required.');
+      if (input.feeConsent !== true || input.feeAmount !== 1) fail(400, 'Update Detail and agree to the one-time $1.00 identity verification fee before continuing.');
       const apiKey = secret('DIDIT_API_KEY','DIDIT_KYC_SECRET_KEY'); const workflow = Deno.env.get('DIDIT_WORKFLOW_ID');
       if (!apiKey || !workflow) fail(503, 'Identity verification is not configured.');
       const profile = await userRow(actor);
       if (profile.verificationstatus === 'VERIFIED') fail(409, 'Your identity is already verified.');
       const { data: existing } = await admin.from('privatekyc').select('*').eq('userid', actor).maybeSingle();
       const verificationFeeBalance = profile.role === 'CLEANER' ? Number(profile.commissionbalance ?? 0) : Number(profile.balance ?? 0);
-      if (!profile.cleanerverificationfeepaidat && verificationFeeBalance < 0.5) {
-        fail(402, 'Add at least $0.50 to your Detail wallet to start the one-time identity check.');
+      if (!profile.cleanerverificationfeepaidat && verificationFeeBalance < 1.00) {
+        fail(402, 'Add at least $1.00 to your Detail wallet to start the one-time identity check.');
       }
       if (existing?.sessionid && existing?.sessionurl && isDiditVerificationPending(existing.status)) {
         const { error: feeError } = await admin.rpc('charge_cleaner_verification_fee', { p_user_id: actor });
         if (feeError) {
           const message = String(feeError.message ?? 'Could not charge the verification fee.');
-          fail(message.includes('Add at least $0.50') ? 402 : 409, message);
+          fail(message.includes('Add at least $1.00') ? 402 : 409, message);
         }
         return { sessionUrl: existing.sessionurl, status: String(existing.status) };
       }
       const { data: feeReceipt, error: feeError } = await admin.rpc('charge_cleaner_verification_fee', { p_user_id: actor });
       if (feeError) {
         const message = String(feeError.message ?? 'Could not charge the verification fee.');
-        fail(message.includes('Add at least $0.50') ? 402 : 409, message);
+        fail(message.includes('Add at least $1.00') ? 402 : 409, message);
       }
       const refundFeeOnLaunchFailure = async () => {
         if (feeReceipt?.alreadyPaid !== true) await admin.rpc('refund_failed_cleaner_verification_fee', { p_user_id: actor });
@@ -1086,7 +1086,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const existing = await existingPayment();
       if (existing) return { referenceNumber: reference, status: existing.wallet_attempt_status ?? existing.status };
 
-      if (verification && (![0.50, 1.00].includes(amount) || Number(profile.balance) >= 0.50 ||
+      if (verification && (amount !== 1.00 || Number(profile.balance) >= 1.00 ||
           profile.cleanerverificationfeepaidat || profile.verificationstatus === 'VERIFIED')) {
         fail(409, 'Return to cleaner registration to start or check your identity verification.');
       }
@@ -1360,6 +1360,20 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       await enforceRateLimit(request,actor,'list_car_wash_sites',30,300);
       const {data,error}=await admin.rpc('list_car_wash_sites',{p_lat:lat,p_lng:lng});if(error)throw error;
       return {sites:(data??[]).map((site:Json)=>({id:site.id,cleanerId:site.cleaner_id,name:site.name,address:site.address,lat:Number(site.lat),lng:Number(site.lng)}))};
+    }
+    case 'listMyCarWashBookings': {
+      const actor = authed(), profile = await userRow(actor);
+      if (profile.role !== 'CLEANER' || profile.verificationstatus !== 'VERIFIED' || profile.issuspended || profile.isbanned || profile.accountdeletedat) fail(403, 'Only active verified cleaners can view car wash bookings.');
+      const offset = Number(input.offset ?? 0);
+      if (!Number.isSafeInteger(offset) || offset < 0) fail(400, 'Invalid booking page.');
+      const { data, error } = await admin.from('jobs')
+        .select('id,servicetype,status,scheduleddatetime,scheduledtime,timepreference,createdat,cleanerid,data')
+        .contains('data', { serviceMode: 'VISIT_WASH', washSiteCleanerId: actor })
+        .in('status', ['PENDING', 'ASSIGNED', 'EN_ROUTE', 'IN_PROGRESS'])
+        .order('createdat', { ascending: true }).order('id', { ascending: true })
+        .range(offset, offset + 24);
+      if (error) throw error;
+      return { bookings: (data ?? []).map((job: Json) => ({ id: job.id, serviceType: job.servicetype, status: job.status, scheduledDateTime: job.scheduleddatetime, scheduledTime: job.scheduledtime, timePreference: job.timepreference, createdAt: job.createdat, assignedToMe: job.cleanerid === actor })), nextOffset: data?.length === 25 ? offset + 25 : null };
     }
     case 'getMyCarWashSite': {
       const actor=authed(),profile=await userRow(actor);
