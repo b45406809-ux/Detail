@@ -43,7 +43,7 @@ relay="https://$worker.$subdomain.workers.dev"
 jq -n --arg token "$token" '{main_module:"worker.mjs",compatibility_date:"2026-09-18",bindings:[{type:"secret_text",name:"PAYNOW_RELAY_TOKEN",text:$token}]}' > "$temp/metadata"
 echo 'Uploading relay Worker.'
 if ! curl -sS --fail-with-body -H "$auth" -X PUT -F "metadata=<$temp/metadata;type=application/json" \
-  -F 'worker.mjs=@cloudflare/paynow-relay.mjs;type=application/javascript+module' "$api/scripts/$worker" > "$temp/upload" || ! jq -e '.success == true' "$temp/upload"; then
+  -F 'worker.mjs=@cloudflare/paynow-relay.mjs;filename=worker.mjs;type=application/javascript+module' "$api/scripts/$worker" > "$temp/upload" || ! jq -e '.success == true' "$temp/upload"; then
   jq -r '.errors[]? | "Cloudflare error \(.code): \(.message)"' "$temp/upload"
   exit 1
 fi
