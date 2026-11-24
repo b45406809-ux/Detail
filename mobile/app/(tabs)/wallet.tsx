@@ -172,12 +172,14 @@ export default function WalletScreen() {
     setIsLoading(true);
     try {
       let status: string;
+      let failureReason: string | undefined;
       if (pendingReference) {
         status = await refreshEcoCashTopup(pendingReference);
         if (!isTopupFinished(status)) appAlert('Payment pending', 'Paynow has not confirmed the outcome. If no prompt arrived, check the payment reference in Wallet history.');
       } else {
         const topup = await addFundsToWallet(value, phone, isVerification ? 'VERIFICATION' : 'COMMISSION');
         status = topup.status;
+        failureReason = topup.failureReason;
         if (!isTopupFinished(status)) setPendingReference(topup.referenceNumber);
       }
       if (isTopupFinished(status)) {
@@ -199,7 +201,7 @@ export default function WalletScreen() {
             'Decline the EcoCash prompt if it still arrives. You can start another payment from Wallet.');
         } else {
           setCanRetryPayment(true);
-          appAlert('Payment not completed', 'Check your EcoCash number and USD balance, then tap Retry payment.');
+          appAlert('Payment not completed', failureReason || 'Check your EcoCash number and USD balance, then tap Retry payment.');
         }
       }
     } catch (error) {

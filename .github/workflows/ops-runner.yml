@@ -100,7 +100,7 @@ jobs:
           console.log('AgentMail accepted the message for delivery.');
           NODE
   configure-paynow-sandbox:
-    if: github.event_name == 'workflow_dispatch' && inputs.task == 'configure-paynow-sandbox' && inputs.confirm_production_access == true && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
+    if: github.event_name == 'workflow_dispatch' && inputs.task == 'configure-paynow-sandbox' && inputs.confirm_production_access == true && inputs.confirm_live_side_effects == true && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
     runs-on: ubuntu-latest
     environment: production
     env:
@@ -112,23 +112,19 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: 2.75.0
-      - name: Copy sandbox credentials without overwriting existing Paynow secrets
+      - name: Refresh Paynow credentials from GitHub secrets
         shell: bash
         run: |
           set -euo pipefail
           test -n "$SUPABASE_ACCESS_TOKEN" && test -n "$SUPABASE_PROJECT_REF" || { echo 'Missing Supabase access token or project reference.'; exit 1; }
           test -n "$SANDBOX_ID" && test -n "$SANDBOX_KEY" || { echo 'Missing one or both Paynow sandbox GitHub secrets.'; exit 1; }
-          existing="$(supabase secrets list --project-ref "$SUPABASE_PROJECT_REF" --output json)"
-          if echo "$existing" | jq -e 'any(.[]; .name == "PAYNOW_INTEGRATION_ID" or .name == "PAYNOW_INTEGRATION_KEY")' >/dev/null; then
-            echo 'Paynow runtime secrets already exist; refusing to overwrite them.'
-            exit 1
-          fi
+          [[ "$SANDBOX_ID" == '27890' ]] || { echo 'Configured integration ID does not match the approved integration 27890.'; exit 1; }
           secret_file="$(mktemp)"
           trap 'rm -f "$secret_file"' EXIT
           chmod 600 "$secret_file"
           printf 'PAYNOW_INTEGRATION_ID=%s\nPAYNOW_INTEGRATION_KEY=%s\n' "$SANDBOX_ID" "$SANDBOX_KEY" > "$secret_file"
           supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" --env-file "$secret_file" --yes
-          echo 'Sandbox credentials configured. No payment was initiated.'
+          echo 'Paynow credentials refreshed. No payment was initiated.'
   play-store-listing:
     if: github.event_name == 'workflow_dispatch' && inputs.task == 'play-store-listing' && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
     runs-on: ubuntu-latest

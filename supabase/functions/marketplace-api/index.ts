@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient, type User } from 'npm:@supabase/supabase-js@2.80.0';
 import { Paynow } from 'npm:paynow@2.2.2';
+import { initiatePaynowMobile } from '../_shared/paynow_mobile.ts';
 import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from 'npm:@aws-sdk/client-s3@3.840.0';
 import { getSignedUrl } from 'npm:@aws-sdk/s3-request-presigner@3.840.0';
 import { hasRecentSupabaseAuthentication } from '../_shared/session_auth.ts';
@@ -1106,18 +1107,21 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       }
       if (error) throw error;
 
-      const result = await client.sendMobile(checkout, phone, 'ecocash');
-      if (result?.success === false) {
+      const result = await initiatePaynowMobile(client, checkout, phone);
+      if (result.kind === 'rejected') {
         const { error: updateError } = await admin.from('payments').update({
           status: 'FAILED', updatedat: new Date().toISOString(),
         }).eq('id', id).eq('status', 'INITIATING');
         if (updateError) throw updateError;
-        return { referenceNumber: reference, status: 'FAILED' };
+        return { referenceNumber: reference, status: 'FAILED', failureReason: result.reason };
       }
       // An ambiguous provider response may still have triggered a prompt.
       // Preserve the reference so callbacks can reconcile it and retries cannot send a second prompt.
-      if (!result?.pollUrl) return { referenceNumber: reference, status: 'INITIATING' };
-      const pollurl = trustedPaynowUrl(String(result.pollUrl));
+      if (result.kind === 'unknown') {
+        console.error('Paynow mobile initiation unresolved', reference, result.reason);
+        return { referenceNumber: reference, status: 'INITIATING' };
+      }
+      const pollurl = trustedPaynowUrl(result.pollUrl);
       const { error: pollError } = await admin.from('payments').update({ pollurl, updatedat: new Date().toISOString() }).eq('id', id);
       if (pollError) throw pollError;
       const { error: statusError } = await admin.from('payments').update({ status: 'PENDING' }).eq('id', id).eq('status', 'INITIATING');

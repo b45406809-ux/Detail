@@ -4,7 +4,7 @@ import { auth } from './supabase';
 import { callFunction } from './functions';
 
 type TopupPurpose = 'VERIFICATION' | 'COMMISSION';
-type Topup = { referenceNumber: string; status: string };
+type Topup = { referenceNumber: string; status: string; failureReason?: string };
 export type EcoCashPayment = Topup & {
   amount: number;
   createdAt: string;
