@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.80.0';
 import { Paynow } from 'npm:paynow@2.2.2';
+import { pollPaynowStatus } from '../_shared/paynow_poll.ts';
 
 const url = Deno.env.get('SUPABASE_URL') ?? '';
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
@@ -75,7 +76,7 @@ async function reconcileRefund(payment: Record<string, any>) {
 
 async function processPayment(payment: Record<string, any>) {
   const pollUrl = trustedPollUrl(String(payment.pollurl));
-  const result = await paynow.pollTransaction(pollUrl);
+  const result = await pollPaynowStatus(paynow, pollUrl);
   const reference = String(result.reference ?? '');
   const status = String(result.status ?? '');
   const amount = Number(result.amount);

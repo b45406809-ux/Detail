@@ -669,9 +669,9 @@ jobs:
         run: |
           set -euo pipefail
           output="$RUNNER_TEMP/marketplace-api-deploy.txt"
-          if supabase functions deploy marketplace-api --project-ref "$SUPABASE_PROJECT_REF" --use-api > "$output" 2>&1; then
+          if supabase functions deploy marketplace-api --project-ref "$SUPABASE_PROJECT_REF" --use-api > "$output" 2>&1 && supabase functions deploy paynow-reconcile --project-ref "$SUPABASE_PROJECT_REF" --use-api >> "$output" 2>&1; then
             cat "$output" >> "$OPS_LOG"
-            echo 'marketplace-api Edge Function deployed.' >> "$OPS_LOG"
+            echo 'marketplace-api and paynow-reconcile Edge Functions deployed.' >> "$OPS_LOG"
           else
             cat "$output" >> "$OPS_LOG"
             echo 'marketplace-api Edge Function deployment failed.' >> "$OPS_LOG"
