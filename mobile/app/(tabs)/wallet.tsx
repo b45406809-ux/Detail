@@ -310,7 +310,7 @@ export default function WalletScreen() {
             <Text className="text-xs font-display font-black text-white/70 uppercase tracking-widest">Prepaid commission</Text>
           </View>
           <Text className="text-4xl font-display font-black text-white mb-1">${Number(profile?.commissionBalance ?? 0).toFixed(2)}</Text>
-          <Text className="font-sans text-sm text-white/70">When a customer accepts your bid, Detail deducts 10% of the job value from your prepaid commission credit.</Text>
+          <Text className="font-sans text-sm text-white/70">When a job is marked completed, Detail deducts 10% of the job value from your prepaid commission credit.</Text>
           {Number(profile?.commissionOwed ?? 0) > 0 && <Text className="font-sans-bold text-sm text-white mt-3">Commission due: ${Number(profile?.commissionOwed ?? 0).toFixed(2)} · Clear this before accepting new jobs.</Text>}
           <TouchableOpacity onPress={() => setIsAddFundsOpen(true)} className="mt-5 bg-white/20 py-3 rounded-2xl flex-row items-center justify-center gap-2" activeOpacity={0.8}>
             <Plus size={16} color="#fff" />

@@ -887,12 +887,6 @@ export default function TrackingScreen() {
           ))}
         </View>
 
-        <View className="bg-emerald-50 rounded-2xl px-4 py-3 flex-row items-center gap-2">
-          <ShieldCheck size={16} color="#0FB77A" />
-          <Text className="font-sans flex-1 text-[11px] font-bold text-emerald-800">
-            Detail Secure Service — your payment is protected until you review the service.
-          </Text>
-        </View>
       </GlassSheet>
 
       {/* Before & After Photos Modal */}
