@@ -7,12 +7,14 @@ values
   ('87150e3b-4530-4438-9e1e-dbc3d14ee901','authenticated','authenticated','avatar-cleaner@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now()),
   ('9e064150-967a-45e4-92a4-114fe8c979c0','authenticated','authenticated','avatar-outsider@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now());
 
-insert into public.users(id,email,displayName,role,verificationStatus,cleanerAgreementAccepted)
+set local request.jwt.claim.role = 'service_role';
+insert into public.users(id,email,displayName,role,verificationStatus,cleanerAgreementAccepted,photoURL,cleanerSelfieAt)
 values
-  ('6c32a407-a8ca-4b46-9fad-6165c5f90910','avatar-customer@detail.invalid','Avatar Customer','CUSTOMER','NOT_STARTED',false),
-  ('87150e3b-4530-4438-9e1e-dbc3d14ee901','avatar-cleaner@detail.invalid','Avatar Cleaner','CLEANER','VERIFIED',true),
-  ('9e064150-967a-45e4-92a4-114fe8c979c0','avatar-outsider@detail.invalid','Avatar Outsider','CUSTOMER','NOT_STARTED',false)
-on conflict(id) do update set displayName=excluded.displayName,role=excluded.role,verificationStatus=excluded.verificationStatus,cleanerAgreementAccepted=excluded.cleanerAgreementAccepted;
+  ('6c32a407-a8ca-4b46-9fad-6165c5f90910','avatar-customer@detail.invalid','Avatar Customer','CUSTOMER','NOT_STARTED',false,'',null),
+  ('87150e3b-4530-4438-9e1e-dbc3d14ee901','avatar-cleaner@detail.invalid','Avatar Cleaner','CLEANER','VERIFIED',true,'detail-media/profile-photos/87150e3b-4530-4438-9e1e-dbc3d14ee901/avatar.jpg',now()),
+  ('9e064150-967a-45e4-92a4-114fe8c979c0','avatar-outsider@detail.invalid','Avatar Outsider','CUSTOMER','NOT_STARTED',false,'',null)
+on conflict(id) do update set displayName=excluded.displayName,role=excluded.role,verificationStatus=excluded.verificationStatus,cleanerAgreementAccepted=excluded.cleanerAgreementAccepted, photoURL=excluded.photoURL, cleanerSelfieAt=excluded.cleanerSelfieAt;
+reset request.jwt.claim.role;
 
 insert into public.jobs(id,customerId,cleanerId,serviceType,status)
 values('5da6206d-53d7-4955-901a-d108da2aa6eb','6c32a407-a8ca-4b46-9fad-6165c5f90910','87150e3b-4530-4438-9e1e-dbc3d14ee901','House cleaning','ASSIGNED');

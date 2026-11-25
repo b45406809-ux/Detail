@@ -6,13 +6,15 @@ values
   ('3a398724-2e26-4d3d-b0b4-50bc89ee16f4','authenticated','authenticated','reschedule-customer@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now()),
   ('f95f7f14-f66e-4c2a-8dd3-b7d32735b57f','authenticated','authenticated','reschedule-cleaner@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now());
 
-insert into public.users(id,email,displayName,role,status,verificationStatus,cleanerAgreementAccepted,cleanerOnboardingComplete)
+set local request.jwt.claim.role = 'service_role';
+insert into public.users(id,email,displayName,role,status,verificationStatus,cleanerAgreementAccepted,cleanerOnboardingComplete,photoURL,cleanerSelfieAt)
 values
-  ('3a398724-2e26-4d3d-b0b4-50bc89ee16f4','reschedule-customer@detail.invalid','Reschedule Customer','CUSTOMER','OFFLINE','NOT_STARTED',false,false),
-  ('f95f7f14-f66e-4c2a-8dd3-b7d32735b57f','reschedule-cleaner@detail.invalid','Reschedule Cleaner','CLEANER','AVAILABLE','VERIFIED',true,true)
+  ('3a398724-2e26-4d3d-b0b4-50bc89ee16f4','reschedule-customer@detail.invalid','Reschedule Customer','CUSTOMER','OFFLINE','NOT_STARTED',false,false,'',null),
+  ('f95f7f14-f66e-4c2a-8dd3-b7d32735b57f','reschedule-cleaner@detail.invalid','Reschedule Cleaner','CLEANER','AVAILABLE','VERIFIED',true,true,'detail-media/profile-photos/f95f7f14-f66e-4c2a-8dd3-b7d32735b57f/avatar.jpg',now())
 on conflict(id) do update set email=excluded.email,displayName=excluded.displayName,role=excluded.role,
   status=excluded.status,verificationStatus=excluded.verificationStatus,
-  cleanerAgreementAccepted=excluded.cleanerAgreementAccepted,cleanerOnboardingComplete=excluded.cleanerOnboardingComplete;
+  cleanerAgreementAccepted=excluded.cleanerAgreementAccepted,cleanerOnboardingComplete=excluded.cleanerOnboardingComplete, photoURL=excluded.photoURL, cleanerSelfieAt=excluded.cleanerSelfieAt;
+reset request.jwt.claim.role;
 
 insert into public.jobs(id,customerId,category,serviceType,status,bookingMode,estimatedDuration,scheduledDateTime,price,checklist,location)
 values('611a954d-5607-40ae-b0d8-9dc24c96774b','3a398724-2e26-4d3d-b0b4-50bc89ee16f4',

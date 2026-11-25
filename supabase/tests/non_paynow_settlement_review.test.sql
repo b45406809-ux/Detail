@@ -6,11 +6,13 @@ values
   ('92f2c7a4-8d91-4aa6-b8a4-299a99157b89','authenticated','authenticated','settle-customer@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now()),
   ('5e95b4ec-717f-40d6-8c0c-29ed320fa00d','authenticated','authenticated','settle-cleaner@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now())
 on conflict(id) do nothing;
-insert into public.users(id,email,displayName,role,status,verificationStatus,cleanerAgreementAccepted,cleanerOnboardingComplete)
+set local request.jwt.claim.role = 'service_role';
+insert into public.users(id,email,displayName,role,status,verificationStatus,cleanerAgreementAccepted,cleanerOnboardingComplete,photoURL,cleanerSelfieAt)
 values
-  ('92f2c7a4-8d91-4aa6-b8a4-299a99157b89','settle-customer@detail.invalid','Settle Customer','CUSTOMER','OFFLINE','NOT_STARTED',false,false),
-  ('5e95b4ec-717f-40d6-8c0c-29ed320fa00d','settle-cleaner@detail.invalid','Settle Cleaner','CLEANER','AVAILABLE','VERIFIED',true,true)
+  ('92f2c7a4-8d91-4aa6-b8a4-299a99157b89','settle-customer@detail.invalid','Settle Customer','CUSTOMER','OFFLINE','NOT_STARTED',false,false,'',null),
+  ('5e95b4ec-717f-40d6-8c0c-29ed320fa00d','settle-cleaner@detail.invalid','Settle Cleaner','CLEANER','AVAILABLE','VERIFIED',true,true,'detail-media/profile-photos/5e95b4ec-717f-40d6-8c0c-29ed320fa00d/avatar.jpg',now())
 on conflict(id) do nothing;
+reset request.jwt.claim.role;
 
 insert into public.jobs(id,customerId,cleanerId,category,serviceType,status,location,price,paymentMethod,paymentStatus,completionSubmittedAt,data)
 values

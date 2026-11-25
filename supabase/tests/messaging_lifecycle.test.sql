@@ -7,11 +7,13 @@ values
   ('06a4e1cb-214d-4e5b-b6cb-0d8a8a91d2c4','authenticated','authenticated','message-customer@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now()),
   ('337d52fe-2bfd-441c-8bb7-e0140ee21ab9','authenticated','authenticated','message-cleaner@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now());
 
-insert into public.users(id,email,displayName,role)
+set local request.jwt.claim.role = 'service_role';
+insert into public.users(id,email,displayName,role,photoURL,cleanerSelfieAt)
 values
-  ('06a4e1cb-214d-4e5b-b6cb-0d8a8a91d2c4','message-customer@detail.invalid','Message Customer','CUSTOMER'),
-  ('337d52fe-2bfd-441c-8bb7-e0140ee21ab9','message-cleaner@detail.invalid','Message Cleaner','CLEANER')
-on conflict(id) do update set email=excluded.email,displayName=excluded.displayName,role=excluded.role;
+  ('06a4e1cb-214d-4e5b-b6cb-0d8a8a91d2c4','message-customer@detail.invalid','Message Customer','CUSTOMER','',null),
+  ('337d52fe-2bfd-441c-8bb7-e0140ee21ab9','message-cleaner@detail.invalid','Message Cleaner','CLEANER','detail-media/profile-photos/337d52fe-2bfd-441c-8bb7-e0140ee21ab9/avatar.jpg',now())
+on conflict(id) do update set email=excluded.email,displayName=excluded.displayName,role=excluded.role, photoURL=excluded.photoURL, cleanerSelfieAt=excluded.cleanerSelfieAt;
+reset request.jwt.claim.role;
 
 insert into public.jobs(id,customerId,cleanerId,serviceType,status)
 values('508d398f-5481-402f-807e-c730a62fdf80','06a4e1cb-214d-4e5b-b6cb-0d8a8a91d2c4','337d52fe-2bfd-441c-8bb7-e0140ee21ab9','House clean','ASSIGNED');

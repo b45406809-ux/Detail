@@ -80,8 +80,8 @@ select ok(
   'payout requests are only created through the trusted service'
 );
 select ok(
-  has_function_privilege('service_role', 'public.request_cleaner_payout_idempotent(uuid,numeric,text,text,text,text,text,text)', 'execute'),
-  'the trusted service can create idempotent payout requests'
+  not has_function_privilege('service_role', 'public.request_cleaner_payout_idempotent(uuid,numeric,text,text,text,text,text,text)', 'execute'),
+  'the trusted service cannot open new payouts'
 );
 select has_column('public','jobs','lastmessage','job message previews have a persisted column');
 select has_column('public','jobs','lastmessageat','job message previews have a persisted timestamp');

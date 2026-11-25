@@ -8,14 +8,16 @@ values
   ('40b4bda5-953a-44d5-9b56-5dc6c024f24f','authenticated','authenticated','instant-customer-two@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now()),
   ('922363f4-9721-42b0-8f6d-d12411d72716','authenticated','authenticated','instant-cleaner@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now());
 
-insert into public.users(id,email,displayName,role,status,verificationStatus,cleanerAgreementAccepted,cleanerOnboardingComplete)
+set local request.jwt.claim.role = 'service_role';
+insert into public.users(id,email,displayName,role,status,verificationStatus,cleanerAgreementAccepted,cleanerOnboardingComplete,photoURL,cleanerSelfieAt)
 values
-  ('c0877466-32d1-487c-9aa1-b243b805db7c','instant-customer-one@detail.invalid','Instant Customer One','CUSTOMER','OFFLINE','NOT_STARTED',false,false),
-  ('40b4bda5-953a-44d5-9b56-5dc6c024f24f','instant-customer-two@detail.invalid','Instant Customer Two','CUSTOMER','OFFLINE','NOT_STARTED',false,false),
-  ('922363f4-9721-42b0-8f6d-d12411d72716','instant-cleaner@detail.invalid','Instant Cleaner','CLEANER','AVAILABLE','VERIFIED',true,true)
+  ('c0877466-32d1-487c-9aa1-b243b805db7c','instant-customer-one@detail.invalid','Instant Customer One','CUSTOMER','OFFLINE','NOT_STARTED',false,false,'',null),
+  ('40b4bda5-953a-44d5-9b56-5dc6c024f24f','instant-customer-two@detail.invalid','Instant Customer Two','CUSTOMER','OFFLINE','NOT_STARTED',false,false,'',null),
+  ('922363f4-9721-42b0-8f6d-d12411d72716','instant-cleaner@detail.invalid','Instant Cleaner','CLEANER','AVAILABLE','VERIFIED',true,true,'detail-media/profile-photos/922363f4-9721-42b0-8f6d-d12411d72716/avatar.jpg',now())
 on conflict(id) do update set email=excluded.email,displayName=excluded.displayName,role=excluded.role,
   status=excluded.status,verificationStatus=excluded.verificationStatus,
-  cleanerAgreementAccepted=excluded.cleanerAgreementAccepted,cleanerOnboardingComplete=excluded.cleanerOnboardingComplete;
+  cleanerAgreementAccepted=excluded.cleanerAgreementAccepted,cleanerOnboardingComplete=excluded.cleanerOnboardingComplete, photoURL=excluded.photoURL, cleanerSelfieAt=excluded.cleanerSelfieAt;
+reset request.jwt.claim.role;
 
 insert into public.jobs(id,customerId,category,serviceType,status,bookingMode,estimatedDuration,matchExpiresAt,price,checklist,location)
 values

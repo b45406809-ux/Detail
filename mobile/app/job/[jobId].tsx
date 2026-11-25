@@ -361,7 +361,7 @@ export default function CleanerJobDetailScreen() {
                 <View className="-mt-2 mb-4 rounded-2xl border border-violet-100 bg-violet-50 p-3">
                   <Text className="font-display text-xs font-black text-violet-900">Required prepaid commission (10%) · ${commissionReserve(Number(bidPrice)).toFixed(2)}</Text>
                   <Text className="mt-1 font-sans text-[11px] leading-4 text-violet-800/80">
-                    Available credit: ${availableCommission.toFixed(2)}. You need the full 10% available before submitting. If accepted, Detail reserves it and the customer pays you directly.
+                    Available credit: ${availableCommission.toFixed(2)}. You need the full 10% available before submitting. Detail deducts it from your prepaid credit when the customer accepts your bid.
                   </Text>
                   {suggestedCommissionTopup > 0 ? (
                     <>

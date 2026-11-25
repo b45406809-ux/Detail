@@ -54,7 +54,8 @@ export default function WalletScreen() {
   const [transactionLimit, setTransactionLimit] = useState(20);
   const [totalEarnings, setTotalEarnings] = useState(0);
   const [completedEarningsJobs, setCompletedEarningsJobs] = useState(0);
-  const [earningsLoading, setEarningsLoading] = useState(false);
+  const [earningsLoading, setEarningsLoading] = useState(true);
+  const [earningsError, setEarningsError] = useState(false);
   const [earningsRetry, setEarningsRetry] = useState(0);
   const userId = user?.uid;
   const [paymentHistory, setPaymentHistory] = useState<EcoCashPayment[]>([]);
@@ -189,12 +190,13 @@ export default function WalletScreen() {
     }
     let active = true;
     setEarningsLoading(true);
+    setEarningsError(false);
     void callFunction('getCleanerEarningsSummary').then((summary: { totalEarnings?: number; completedJobs?: number }) => {
       if (!active || auth.currentUser?.uid !== userId) return;
       setTotalEarnings(Number(summary.totalEarnings ?? 0));
       setCompletedEarningsJobs(Number(summary.completedJobs ?? 0));
     }).catch(() => {
-      if (active) appAlert('Could not load earnings', 'Pull down to refresh your wallet and try again.');
+      if (active && auth.currentUser?.uid === userId) setEarningsError(true);
     }).finally(() => {
       if (active) setEarningsLoading(false);
     });
@@ -333,7 +335,7 @@ export default function WalletScreen() {
             <Text className="text-xs font-display font-black text-white/70 uppercase tracking-widest">Prepaid commission</Text>
           </View>
           <Text className="text-4xl font-display font-black text-white mb-1">${Number(profile?.commissionBalance ?? 0).toFixed(2)}</Text>
-          <Text className="font-sans text-sm text-white/70">Available credit · 10% is reserved when you accept a booking paid directly by the customer.</Text>
+          <Text className="font-sans text-sm text-white/70">When a customer accepts your bid, Detail deducts 10% of the job value from your prepaid commission credit.</Text>
           {Number(profile?.commissionOwed ?? 0) > 0 && <Text className="font-sans-bold text-sm text-white mt-3">Commission due: ${Number(profile?.commissionOwed ?? 0).toFixed(2)} · Clear this before accepting new jobs.</Text>}
           <TouchableOpacity onPress={() => setIsAddFundsOpen(true)} className="mt-5 bg-white/20 py-3 rounded-2xl flex-row items-center justify-center gap-2" activeOpacity={0.8}>
             <Plus size={16} color="#fff" />
@@ -343,8 +345,21 @@ export default function WalletScreen() {
         </View>
         <View className="rounded-3xl border border-slate-100 bg-white p-5">
           <Text className="font-display font-black text-slate-900">Total earnings</Text>
-          <Text className="mt-2 text-3xl font-display font-black text-slate-900">{earningsLoading ? '—' : `$${totalEarnings.toFixed(2)}`}</Text>
-          <Text className="mt-1 font-sans text-sm text-slate-500">After Detail commission across {completedEarningsJobs} completed {completedEarningsJobs === 1 ? 'booking' : 'bookings'}. Customer payments are settled directly with you.</Text>
+          {earningsError ? (
+            <View>
+              <Text className="mt-2 font-sans text-sm text-slate-500">Could not load earnings.</Text>
+              <TouchableOpacity accessibilityRole="button" onPress={() => setEarningsRetry(value => value + 1)} className="self-start py-2">
+                <Text className="font-sans-bold text-sm text-accent">Retry earnings</Text>
+              </TouchableOpacity>
+            </View>
+          ) : earningsLoading ? (
+            <ActivityIndicator accessibilityLabel="Loading earnings" color="#3906D2" style={{ alignSelf: 'flex-start', marginTop: 8 }} />
+          ) : (
+            <>
+              <Text className="mt-2 text-3xl font-display font-black text-slate-900">${totalEarnings.toFixed(2)}</Text>
+              <Text className="mt-1 font-sans text-sm text-slate-500">After Detail commission across {completedEarningsJobs} completed {completedEarningsJobs === 1 ? 'booking' : 'bookings'}. Customer payments are settled directly with you.</Text>
+            </>
+          )}
         </View>
       </View> : <View className="mx-5 mb-6 bg-accent rounded-4xl p-6 shadow-xl shadow-accent/30">
         <View className="flex-row items-center gap-2 mb-4">

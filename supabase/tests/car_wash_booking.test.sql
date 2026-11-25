@@ -6,12 +6,14 @@ values
   ('b1f10ca8-0afe-45b0-91b6-218f5040a1e1','authenticated','authenticated','wash-owner@detail.invalid','',now(),'{}','{}',now(),now()),
   ('b1f10ca8-0afe-45b0-91b6-218f5040a1e2','authenticated','authenticated','other-cleaner@detail.invalid','',now(),'{}','{}',now(),now());
 
-insert into public.users(id,email,displayName,role,status,verificationStatus,cleanerAgreementAccepted,cleanerOnboardingComplete,serviceCategories)
+set local request.jwt.claim.role = 'service_role';
+insert into public.users(id,email,displayName,role,status,verificationStatus,cleanerAgreementAccepted,cleanerOnboardingComplete,serviceCategories,photoURL,cleanerSelfieAt)
 values
-  ('b1f10ca8-0afe-45b0-91b6-218f5040a1e1','wash-owner@detail.invalid','Wash Owner','CLEANER','AVAILABLE','VERIFIED',true,true,array['CAR']),
-  ('b1f10ca8-0afe-45b0-91b6-218f5040a1e2','other-cleaner@detail.invalid','Other Cleaner','CLEANER','AVAILABLE','VERIFIED',true,true,array['CAR'])
+  ('b1f10ca8-0afe-45b0-91b6-218f5040a1e1','wash-owner@detail.invalid','Wash Owner','CLEANER','AVAILABLE','VERIFIED',true,true,array['CAR'],'detail-media/profile-photos/b1f10ca8-0afe-45b0-91b6-218f5040a1e1/avatar.jpg',now()),
+  ('b1f10ca8-0afe-45b0-91b6-218f5040a1e2','other-cleaner@detail.invalid','Other Cleaner','CLEANER','AVAILABLE','VERIFIED',true,true,array['CAR'],'detail-media/profile-photos/b1f10ca8-0afe-45b0-91b6-218f5040a1e2/avatar.jpg',now())
 on conflict(id) do update set role=excluded.role,status=excluded.status,verificationStatus=excluded.verificationStatus,
-  cleanerAgreementAccepted=true,cleanerOnboardingComplete=true,serviceCategories=excluded.serviceCategories;
+  cleanerAgreementAccepted=true,cleanerOnboardingComplete=true,serviceCategories=excluded.serviceCategories, photoURL=excluded.photoURL, cleanerSelfieAt=excluded.cleanerSelfieAt;
+reset request.jwt.claim.role;
 
 select lives_ok($$select public.save_car_wash_site('b1f10ca8-0afe-45b0-91b6-218f5040a1e1','Town Wash','12 Main Street, Harare',-17.82,31.05,true)$$,
   'verified car cleaner can publish a wash location');

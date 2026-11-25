@@ -6,13 +6,15 @@ values
   ('abb56c59-044b-4fd1-8b1b-cfd1b39e7f86','authenticated','authenticated','quote-customer@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now()),
   ('5fae0f47-4552-4220-8796-9d08c43fca7e','authenticated','authenticated','quote-cleaner@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now());
 
-insert into public.users(id,email,displayName,role,status,verificationStatus,cleanerAgreementAccepted,cleanerOnboardingComplete)
+set local request.jwt.claim.role = 'service_role';
+insert into public.users(id,email,displayName,role,status,verificationStatus,cleanerAgreementAccepted,cleanerOnboardingComplete,photoURL,cleanerSelfieAt)
 values
-  ('abb56c59-044b-4fd1-8b1b-cfd1b39e7f86','quote-customer@detail.invalid','Quote Customer','CUSTOMER','OFFLINE','NOT_STARTED',false,false),
-  ('5fae0f47-4552-4220-8796-9d08c43fca7e','quote-cleaner@detail.invalid','Quote Cleaner','CLEANER','AVAILABLE','VERIFIED',true,true)
+  ('abb56c59-044b-4fd1-8b1b-cfd1b39e7f86','quote-customer@detail.invalid','Quote Customer','CUSTOMER','OFFLINE','NOT_STARTED',false,false,'',null),
+  ('5fae0f47-4552-4220-8796-9d08c43fca7e','quote-cleaner@detail.invalid','Quote Cleaner','CLEANER','AVAILABLE','VERIFIED',true,true,'detail-media/profile-photos/5fae0f47-4552-4220-8796-9d08c43fca7e/avatar.jpg',now())
 on conflict(id) do update set email=excluded.email,displayName=excluded.displayName,role=excluded.role,
   status=excluded.status,verificationStatus=excluded.verificationStatus,
-  cleanerAgreementAccepted=excluded.cleanerAgreementAccepted,cleanerOnboardingComplete=excluded.cleanerOnboardingComplete;
+  cleanerAgreementAccepted=excluded.cleanerAgreementAccepted,cleanerOnboardingComplete=excluded.cleanerOnboardingComplete, photoURL=excluded.photoURL, cleanerSelfieAt=excluded.cleanerSelfieAt;
+reset request.jwt.claim.role;
 
 insert into public.jobs(id,customerId,category,serviceType,status,bookingMode,biddingExpiresAt,price,checklist,location)
 values('8fd24a33-1846-49d8-9d78-0ce56b0f2a44','abb56c59-044b-4fd1-8b1b-cfd1b39e7f86',

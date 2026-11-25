@@ -116,6 +116,8 @@ async function writeProfile(user, fixture) {
       cleaneragreementaccepted: false,
       cleaneronboardingcomplete: false,
       verificationstatus: 'NOT_STARTED',
+      photourl: `detail-media/profile-photos/${user.id}/avatar.jpg`,
+      cleanerselfieat: new Date().toISOString(),
       servicecategories: fixture.serviceCategories,
       serviceradiuskm: 15,
       experienceyears: 2,

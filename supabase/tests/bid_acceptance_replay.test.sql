@@ -8,16 +8,16 @@ values
   ('2267252c-2a14-45e2-a9f3-bfcb2caa8652','authenticated','authenticated','accept-stranger@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now())
 on conflict(id) do nothing;
 
-insert into public.users(id,email,displayName,role,status,verificationStatus,cleanerAgreementAccepted,cleanerOnboardingComplete,balance,commissionBalance)
+set local request.jwt.claim.role = 'service_role';
+insert into public.users(id,email,displayName,role,status,verificationStatus,cleanerAgreementAccepted,cleanerOnboardingComplete,balance,commissionBalance,photoURL,cleanerSelfieAt)
 values
-  ('35f3162f-0ea7-4e36-a02e-c98525a5fc18','accept-customer@detail.invalid','Accept Customer','CUSTOMER','OFFLINE','NOT_STARTED',false,false,100,0),
-  ('f97f2526-06b2-4c34-a42d-2fbb66984ea7','accept-cleaner@detail.invalid','Accept Cleaner','CLEANER','AVAILABLE','VERIFIED',true,true,2.50,2.50),
-  ('2267252c-2a14-45e2-a9f3-bfcb2caa8652','accept-stranger@detail.invalid','Accept Stranger','CUSTOMER','OFFLINE','NOT_STARTED',false,false,0,0)
+  ('35f3162f-0ea7-4e36-a02e-c98525a5fc18','accept-customer@detail.invalid','Accept Customer','CUSTOMER','OFFLINE','NOT_STARTED',false,false,100,0,'',null),
+  ('f97f2526-06b2-4c34-a42d-2fbb66984ea7','accept-cleaner@detail.invalid','Accept Cleaner','CLEANER','AVAILABLE','VERIFIED',true,true,2.50,2.50,'detail-media/profile-photos/f97f2526-06b2-4c34-a42d-2fbb66984ea7/avatar.jpg',now()),
+  ('2267252c-2a14-45e2-a9f3-bfcb2caa8652','accept-stranger@detail.invalid','Accept Stranger','CUSTOMER','OFFLINE','NOT_STARTED',false,false,0,0,'',null)
 on conflict(id) do update set email=excluded.email,displayName=excluded.displayName,role=excluded.role,status=excluded.status,
   verificationStatus=excluded.verificationStatus,cleanerAgreementAccepted=excluded.cleanerAgreementAccepted,
-  cleanerOnboardingComplete=excluded.cleanerOnboardingComplete,balance=excluded.balance,commissionBalance=excluded.commissionBalance;
-update public.users set photoURL='detail-media/profile-photos/'||id::text||'/avatar.jpg', cleanerSelfieAt=now()
-where id='f97f2526-06b2-4c34-a42d-2fbb66984ea7';
+  cleanerOnboardingComplete=excluded.cleanerOnboardingComplete,balance=excluded.balance,commissionBalance=excluded.commissionBalance, photoURL=excluded.photoURL, cleanerSelfieAt=excluded.cleanerSelfieAt;
+reset request.jwt.claim.role;
 
 insert into public.jobs(id,customerId,category,serviceType,status,bookingMode,biddingExpiresAt,checklist,location,budget)
 values('a9643c87-a840-42e3-91ed-eeced76c103a','35f3162f-0ea7-4e36-a02e-c98525a5fc18',

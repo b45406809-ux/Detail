@@ -7,13 +7,15 @@ values
   ('9f171a9b-c535-47f7-bd0f-7d7452c7e9b2','authenticated','authenticated','reassign-old@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now()),
   ('cf218c2d-8c58-4c13-a6cb-abd7c6f46b67','authenticated','authenticated','reassign-new@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now());
 
-insert into public.users(id,email,displayName,role,status,verificationStatus,cleanerAgreementAccepted,cleanerOnboardingComplete)
+set local request.jwt.claim.role = 'service_role';
+insert into public.users(id,email,displayName,role,status,verificationStatus,cleanerAgreementAccepted,cleanerOnboardingComplete,photoURL,cleanerSelfieAt)
 values
-  ('6c71d302-d700-4b31-85b5-c485f5f51357','reassign-customer@detail.invalid','Reassignment Customer','CUSTOMER','OFFLINE','NOT_STARTED',false,false),
-  ('9f171a9b-c535-47f7-bd0f-7d7452c7e9b2','reassign-old@detail.invalid','Original Cleaner','CLEANER','BUSY','VERIFIED',true,true),
-  ('cf218c2d-8c58-4c13-a6cb-abd7c6f46b67','reassign-new@detail.invalid','Replacement Cleaner','CLEANER','AVAILABLE','VERIFIED',true,true)
+  ('6c71d302-d700-4b31-85b5-c485f5f51357','reassign-customer@detail.invalid','Reassignment Customer','CUSTOMER','OFFLINE','NOT_STARTED',false,false,'',null),
+  ('9f171a9b-c535-47f7-bd0f-7d7452c7e9b2','reassign-old@detail.invalid','Original Cleaner','CLEANER','BUSY','VERIFIED',true,true,'detail-media/profile-photos/9f171a9b-c535-47f7-bd0f-7d7452c7e9b2/avatar.jpg',now()),
+  ('cf218c2d-8c58-4c13-a6cb-abd7c6f46b67','reassign-new@detail.invalid','Replacement Cleaner','CLEANER','AVAILABLE','VERIFIED',true,true,'detail-media/profile-photos/cf218c2d-8c58-4c13-a6cb-abd7c6f46b67/avatar.jpg',now())
 on conflict(id) do update set role=excluded.role,status=excluded.status,verificationStatus=excluded.verificationStatus,
-  cleanerAgreementAccepted=excluded.cleanerAgreementAccepted,cleanerOnboardingComplete=excluded.cleanerOnboardingComplete;
+  cleanerAgreementAccepted=excluded.cleanerAgreementAccepted,cleanerOnboardingComplete=excluded.cleanerOnboardingComplete, photoURL=excluded.photoURL, cleanerSelfieAt=excluded.cleanerSelfieAt;
+reset request.jwt.claim.role;
 
 insert into public.jobs(id,customerId,cleanerId,category,serviceType,status,scheduledDateTime)
 values

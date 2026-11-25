@@ -960,13 +960,6 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const {data:booking,error:bookingError}=await admin.from('jobs').select('customerid').eq('id',jobId).maybeSingle();
       if(bookingError)throw bookingError;
       if(!booking||booking.customerid!==actor)fail(403,'Only the customer can accept a quote.');
-      const {data:bid,error:bidError}=await admin.from('bids').select('cleanerid,bidprice').eq('id',bidId).eq('jobid',jobId).maybeSingle();
-      if(bidError)throw bidError;if(!bid)fail(404,'This quote is no longer available. Refresh the offers.');
-      const {data:cleaner,error:cleanerError}=await admin.from('users').select('id,photourl,cleanerselfieat,commissionbalance,commissionowed').eq('id',bid.cleanerid).maybeSingle();
-      if(cleanerError)throw cleanerError;
-      if(!cleaner||!hasCleanerSelfie(cleaner,String(cleaner.id)))fail(409,'This cleaner needs to update their profile selfie before this quote can be accepted. Choose another quote or ask them to update their profile.');
-      const requiredCommission=round2(Number(bid.bidprice)*0.10);
-      if(Number(cleaner.commissionowed??0)>0||Number(cleaner.commissionbalance??0)<requiredCommission)fail(409,'This cleaner needs to top up prepaid commission before this quote can be accepted. Choose another quote or ask them to update their balance.');
       const {data:operations,error:operationsError}=await admin.from('configuration').select('value').eq('key','operations').maybeSingle();
       if(operationsError)throw operationsError;
       if(operations?.value?.switches?.maintenance===true||operations?.value?.switches?.bidAcceptance===true)fail(503,'Booking acceptance is temporarily paused. Please try again later.');
@@ -977,7 +970,8 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const {data,error}=await admin.rpc('accept_bid',{p_actor_id:actor,p_job_id:jobId,p_bid_id:bidId,p_payment_method:acceptedMethod,p_idempotency_key:key});
       if(error){
         const message=String(error.message??'');
-        if(/commission balance is insufficient|prepaid commission is too low/i.test(message))fail(409,'This cleaner cannot accept a new booking right now. Choose another quote or ask them to contact support.');
+        if(/profile selfie/i.test(message))fail(409,'The cleaner needs to update their profile selfie before you can accept this quote.');
+        if(/commission balance is insufficient|prepaid commission is too low/i.test(message))fail(409,'The cleaner needs to top up their prepaid commission before you can accept this quote.');
         if(/pay any outstanding commission/i.test(message))fail(409,'This cleaner cannot accept another booking right now. Choose another quote or ask them to contact support.');
         if(/JOB_UNAVAILABLE|job is not available/i.test(message))fail(409,'This booking has already been accepted or is no longer available. Refresh the offers.');
         if(/BID_UNAVAILABLE|bid is not available/i.test(message))fail(409,'This quote is no longer available. Refresh the offers and choose another quote.');
@@ -992,9 +986,9 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         console.error('Quote acceptance database request failed',error.code??'unknown');
         throw error;
       }
-      const cleanerNotice=`Booking confirmed. Contact the customer to arrange your agreed payment method. Detail does not collect customer booking payments. A $${Number(data.commissionReserved ?? 0).toFixed(2)} commission reserve has been taken from your prepaid credit.`;
+      const cleanerNotice=`The customer accepted your quote. Detail deducted $${Number(data.commissionReserved ?? 0).toFixed(2)} from your prepaid commission credit. Arrange the job payment directly with the customer.`;
       if(data.cleanerId&&!data.replayed)await notify(data.cleanerId,{type:'BID_ACCEPTED',title:'Quote accepted',body:cleanerNotice,jobId});
-      if(!data.replayed)await notify(actor,{type:'BID_ACCEPTED',title:'Booking confirmed',body:'Your cleaner accepted the quote. Message them to arrange the booking and payment directly.',jobId});
+      if(!data.replayed)await notify(actor,{type:'BID_ACCEPTED',title:'Booking confirmed',body:'You accepted your cleaner’s quote. Message them to arrange the booking and payment directly.',jobId});
       return data;
     }
     case 'listEcoCashWalletPayments': {
@@ -1031,14 +1025,14 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       while (true) {
         const { data, error } = await admin.from('jobs').select('earnings')
           .eq('cleanerid', actor).eq('status', 'COMPLETED').not('earnings', 'is', null)
-          .order('createdat', { ascending: true }).range(offset, offset + pageSize - 1);
+          .order('id', { ascending: true }).range(offset, offset + pageSize - 1);
         if (error) throw error;
         for (const row of data ?? []) {
           const earnings = row.earnings as Json | null;
           if (!earnings || earnings.finalized !== true) continue;
-          const gross = Number(earnings.gross);
-          const commission = Number(earnings.commission);
-          const net = Number(earnings.net);
+          const gross = Number(earnings.gross ?? NaN);
+          const commission = Number(earnings.commission ?? NaN);
+          const net = Number(earnings.net ?? NaN);
           const amount = Number.isFinite(net) ? net : Number.isFinite(gross) && Number.isFinite(commission) ? gross - commission : NaN;
           if (!Number.isFinite(amount) || amount < 0) continue;
           totalEarnings += amount;
@@ -1115,7 +1109,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const { error } = await admin.from('payments').insert({
         id, customerid: actor, provider: 'PAYNOW', reference, amount, currency: 'USD',
         status: 'INITIATING', idempotencykey: `wallet_topup_${stableId}`,
-        data: { type: 'wallet_topup', channel: 'ECOCASH', balanceType: 'COMMISSION', intent },
+        data: { type: 'wallet_topup', channel: 'ECOCASH', balanceType: 'COMMISSION', purpose: verification ? 'VERIFICATION' : 'COMMISSION', intent },
       });
       if (error?.code === '23505') {
         const retry = await existingPayment();

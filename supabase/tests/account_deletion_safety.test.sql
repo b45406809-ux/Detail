@@ -1,5 +1,5 @@
 begin;
-select plan(13);
+select plan(12);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('f994a4ab-a43b-4c26-ae97-225f93422c88','authenticated','authenticated','account-delete-test@detail.invalid','',now(),'{}'::jsonb,'{}'::jsonb,now(),now());
@@ -15,14 +15,6 @@ values('0587c8d6-e371-4b8a-9ed6-7d13a35ad2ee','f994a4ab-a43b-4c26-ae97-225f93422
 
 insert into public.payoutRequests(cleanerId,amount,method,accountName,accountNumber,status)
 values('f994a4ab-a43b-4c26-ae97-225f93422c88',10,'BANK','Deletion Test','encrypted','APPROVED');
-select throws_ok(
-  $$select public.close_account('f994a4ab-a43b-4c26-ae97-225f93422c88')$$,
-  'P0001',
-  'Pending or approved payouts must be settled before account deletion',
-  'approved payout blocks account deletion'
-);
-delete from public.payoutRequests where cleanerId='f994a4ab-a43b-4c26-ae97-225f93422c88';
-
 insert into public.payments(id,customerId,jobId,provider,amount,status)
 values('account-delete-authorized','f994a4ab-a43b-4c26-ae97-225f93422c88','0587c8d6-e371-4b8a-9ed6-7d13a35ad2ee','PAYNOW',10,'AUTHORIZED');
 select throws_ok(
@@ -52,7 +44,7 @@ select is(public.cancel_ecocash_wallet_attempt('f994a4ab-a43b-4c26-ae97-225f9342
 select is((select status from public.payments where id='account-delete-ecocash'),
   'PENDING','the provider status remains available for reconciliation');
 
-select ok(public.close_account('f994a4ab-a43b-4c26-ae97-225f93422c88'),'eligible account can be anonymized');
+select ok(public.close_account('f994a4ab-a43b-4c26-ae97-225f93422c88'),'a retained approved payout does not block an otherwise eligible account from closing');
 select ok((select locationPoint is null and locationUpdatedAt is null from public.users where id='f994a4ab-a43b-4c26-ae97-225f93422c88'),'precise user location and freshness are erased');
 select ok((select location='{}'::jsonb and description='' and data->'location' is null from public.jobs where id='0587c8d6-e371-4b8a-9ed6-7d13a35ad2ee'),'retained booking no longer contains customer address or instructions');
 select is(public.apply_paynow_status('account-delete-ecocash','Paid',1)->>'status',
