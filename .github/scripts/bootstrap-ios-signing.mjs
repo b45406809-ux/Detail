@@ -91,8 +91,23 @@ if (process.env.AUDIT_CERTIFICATE_SERIAL) {
     String(cert.attributes?.serialNumber ?? '').toUpperCase().replace(/^0+/, '') === serial);
   console.log(`Apple lists ${certificates.length} iOS distribution certificates for this team.`);
   console.log(match
-    ? `The specified certificate is listed. Expiration: ${match.attributes?.expirationDate}.`
+    ? `The specified certificate is listed. Name: ${match.attributes?.name ?? 'unnamed'}; expiration: ${match.attributes?.expirationDate}.`
     : 'Apple does not list the specified certificate for this team.');
+  for (const cert of certificates) {
+    console.log(`Certificate: ${cert.attributes?.name ?? 'unnamed'}; expires ${cert.attributes?.expirationDate}; serial ${cert.attributes?.serialNumber ?? 'unavailable'}; id ${cert.id}.`);
+  }
+  const profilesQuery = new URLSearchParams({
+    'filter[bundleId]': bundleId,
+    'filter[profileType]': 'IOS_APP_STORE',
+    include: 'certificates',
+    limit: '200',
+  });
+  const profilesResponse = await appleRequest(`/profiles?${profilesQuery}`);
+  const certificateNames = new Map(certificates.map(cert => [cert.id, cert.attributes?.name ?? 'unnamed']));
+  for (const profile of profilesResponse.data ?? []) {
+    const linkedCerts = profile.relationships?.certificates?.data ?? [];
+    console.log(`App Store profile: ${profile.attributes?.name ?? 'unnamed'}; expires ${profile.attributes?.expirationDate}; certificates ${linkedCerts.map(cert => certificateNames.get(cert.id) ?? cert.id).join(', ') || 'none'}.`);
+  }
   process.exit(0);
 }
 const certificateName = `Detail GitHub App Store Signing ${process.env.GITHUB_RUN_ID ?? 'GHA'}`;
