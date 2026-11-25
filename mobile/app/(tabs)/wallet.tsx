@@ -1,7 +1,6 @@
 import { appAlert, AppDialogHost } from '@/components/AppDialog';
 import React, { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Crypto from 'expo-crypto';
 import {
   View,
   Text,
@@ -40,21 +39,23 @@ import {
 } from '../../services/supabase';
 import { addFundsToWallet, cancelEcoCashWalletPayment, isTopupFinished, listEcoCashWalletPayments, pendingEcoCashTopup, refreshEcoCashTopup, type EcoCashPayment } from '../../services/payments';
 import { callFunction } from '../../services/functions';
-import { Job, WalletTransaction } from '../../types';
+import { WalletTransaction } from '../../types';
 import { formatDate } from '../../utils/date';
 
 export default function WalletScreen() {
   const { user, profile } = useAuth();
   const isCleaner = profile?.role === 'CLEANER';
-  const { verification, returnToCleaner } = useLocalSearchParams<{ verification?: string; returnToCleaner?: string }>();
+  const { verification, returnToCleaner, topupAmount } = useLocalSearchParams<{ verification?: string; returnToCleaner?: string; topupAmount?: string }>();
   const isVerification = verification === '1' && !isCleaner;
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
-  const [commissionJobs, setCommissionJobs] = useState<Job[]>([]);
-  const [commissionJobsLoading, setCommissionJobsLoading] = useState(false);
   const [transactionsLoading, setTransactionsLoading] = useState(true);
   const [transactionsError, setTransactionsError] = useState(false);
   const [transactionsRetry, setTransactionsRetry] = useState(0);
   const [transactionLimit, setTransactionLimit] = useState(20);
+  const [totalEarnings, setTotalEarnings] = useState(0);
+  const [completedEarningsJobs, setCompletedEarningsJobs] = useState(0);
+  const [earningsLoading, setEarningsLoading] = useState(false);
+  const [earningsRetry, setEarningsRetry] = useState(0);
   const userId = user?.uid;
   const [paymentHistory, setPaymentHistory] = useState<EcoCashPayment[]>([]);
   const [paymentPage, setPaymentPage] = useState<number | null>(null);
@@ -65,7 +66,7 @@ export default function WalletScreen() {
   const historyRequest = React.useRef(0);
   const hiddenPaymentsKey = `detail:hidden-ecocash:${userId}`;
   const loadPaymentHistory = React.useCallback(async (offset = 0) => {
-    if (!userId) return;
+    if (!userId || !isCleaner) return;
     const request = ++historyRequest.current;
     const isCurrent = () => historyRequest.current === request && auth.currentUser?.uid === userId;
     setPaymentHistoryLoading(true);
@@ -83,10 +84,10 @@ export default function WalletScreen() {
     } finally {
       if (isCurrent()) setPaymentHistoryLoading(false);
     }
-  }, [userId]);
+  }, [userId, isCleaner]);
   useFocusEffect(React.useCallback(() => {
-    void loadPaymentHistory();
-  }, [loadPaymentHistory]));
+    if (isCleaner) void loadPaymentHistory();
+  }, [isCleaner, loadPaymentHistory]));
   useEffect(() => {
     setPaymentHistory([]);
     setPaymentPage(null);
@@ -104,6 +105,13 @@ export default function WalletScreen() {
   const [pendingReference, setPendingReference] = useState<string>();
   const [canRetryPayment, setCanRetryPayment] = useState(false);
   useEffect(() => {
+    if (!isCleaner || !topupAmount) return;
+    const suggested = Number(topupAmount);
+    if (!Number.isFinite(suggested) || suggested < 1 || suggested > 1000) return;
+    setAmount(suggested.toFixed(2));
+    setIsAddFundsOpen(true);
+  }, [isCleaner, topupAmount]);
+  useEffect(() => {
     let active = true;
     setPendingReference(undefined);
     if (userId) void pendingEcoCashTopup(userId).then(reference => {
@@ -111,12 +119,10 @@ export default function WalletScreen() {
     }).catch(() => {});
     return () => { active = false; };
   }, [userId]);
+  useEffect(() => {
+    if (profile && !isCleaner && !isVerification) router.replace('/(tabs)/home');
+  }, [profile, isCleaner, isVerification]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isPayoutOpen, setIsPayoutOpen] = useState(false);
-  const [payoutAmount, setPayoutAmount] = useState('');
-  const [payoutMethod, setPayoutMethod] = useState<'ECOCASH' | 'INNBUCKS' | 'BANK'>('ECOCASH');
-  const [payoutName, setPayoutName] = useState('');
-  const [payoutDestination, setPayoutDestination] = useState('');
 
   // EcoCash completes outside the app. Refresh the active attempt while the
   // wallet is open so a declined prompt does not remain pending on screen.
@@ -158,7 +164,7 @@ export default function WalletScreen() {
 
   // Real-time transaction feed from Firestore
   useEffect(() => {
-    if (!userId) { setTransactions([]); setTransactionsLoading(false); return; }
+    if (!userId || isVerification) { setTransactions([]); setTransactionsLoading(false); return; }
     setTransactionsLoading(true);
     setTransactionsError(false);
     const q = query(
@@ -172,19 +178,28 @@ export default function WalletScreen() {
       setTransactionsLoading(false);
       setTransactionsError(false);
     }, () => { setTransactionsLoading(false); setTransactionsError(true); });
-  }, [userId, transactionsRetry, transactionLimit]);
+  }, [userId, isVerification, transactionsRetry, transactionLimit]);
 
-  useEffect(() => {
-    if (!userId || !isCleaner) { setCommissionJobs([]); setCommissionJobsLoading(false); return; }
-    setCommissionJobsLoading(true);
-    const q = query(collection(db, 'jobs'), where('cleanerId', '==', userId), where('status', '==', 'COMPLETED'), orderBy('createdAt', 'desc'), limit(50));
-    return onSnapshot(q, (snap) => {
-      setCommissionJobs(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Job)).filter((job) =>
-        job.earnings?.commission !== undefined || job.directCommissionPolicyVersion === 1
-      ));
-      setCommissionJobsLoading(false);
-    }, () => setCommissionJobsLoading(false));
-  }, [userId, isCleaner]);
+  useFocusEffect(React.useCallback(() => {
+    if (!userId || !isCleaner) {
+      setTotalEarnings(0);
+      setCompletedEarningsJobs(0);
+      setEarningsLoading(false);
+      return;
+    }
+    let active = true;
+    setEarningsLoading(true);
+    void callFunction('getCleanerEarningsSummary').then((summary: { totalEarnings?: number; completedJobs?: number }) => {
+      if (!active || auth.currentUser?.uid !== userId) return;
+      setTotalEarnings(Number(summary.totalEarnings ?? 0));
+      setCompletedEarningsJobs(Number(summary.completedJobs ?? 0));
+    }).catch(() => {
+      if (active) appAlert('Could not load earnings', 'Pull down to refresh your wallet and try again.');
+    }).finally(() => {
+      if (active) setEarningsLoading(false);
+    });
+    return () => { active = false; };
+  }, [userId, isCleaner, earningsRetry]));
 
   const handleAddFunds = async () => {
     if (!pendingReference && !isCleaner && !isVerification) {
@@ -194,8 +209,8 @@ export default function WalletScreen() {
     }
     const value = isVerification ? 2.00 : Number(amount);
     const phone = ecoCashPhone.trim().replace(/[ +().-]/g, '').replace(/^263/, '0');
-    if (!pendingReference && (!Number.isFinite(value) || value < 0.50 || value > 1000 || Math.round(value * 100) / 100 !== value)) {
-      appAlert('Invalid amount', 'Enter an amount from $0.50 to $1,000 USD.');
+    if (!pendingReference && (!Number.isFinite(value) || value < (isVerification ? 2 : 1) || value > 1000 || Math.round(value * 100) / 100 !== value)) {
+      appAlert('Invalid amount', isVerification ? 'Cleaner registration requires exactly $2.00 USD.' : 'Enter a commission top-up from $1.00 to $1,000 USD.');
       return;
     }
     if (!pendingReference && !/^07[78][0-9]{7}$/.test(phone)) {
@@ -299,34 +314,7 @@ export default function WalletScreen() {
     ]);
   };
 
-  const balance = isVerification ? Number(profile?.commissionBalance ?? 0) : Number(profile?.balance ?? 0);
-  // Commission top-ups are tracked in a separate bucket and must not reduce
-  // already-cleared earnings; payout holds debit earningsBalance atomically.
-  const availableEarnings = isCleaner
-    ? Math.max(0, Number(profile?.earningsBalance ?? 0))
-    : 0;
-
-  const requestPayout = async () => {
-    if (!user) return;
-    setIsLoading(true);
-    try {
-      const request={amount:Number(payoutAmount),method:payoutMethod,accountName:payoutName.trim(),accountNumber:payoutDestination.trim()};
-      const storageKey=`detail:payout-intent:${user.uid}`;
-      const signature=await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256,JSON.stringify(request));
-      let idempotencyKey='';
-      try {
-        const saved=JSON.parse((await AsyncStorage.getItem(storageKey))??'null') as {signature?:string;key?:string}|null;
-        if(saved?.signature===signature&&typeof saved.key==='string')idempotencyKey=saved.key;
-      } catch { /* replace a corrupt saved retry record */ }
-      if(!idempotencyKey){idempotencyKey=Crypto.randomUUID();await AsyncStorage.setItem(storageKey,JSON.stringify({signature,key:idempotencyKey}));}
-      await callFunction('requestCleanerPayout', { ...request, idempotencyKey });
-      await AsyncStorage.removeItem(storageKey);
-      setIsPayoutOpen(false); setPayoutAmount(''); setPayoutName(''); setPayoutDestination('');
-      appAlert('Payout requested', 'Your cleared earnings are reserved. Detail will send the transfer and update the request status.');
-    } catch (error: any) {
-      appAlert('Could not request payout', error?.message ?? 'Please check the amount and payout details.');
-    } finally { setIsLoading(false); }
-  };
+  if (profile && !isCleaner && !isVerification) return null;
 
   return (
     <SafeAreaView className="flex-1 bg-canvas">
@@ -338,75 +326,41 @@ export default function WalletScreen() {
         </View>
       </View>
 
-      {/* Balance card */}
-      <View className="mx-5 mb-6 bg-accent rounded-4xl p-6 shadow-xl shadow-accent/30">
+      {isCleaner ? <View className="gap-4 px-5 mb-6">
+        <View className="bg-accent rounded-4xl p-6 shadow-xl shadow-accent/30">
+          <View className="flex-row items-center gap-2 mb-4">
+            <Wallet size={18} color="rgba(255,255,255,0.7)" />
+            <Text className="text-xs font-display font-black text-white/70 uppercase tracking-widest">Prepaid commission</Text>
+          </View>
+          <Text className="text-4xl font-display font-black text-white mb-1">${Number(profile?.commissionBalance ?? 0).toFixed(2)}</Text>
+          <Text className="font-sans text-sm text-white/70">Available credit · 10% is reserved when you accept a booking paid directly by the customer.</Text>
+          {Number(profile?.commissionOwed ?? 0) > 0 && <Text className="font-sans-bold text-sm text-white mt-3">Commission due: ${Number(profile?.commissionOwed ?? 0).toFixed(2)} · Clear this before accepting new jobs.</Text>}
+          <TouchableOpacity onPress={() => setIsAddFundsOpen(true)} className="mt-5 bg-white/20 py-3 rounded-2xl flex-row items-center justify-center gap-2" activeOpacity={0.8}>
+            <Plus size={16} color="#fff" />
+            <Text className="text-white font-display font-black text-xs uppercase tracking-wider">{pendingReference ? 'Check EcoCash payment' : 'Top up commission'}</Text>
+          </TouchableOpacity>
+          <Text className="font-sans text-xs text-white/60 mt-3">Your $1 minimum credit covers up to $10 of accepted bookings.</Text>
+        </View>
+        <View className="rounded-3xl border border-slate-100 bg-white p-5">
+          <Text className="font-display font-black text-slate-900">Total earnings</Text>
+          <Text className="mt-2 text-3xl font-display font-black text-slate-900">{earningsLoading ? '—' : `$${totalEarnings.toFixed(2)}`}</Text>
+          <Text className="mt-1 font-sans text-sm text-slate-500">After Detail commission across {completedEarningsJobs} completed {completedEarningsJobs === 1 ? 'booking' : 'bookings'}. Customer payments are settled directly with you.</Text>
+        </View>
+      </View> : <View className="mx-5 mb-6 bg-accent rounded-4xl p-6 shadow-xl shadow-accent/30">
         <View className="flex-row items-center gap-2 mb-4">
           <Wallet size={18} color="rgba(255,255,255,0.7)" />
-          <Text className="text-xs font-display font-black text-white/70 uppercase tracking-widest">
-            {isCleaner ? 'Available earnings' : 'Available Balance'}
-          </Text>
+          <Text className="text-xs font-display font-black text-white/70 uppercase tracking-widest">Cleaner registration payment</Text>
         </View>
-        <Text className="text-4xl font-display font-black text-white mb-1">${(isCleaner ? availableEarnings : balance).toFixed(2)}</Text>
-        <Text className="font-sans text-sm text-white/60 font-medium">{isCleaner || isVerification ? `Cleaner commission deposit · $${Number(profile?.commissionBalance ?? 0).toFixed(2)} available` : 'Detail Wallet'}</Text>
+        <Text className="text-2xl font-display font-black text-white mb-1">$2.00</Text>
+        <Text className="font-sans text-sm text-white/70 font-medium">$1 pays the one-time identity check and $1 remains as prepaid commission credit.</Text>
+        {(isVerification || pendingReference) && <TouchableOpacity onPress={() => setIsAddFundsOpen(true)} className="mt-6 bg-white/20 py-3 rounded-2xl flex-row items-center justify-center gap-2" activeOpacity={0.8}>
+          <Plus size={16} color="#fff" />
+          <Text className="text-white font-display font-black text-xs uppercase tracking-wider">{pendingReference ? 'Check EcoCash payment' : 'Fund verification'}</Text>
+        </TouchableOpacity>}
+      </View>}
 
-        <View className="flex-row gap-3 mt-6">
-          {(isCleaner || isVerification || pendingReference) && <TouchableOpacity
-            onPress={() => setIsAddFundsOpen(true)}
-            className="flex-1 bg-white/20 py-3 rounded-2xl flex-row items-center justify-center gap-2"
-            activeOpacity={0.8}
-          >
-            <Plus size={16} color="#fff" />
-            <Text className="text-white font-display font-black text-xs uppercase tracking-wider">{pendingReference ? 'Check EcoCash payment' : isCleaner ? 'Top up commission' : 'Fund verification'}</Text>
-          </TouchableOpacity>}
-          {isCleaner && <TouchableOpacity
-            onPress={() => setIsPayoutOpen(true)}
-            className="flex-1 bg-white/20 py-3 rounded-2xl flex-row items-center justify-center gap-2"
-            activeOpacity={0.8}
-          >
-            <ArrowUpRight size={16} color="#fff" />
-            <Text className="text-white font-display font-black text-xs uppercase tracking-wider">Request payout</Text>
-          </TouchableOpacity>}
-        </View>
-      </View>
-
-      {isCleaner && <View className="mx-5 mb-6 rounded-2xl bg-white p-4 border border-slate-100"><Text className="font-display font-black text-slate-900">How earnings and commission work</Text><Text className="font-sans text-sm text-slate-600 mt-2">Offline bookings reserve 10% from this prepaid credit when a customer accepts your quote. Your $1 minimum commission deposit covers up to $10 of offline bookings. Cleared earnings appear above when available; request a payout from this screen. Payouts are reviewed and sent manually while integrations are unavailable, so transfer timing is not guaranteed.</Text></View>}
-
-      {(isCleaner && Number(profile?.commissionOwed ?? 0) > 0) && (
-        <TouchableOpacity
-          onPress={() => setIsAddFundsOpen(true)}
-          activeOpacity={0.85}
-          className="mx-5 mb-6 bg-red-50 border border-red-100 rounded-3xl p-4 flex-row items-center gap-3"
-        >
-          <View className="w-10 h-10 bg-red-100 rounded-2xl items-center justify-center">
-            <ArrowUpRight size={18} color="#ef4444" />
-          </View>
-          <View className="flex-1">
-            <Text className="text-sm font-display font-black text-red-700">Outstanding commission due</Text>
-            <Text className="font-sans text-xs text-red-500 font-medium mt-0.5">
-              {`You owe $${Number(profile?.commissionOwed ?? 0).toFixed(2)} from earlier bookings. Clear this before accepting new jobs.`}
-            </Text>
-          </View>
-        </TouchableOpacity>
-      )}
-
-      {isCleaner ? <View className="mx-5 mb-5 rounded-3xl border border-slate-100 bg-white p-4">
-        <View className="mb-3 flex-row items-center justify-between">
-          <View><Text className="font-display font-black text-slate-900">Jobs with Detail commission</Text><Text className="mt-1 font-sans text-xs text-slate-500">Completed bookings that added to your commission record</Text></View>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/activity')}><Text className="font-sans-bold text-xs text-accent">See all</Text></TouchableOpacity>
-        </View>
-        {commissionJobsLoading ? <ActivityIndicator color="#3906D2" /> : commissionJobs.length === 0 ? <Text className="font-sans text-sm text-slate-500">No completed jobs with commission yet.</Text> : commissionJobs.slice(0, 3).map((job) => {
-          const gross = Number(job.earnings?.gross ?? job.price ?? 0);
-          const fee = Number(job.earnings?.commission ?? 0);
-          const net = Number(job.earnings?.net ?? Math.max(0, gross - fee));
-          return <View key={job.id} className="flex-row items-center justify-between border-t border-slate-100 py-3">
-            <View className="flex-1 pr-3"><Text className="font-sans-bold text-sm text-slate-800" numberOfLines={1}>{job.serviceType || (job.category === 'CAR' ? 'Car cleaning' : 'House cleaning')}</Text><Text className="mt-0.5 font-sans text-xs text-slate-500">{formatDate(job.createdAt, 'Date unavailable')} · Job ${gross.toFixed(2)}</Text></View>
-            <View className="items-end"><Text className="font-sans-bold text-sm text-rose-700">-${fee.toFixed(2)}</Text><Text className="mt-0.5 font-sans text-[10px] text-slate-500">After fee ${net.toFixed(2)}</Text></View>
-          </View>;
-        })}
-      </View> : null}
-
-      {/* Transactions */}
-      <View className="flex-1 px-5">
+      {/* Cleaner commission and payment history. */}
+      {!isVerification && <View className="flex-1 px-5">
         <FlatList
           data={transactions}
           keyExtractor={(t) => t.id}
@@ -416,6 +370,7 @@ export default function WalletScreen() {
           onRefresh={() => {
             void loadPaymentHistory();
             setTransactionsRetry(value => value + 1);
+            setEarningsRetry(value => value + 1);
           }}
           ListHeaderComponent={<View>
             <Text className="text-xs font-display font-black text-slate-400 uppercase tracking-widest mb-3">EcoCash payment history</Text>
@@ -499,7 +454,7 @@ export default function WalletScreen() {
               </View>
             )}
           />
-      </View>
+      </View>}
 
       {/* Add Funds Modal */}
       <Modal visible={isAddFundsOpen} transparent animationType="slide" onRequestClose={() => setIsAddFundsOpen(false)}>
@@ -517,12 +472,12 @@ export default function WalletScreen() {
             ) : (
               <>
                 <Text className="font-sans text-sm text-slate-600 mb-5">
-                  {isVerification ? 'Pay $2.00 USD: $1.00 covers your identity check and $1.00 remains as your minimum cleaner commission deposit.' : 'Top-ups start at $0.50 USD and clear commission due first.'}
+                  {isVerification ? 'Pay $2.00 USD: $1.00 covers your identity check and $1.00 remains as your minimum cleaner commission deposit.' : 'Commission top-ups start at $1.00 USD. Top-ups first clear any commission due.'}
                 </Text>
                 {!isVerification && <>
                   <Text className="font-sans-bold text-sm text-slate-700 mb-2">Amount (USD)</Text>
                   <TextInput accessibilityLabel="Amount in US dollars" className="bg-slate-50 rounded-2xl px-4 py-4 mb-4 font-sans text-slate-900"
-                    placeholder="0.50" keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
+                    placeholder="1.00" keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
                 </>}
                 <Text className="font-sans-bold text-sm text-slate-700 mb-2">EcoCash mobile number</Text>
                 <TextInput accessibilityLabel="EcoCash mobile number" className="bg-slate-50 rounded-2xl px-4 py-4 mb-5 font-sans text-slate-900"
@@ -540,18 +495,6 @@ export default function WalletScreen() {
             {pendingReference && <TouchableOpacity accessibilityRole="button" onPress={() => cancelPayment(pendingReference)} disabled={isLoading || Boolean(checkingPayment)} className="mt-3 rounded-full border border-slate-200 py-4 items-center"><Text className="font-sans-bold text-sm text-accent">Cancel payment</Text></TouchableOpacity>}
           </View>
         </KeyboardAvoidingView>
-      </Modal>
-      <Modal visible={isPayoutOpen} transparent animationType="slide">
-        {isPayoutOpen && <AppDialogHost />}
-        <View className="flex-1 justify-center bg-[#150256]/55 px-5"><View className="bg-white rounded-[28px] p-6 pb-10">
-          <View className="flex-row justify-between items-center mb-4"><Text className="text-xl font-display font-black">Request payout</Text><TouchableOpacity onPress={() => setIsPayoutOpen(false)}><X size={22} color="#94a3b8" /></TouchableOpacity></View>
-          <Text className="font-sans text-sm text-slate-500 mb-3">Available cleared earnings: ${availableEarnings.toFixed(2)}. Minimum payout $5. Transfers are sent manually while payout integrations are unavailable.</Text>
-          <TextInput className="font-sans border border-slate-200 rounded-xl p-4 mb-3" placeholder="Amount in USD" keyboardType="decimal-pad" value={payoutAmount} onChangeText={setPayoutAmount} />
-          <View className="flex-row gap-2 mb-3">{(['ECOCASH','INNBUCKS','BANK'] as const).map(m => <TouchableOpacity key={m} onPress={() => setPayoutMethod(m)} className={`flex-1 p-3 rounded-xl ${payoutMethod === m ? 'bg-accent' : 'bg-slate-100'}`}><Text className={`text-center text-xs font-bold ${payoutMethod === m ? 'text-white' : 'text-slate-700'}`}>{m}</Text></TouchableOpacity>)}</View>
-          <TextInput className="font-sans border border-slate-200 rounded-xl p-4 mb-3" placeholder="Account / wallet holder name" value={payoutName} onChangeText={setPayoutName} />
-          <TextInput className="font-sans border border-slate-200 rounded-xl p-4 mb-4" placeholder={payoutMethod === 'BANK' ? 'Bank account number and bank' : 'Mobile money number'} value={payoutDestination} onChangeText={setPayoutDestination} />
-          <TouchableOpacity disabled={isLoading} onPress={requestPayout} className="bg-accent rounded-2xl p-4 items-center">{isLoading ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-display font-black">Submit payout request</Text>}</TouchableOpacity>
-        </View></View>
       </Modal>
     </SafeAreaView>
   );

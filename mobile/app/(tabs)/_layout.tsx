@@ -4,6 +4,7 @@ import { View, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../../context/AuthContext';
 
 function TabIcon({ Icon, focused }: { Icon: LucideIcon; focused: boolean }) {
   return (
@@ -24,6 +25,7 @@ function TabIcon({ Icon, focused }: { Icon: LucideIcon; focused: boolean }) {
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const { profile } = useAuth();
   return (
     <Tabs
       screenOptions={{
@@ -58,7 +60,7 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="wallet"
-        options={{ tabBarAccessibilityLabel: 'Wallet', tabBarIcon: ({ focused }) => <TabIcon Icon={Wallet} focused={focused} /> }}
+        options={{ href: profile?.role === 'CLEANER' ? '/(tabs)/wallet' : null, tabBarAccessibilityLabel: 'Wallet', tabBarIcon: ({ focused }) => <TabIcon Icon={Wallet} focused={focused} /> }}
       />
       <Tabs.Screen
         name="profile"

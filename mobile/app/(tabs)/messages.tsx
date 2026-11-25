@@ -1,6 +1,7 @@
 import { showPermissionDenied } from '@/utils/permissionPrompt';
 import { appAlert } from '@/components/AppDialog';
 import React, { useEffect, useState, useRef } from 'react';
+import { Audio } from 'expo-av';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import {
@@ -19,7 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../../components/LoadingList';
 import { useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Send, MessageSquare, ImagePlus, PhoneCall, PhoneOff, MoreHorizontal, Flag } from 'lucide-react-native';
+import { ArrowLeft, Send, MessageSquare, ImagePlus, Mic, Play, Pause, Square, X, PhoneCall, PhoneOff, MoreHorizontal, Flag } from 'lucide-react-native';
 import type { Call, CallInvite, Voice as VoiceClient } from '@twilio/voice-react-native-sdk';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
@@ -34,7 +35,7 @@ import {
   getDocs,
   supabase,
 } from '../../services/supabase';
-import { uploadChatPhoto } from '../../services/storage';
+import { uploadChatPhoto, uploadChatVoiceNote } from '../../services/storage';
 import { callFunction } from '../../services/functions';
 import { ChatMessage } from '../../types';
 
@@ -42,6 +43,7 @@ const QUICK_REPLIES = ['On my way!', 'Sounds good', "I'm here", 'Thank you!'];
 const MESSAGE_RETENTION_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_CALL_LIMIT_SECONDS = 120;
 const MAX_CALL_LIMIT_SECONDS = 3600;
+const MAX_VOICE_NOTE_MS = 60_000;
 const messageTime = (value: any) => value?.toDate?.().getTime?.() ?? new Date(value).getTime();
 
 interface VoiceTokenResponse {
@@ -108,6 +110,10 @@ export default function MessagesScreen() {
   const [callDuration, setCallDuration] = useState(0);
   const [incomingCaller, setIncomingCaller] = useState('');
   const [voiceIncomingEnabled, setVoiceIncomingEnabled] = useState(false);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [isSendingVoice, setIsSendingVoice] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const [blockedByMe, setBlockedByMe] = useState(false);
   const [blockedMe, setBlockedMe] = useState(false);
   const conversationBlocked = blockedByMe || blockedMe;
@@ -116,6 +122,22 @@ export default function MessagesScreen() {
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
   }, []);
+  useEffect(() => {
+    setIsRecordingVoice(false);
+    setRecordingSeconds(0);
+    setPlayingMessageId(null);
+    playbackMessageRef.current = null;
+    return () => {
+      playbackGenerationRef.current += 1;
+      const recording = voiceRecordingRef.current;
+      voiceRecordingRef.current = null;
+      if (recording) void recording.stopAndUnloadAsync().catch(() => undefined);
+      const sound = playbackSoundRef.current;
+      playbackSoundRef.current = null;
+      if (sound) void sound.unloadAsync().catch(() => undefined);
+      void Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true }).catch(() => undefined);
+    };
+  }, [activeJobId]);
   const flatListRef = useRef<FlatList>(null);
   const preserveChatScrollRef = useRef(false);
   const reachedHistoryStartRef = useRef(false);
@@ -123,6 +145,10 @@ export default function MessagesScreen() {
   const voiceRef = useRef<VoiceClient | null>(null);
   const voiceCallRef = useRef<Call | null>(null);
   const incomingInviteRef = useRef<CallInvite | null>(null);
+  const voiceRecordingRef = useRef<Audio.Recording | null>(null);
+  const playbackSoundRef = useRef<Audio.Sound | null>(null);
+  const playbackMessageRef = useRef<string | null>(null);
+  const playbackGenerationRef = useRef(0);
   const voiceTokenRef = useRef('');
   const connectedAtRef = useRef(0);
   const callDurationLimitRef = useRef(DEFAULT_CALL_LIMIT_SECONDS);
@@ -169,7 +195,7 @@ export default function MessagesScreen() {
     [
       { text: 'Harassment or bullying', onPress: () => void submitSafetyReport('HARASSMENT', message) },
       { text: 'Scam or off-app payment request', onPress: () => void submitSafetyReport('SCAM_OR_OFF_PLATFORM_REQUEST', message) },
-      { text: 'Inappropriate message or photo', onPress: () => void submitSafetyReport('INAPPROPRIATE_CONTENT', message) },
+      { text: 'Inappropriate message or media', onPress: () => void submitSafetyReport('INAPPROPRIATE_CONTENT', message) },
       { text: 'Other safety concern', onPress: () => void submitSafetyReport('OTHER_SAFETY_CONCERN', message) },
       { text: 'Cancel', style: 'cancel' },
     ],
@@ -210,7 +236,7 @@ export default function MessagesScreen() {
     ]);
   };
 
-  const getPendingMessageIntent = async (kind: 'text' | 'photo', value: string) => {
+  const getPendingMessageIntent = async (kind: 'text' | 'photo' | 'voice', value: string) => {
     if (!user || !activeJobId) throw new Error('Open a booking conversation before sending a message.');
     const intent = `${user.uid}:${activeJobId}:${kind}:${value}`;
     const cached = pendingMessageIntentsRef.current.get(intent);
@@ -265,7 +291,7 @@ export default function MessagesScreen() {
             otherUserPhoto: isCustomer ? job.cleanerPhoto ?? '' : job.customerPhoto ?? '',
             lastMessage: job.lastMessageAt && messageTime(job.lastMessageAt) < Date.now() - MESSAGE_RETENTION_MS ? 'No recent messages' : job.lastMessage ?? 'No messages yet',
             lastMessageAt: job.lastMessageAt,
-            unreadCount: job[unreadField] ?? 0,
+            unreadCount: job.lastMessageAt && messageTime(job.lastMessageAt) < Date.now() - MESSAGE_RETENTION_MS ? 0 : job[unreadField] ?? 0,
             jobStatus: String(job.status ?? '').toUpperCase(),
           }));
         setConversations(convos);
@@ -301,7 +327,7 @@ export default function MessagesScreen() {
       const page = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChatMessage))
         .filter(message => messageTime(message.createdAt) >= Date.now() - MESSAGE_RETENTION_MS)
         .reverse();
-      setHasOlderMessages(false);
+      setHasOlderMessages(snap.size === 100);
       setMessages(current => {
         const merged = new Map(current.map(message => [message.id, message]));
         page.forEach(message => merged.set(message.id, message));
@@ -349,6 +375,7 @@ export default function MessagesScreen() {
             ? incomingLimit
             : DEFAULT_CALL_LIMIT_SECONDS;
           incomingInviteRef.current = invite;
+          if (voiceRecordingRef.current) void finishVoiceRecording(false);
           setIncomingCaller(invite.getFrom().replace(/^client:/, '').slice(0, 12));
           setCallState('incoming');
         });
@@ -423,7 +450,7 @@ export default function MessagesScreen() {
   };
 
   const startVoiceCall = async () => {
-    if (conversationBlocked || !activeConversation?.otherUserId || !activeJobId || callState !== 'ready' || !voiceRef.current || !voiceTokenRef.current) return;
+    if (conversationBlocked || isRecordingVoice || isSendingVoice || !activeConversation?.otherUserId || !activeJobId || callState !== 'ready' || !voiceRef.current || !voiceTokenRef.current) return;
     setCallError('');
     setCallState('calling');
     try {
@@ -493,6 +520,7 @@ export default function MessagesScreen() {
       const page = await getDocs(query(
         collection(db, 'messages'),
         where('jobId', '==', activeJobId),
+        where('createdAt', '>=', new Date(Date.now() - MESSAGE_RETENTION_MS)),
         where('createdAt', '<', oldest.createdAt),
         orderBy('createdAt', 'desc'),
         limit(100)
@@ -552,6 +580,130 @@ export default function MessagesScreen() {
       appAlert('Photo not sent', 'Check your connection and try again.');
     } finally {
       setIsSendingPhoto(false);
+    }
+  };
+
+  const uploadAndSendVoice = async (uri: string) => {
+    if (!activeJobId || !user || chatReadOnly || conversationBlocked) return;
+    setIsSendingVoice(true);
+    try {
+      const { intent, pending } = await getPendingMessageIntent('voice', uri);
+      const mediaPath = pending.imagePath ?? await uploadChatVoiceNote(uri, activeJobId);
+      pending.imagePath = mediaPath;
+      await savePendingMessageIntent(intent, pending);
+      const { error } = await supabase.rpc('send_job_message', {
+        p_job_id: activeJobId,
+        p_text: 'Voice message',
+        p_image_path: mediaPath,
+        p_idempotency_key: pending.key,
+      });
+      if (error) throw error;
+      await clearPendingMessageIntent(intent, pending);
+    } catch (error) {
+      console.error('Could not send chat voice note:', error);
+      appAlert('Voice note not sent', error instanceof Error ? error.message : 'Check your connection and try again.');
+    } finally {
+      setIsSendingVoice(false);
+    }
+  };
+
+  const finishVoiceRecording = async (send: boolean) => {
+    const recording = voiceRecordingRef.current;
+    if (!recording) return;
+    voiceRecordingRef.current = null;
+    setIsRecordingVoice(false);
+    try {
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+      if (send && uri) await uploadAndSendVoice(uri);
+    } catch (error) {
+      console.warn('Could not finish chat voice recording:', error instanceof Error ? error.message : 'unknown error');
+      if (send) appAlert('Voice note not saved', 'Try recording again.');
+    } finally {
+      setRecordingSeconds(0);
+    }
+  };
+
+  const startVoiceRecording = async () => {
+    if (Platform.OS === 'web' || !activeJobId || !user || chatReadOnly || conversationBlocked || isSendingVoice || ['calling', 'ringing', 'connected', 'incoming'].includes(callState)) return;
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      if (!permission.granted) {
+        showPermissionDenied('Allow microphone access to record a voice note.', permission.canAskAgain);
+        return;
+      }
+      const playback = playbackSoundRef.current;
+      playbackSoundRef.current = null;
+      playbackMessageRef.current = null;
+      setPlayingMessageId(null);
+      if (playback) await playback.unloadAsync().catch(() => undefined);
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true, shouldDuckAndroid: true, playThroughEarpieceAndroid: false });
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY,
+        status => {
+          if (!status.isRecording) return;
+          const elapsed = Math.floor(status.durationMillis / 1000);
+          setRecordingSeconds(elapsed);
+          if (status.durationMillis >= MAX_VOICE_NOTE_MS) void finishVoiceRecording(true);
+        },
+        250,
+      );
+      voiceRecordingRef.current = recording;
+      setRecordingSeconds(0);
+      setIsRecordingVoice(true);
+    } catch (error) {
+      console.warn('Could not start chat voice recording:', error instanceof Error ? error.message : 'unknown error');
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true }).catch(() => undefined);
+      appAlert('Could not record voice note', error instanceof Error ? error.message : 'Check microphone permissions and try again.');
+    }
+  };
+
+  const toggleVoicePlayback = async (messageId: string, uri: string) => {
+    try {
+      const currentSound = playbackSoundRef.current;
+      if (playbackMessageRef.current === messageId && currentSound) {
+        const status = await currentSound.getStatusAsync();
+        if (status.isLoaded && status.isPlaying) {
+          await currentSound.pauseAsync();
+          setPlayingMessageId(null);
+        } else if (status.isLoaded) {
+          await currentSound.playAsync();
+          setPlayingMessageId(messageId);
+        }
+        return;
+      }
+      playbackGenerationRef.current += 1;
+      const generation = playbackGenerationRef.current;
+      const previous = playbackSoundRef.current;
+      playbackSoundRef.current = null;
+      playbackMessageRef.current = messageId;
+      setPlayingMessageId(messageId);
+      if (previous) await previous.unloadAsync().catch(() => undefined);
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, shouldDuckAndroid: true });
+      const { sound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: true }, status => {
+        if (generation !== playbackGenerationRef.current || !status.isLoaded) return;
+        if (status.didJustFinish) {
+          const finishedSound = playbackSoundRef.current;
+          playbackSoundRef.current = null;
+          playbackMessageRef.current = null;
+          setPlayingMessageId(null);
+          if (finishedSound) void finishedSound.unloadAsync().catch(() => undefined);
+        }
+      });
+      if (generation !== playbackGenerationRef.current) {
+        await sound.unloadAsync().catch(() => undefined);
+        return;
+      }
+      playbackSoundRef.current = sound;
+    } catch (error) {
+      playbackGenerationRef.current += 1;
+      const failedSound = playbackSoundRef.current;
+      playbackSoundRef.current = null;
+      playbackMessageRef.current = null;
+      setPlayingMessageId(null);
+      if (failedSound) await failedSound.unloadAsync().catch(() => undefined);
+      appAlert('Could not play voice note', error instanceof Error ? error.message : 'Try again in a moment.');
     }
   };
 
@@ -623,8 +775,8 @@ export default function MessagesScreen() {
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel="Start booking voice call"
-              accessibilityState={{ disabled: conversationBlocked || callState !== 'ready' || !['ASSIGNED', 'EN_ROUTE', 'IN_PROGRESS'].includes(activeConversation?.jobStatus ?? '') }}
-              disabled={conversationBlocked || callState !== 'ready' || !['ASSIGNED', 'EN_ROUTE', 'IN_PROGRESS'].includes(activeConversation?.jobStatus ?? '')}
+              accessibilityState={{ disabled: conversationBlocked || isRecordingVoice || isSendingVoice || callState !== 'ready' || !['ASSIGNED', 'EN_ROUTE', 'IN_PROGRESS'].includes(activeConversation?.jobStatus ?? '') }}
+              disabled={conversationBlocked || isRecordingVoice || isSendingVoice || callState !== 'ready' || !['ASSIGNED', 'EN_ROUTE', 'IN_PROGRESS'].includes(activeConversation?.jobStatus ?? '')}
               onPress={() => void startVoiceCall()}
               className="h-10 w-10 items-center justify-center rounded-full bg-accent/10"
             >
@@ -663,10 +815,10 @@ export default function MessagesScreen() {
           {/* Messages */}
           {chatError ? <View className="items-center px-4 py-2"><Text accessibilityRole="alert" className="text-center text-xs text-rose-700">{chatError}</Text><TouchableOpacity accessibilityRole="button" onPress={() => setChatRetry(value => value + 1)} className="mt-1 rounded-full bg-rose-50 px-3 py-1"><Text className="text-xs font-bold text-rose-800">Retry messages</Text></TouchableOpacity></View> : null}
         {chatReadOnly ? <View className="mx-4 mt-3 rounded-2xl bg-slate-100 px-4 py-3"><Text className="text-xs font-bold text-slate-700">{activeConversation ? 'This booking is cancelled. Recent messages are read-only.' : 'Chat is available once a cleaner is assigned.'}</Text></View> : null}
-        {conversationBlocked ? <View className="mx-4 mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3"><Text className="text-xs font-bold text-rose-900">{blockedByMe ? 'You blocked this person' : 'This person blocked you'}</Text><Text className="mt-1 text-xs leading-5 text-rose-800">Existing history stays available. New messages, photos, and calls are disabled{blockedByMe ? ' until you unblock them from the conversation menu.' : ' in this conversation.'}</Text></View> : null}
+        {conversationBlocked ? <View className="mx-4 mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3"><Text className="text-xs font-bold text-rose-900">{blockedByMe ? 'You blocked this person' : 'This person blocked you'}</Text><Text className="mt-1 text-xs leading-5 text-rose-800">Existing history stays available. New messages, photos, voice notes, and calls are disabled{blockedByMe ? ' until you unblock them from the conversation menu.' : ' in this conversation.'}</Text></View> : null}
         <View className="mx-4 mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
           <Text className="text-xs font-bold text-amber-950">Stay safe on Detail</Text>
-          <Text className="mt-1 text-xs leading-5 text-amber-900">Messages disappear from this chat after 24 hours, but remain stored securely. Abusive language is screened automatically. Keep communication and payments in Detail. Don’t share your phone number, verification codes, or send money outside the app. Use the conversation menu to report or block someone; you can also report a message below.</Text>
+          <Text className="mt-1 text-xs leading-5 text-amber-900">Messages stay visible to booking participants for 24 hours. After that, only authorized Detail admins can access the retained conversation for support and safety. Abusive language is screened automatically. Keep communication and payments in Detail. Don’t share your phone number, verification codes, or send money outside the app. Use the conversation menu to report or block someone; you can also report a message below.</Text>
         </View>
         <FlatList
             ref={flatListRef}
@@ -680,7 +832,17 @@ export default function MessagesScreen() {
               return (
                 <View className={`flex-row ${isMe ? 'justify-end' : 'justify-start'}`}>
                   <View className="max-w-[78%]">
-                    {item.imageUrl ? (
+                    {item.imageUrl && item.imageUrl.includes('/chat-audio/') ? (
+                      <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel={playingMessageId === item.id ? 'Pause voice note' : 'Play voice note'}
+                        onPress={() => void toggleVoicePlayback(item.id, item.imageUrl!)}
+                        className={`min-w-[176px] flex-row items-center gap-3 rounded-3xl px-4 py-3 ${isMe ? 'bg-accent rounded-tr-sm' : 'bg-slate-100 rounded-tl-sm'}`}
+                      >
+                        {playingMessageId === item.id ? <Pause size={19} color={isMe ? '#fff' : '#3906d2'} /> : <Play size={19} color={isMe ? '#fff' : '#3906d2'} />}
+                        <Text className={`text-sm font-semibold ${isMe ? 'text-white' : 'text-slate-900'}`}>Voice note</Text>
+                      </TouchableOpacity>
+                    ) : item.imageUrl ? (
                       <Image source={{ uri: item.imageUrl }} style={{ width: 180, height: 180, borderRadius: 20 }} />
                     ) : (
                       <View className={`px-4 py-3 rounded-3xl ${isMe ? 'bg-accent rounded-tr-sm' : 'bg-slate-100 rounded-tl-sm'}`}>
@@ -716,34 +878,62 @@ export default function MessagesScreen() {
 
           {/* Input */}
           <View className="flex-row items-center gap-3 px-4 py-3 border-t border-slate-100">
-            <TouchableOpacity
-              onPress={sendPhoto}
-              disabled={isSendingPhoto || conversationBlocked || chatReadOnly}
-              className="w-11 h-11 rounded-2xl items-center justify-center bg-accent/10"
-            >
-              {isSendingPhoto ? <ActivityIndicator size="small" color="#3906D2" /> : <ImagePlus size={18} color="#3906D2" />}
-            </TouchableOpacity>
-            <TextInput
-              className="font-sans flex-1 bg-slate-50 rounded-2xl px-4 py-3 text-sm font-medium text-slate-900 border border-slate-100"
-              placeholder="Type a message…"
-              placeholderTextColor="#94a3b8"
-              value={inputText}
-              onChangeText={setInputText}
-              editable={!conversationBlocked && !chatReadOnly}
-              multiline
-              maxLength={500}
-              onSubmitEditing={() => sendMessage()}
-              returnKeyType="send"
-            />
-            <TouchableOpacity
-              onPress={() => sendMessage()}
-              disabled={!inputText.trim() || conversationBlocked || chatReadOnly}
-              className={`w-11 h-11 rounded-2xl items-center justify-center ${
-                inputText.trim() ? 'bg-accent' : 'bg-slate-100'
-              }`}
-            >
-              <Send size={18} color={inputText.trim() ? '#fff' : '#94a3b8'} />
-            </TouchableOpacity>
+            {isRecordingVoice ? (
+              <>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Cancel voice note" onPress={() => void finishVoiceRecording(false)} className="w-11 h-11 rounded-2xl items-center justify-center bg-slate-100">
+                  <X size={19} color="#64748b" />
+                </TouchableOpacity>
+                <View className="flex-1">
+                  <Text className="text-sm font-semibold text-slate-900">Recording voice note</Text>
+                  <Text className="mt-0.5 text-xs font-medium text-slate-500">{String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}:{String(recordingSeconds % 60).padStart(2, '0')} / 01:00</Text>
+                </View>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Stop and send voice note" onPress={() => void finishVoiceRecording(true)} className="w-11 h-11 rounded-2xl items-center justify-center bg-accent">
+                  <Square size={17} color="#fff" fill="#fff" />
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Send photo"
+                  onPress={sendPhoto}
+                  disabled={isSendingPhoto || isSendingVoice || conversationBlocked || chatReadOnly}
+                  className="w-11 h-11 rounded-2xl items-center justify-center bg-accent/10"
+                >
+                  {isSendingPhoto ? <ActivityIndicator size="small" color="#3906D2" /> : <ImagePlus size={18} color="#3906D2" />}
+                </TouchableOpacity>
+                <TextInput
+                  className="font-sans flex-1 bg-slate-50 rounded-2xl px-4 py-3 text-sm font-medium text-slate-900 border border-slate-100"
+                  placeholder="Type a message…"
+                  placeholderTextColor="#94a3b8"
+                  value={inputText}
+                  onChangeText={setInputText}
+                  editable={!conversationBlocked && !chatReadOnly && !isSendingVoice}
+                  multiline
+                  maxLength={500}
+                  onSubmitEditing={() => sendMessage()}
+                  returnKeyType="send"
+                />
+                {Platform.OS !== 'web' ? (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Record voice note"
+                    onPress={() => void startVoiceRecording()}
+                    disabled={isSendingPhoto || isSendingVoice || conversationBlocked || chatReadOnly || ['calling', 'ringing', 'connected', 'incoming'].includes(callState)}
+                    className="w-11 h-11 rounded-2xl items-center justify-center bg-accent/10"
+                  >
+                    {isSendingVoice ? <ActivityIndicator size="small" color="#3906D2" /> : <Mic size={18} color="#3906D2" />}
+                  </TouchableOpacity>
+                ) : null}
+                <TouchableOpacity
+                  onPress={() => sendMessage()}
+                  disabled={!inputText.trim() || conversationBlocked || chatReadOnly || isSendingVoice}
+                  className={`w-11 h-11 rounded-2xl items-center justify-center ${inputText.trim() ? 'bg-accent' : 'bg-slate-100'}`}
+                >
+                  <Send size={18} color={inputText.trim() ? '#fff' : '#94a3b8'} />
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -776,7 +966,9 @@ export default function MessagesScreen() {
         </View>
       ) : (
         <FlatList
-          data={conversations}
+          data={conversations.map(conversation => conversation.lastMessageAt && messageTime(conversation.lastMessageAt) < now - MESSAGE_RETENTION_MS
+            ? { ...conversation, lastMessage: 'No recent messages', unreadCount: 0 }
+            : conversation)}
           keyExtractor={(c) => c.jobId}
           contentContainerStyle={{ paddingHorizontal: 20, gap: 12, paddingBottom: 32 }}
           renderItem={({ item }) => (

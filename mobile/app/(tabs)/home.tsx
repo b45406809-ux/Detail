@@ -62,6 +62,10 @@ import { recordMapboxUsage } from '../../services/usageMetrics';
 import { CleanerLocationPermissionError, completeCleanerPresenceStart, startCleanerLocationUpdates, stopCleanerLocationUpdates } from '../../services/locationTracking';
 import { needsCleanerVerificationTopUp } from '../../utils/cleanerVerification';
 
+function requiresCleanerRegistration(message: string) {
+  return /complete cleaner verification and onboarding|verify this phone number before (?:applying as a cleaner|switching roles)|verify your phone number in cleaner registration/i.test(message);
+}
+
 export default function HomeScreen() {
   const { user, profile, locationTrackingError } = useAuth();
   const userId = user?.uid;
@@ -203,7 +207,7 @@ export default function HomeScreen() {
         }
         appAlert(
           'Cleaner Registration Required',
-          'To work as a cleaner, add $2.00 to your Detail wallet during registration: $1.00 pays the one-time identity check and $1.00 remains as minimum commission credit, covering up to $10 of offline bookings. Verify your mobile and email and accept the cleaner agreement.',
+          'To work as a cleaner, make the $2.00 registration payment: $1.00 pays the one-time identity check and $1.00 remains as minimum prepaid commission credit, covering up to $10 of bookings. Verify your mobile and email and accept the cleaner agreement.',
           [
             { text: 'Cancel', style: 'cancel' },
             {
@@ -215,7 +219,12 @@ export default function HomeScreen() {
         );
         return;
       }
-      callFunction('setActiveRole', { role: 'CLEANER' }).then(() => setViewRole('CLEANER')).catch((e:any) => appAlert('Could not switch role', e.message ?? 'Try again.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Cleaner registration', onPress: () => router.push('/register-cleaner') }]));
+      callFunction('setActiveRole', { role: 'CLEANER' }).then(() => setViewRole('CLEANER')).catch((e:any) => {
+        const message = e?.message || 'Try again.';
+        appAlert('Could not switch role', message, requiresCleanerRegistration(message)
+          ? [{ text: 'Cancel', style: 'cancel' }, { text: 'Cleaner registration', onPress: () => router.push('/register-cleaner') }]
+          : [{ text: 'OK' }]);
+      });
     } else {
       callFunction('setActiveRole', { role: 'CUSTOMER' }).then(async () => {
         setViewRole('CUSTOMER');
@@ -362,7 +371,13 @@ export default function HomeScreen() {
         await callFunction('updateCleanerPresence',{status:'OFFLINE'}).catch(()=>{});
       }
       if (error instanceof CleanerLocationPermissionError) showPermissionDenied(error.message, error.canAskAgain);
-      else appAlert('Could not go online', error?.message || 'Please try again.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Cleaner registration', onPress: () => router.push('/register-cleaner') }]);
+      else {
+        const message = error?.message || 'Please try again.';
+        const needsRegistration = requiresCleanerRegistration(message);
+        appAlert('Could not go online', message, needsRegistration
+          ? [{ text: 'Cancel', style: 'cancel' }, { text: 'Cleaner registration', onPress: () => router.push('/register-cleaner') }]
+          : [{ text: 'OK' }]);
+      }
     }
   };
 

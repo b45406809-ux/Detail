@@ -77,6 +77,10 @@ export function toCleanerBookingSummary(job: Json) {
   const location = job.location && typeof job.location === 'object' && !Array.isArray(job.location)
     ? job.location as Json
     : {};
+  const data = job.data && typeof job.data === 'object' && !Array.isArray(job.data)
+    ? job.data as Json
+    : {};
+  const isPublicWashSite = category === 'CAR' && data.serviceMode === 'VISIT_WASH';
   const lat = Number(location.lat), lng = Number(location.lng);
   return {
     id: job.id,
@@ -86,16 +90,19 @@ export function toCleanerBookingSummary(job: Json) {
     checklist,
     description: '',
     location: {
-      lat: Number.isFinite(lat) && Math.abs(lat) <= 90 ? Math.round(lat * 100) / 100 : 0,
-      lng: Number.isFinite(lng) && Math.abs(lng) <= 180 ? Math.round(lng * 100) / 100 : 0,
-      address: 'Approximate area',
+      // A selected public car wash is the destination, so cleaners need its
+      // exact coordinates and address. Residential/mobile jobs stay rounded
+      // until the cleaner has accepted the booking.
+      lat: Number.isFinite(lat) && Math.abs(lat) <= 90 ? (isPublicWashSite ? lat : Math.round(lat * 100) / 100) : 0,
+      lng: Number.isFinite(lng) && Math.abs(lng) <= 180 ? (isPublicWashSite ? lng : Math.round(lng * 100) / 100) : 0,
+      address: isPublicWashSite ? safeText(location.address, 180) || 'Selected car wash' : 'Approximate area',
     },
     scheduledTime: job.scheduledtime,
     timePreference: job.timepreference,
     scheduledDateTime: job.scheduleddatetime,
     bookingMode: job.bookingmode,
-    serviceMode: job.data && typeof job.data === 'object' ? (job.data as Json).serviceMode : 'MOBILE',
-    washSiteName: job.data && typeof job.data === 'object' ? safeText((job.data as Json).washSiteName, 80) : '',
+    serviceMode: data.serviceMode === 'VISIT_WASH' ? 'VISIT_WASH' : 'MOBILE',
+    washSiteName: isPublicWashSite ? safeText(data.washSiteName, 80) : '',
     budget: job.budget,
     biddingExpiresAt: job.biddingexpiresat,
     estimatedDuration: job.estimatedduration,

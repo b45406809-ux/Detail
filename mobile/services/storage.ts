@@ -10,24 +10,26 @@ const signedUrlRequests = new Map<string, Promise<string>>();
 function filename() { return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
 function mimeTypeFromUri(uri: string) {
   const extension = uri.split(/[?#]/, 1)[0].split('.').pop()?.toLowerCase();
-  const types: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic' };
+  const types: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', m4a: 'audio/mp4' };
   return extension ? types[extension] : undefined;
 }
 async function uploadUri(uri: string, path: string, onProgress?: (pct: number) => void, upsert = false) {
-  if (!auth.currentUser) throw new Error('Sign in before uploading a photo.');
+  const isVoiceNote = path.startsWith('chat-audio/');
+  if (!auth.currentUser) throw new Error(isVoiceNote ? 'Sign in before sending a voice note.' : 'Sign in before uploading a photo.');
   const response = await fetch(uri);
-  if (!response.ok) throw new Error('Could not read the selected photo. Please choose it again.');
+  if (!response.ok) throw new Error(isVoiceNote ? 'Could not read the voice note. Please record it again.' : 'Could not read the selected photo. Please choose it again.');
   const bytes = await response.arrayBuffer();
-  if (bytes.byteLength === 0 || bytes.byteLength > MAX_UPLOAD_BYTES) throw new Error('Choose a photo smaller than 15 MB.');
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_UPLOAD_BYTES) throw new Error(isVoiceNote ? 'Keep voice notes under 15 MB.' : 'Choose a photo smaller than 15 MB.');
   const responseType = response.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase();
-  const contentType = responseType?.startsWith('image/') ? responseType : mimeTypeFromUri(uri);
-  if (!contentType || !['image/jpeg', 'image/png', 'image/webp', 'image/heic'].includes(contentType)) {
-    throw new Error('Choose a JPEG, PNG, WebP, or HEIC image.');
+  const contentType = responseType && (responseType.startsWith('image/') || responseType === 'audio/mp4') ? responseType : mimeTypeFromUri(uri);
+  const isSupportedImage = !!contentType && ['image/jpeg', 'image/png', 'image/webp', 'image/heic'].includes(contentType);
+  if (!contentType || (isVoiceNote ? contentType !== 'audio/mp4' : !isSupportedImage)) {
+    throw new Error(isVoiceNote ? 'Could not read the voice note. Please record it again.' : 'Choose a JPEG, PNG, WebP, or HEIC image.');
   }
   onProgress?.(0.1);
   const signed=await callFunction<{path:string;contentType:string;size:number;upsert:boolean},{url:string;path:string}>('mediaUploadUrl',{path,contentType,size:bytes.byteLength,upsert});
   const uploaded=await fetch(signed.url,{method:'PUT',headers:{'content-type':contentType,'content-length':String(bytes.byteLength)},body:bytes});
-  if(!uploaded.ok)throw new Error('Could not upload the photo. Please try again.');
+  if(!uploaded.ok)throw new Error(isVoiceNote ? 'Could not upload the voice note. Please try again.' : 'Could not upload the photo. Please try again.');
   onProgress?.(1);
   return `${BUCKET}/${path}`;
 }
@@ -45,6 +47,11 @@ export function uploadChatPhoto(uri: string, jobId: string) {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error('Sign in before uploading a photo.');
   return uploadUri(uri, `chat-photos/${jobId}/${uid}/${filename()}`);
+}
+export function uploadChatVoiceNote(uri: string, jobId: string) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error('Sign in before sending a voice note.');
+  return uploadUri(uri, `chat-audio/${jobId}/${uid}/${filename()}.m4a`);
 }
 export function uploadSupportEvidence(uri: string, jobId: string) {
   const uid = auth.currentUser?.uid;
@@ -88,8 +95,10 @@ export async function signMediaValue(value: unknown, context: { jobId?: string }
     if (cached) signedUrlCache.delete(cacheKey);
     const pending = signedUrlRequests.get(cacheKey);
     if (pending) return pending;
-    const request = callFunction<{path:string;jobId?:string},{url:string}>('mediaReadUrl',{path:`${BUCKET}/${path}`, ...(context.jobId ? { jobId: context.jobId } : {})}).then(({url}) => {
-      signedUrlCache.set(cacheKey, { url, expiresAt: Date.now() + SIGNED_URL_TTL_MS });
+    const request = callFunction<{path:string;jobId?:string},{url:string;expiresIn?:number}>('mediaReadUrl',{path:`${BUCKET}/${path}`, ...(context.jobId ? { jobId: context.jobId } : {})}).then(({url,expiresIn}) => {
+      const providerTtlMs=Number.isFinite(Number(expiresIn))?Math.max(0,(Number(expiresIn)-5)*1000):SIGNED_URL_TTL_MS;
+      const cacheTtlMs=Math.min(SIGNED_URL_TTL_MS,providerTtlMs);
+      if(cacheTtlMs>0)signedUrlCache.set(cacheKey, { url, expiresAt: Date.now() + cacheTtlMs });
       while (signedUrlCache.size > SIGNED_URL_CACHE_LIMIT) {
         const oldest = signedUrlCache.keys().next().value;
         if (oldest === undefined) break;

@@ -44,7 +44,7 @@ const reply = (body: unknown, status = 200, origin: string | null = null) => new
   status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': origin ?? '*', 'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type', 'access-control-allow-methods': 'POST, OPTIONS', 'vary': 'Origin' },
 });
 function fail(status: number, message: string): never { throw new ApiError(status, message); }
-async function signedMediaUrl(value: unknown): Promise<string | null> {
+async function signedMediaUrl(value: unknown, expiresInSeconds = 3600): Promise<string | null> {
   if (typeof value !== 'string' || !value) return null;
   if (!value.startsWith('detail-media/')) return value;
   const path = value.slice('detail-media/'.length);
@@ -52,15 +52,28 @@ async function signedMediaUrl(value: unknown): Promise<string | null> {
   try {
     const s3 = r2Client();
     await s3.send(new HeadObjectCommand({ Bucket: r2Bucket(), Key: path }));
-    return await getSignedUrl(s3, new GetObjectCommand({ Bucket: r2Bucket(), Key: path }), { expiresIn: 3600 });
+    return await getSignedUrl(s3, new GetObjectCommand({ Bucket: r2Bucket(), Key: path }), { expiresIn: expiresInSeconds });
   } catch {
-    const { data, error } = await admin.storage.from('detail-media').createSignedUrl(path, 3600);
+    const { data, error } = await admin.storage.from('detail-media').createSignedUrl(path, expiresInSeconds);
     if (error) throw error;
     return data.signedUrl;
   }
 }
-async function cleanerBookingSummary(job: Json) {
-  return toCleanerBookingSummary(job);
+const cleanerSelfiePath = (userId: string) => `detail-media/profile-photos/${userId}/avatar.jpg`;
+const hasCleanerSelfie = (profile: Json, userId: string) => profile.photourl === cleanerSelfiePath(userId) && !!profile.cleanerselfieat;
+async function cleanerBookingSummary(job: Json, includePhotos = false) {
+  const summary = toCleanerBookingSummary(job);
+  if (!includePhotos || typeof job.customerid !== 'string' || !Array.isArray(job.photos)) return summary;
+
+  // Open-job photos are private. Sign them only after the caller has passed
+  // the cleaner and open-booking checks in getCleanerBookingPreview.
+  const prefix = `detail-media/job-photos/${job.customerid}/`;
+  const paths = job.photos.slice(0, 6).filter((value: unknown): value is string =>
+    typeof value === 'string' && value.startsWith(prefix) && /^[A-Za-z0-9._-]+$/.test(value.slice(prefix.length))
+  );
+  summary.photos = (await Promise.all(paths.map((path: string) => signedMediaUrl(path, 900).catch(() => null))))
+    .filter((value): value is string => !!value);
+  return summary;
 }
 
 const text = (value: unknown, max = 500) => typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -122,24 +135,6 @@ async function requireRecentAdminAuth(uid:string){
   const failure=adminStepUpFailure(data.user?.last_sign_in_at);
   if(failure==='recent_auth_required')fail(403,'Sign in again before this sensitive administrator action.');
 }
-function payoutKey(){
-  const encoded=Deno.env.get('PAYOUT_ENCRYPTION_KEY')??'';
-  let raw:Uint8Array;try{raw=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));}catch{raw=new Uint8Array();}
-  if(raw.length!==32)fail(503,'Payout encryption is not configured.');return raw;
-}
-const encodeBase64=(bytes:Uint8Array)=>btoa(String.fromCharCode(...bytes));
-const arrayBuffer=(bytes:ArrayLike<number>)=>{const copy=new Uint8Array(bytes.length);copy.set(bytes);return copy.buffer;};
-async function encryptPayoutAccount(accountNumber:string){
-  const iv=crypto.getRandomValues(new Uint8Array(12)),key=await crypto.subtle.importKey('raw',arrayBuffer(payoutKey()),'AES-GCM',false,['encrypt']);
-  const encrypted=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(accountNumber)));
-  return `${encodeBase64(iv)}.${encodeBase64(encrypted)}`;
-}
-async function decryptPayoutAccount(ciphertext:string){
-  const [ivText,bodyText]=ciphertext.split('.');if(!ivText||!bodyText)fail(503,'Payout destination is unavailable.');
-  const decode=(value:string)=>Uint8Array.from(atob(value),c=>c.charCodeAt(0));const key=await crypto.subtle.importKey('raw',arrayBuffer(payoutKey()),'AES-GCM',false,['decrypt']);
-  try{return new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:arrayBuffer(decode(ivText))},key,arrayBuffer(decode(bodyText))));}catch{fail(503,'Payout destination could not be decrypted.');}
-}
-
 async function getUser(request: Request): Promise<User> {
   const bearer = request.headers.get('authorization') ?? '';
   const token = bearer.startsWith('Bearer ') ? bearer.slice(7) : '';
@@ -265,29 +260,6 @@ function trustedPaynowUrl(raw: string) {
   if (parsed.protocol !== 'https:' || !['paynow.co.zw', 'www.paynow.co.zw'].includes(parsed.hostname)) fail(502, 'Paynow returned an untrusted checkout URL.');
   return parsed.toString();
 }
-async function startPaynowCheckout(jobId: string, email: string, details?: { reference?: string; amount?: number; cleanerName?: string; serviceType?: string; attemptKey?: string }) {
-  const { data: payment, error } = await admin.from('payments').select('*').eq('id', `${jobId}_booking`).single();
-  if (error) throw error;
-  const { data: job, error: jobError } = await admin.from('jobs').select('*').eq('id', jobId).single();
-  if (jobError) throw jobError;
-  const reference = details?.reference ?? payment.reference;
-  if (!reference) fail(409, 'Paynow reference is missing.');
-  const client = paynowClient();
-  const checkout = client.createPayment(String(reference), email);
-  const price = Number(details?.amount ?? payment.amount);
-  checkout.add(`Detail ${details?.serviceType ?? job.servicetype ?? 'cleaning'} with ${details?.cleanerName ?? job.cleanername ?? 'Cleaner'} (${jobId})`, price);
-  const result = await client.send(checkout);
-  if (!result?.success || !result.redirectUrl || !result.pollUrl) throw new Error(String(result?.error ?? 'Paynow did not return a checkout URL.'));
-  const redirectUrl = trustedPaynowUrl(String(result.redirectUrl));
-  const pollUrl = new URL(String(result.pollUrl));
-  if (pollUrl.protocol !== 'https:' || !['paynow.co.zw', 'www.paynow.co.zw'].includes(pollUrl.hostname)) fail(502, 'Paynow returned an untrusted poll URL.');
-  const paymentData=details?.attemptKey?{...(payment.data??{}),retryAttempt:{...(payment.data?.retryAttempt??{}),status:'PENDING',checkoutCreatedAt:new Date().toISOString()}}:payment.data;
-  const {error:paymentUpdateError}=await admin.from('payments').update({ status: 'PENDING', redirecturl: redirectUrl, pollurl: String(result.pollUrl), ...(details?.attemptKey?{data:paymentData}:{}), updatedat: new Date().toISOString() }).eq('id', payment.id);
-  if(paymentUpdateError)throw paymentUpdateError;
-  const {error:jobUpdateError}=await admin.from('jobs').update({ paymentstatus: 'PENDING' }).eq('id', jobId);
-  if(jobUpdateError)throw jobUpdateError;
-  return redirectUrl;
-}
 async function applyPaynowStatus(reference: string, status: string, amount: string | number) {
   const eventPayload=JSON.stringify({reference,status,amount:Number(amount)});
   const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(eventPayload)));
@@ -305,16 +277,30 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
   const uid = user?.id;
   const authed = (): string => { if (!uid) fail(401, 'Sign in required.'); return uid; };
   switch (name) {
+    case 'confirmCleanerProfileSelfie': {
+      const actor=authed();
+      const expectedPath=cleanerSelfiePath(actor);
+      const {data:profile,error:profileError}=await admin.from('users').select('id,photourl').eq('id',actor).maybeSingle();
+      if(profileError)throw profileError;
+      if(!profile||profile.photourl!==expectedPath)fail(409,'Take and save your profile selfie before continuing.');
+      const {data:updated,error}=await admin.from('users').update({cleanerselfieat:new Date().toISOString()}).eq('id',actor).eq('photourl',expectedPath).select('id').maybeSingle();
+      if(error)throw error;
+      if(!updated)fail(409,'Your selfie could not be confirmed. Retake it and try again.');
+      return {success:true};
+    }
     case 'mediaUploadUrl': {
       const actor=authed(); await requireActiveMarketplaceAccount(actor);
       const path=text(input.path,500),type=text(input.contentType,80).toLowerCase(),size=Number(input.size);
-      if(!/^[a-z0-9-]+(?:\/[A-Za-z0-9._-]+){2,3}$/.test(path)||!['image/jpeg','image/png','image/webp','image/heic'].includes(type)||!Number.isFinite(size)||size<=0||size>15*1024*1024)fail(400,'Invalid media upload.');
       const parts=path.split('/'),folder=parts[0];
+      const allowedTypes=folder==='chat-audio'?['audio/mp4']:['image/jpeg','image/png','image/webp','image/heic'];
+      if(!/^[a-z0-9-]+(?:\/[A-Za-z0-9._-]+){2,3}$/.test(path)||!allowedTypes.includes(type)||!Number.isFinite(size)||size<=0||size>15*1024*1024)fail(400,'Invalid media upload.');
+      if(folder==='chat-audio'&&!/^chat-audio\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/[A-Za-z0-9._-]+\.m4a$/i.test(path))fail(400,'Invalid voice note upload.');
       if(['profile-photos','job-photos','verification','cleaner-portfolio'].includes(folder)&&parts[1]!==actor)fail(403,'You cannot upload to another account folder.');
-      if(['job-completion','chat-photos','support-evidence'].includes(folder)){
+      if(folder==='profile-photos'&&path!==`profile-photos/${actor}/avatar.jpg`)fail(400,'Use the profile photo slot for your profile picture.');
+      if(['job-completion','chat-photos','chat-audio','support-evidence'].includes(folder)){
         const {data:job,error}=await admin.from('jobs').select('customerid,cleanerid').eq('id',parts[1]).maybeSingle();
         if(error)throw error;if(!job||![job.customerid,job.cleanerid].includes(actor)||!path.includes(`/${actor}/`))fail(403,'You cannot upload media for this booking.');
-        if(folder==='chat-photos'){
+        if(folder==='chat-photos'||folder==='chat-audio'){
           const otherUserId=job.customerid===actor?job.cleanerid:job.customerid;
           if(!otherUserId)fail(403,'This booking has no chat partner yet.');
           const [blockedByActor,blockedByOther]=await Promise.all([
@@ -322,36 +308,49 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
             admin.from('userblocks').select('blockerid').eq('blockerid',otherUserId).eq('blockeduserid',actor).maybeSingle(),
           ]);
           if(blockedByActor.error)throw blockedByActor.error;if(blockedByOther.error)throw blockedByOther.error;
-          if(blockedByActor.data||blockedByOther.data)fail(403,'Chat photos are unavailable in this conversation.');
+          if(blockedByActor.data||blockedByOther.data)fail(403,'Chat media is unavailable in this conversation.');
         }
       }
-      if(!['profile-photos','job-photos','verification','cleaner-portfolio','job-completion','chat-photos','support-evidence'].includes(folder))fail(400,'Unsupported media type.');
+      if(!['profile-photos','job-photos','verification','cleaner-portfolio','job-completion','chat-photos','chat-audio','support-evidence'].includes(folder))fail(400,'Unsupported media type.');
       const command=new PutObjectCommand({Bucket:r2Bucket(),Key:path,ContentType:type,ContentLength:size});
       return {url:await getSignedUrl(r2Client(),command,{expiresIn:300}),path:`detail-media/${path}`,expiresIn:300};
     }
     case 'mediaReadUrl': {
       const actor=authed(),path=text(input.path,500).replace(/^detail-media\//,'');
       if(path.includes('..')||path.startsWith('/'))fail(400,'Invalid media path.');
-      const parts=path.split('/'),folder=parts[0];let allowed=false;
+      const parts=path.split('/'),folder=parts[0];let allowed=false,expiresIn=3600;
       if(['profile-photos','verification','cleaner-portfolio'].includes(folder)){
         allowed=parts[1]===actor;
         if(folder==='profile-photos'&&!allowed){const {data:profile}=await admin.from('users').select('verificationstatus,role').eq('id',parts[1]).maybeSingle();allowed=profile?.role==='CLEANER'&&profile?.verificationstatus==='VERIFIED';}
         if(folder==='cleaner-portfolio'&&!allowed){const {data:profile}=await admin.from('users').select('verificationstatus,role').eq('id',parts[1]).maybeSingle();allowed=profile?.role==='CLEANER'&&profile?.verificationstatus==='VERIFIED';}
       }
-      if(['job-photos','job-completion','chat-photos','support-evidence'].includes(folder)){
+      if(['job-photos','job-completion','chat-photos','chat-audio','support-evidence'].includes(folder)){
+        if(folder==='chat-photos'||folder==='chat-audio'){
+          const {data:message,error:messageError}=await admin.from('messages').select('jobid,createdat').eq('imageurl',`detail-media/${path}`).gte('createdat',new Date(Date.now()-24*60*60*1000).toISOString()).maybeSingle();
+          if(messageError)throw messageError;
+          if(!message)fail(410,'This chat media has expired or is unavailable.');
+          const {data:job,error:jobError}=await admin.from('jobs').select('customerid,cleanerid').eq('id',message.jobid).maybeSingle();
+          if(jobError)throw jobError;
+          allowed=!!job&&[job.customerid,job.cleanerid].includes(actor);
+          const remaining=Math.floor((Date.parse(message.createdat)+24*60*60*1000-Date.now())/1000);
+          if(remaining<=0)fail(410,'This chat media has expired or is unavailable.');
+          expiresIn=Math.min(3600,remaining);
+        }
         const jobId=folder==='job-photos'?text(input.jobId,80):parts[1];
-        const {data:job,error}=await admin.from('jobs').select('customerid,cleanerid,photos').eq('id',jobId).maybeSingle();if(error)throw error;
-        allowed=!!job&&[job.customerid,job.cleanerid].includes(actor);
-        if(folder==='job-photos')allowed=allowed&&Array.isArray(job?.photos)&&job.photos.includes(`detail-media/${path}`);
-        if(folder==='support-evidence')allowed=allowed&&parts[2]===actor;
-        if(folder==='job-completion'||folder==='chat-photos')allowed=allowed&&parts[2]===actor;
+        if(folder!=='chat-photos'&&folder!=='chat-audio'){
+          const {data:job,error}=await admin.from('jobs').select('customerid,cleanerid,photos').eq('id',jobId).maybeSingle();if(error)throw error;
+          allowed=!!job&&[job.customerid,job.cleanerid].includes(actor);
+          if(folder==='job-photos')allowed=allowed&&Array.isArray(job?.photos)&&job.photos.includes(`detail-media/${path}`);
+          if(folder==='support-evidence')allowed=allowed&&parts[2]===actor;
+          if(folder==='job-completion')allowed=allowed&&parts[2]===actor;
+        }
       }
       if(!allowed)fail(403,'You cannot view this private media.');
       const s3=r2Client();
-      try{await s3.send(new HeadObjectCommand({Bucket:r2Bucket(),Key:path}));return {url:await getSignedUrl(s3,new GetObjectCommand({Bucket:r2Bucket(),Key:path}),{expiresIn:3600}),expiresIn:3600};}
+      try{await s3.send(new HeadObjectCommand({Bucket:r2Bucket(),Key:path}));return {url:await getSignedUrl(s3,new GetObjectCommand({Bucket:r2Bucket(),Key:path}),{expiresIn}),expiresIn};}
       catch{
-        const {data,error}=await admin.storage.from('detail-media').createSignedUrl(path,3600);
-        if(error)throw error;return {url:data.signedUrl,expiresIn:3600};
+        const {data,error}=await admin.storage.from('detail-media').createSignedUrl(path,expiresIn);
+        if(error)throw error;return {url:data.signedUrl,expiresIn};
       }
     }
     case 'mediaDelete': {
@@ -510,6 +509,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'acceptCleanerAgreement': {
       const actor = authed();
       const profile = await userRow(actor);
+      if (!hasCleanerSelfie(profile, actor)) fail(409, 'Take a front-camera selfie for your cleaner profile first. Customers will see this photo.');
       if (!user?.phone_confirmed_at || !user?.phone || String(profile.phone ?? '').replace(/\D/g, '') !== user.phone.replace(/\D/g, '')) fail(409, 'Verify your phone number before becoming a cleaner.');
       const { error } = await admin.rpc('accept_cleaner_agreement',{p_user_id:actor});
       if (error) throw error;
@@ -523,6 +523,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     }
     case 'submitCleanerApplication': {
       const actor = authed(); const profile = await userRow(actor);
+      if (!hasCleanerSelfie(profile, actor)) fail(409, 'Take a front-camera selfie for your cleaner profile before applying. Customers will see this photo.');
       if (profile.verificationstatus !== 'VERIFIED' || !user?.email_confirmed_at) fail(409, 'Verify your identity and email before applying.');
       const inputName = text(input.fullName, 120), phone = text(input.phone, 40), address = text(input.address, 250), area = text(input.serviceArea, 120);
       if (!user?.phone_confirmed_at || !user?.phone || phone.replace(/\D/g, '') !== user.phone.replace(/\D/g, '')) fail(409, 'Verify this phone number before applying as a cleaner.');
@@ -539,6 +540,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if (profile.issuspended || profile.isbanned || profile.accountdeletedat) fail(403, 'This account cannot change marketplace roles. Contact support for help.');
       if (role === 'CLEANER' && (!user?.phone_confirmed_at || !user?.phone || String(profile.phone ?? '').replace(/\D/g, '') !== user.phone.replace(/\D/g, ''))) fail(409, 'Verify your phone number in cleaner registration before switching roles.');
       if (role === 'CLEANER' && (profile.verificationstatus !== 'VERIFIED' || !profile.cleaneragreementaccepted || !profile.cleaneronboardingcomplete || profile.issuspended || profile.isbanned)) fail(409, 'Complete cleaner verification and onboarding first.');
+      if (role === 'CLEANER' && !hasCleanerSelfie(profile, actor)) fail(409, 'Take a front-camera selfie for your cleaner profile first. Customers will see this photo.');
       if (role === 'CUSTOMER' && profile.role === 'CLEANER') {
         const { count, error } = await admin.from('jobs').select('id', { count: 'exact', head: true }).eq('cleanerid', actor).in('status', ['ASSIGNED','EN_ROUTE','IN_PROGRESS']);
         if (error) throw error;
@@ -564,6 +566,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'updateCleanerPresence': {
       const actor = authed(); const profile = await userRow(actor);
       if (!['AVAILABLE','OFFLINE'].includes(input.status) || profile.role !== 'CLEANER' || profile.verificationstatus !== 'VERIFIED' || !profile.cleaneragreementaccepted || profile.issuspended || profile.isbanned) fail(403, 'Only an approved cleaner can change availability.');
+      if (!hasCleanerSelfie(profile, actor)) fail(409, 'Take a front-camera selfie for your cleaner profile before going online. Customers will see this photo.');
       if (input.status === 'AVAILABLE' && (!user?.phone_confirmed_at || !user?.phone || String(profile.phone ?? '').replace(/\D/g, '') !== user.phone.replace(/\D/g, ''))) fail(409, 'Verify your phone number in cleaner registration before going online.');
       if(input.status==='OFFLINE'){
         const {count,error}=await admin.from('jobs').select('id',{count:'exact',head:true}).eq('cleanerid',actor).in('status',['ASSIGNED','EN_ROUTE','IN_PROGRESS']);
@@ -586,6 +589,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const actor = authed(); const profile = await userRow(actor); const lat = Number(input.lat), lng = Number(input.lng);
       if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat)>90 || Math.abs(lng)>180) fail(400,'Invalid coordinates.');
       if (profile.role !== 'CLEANER' || profile.verificationstatus !== 'VERIFIED' || !profile.cleaneragreementaccepted || profile.status !== 'AVAILABLE' || profile.issuspended || profile.isbanned) fail(403,'Only an approved online cleaner can share availability location.');
+      if (!hasCleanerSelfie(profile, actor)) fail(409, 'Take a front-camera selfie for your cleaner profile before going online.');
       const point = `SRID=4326;POINT(${lng} ${lat})`;
       const updatedAt = new Date().toISOString();
       const { data: stillEligible, error } = await admin.from('users').update({ location: { lat, lng }, locationpoint: point, locationupdatedat: updatedAt, updatedat: updatedAt })
@@ -600,7 +604,8 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'prepareCleanerLocation': {
       const actor=authed(),profile=await userRow(actor),lat=Number(input.lat),lng=Number(input.lng);
       if(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)fail(400,'Invalid coordinates.');
-      if(profile.role!=='CLEANER'||profile.verificationstatus!=='VERIFIED'||!profile.cleaneragreementaccepted||profile.status!=='OFFLINE'||profile.issuspended||profile.isbanned)fail(403,'Only an approved offline cleaner can prepare an availability location.');
+      if(profile.role!=='CLEANER'||profile.verificationstatus!=='VERIFIED'||!profile.cleaneragreementaccepted||profile.issuspended||profile.isbanned||profile.accountdeletedat)fail(403,'Complete cleaner verification and onboarding before going online.');
+      if(!hasCleanerSelfie(profile,actor))fail(409,'Take a front-camera selfie for your cleaner profile before going online. Customers will see this photo.');
       const point=`SRID=4326;POINT(${lng} ${lat})`;
       const {error}=await admin.from('users').update({location:{lat,lng},locationpoint:point,locationupdatedat:new Date().toISOString(),updatedat:new Date().toISOString()}).eq('id',actor);
       if(error)throw error;
@@ -761,9 +766,9 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         if(!washSiteId)fail(400,'Choose a published car wash location.');
         const {data:siteRows,error:siteError}=await admin.rpc('get_car_wash_site',{p_id:washSiteId});
         if(siteError)throw siteError;const site=siteRows?.[0];if(!site||!site.enabled)fail(404,'That wash location is no longer available. Choose another location.');
-        const {data:owner,error:ownerError}=await admin.from('users').select('role,verificationstatus,cleaneragreementaccepted,cleaneronboardingcomplete,issuspended,isbanned,accountdeletedat,servicecategories').eq('id',site.cleaner_id).maybeSingle();
+        const {data:owner,error:ownerError}=await admin.from('users').select('id,photourl,cleanerselfieat,role,verificationstatus,cleaneragreementaccepted,cleaneronboardingcomplete,issuspended,isbanned,accountdeletedat,servicecategories').eq('id',site.cleaner_id).maybeSingle();
         if(ownerError)throw ownerError;
-        if(!owner||owner.role!=='CLEANER'||owner.verificationstatus!=='VERIFIED'||!owner.cleaneragreementaccepted||!owner.cleaneronboardingcomplete||owner.issuspended||owner.isbanned||owner.accountdeletedat||(owner.servicecategories??[]).indexOf('CAR')<0)fail(409,'That wash cannot accept bookings right now. Choose another location.');
+        if(!owner||owner.role!=='CLEANER'||owner.verificationstatus!=='VERIFIED'||!owner.cleaneragreementaccepted||!owner.cleaneronboardingcomplete||owner.issuspended||owner.isbanned||owner.accountdeletedat||(owner.servicecategories??[]).indexOf('CAR')<0||!hasCleanerSelfie(owner,site.cleaner_id))fail(409,'That wash cannot accept bookings right now. Choose another location.');
         washSite={id:site.id,cleanerId:site.cleaner_id,name:site.name,address:site.address,lat:Number(site.lat),lng:Number(site.lng)};
         booking={...booking,serviceMode,washSiteId:site.id,washSiteCleanerId:site.cleaner_id,washSiteName:site.name,location:{lat:Number(site.lat),lng:Number(site.lng),address:site.address}};
       } else booking={...booking,serviceMode};
@@ -818,7 +823,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(error)throw error;
       const rows=await Promise.all((offers??[]).map(async offer=>{
         const {data:job}=await admin.from('jobs').select('id,category,servicetype,price,budget,estimatedduration,suppliesrequired,suppliesfee,checklist').eq('id',offer.jobid).maybeSingle();
-        return job?{offerId:offer.id,jobId:job.id,category:job.category,serviceType:job.servicetype,price:Number(job.price??job.budget??0),estimatedPayout:Math.round(Number(job.price??job.budget??0)*0.9*100)/100,estimatedDuration:job.estimatedduration,suppliesRequired:job.suppliesrequired,suppliesFee:job.suppliesfee,distanceKm:offer.distancemeters===null?null:Math.round(offer.distancemeters/100)/10,expiresAt:offer.expiresat,checklist:job.checklist}:null;
+        return job?{offerId:offer.id,jobId:job.id,category:job.category,serviceType:job.servicetype,price:Number(job.price??job.budget??0),estimatedEarnings:Math.round(Number(job.price??job.budget??0)*0.9*100)/100,estimatedDuration:job.estimatedduration,suppliesRequired:job.suppliesrequired,suppliesFee:job.suppliesfee,distanceKm:offer.distancemeters===null?null:Math.round(offer.distancemeters/100)/10,expiresAt:offer.expiresat,checklist:job.checklist}:null;
       }));
       return {offers:rows.filter(Boolean)};
     }
@@ -902,7 +907,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if (!Array.isArray(job.completionphotos) || job.completionphotos.length < 1) fail(409,'Add at least one completion photo before submitting the finished booking.');
       const { error } = await admin.rpc('transition_booking',{p_job_id:jobId,p_actor_id:actor,p_new_status:'COMPLETED',p_idempotency_key:key,p_reason:null});
       if (error) throw error;
-      await notify(job.customerid,{type:'COMPLETED',title:'Booking completed',body:job.paymentmethod==='DIRECT_OFFLINE'?'Review the work and confirm completion within 48 hours, or report a problem. Pay your cleaner through the method you agreed on; Detail records its 10% commission after completion is confirmed.':'Your cleaning is complete. Confirm delivery in Paynow BuySafe, then leave a rating.',jobId});
+      await notify(job.customerid,{type:'COMPLETED',title:'Booking completed',body:'Review the work and confirm completion within 48 hours, or report a problem. Pay your cleaner through the method you agreed on, then leave a rating.',jobId});
       return { success:true };
     }
     case 'submitBid': {
@@ -913,7 +918,16 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if (profileResult.error || jobResult.error) fail(404,'Job or cleaner not found.');
       const profile=profileResult.data, job=jobResult.data;
       if (profile.role!=='CLEANER' || profile.verificationstatus!=='VERIFIED' || !profile.cleaneragreementaccepted || !profile.cleaneronboardingcomplete || profile.issuspended || profile.isbanned || profile.accountdeletedat || Number(profile.balance)<0) fail(403,'Complete cleaner verification and resolve any outstanding commission before bidding.');
+      if (!hasCleanerSelfie(profile, actor)) fail(409,'Take a front-camera selfie for your cleaner profile before bidding. Customers will see this photo.');
       if (!user?.phone_confirmed_at || !user?.phone || String(profile.phone ?? '').replace(/\D/g, '') !== user.phone.replace(/\D/g, '')) fail(409, 'Verify your phone number in cleaner registration before bidding.');
+      const commissionReserve = round2(bidPrice * 0.10);
+      const commissionBalance = Math.max(0, Number(profile.commissionbalance) || 0);
+      const commissionOwed = Math.max(0, Number(profile.commissionowed) || 0);
+      const commissionShortfall = Math.max(0, commissionOwed, commissionOwed + commissionReserve - commissionBalance);
+      if (commissionShortfall > 0) {
+        const suggestedTopup = Math.max(1, round2(commissionShortfall));
+        fail(402, `PREPAID_TOPUP_REQUIRED:${suggestedTopup.toFixed(2)}`);
+      }
       const {data:operations}=await admin.from('configuration').select('value').eq('key','operations').maybeSingle();
       if(operations?.value?.switches?.maintenance===true||operations?.value?.switches?.bidAcceptance===true)fail(503,'Cleaner bidding is temporarily paused.');
       if (job.status!=='PENDING' || job.bookingmode==='INSTANT' || (job.biddingexpiresat && new Date(job.biddingexpiresat).getTime()<Date.now())) fail(409,'This booking is not accepting cleaner bids.');
@@ -946,6 +960,13 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const {data:booking,error:bookingError}=await admin.from('jobs').select('customerid').eq('id',jobId).maybeSingle();
       if(bookingError)throw bookingError;
       if(!booking||booking.customerid!==actor)fail(403,'Only the customer can accept a quote.');
+      const {data:bid,error:bidError}=await admin.from('bids').select('cleanerid,bidprice').eq('id',bidId).eq('jobid',jobId).maybeSingle();
+      if(bidError)throw bidError;if(!bid)fail(404,'This quote is no longer available. Refresh the offers.');
+      const {data:cleaner,error:cleanerError}=await admin.from('users').select('id,photourl,cleanerselfieat,commissionbalance,commissionowed').eq('id',bid.cleanerid).maybeSingle();
+      if(cleanerError)throw cleanerError;
+      if(!cleaner||!hasCleanerSelfie(cleaner,String(cleaner.id)))fail(409,'This cleaner needs to update their profile selfie before this quote can be accepted. Choose another quote or ask them to update their profile.');
+      const requiredCommission=round2(Number(bid.bidprice)*0.10);
+      if(Number(cleaner.commissionowed??0)>0||Number(cleaner.commissionbalance??0)<requiredCommission)fail(409,'This cleaner needs to top up prepaid commission before this quote can be accepted. Choose another quote or ask them to update their balance.');
       const {data:operations,error:operationsError}=await admin.from('configuration').select('value').eq('key','operations').maybeSingle();
       if(operationsError)throw operationsError;
       if(operations?.value?.switches?.maintenance===true||operations?.value?.switches?.bidAcceptance===true)fail(503,'Booking acceptance is temporarily paused. Please try again later.');
@@ -954,63 +975,27 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       // used for commission-credit top-ups, not BuySafe/customer checkout.
       const acceptedMethod='DIRECT_OFFLINE';
       const {data,error}=await admin.rpc('accept_bid',{p_actor_id:actor,p_job_id:jobId,p_bid_id:bidId,p_payment_method:acceptedMethod,p_idempotency_key:key});
-      if(error)throw error;
-      let redirectUrl: string | null=data.redirectUrl??null;
-      if(data.paymentMethod==='PAYNOW'&&!data.replayed) {
-        const {data:profile}=await admin.from('users').select('email').eq('id',actor).single();
-        const email=user?.email??profile?.email;
-        if(!email)fail(409,'Add an email address to your account before paying with Paynow.');
-        try { redirectUrl=await startPaynowCheckout(jobId,email,{reference:data.payment.reference,amount:data.payment.amount,cleanerName:data.cleanerName}); }
-        catch(error){const {data:current}=await admin.from('payments').select('data').eq('id',`${jobId}_booking`).maybeSingle();await admin.from('payments').update({status:'FAILED',data:{...(current?.data??{}),failureReason:'INITIATION_FAILED'}}).eq('id',`${jobId}_booking`);await admin.from('jobs').update({paymentstatus:'FAILED'}).eq('id',jobId);throw error;}
-      }
-      const offlineNotice=`Booking confirmed. Agree cash, EcoCash, InnBucks, or another offline payment method with the customer. Detail does not receive the customer’s payment. $${Number(data.commissionReserved ?? 0).toFixed(2)} (10%) has been reserved from your prepaid commission credit for this booking; it is returned if the booking is cancelled under the cancellation process.`;
-      if(data.cleanerId && data.paymentMethod!=='PAYNOW'&&!data.replayed) await notify(data.cleanerId,{type:'BID_ACCEPTED',title:'Quote accepted',body:data.paymentMethod==='DIRECT_OFFLINE'?offlineNotice:'The customer accepted your quote.',jobId});
-      if(data.paymentMethod==='DIRECT_OFFLINE'&&!data.replayed) await notify(actor,{type:'PAYMENT_UNAVAILABLE',title:'Booking confirmed — agree payment with your cleaner',body:'Arrange cash, EcoCash, InnBucks, or another agreed payment method with your cleaner. Detail does not receive this payment. The cleaner’s 10% commission is reserved from their prepaid credit when you accept.',jobId});
-      return {...data,redirectUrl,paymentUnavailable:data.paymentMethod==='DIRECT_OFFLINE'};
-    }
-    case 'refreshPaynowBookingPayment': {
-      const actor=authed(), jobId=text(input.jobId,80);await enforceRateLimit(request,actor,'paynow_booking_refresh',12,300);
-      const {data:job}=await admin.from('jobs').select('customerid').eq('id',jobId).maybeSingle();
-      if(!job||job.customerid!==actor)fail(403,'Only the customer can refresh this payment.');
-      const {data:payment}=await admin.from('payments').select('*').eq('id',`${jobId}_booking`).maybeSingle();
-      if(!payment||payment.provider!=='PAYNOW'||!payment.pollurl)fail(409,'Paynow checkout has not been created.');
-      const poll=new URL(payment.pollurl); if(poll.protocol!=='https:'||!['paynow.co.zw','www.paynow.co.zw'].includes(poll.hostname))fail(400,'Untrusted Paynow poll URL.');
-      const result=await pollPaynowStatus(paynowClient(), payment.pollurl, paynowFetch);
-      const applied=await applyPaynowStatus(String(result.reference),String(result.status),String(result.amount));
-      return {success:true,status:applied.status};
-    }
-    case 'resumePaynowBookingPayment': {
-      const actor=authed(),jobId=text(input.jobId,80);await enforceRateLimit(request,actor,'paynow_booking_resume',12,300);
-      const {data:job,error:jobError}=await admin.from('jobs').select('customerid').eq('id',jobId).maybeSingle();
-      if(jobError)throw jobError;
-      if(!job||job.customerid!==actor)fail(403,'Only the customer can resume this payment.');
-      const {data:payment,error:paymentError}=await admin.from('payments').select('provider,status,redirecturl').eq('id',`${jobId}_booking`).maybeSingle();
-      if(paymentError)throw paymentError;
-      if(!payment||payment.provider!=='PAYNOW'||payment.status!=='PENDING'||!payment.redirecturl)fail(409,'There is no pending Paynow checkout to resume. Refresh the payment status first.');
-      return {success:true,redirectUrl:trustedPaynowUrl(payment.redirecturl)};
-    }
-    case 'retryPaynowBookingPayment': {
-      const actor=authed(), jobId=text(input.jobId,80),idempotencyKey=requireKey(input.idempotencyKey);
-      await enforceRateLimit(request,actor,'paynow_booking_retry',5,3600);
-      await assertPaymentsAvailable();
-      const [{data:job},{data:payment},{data:profile}] = await Promise.all([admin.from('jobs').select('*').eq('id',jobId).maybeSingle(),admin.from('payments').select('*').eq('id',`${jobId}_booking`).maybeSingle(),admin.from('users').select('email').eq('id',actor).maybeSingle()]);
-      if(!job||!payment||job.customerid!==actor||job.paymentmethod!=='PAYNOW')fail(409,'This Paynow payment cannot be retried.');
-      const email=user?.email??profile?.email; if(!email)fail(409,'Add an email address before paying with Paynow.');
-      const {data:claim,error:claimError}=await admin.rpc('claim_paynow_booking_retry',{p_job_id:jobId,p_customer_id:actor,p_idempotency_key:idempotencyKey});if(claimError)throw claimError;
-      if(claim.status==='PENDING'&&claim.redirectUrl)return {success:true,redirectUrl:claim.redirectUrl};
-      if(claim.status==='IN_PROGRESS')fail(409,'Paynow checkout is still starting. Wait a moment, then refresh payment status.');
-      const reference=String(claim.reference);
-      try{
-        const redirectUrl=await startPaynowCheckout(jobId,email,{reference,amount:Number(payment.amount),cleanerName:job.cleanername,serviceType:job.servicetype,attemptKey:idempotencyKey});
-        return {success:true,redirectUrl};
-      }catch(error){
-        const {data:latest}=await admin.from('payments').select('data').eq('id',payment.id).maybeSingle();
-        const retryAttempt={...(latest?.data?.retryAttempt??{}),status:'FAILED',failedAt:new Date().toISOString()};
-        const {error:paymentError}=await admin.from('payments').update({status:'FAILED',data:{...(latest?.data??{}),retryAttempt},updatedat:new Date().toISOString()}).eq('id',payment.id);
-        const {error:jobError}=await admin.from('jobs').update({paymentstatus:'FAILED',updatedat:new Date().toISOString()}).eq('id',jobId);
-        if(paymentError||jobError)console.error('Paynow retry failed and status recovery was incomplete',paymentError?.message,jobError?.message);
+      if(error){
+        const message=String(error.message??'');
+        if(/commission balance is insufficient|prepaid commission is too low/i.test(message))fail(409,'This cleaner cannot accept a new booking right now. Choose another quote or ask them to contact support.');
+        if(/pay any outstanding commission/i.test(message))fail(409,'This cleaner cannot accept another booking right now. Choose another quote or ask them to contact support.');
+        if(/JOB_UNAVAILABLE|job is not available/i.test(message))fail(409,'This booking has already been accepted or is no longer available. Refresh the offers.');
+        if(/BID_UNAVAILABLE|bid is not available/i.test(message))fail(409,'This quote is no longer available. Refresh the offers and choose another quote.');
+        if(/Cleaner is not eligible/i.test(message))fail(409,'This cleaner is not currently approved to accept bookings. Choose another quote.');
+        if(/idempotency key is already bound/i.test(message))fail(409,'This quote acceptance was already used for another action. Refresh the offers and try again.');
+        if(/bid not found/i.test(message))fail(404,'This quote is no longer available. Refresh the offers.');
+        if(/job not found/i.test(message))fail(404,'This booking could not be found. Refresh the offers.');
+        if(error.code==='P0001'||error.code==='23505'){
+          console.warn('Quote acceptance was rejected by the booking database',error.code,message.slice(0,180));
+          fail(409,'The quote could not be accepted. It may have been accepted already or become unavailable. Refresh the offers and try again.');
+        }
+        console.error('Quote acceptance database request failed',error.code??'unknown');
         throw error;
       }
+      const cleanerNotice=`Booking confirmed. Contact the customer to arrange your agreed payment method. Detail does not collect customer booking payments. A $${Number(data.commissionReserved ?? 0).toFixed(2)} commission reserve has been taken from your prepaid credit.`;
+      if(data.cleanerId&&!data.replayed)await notify(data.cleanerId,{type:'BID_ACCEPTED',title:'Quote accepted',body:cleanerNotice,jobId});
+      if(!data.replayed)await notify(actor,{type:'BID_ACCEPTED',title:'Booking confirmed',body:'Your cleaner accepted the quote. Message them to arrange the booking and payment directly.',jobId});
+      return data;
     }
     case 'listEcoCashWalletPayments': {
       const actor = authed();
@@ -1034,6 +1019,35 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         })),
         nextOffset: data?.length === 25 ? offset + 25 : null,
       };
+    }
+    case 'getCleanerEarningsSummary': {
+      const actor = authed();
+      const profile = await requireActiveMarketplaceAccount(actor);
+      if (profile.role !== 'CLEANER') fail(403, 'Switch to Cleaner to view your earnings.');
+      const pageSize = 500;
+      let offset = 0;
+      let totalEarnings = 0;
+      let completedJobs = 0;
+      while (true) {
+        const { data, error } = await admin.from('jobs').select('earnings')
+          .eq('cleanerid', actor).eq('status', 'COMPLETED').not('earnings', 'is', null)
+          .order('createdat', { ascending: true }).range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        for (const row of data ?? []) {
+          const earnings = row.earnings as Json | null;
+          if (!earnings || earnings.finalized !== true) continue;
+          const gross = Number(earnings.gross);
+          const commission = Number(earnings.commission);
+          const net = Number(earnings.net);
+          const amount = Number.isFinite(net) ? net : Number.isFinite(gross) && Number.isFinite(commission) ? gross - commission : NaN;
+          if (!Number.isFinite(amount) || amount < 0) continue;
+          totalEarnings += amount;
+          completedJobs += 1;
+        }
+        if ((data?.length ?? 0) < pageSize) break;
+        offset += pageSize;
+      }
+      return { totalEarnings: round2(totalEarnings), completedJobs };
     }
     case 'cancelEcoCashWalletPayment': {
       const actor = authed();
@@ -1061,16 +1075,16 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'createPaynowWalletTopup': {
       const actor = authed();
       const amount = Number(input.amount);
+      const verification = input.purpose === 'VERIFICATION';
       const idempotencyKey = requireKey(input.idempotencyKey);
       const digits = text(input.phone, 40).replace(/[ +().-]/g, '');
       const phone = digits.replace(/^263/, '0');
-      if (!Number.isFinite(amount) || amount !== round2(amount) || amount < 0.50 || amount > 1000 ||
+      if (!Number.isFinite(amount) || amount !== round2(amount) || (verification ? amount !== 2.00 : amount < 1.00) || amount > 1000 ||
           String(input.currency ?? 'USD').toUpperCase() !== 'USD') {
-        fail(400, 'Top-ups must be between $0.50 and $1,000 USD.');
+        fail(400, verification ? 'Cleaner registration payments must be exactly $2.00 USD.' : 'Commission top-ups must be between $1.00 and $1,000 USD.');
       }
       if (!/^07[78][0-9]{7}$/.test(phone)) fail(400, 'Enter a valid EcoCash mobile number.');
       const profile = await requireActiveMarketplaceAccount(actor);
-      const verification = input.purpose === 'VERIFICATION';
       if (verification ? profile.role !== 'CUSTOMER' : profile.role !== 'CLEANER') {
         fail(403, 'Open cleaner registration for verification or switch to Cleaner to top up commission.');
       }
@@ -1141,43 +1155,6 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const {error}=await admin.rpc('settle_job_payment',{p_job_id:jobId,p_actor_id:actor,p_payment_method:method});
       if(error)throw error; return {success:true};
     }
-    case 'requestCleanerPayout': {
-      const actor=authed(),operationKey=requireKey(input.idempotencyKey),amount=round2(Number(input.amount)),method=text(input.method,20).toUpperCase();
-      const accountName=text(input.accountName,100),accountNumber=text(input.accountNumber,120);
-      if(!Number.isFinite(amount)||amount<5)fail(400,'Enter a valid payout amount of at least $5.');
-      if(accountNumber.length<4)fail(400,'Enter a valid payout destination.');
-      const requestHash=await hash(JSON.stringify({amount,method,accountName,accountNumber}));
-      const {data:existing,error:existingError}=await admin.from('payoutrequests').select('id,requesthash,status').eq('cleanerid',actor).eq('operationkey',operationKey).maybeSingle();
-      if(existingError)throw existingError;
-      if(existing){if(existing.requesthash!==requestHash)fail(409,'This payout retry key was already used for different details.');return {success:true,payoutRequestId:existing.id,status:existing.status};}
-      await enforceRateLimit(request,actor,'cleaner_payout_request',4,86400);
-      const encrypted=await encryptPayoutAccount(accountNumber),last4=accountNumber.slice(-4).replace(/[^A-Za-z0-9]/g,'0');
-      const {data,error}=await admin.rpc('request_cleaner_payout_idempotent',{p_cleaner_id:actor,p_amount:amount,p_method:method,p_account_name:accountName,p_ciphertext:encrypted,p_last4:last4,p_operation_key:operationKey,p_request_hash:requestHash});
-      if(error)throw error; return {success:true,payoutRequestId:data,status:'PENDING'};
-    }
-    case 'listPayoutRequests': {
-      const actor=authed(); await requireAdmin(actor,'finance.read'); await requireRecentAdminAuth(actor);
-      const {data,error}=await admin.from('payoutrequests').select('id,cleanerid,amount,method,accountnumberlast4,status,approvedby,createdat').in('status',['PENDING','APPROVED']).order('createdat',{ascending:true}).limit(100);
-      if(error)throw error; return {requests:(data??[]).map(item=>({...item,accountNumberMasked:item.accountnumberlast4?`••••${item.accountnumberlast4}`:'Legacy destination — update required'}))};
-    }
-    case 'revealPayoutDestination': {
-      const actor=authed();await requireAdmin(actor,'finance.write');await requireRecentAdminAuth(actor);
-      const payoutId=text(input.payoutRequestId,80);const {data,error}=await admin.from('payoutrequests').select('accountname,accountnumberciphertext,accountnumberlast4,status,approvedby').eq('id',payoutId).maybeSingle();
-      if(error)throw error;if(!data||data.status!=='APPROVED')fail(404,'Approved payout destination not found.');
-      if(!data.accountnumberciphertext)fail(409,'This legacy payout has no encrypted destination. Ask the cleaner to submit updated payout details.');
-      const {error:auditError}=await admin.from('adminauditevents').insert({action:'payout_destination_view',actorid:actor,targetid:payoutId,reason:'Destination revealed for manual payout',createdat:new Date().toISOString()});if(auditError)throw auditError;
-      return {accountName:data.accountname,accountNumber:await decryptPayoutAccount(data.accountnumberciphertext),last4:data.accountnumberlast4};
-    }
-    case 'settlePayoutRequest': {
-      const actor=authed();await requireAdmin(actor,'finance.write'); await requireRecentAdminAuth(actor);
-      const decision=text(input.decision,20).toUpperCase();
-      const {error}=decision==='APPROVED'
-        ?await admin.rpc('approve_cleaner_payout',{p_payout_id:input.payoutRequestId,p_actor_id:actor})
-        :decision==='REJECT_PENDING'
-          ?await admin.rpc('reject_pending_cleaner_payout',{p_payout_id:input.payoutRequestId,p_actor_id:actor,p_reason:text(input.reason,500),p_idempotency_key:requireKey(input.idempotencyKey)})
-        :await admin.rpc('settle_cleaner_payout',{p_payout_id:input.payoutRequestId,p_actor_id:actor,p_decision:decision,p_transfer_reference:text(input.transferReference,120)});
-      if(error)throw error; return {success:true,status:input.decision};
-    }
     case 'submitRating': {
       const actor=authed(); const jobId=text(input.jobId,80); const rating=Number(input.rating);
       if(!Number.isInteger(rating)||rating<1||rating>5)fail(400,'Rating must be between 1 and 5.');
@@ -1218,7 +1195,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       }
       const detail=text(input.details,500);
       const categoryLabels:Record<string,string>={HARASSMENT:'Harassment or bullying',SCAM_OR_OFF_PLATFORM_REQUEST:'Scam or request to move payment off Detail',INAPPROPRIATE_CONTENT:'Inappropriate message or photo',OTHER_SAFETY_CONCERN:'Other safety concern'};
-      const description=[`Reported content: ${categoryLabels[category]}`,messageId?`Message ID: ${messageId}`:'Reported participant',reportedTextExcerpt?`Message excerpt: ${reportedTextExcerpt}`:messageHasImage?'The reported message contains a photo.':'',detail?`Reporter note: ${detail}`:''].filter(Boolean).join('\n');
+      const description=[`Reported content: ${categoryLabels[category]}`,messageId?`Message ID: ${messageId}`:'Reported participant',reportedTextExcerpt?`Message excerpt: ${reportedTextExcerpt}`:messageHasImage?(reportedImagePath.includes('/chat-audio/')?'The reported message contains a voice note.':'The reported message contains a photo.'):'',detail?`Reporter note: ${detail}`:''].filter(Boolean).join('\n');
       const id=crypto.randomUUID();
       const isCustomerReporter=job.customerid===actor;
       const {error:insertError}=await admin.from('supportcases').insert({id,jobid:jobId,customerid:isCustomerReporter?actor:null,cleanerid:isCustomerReporter?null:actor,reason:`User safety report · ${categoryLabels[category]}`,status:'URGENT',data:{type:'USER_CONTENT_REPORT',category,reporterId:actor,reportedUserId:targetUserId,targetMessageId:messageId||null,messageHasImage,reportedTextExcerpt,reportedImagePath:reportedImagePath||null,description,createdAt:new Date().toISOString()}});
@@ -1275,11 +1252,11 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const cleaners:Json[] = data ?? [];
       const cleanerIds = cleaners.map((cleaner:Json) => cleaner.id).filter((id:unknown):id is string => typeof id === 'string');
       const {data:profiles,error:profileError} = cleanerIds.length
-        ? await admin.from('users').select('id,photourl').in('id',cleanerIds)
+        ? await admin.from('users').select('id,photourl,cleanerselfieat').in('id',cleanerIds)
         : {data:[],error:null};
       if(profileError)throw profileError;
-      const photoById = new Map((profiles ?? []).map((profile:Json) => [profile.id,profile.photourl]));
-      return {cleaners:await Promise.all(cleaners.map(async (cleaner:Json) => ({
+      const photoById = new Map((profiles ?? []).filter((profile:Json)=>hasCleanerSelfie(profile,String(profile.id))).map((profile:Json) => [profile.id,profile.photourl]));
+      return {cleaners:await Promise.all(cleaners.filter((cleaner:Json)=>photoById.has(cleaner.id)).map(async (cleaner:Json) => ({
         ...cleaner,
         photo_url:await signedMediaUrl(photoById.get(cleaner.id)),
       })))};
@@ -1289,13 +1266,13 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const search=text(input.search,80).replace(/[^a-zA-Z0-9 -]/g,' ').trim().replace(/\s+/g,' ');
       const category=['HOUSE','CAR'].includes(text(input.category,10).toUpperCase())?text(input.category,10).toUpperCase():'';
       const lat=Number(input.lat),lng=Number(input.lng),radius=Math.min(100,Math.max(1,Number(input.radiusKm)||25));const useNearby=Number.isFinite(lat)&&Number.isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180;
-      let query=admin.from('users').select('id,displayname,photourl,servicearea,servicecategories,serviceradiuskm,ratingaverage,ratingcount,jobscompleted,verificationstatus,status,location,locationupdatedat').eq('role','CLEANER').eq('verificationstatus','VERIFIED').eq('cleaneragreementaccepted',true).eq('issuspended',false).eq('isbanned',false).limit(250);
+      let query=admin.from('users').select('id,displayname,photourl,cleanerselfieat,servicearea,servicecategories,serviceradiuskm,ratingaverage,ratingcount,jobscompleted,verificationstatus,status,location,locationupdatedat').eq('role','CLEANER').eq('verificationstatus','VERIFIED').eq('cleaneragreementaccepted',true).eq('issuspended',false).eq('isbanned',false).limit(250);
       if(useNearby)query=query.eq('status','AVAILABLE').gt('locationupdatedat',new Date(Date.now()-5*60*1000).toISOString());
       if(search)query=query.or(`displayname.ilike.%${search}%,servicearea.ilike.%${search}%`);
       if(category)query=query.contains('servicecategories',[category]);
       const {data,error}=await query;
       if(error)throw error;
-      const candidates=(data??[]).map((row:Json)=>{const point=row.location??{};const cleanerLat=Number(point.lat??point.latitude),cleanerLng=Number(point.lng??point.longitude);const online=cleanerLocationIsFresh(row.status,row.locationupdatedat);let distanceKm:number|null=null;if(useNearby&&online&&Number.isFinite(cleanerLat)&&Number.isFinite(cleanerLng)){const radians=(n:number)=>n*Math.PI/180;const dLat=radians(cleanerLat-lat),dLng=radians(cleanerLng-lng),a=Math.sin(dLat/2)**2+Math.cos(radians(lat))*Math.cos(radians(cleanerLat))*Math.sin(dLng/2)**2;distanceKm=6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}return {row,distanceKm,online};}).filter((item:any)=>!useNearby||(item.online&&item.distanceKm!==null&&item.distanceKm<=Math.min(radius,Number(item.row.serviceradiuskm)||radius))).sort((a:any,b:any)=>useNearby?(a.distanceKm??99999)-(b.distanceKm??99999):Number(b.row.ratingaverage??0)-Number(a.row.ratingaverage??0)).slice(0,100);
+      const candidates=(data??[]).filter((row:Json)=>hasCleanerSelfie(row,String(row.id))).map((row:Json)=>{const point=row.location??{};const cleanerLat=Number(point.lat??point.latitude),cleanerLng=Number(point.lng??point.longitude);const online=cleanerLocationIsFresh(row.status,row.locationupdatedat);let distanceKm:number|null=null;if(useNearby&&online&&Number.isFinite(cleanerLat)&&Number.isFinite(cleanerLng)){const radians=(n:number)=>n*Math.PI/180;const dLat=radians(cleanerLat-lat),dLng=radians(cleanerLng-lng),a=Math.sin(dLat/2)**2+Math.cos(radians(lat))*Math.cos(radians(cleanerLat))*Math.sin(dLng/2)**2;distanceKm=6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}return {row,distanceKm,online};}).filter((item:any)=>!useNearby||(item.online&&item.distanceKm!==null&&item.distanceKm<=Math.min(radius,Number(item.row.serviceradiuskm)||radius))).sort((a:any,b:any)=>useNearby?(a.distanceKm??99999)-(b.distanceKm??99999):Number(b.row.ratingaverage??0)-Number(a.row.ratingaverage??0)).slice(0,100);
       const profiles=await Promise.all(candidates.map(async ({row,distanceKm}:any)=>{
         const {data:portfolio}=await admin.from('cleanerportfolio').select('imagepath,caption').eq('cleanerid',row.id).order('createdat',{ascending:false}).limit(6);
         const photos=await Promise.all((portfolio??[]).map(async (photo:Json)=>{const url=await signedMediaUrl(`detail-media/${photo.imagepath}`);return url?{url,caption:photo.caption}:null;}));
@@ -1306,7 +1283,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     }
     case 'getCleanerPortfolio': {
       const actor=authed(), cleanerId=text(input.cleanerId,80)||actor;
-      if(cleanerId!==actor){const {data:profile}=await admin.from('users').select('role,verificationstatus,issuspended,isbanned').eq('id',cleanerId).maybeSingle();if(!profile||profile.role!=='CLEANER'||profile.verificationstatus!=='VERIFIED'||profile.issuspended||profile.isbanned)fail(404,'Cleaner profile is unavailable.');}
+      if(cleanerId!==actor){const {data:profile}=await admin.from('users').select('id,photourl,cleanerselfieat,role,verificationstatus,issuspended,isbanned').eq('id',cleanerId).maybeSingle();if(!profile||profile.role!=='CLEANER'||profile.verificationstatus!=='VERIFIED'||profile.issuspended||profile.isbanned||!hasCleanerSelfie(profile,cleanerId))fail(404,'Cleaner profile is unavailable.');}
       const {data,error}=await admin.from('cleanerportfolio').select('id,imagepath,caption,createdat').eq('cleanerid',cleanerId).order('createdat',{ascending:false}).limit(20);if(error)throw error;
       const photos=await Promise.all((data??[]).map(async (photo:Json)=>({ ...photo, url:await signedMediaUrl(`detail-media/${photo.imagepath}`) })));
       return {photos};
@@ -1314,16 +1291,18 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'getCleanerBookingPreview': {
       const actor=authed(),jobId=text(input.jobId,80),profile=await userRow(actor);
       if(profile.role!=='CLEANER'||profile.verificationstatus!=='VERIFIED'||!profile.cleaneragreementaccepted||!profile.cleaneronboardingcomplete||profile.issuspended||profile.isbanned)fail(403,'Only active, verified cleaners can review open bookings.');
+      if(!hasCleanerSelfie(profile,actor))fail(409,'Take a front-camera selfie for your cleaner profile before reviewing bookings. Customers will see this photo.');
       const {data:openJob,error:openError}=await admin.from('openjobs').select('jobid,status').eq('jobid',jobId).eq('status','PENDING').maybeSingle();
       if(openError)throw openError;if(!openJob)fail(404,'This booking is no longer accepting quotes.');
-      const {data:job,error}=await admin.from('jobs').select('id,category,servicetype,checklist,description,photos,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status,data').eq('id',openJob.jobid).maybeSingle();
+      const {data:job,error}=await admin.from('jobs').select('id,customerid,category,servicetype,checklist,description,photos,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status,data').eq('id',openJob.jobid).maybeSingle();
       if(error)throw error;if(!job||job.status!=='PENDING')fail(404,'This booking is no longer accepting quotes.');
       if(job.data?.serviceMode==='VISIT_WASH'&&job.data?.washSiteCleanerId!==actor)fail(404,'This booking is reserved for the selected car wash.');
-      return await cleanerBookingSummary(job as Json);
+      return await cleanerBookingSummary(job as Json, true);
     }
     case 'nearbyCleanerJobs': {
       const actor=authed(),profile=await userRow(actor);
       if(profile.role!=='CLEANER'||profile.verificationstatus!=='VERIFIED'||!profile.cleaneragreementaccepted||!profile.cleaneronboardingcomplete||profile.issuspended||profile.isbanned||profile.accountdeletedat)fail(403,'Only active, verified cleaners can review open bookings.');
+      if(!hasCleanerSelfie(profile,actor))fail(409,'Take a front-camera selfie for your cleaner profile before reviewing bookings. Customers will see this photo.');
       await enforceRateLimit(request,actor,'nearby_cleaner_jobs',30,300);
       const lat=input.lat,lng=input.lng;
       if(typeof lat!=='number'||typeof lng!=='number'||!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)fail(400,'A valid location is required.');
@@ -1340,6 +1319,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'getCleanerBookingPreviews': {
       const actor=authed(),profile=await userRow(actor);
       if(profile.role!=='CLEANER'||profile.verificationstatus!=='VERIFIED'||!profile.cleaneragreementaccepted||!profile.cleaneronboardingcomplete||profile.issuspended||profile.isbanned)fail(403,'Only active, verified cleaners can review open bookings.');
+      if(!hasCleanerSelfie(profile,actor))fail(409,'Take a front-camera selfie for your cleaner profile before reviewing bookings. Customers will see this photo.');
       const jobIds=Array.isArray(input.jobIds)?Array.from(new Set(input.jobIds.slice(0,30).map((id:unknown)=>text(id,80)).filter((id:string)=>/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)))):[];
       if(!jobIds.length)return {jobs:[]};
       const {data:openJobs,error:openError}=await admin.from('openjobs').select('jobid').in('jobid',jobIds).eq('status','PENDING');
@@ -1365,7 +1345,12 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)fail(400,'Choose a valid area to find car washes.');
       await enforceRateLimit(request,actor,'list_car_wash_sites',30,300);
       const {data,error}=await admin.rpc('list_car_wash_sites',{p_lat:lat,p_lng:lng});if(error)throw error;
-      return {sites:(data??[]).map((site:Json)=>({id:site.id,cleanerId:site.cleaner_id,name:site.name,address:site.address,lat:Number(site.lat),lng:Number(site.lng)}))};
+      const sites:Json[]=data??[];
+      const cleanerIds=sites.map(site=>site.cleaner_id).filter((id:unknown):id is string=>typeof id==='string');
+      const {data:profiles,error:profileError}=cleanerIds.length?await admin.from('users').select('id,photourl,cleanerselfieat').in('id',cleanerIds):{data:[],error:null};
+      if(profileError)throw profileError;
+      const eligible=new Set((profiles??[]).filter((profile:Json)=>hasCleanerSelfie(profile,String(profile.id))).map((profile:Json)=>profile.id));
+      return {sites:sites.filter(site=>eligible.has(site.cleaner_id)).map((site:Json)=>({id:site.id,cleanerId:site.cleaner_id,name:site.name,address:site.address,lat:Number(site.lat),lng:Number(site.lng)}))};
     }
     case 'listMyCarWashBookings': {
       const actor = authed(), profile = await userRow(actor);
@@ -1392,6 +1377,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'saveMyCarWashSite': {
       const actor=authed(),profile=await userRow(actor);
       if(profile.role!=='CLEANER'||profile.verificationstatus!=='VERIFIED'||!profile.cleaneragreementaccepted||!profile.cleaneronboardingcomplete||profile.issuspended||profile.isbanned||!(profile.servicecategories??[]).includes('CAR'))fail(403,'Complete verified car cleaner registration before publishing a wash location.');
+      if(!hasCleanerSelfie(profile,actor))fail(409,'Take a front-camera selfie for your cleaner profile before publishing a wash location. Customers will see this photo.');
       await enforceRateLimit(request,actor,'save_car_wash_site',10,3600);
       const lat=Number(input.lat),lng=Number(input.lng),enabled=input.enabled!==false;
       if(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)fail(400,'Choose a valid map location.');
@@ -1446,10 +1432,9 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const appleIdentity=(authRecord.user?.identities??[]).find(identity=>identity.provider==='apple');
       const appleSubject=String(appleIdentity?.identity_data?.sub??'');
       const appleAuthorizationCode=text(input.appleAuthorizationCode,4096);
-      const [profileResult,payoutResult,bookingResult]=await Promise.all([admin.from('users').select('balance,earningsbalance,commissionbalance,commissionowed,walletrestricted').eq('id',actor).single(),admin.from('payoutrequests').select('id').eq('cleanerid',actor).in('status',['PENDING','APPROVED']).limit(1).maybeSingle(),admin.from('jobs').select('id').or(`customerid.eq.${actor},cleanerid.eq.${actor}`)]);
-      if(profileResult.error)throw profileResult.error;if(payoutResult.error)throw payoutResult.error;if(bookingResult.error)throw bookingResult.error;
-      const profile=profileResult.data,pendingPayout=payoutResult.data,bookings=bookingResult.data;
-      if(pendingPayout)fail(409,'A payout is still pending or approved. Wait for it to be settled before deleting your account.');
+      const [profileResult,bookingResult]=await Promise.all([admin.from('users').select('balance,earningsbalance,commissionbalance,commissionowed,walletrestricted').eq('id',actor).single(),admin.from('jobs').select('id').or(`customerid.eq.${actor},cleanerid.eq.${actor}`)]);
+      if(profileResult.error)throw profileResult.error;if(bookingResult.error)throw bookingResult.error;
+      const profile=profileResult.data,bookings=bookingResult.data;
       if(Number(profile?.balance??0)>0||Number(profile?.earningsbalance??0)>0||Number(profile?.commissionbalance??0)>0||Number(profile?.commissionowed??0)>0||profile?.walletrestricted)fail(409,'Settle your wallet balances, commission or wallet restriction before deleting your account.');
       const {error}=await admin.rpc('close_account',{p_user_id:actor});
       if(error){
@@ -1462,7 +1447,6 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         }
         const reasons = [
           'Outstanding wallet funds or restrictions must be settled before account deletion',
-          'Pending or approved payouts must be settled before account deletion',
           'Active bookings or payments must be resolved before account deletion',
           'Outstanding payment records must be resolved before account deletion',
         ];
@@ -1470,7 +1454,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         console.error('Account deletion failed during account closure', error.code, error.message);
         fail(503,'Account deletion could not be completed. Please contact support and try again.');
       }
-      const prefixes=[`profile-photos/${actor}`,`verification/${actor}`,`job-photos/${actor}`,`cleaner-portfolio/${actor}`,...(bookings??[]).flatMap((booking:Json)=>[`job-completion/${booking.id}/${actor}`,`chat-photos/${booking.id}/${actor}`])];
+      const prefixes=[`profile-photos/${actor}`,`verification/${actor}`,`job-photos/${actor}`,`cleaner-portfolio/${actor}`,...(bookings??[]).flatMap((booking:Json)=>[`job-completion/${booking.id}/${actor}`,`chat-photos/${booking.id}/${actor}`,`chat-audio/${booking.id}/${actor}`])];
       const storage=admin.storage.from('detail-media');
       for(const prefix of prefixes){
         const paths:string[]=[];
@@ -1585,7 +1569,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
           jobIds.length?admin.from('platformtransactions').select('id,jobid,type,amount,status,createdat,data').in('jobid',jobIds).eq('type','COMMISSION').order('createdat',{ascending:false}).limit(100):Promise.resolve({data:[],error:null}),
         ]):Promise.resolve(null),
         canReadSupport?admin.from('supportcases').select('id,jobid,customerid,cleanerid,ownerid,status,reason,data,createdat').or(`customerid.eq.${userId},cleanerid.eq.${userId}`).order('createdat',{ascending:false}).limit(100):Promise.resolve({data:[],error:null}),
-        canReadSupport&&jobIds.length?admin.from('messages').select('id,jobid,senderid,sendername,text,imageurl,createdat').in('jobid',jobIds).order('createdat',{ascending:false}).limit(200):Promise.resolve({data:[],error:null}),
+        canReadSupport?admin.rpc('admin_user_message_page',{p_user_id:userId,p_before_created_at:null,p_before_id:null,p_limit:100}):Promise.resolve({data:[],error:null}),
         admin.from('notifications').select('id,title,body,type,jobid,read,createdat').eq('userid',userId).order('createdat',{ascending:false}).limit(100),
       ]);
       const queryErrors=[counterpartyResult,reviewsResult,bidsAsCleanerResult,bidsOnCustomerJobsResult,eventsResult,organizationResult,supportResult,conversationResult,notificationResult].filter((result:any)=>result?.error);
@@ -1620,6 +1604,11 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       }
       const hasCleanerHistory=(cleanerJobCount.count??0)>0||profile.verificationstatus!=='NOT_STARTED'||profile.cleaneronboardingcomplete||profile.cleaneragreementaccepted;
       const marketplaceRoles=[...new Set([profile.role,...((customerJobCount.count??0)>0?['CUSTOMER']:[]),...(hasCleanerHistory?['CLEANER']:[])])];
+      const chatMessages=await Promise.all((conversationResult.data??[]).map(async(message:Json)=>({
+        ...message,
+        attachmentKind:message.imageurl?(String(message.imageurl).includes('/chat-audio/')?'VOICE':'PHOTO'):null,
+        attachmentUrl:message.imageurl?await signedMediaUrl(message.imageurl,600).catch(()=>null):null,
+      })));
       const timeline:Json[]=[];
       for(const job of jobs)timeline.push({id:`booking-${job.id}`,type:'BOOKING',at:job.createdat,label:`${job.servicetype||job.category||'Cleaning'} booking created`,detail:`${job.customerid===userId?'Customer':'Cleaner'} · ${job.status}`,jobId:job.id});
       for(const event of eventsResult.data??[])timeline.push({id:`event-${event.id}`,type:event.type,at:event.createdat,label:String(event.type).replaceAll('_',' ').toLowerCase(),detail:event.reason||`${event.previousstate??''}${event.newstate?` → ${event.newstate}`:''}`.trim(),jobId:event.jobid});
@@ -1639,10 +1628,26 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         jobEvents:eventsResult.data??[],
         didit,
         finance:canReadFinance?{balances:{wallet:profile.balance,earnings:profile.earningsbalance,commissionCredit:profile.commissionbalance,commissionDue:profile.commissionowed},payments:paymentRows,walletTransactions:walletRows,commissions:commissionRows}:null,
-        support:canReadSupport?{cases:supportResult.data??[],messages:conversationResult.data??[]}:null,
+        support:canReadSupport?{cases:supportResult.data??[],messages:chatMessages,messagesNextCursor:(chatMessages.length)===100?{createdAt:chatMessages.at(-1)?.createdat,id:chatMessages.at(-1)?.id}:null}:null,
         permissions:{finance:canReadFinance,support:canReadSupport,bookingEvents:canReadBookingEvents},
         timeline:timeline.slice(0,300),
       };
+    }
+    case 'adminUserChatHistory': {
+      const actor=authed();await requireAdmin(actor,'support.manage');
+      const userId=text(input.userId,80);
+      if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId))fail(400,'A valid user ID is required.');
+      const beforeCreatedAt=text(input.beforeCreatedAt,80),beforeId=text(input.beforeId,80);
+      if(Boolean(beforeCreatedAt)!==Boolean(beforeId)||(beforeCreatedAt&&(!Number.isFinite(Date.parse(beforeCreatedAt))||!/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.test(beforeId))))fail(400,'A valid chat history cursor is required.');
+      const {data,error}=await admin.rpc('admin_user_message_page',{p_user_id:userId,p_before_created_at:beforeCreatedAt||null,p_before_id:beforeId||null,p_limit:100});
+      if(error)throw error;
+      const messages=await Promise.all((data??[]).map(async(message:Json)=>({
+        ...message,
+        attachmentKind:message.imageurl?(String(message.imageurl).includes('/chat-audio/')?'VOICE':'PHOTO'):null,
+        attachmentUrl:message.imageurl?await signedMediaUrl(message.imageurl,600).catch(()=>null):null,
+      })));
+      const last=messages.at(-1);
+      return {messages,nextCursor:messages.length===100&&last?{createdAt:last.createdat,id:last.id}:null};
     }
     case 'adminDiditSessionDetail': {
       const actor=authed();await requireAdmin(actor,'users.manage');

@@ -114,6 +114,8 @@ export interface UserProfile {
   // CLEANER. All owner-writable (not in firestore.rules' users update denylist).
   cleanerOnboardingComplete?: boolean;
   cleanerAgreementAccepted?: boolean;
+  /** Set by the database when the canonical cleaner profile photo is uploaded. */
+  cleanerSelfieAt?: string | null;
   serviceCategories?: ServiceCategory[];
   serviceRadiusKm?: number;
   experienceYears?: number;

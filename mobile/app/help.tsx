@@ -39,11 +39,11 @@ const FAQS = [
   },
   {
     q: 'How does payment work?',
-    a: 'Agree on a payment method with your cleaner and pay them directly. Detail reserves a 10% commission from the cleaner’s prepaid credit when you accept their quote. Cleaners use EcoCash in Detail to top up that credit.',
+    a: 'Agree on a payment method with your cleaner and pay them directly. Detail does not collect or hold booking payments.',
   },
   {
     q: 'How do I become a cleaner on Detail?',
-    a: 'Open Become a Cleaner and add $2.00 to your Detail wallet: $1.00 pays the one-time identity check and $1.00 remains as minimum commission credit, covering up to $10 of offline bookings. Complete your Didit check and accept the Cleaner Agreement.',
+    a: 'Open Become a Cleaner and make the $2.00 registration payment: $1.00 pays the one-time identity check and $1.00 remains as minimum prepaid commission credit, covering up to $10 of bookings. Complete your Didit check and accept the Cleaner Agreement.',
   },
   {
     q: 'I have a dispute — what do I do?',

@@ -515,7 +515,6 @@ jobs:
           DIDIT_WORKFLOW_ID: ${{ secrets.DIDIT_WORKFLOW_ID }}
           TURNSTILE_SECRET: ${{ secrets.TURNSTILE_SECRET }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          PAYOUT_ENCRYPTION_KEY: ${{ secrets.PAYOUT_ENCRYPTION_KEY }}
           TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           TWILIO_MESSAGING_SERVICE_SID: ${{ secrets.TWILIO_MESSAGING_SERVICE_SID }}

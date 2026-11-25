@@ -52,6 +52,8 @@ export default function ProfileScreen() {
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [profilePhotoFailed, setProfilePhotoFailed] = useState(false);
   const photoRefreshAttempted = useRef<string | null>(null);
+  const profilePhotoPath = profile?.photoURL?.split('?')[0] ?? '';
+  const hasCurrentCleanerSelfie = Boolean(profile?.cleanerSelfieAt && profilePhotoPath.endsWith(`/profile-photos/${profile.uid}/avatar.jpg`));
   const hasApprovedCleanerAccount = profile?.cleanerOnboardingComplete === true
     && profile?.hasAgreedToTerms === true
     && profile?.cleanerAgreementAccepted === true
@@ -80,6 +82,13 @@ export default function ProfileScreen() {
   };
 
   const handlePickProfilePhoto = async () => {
+    if (profile?.role === 'CLEANER') {
+      appAlert('Cleaner profile selfie', 'Take a current selfie for your customer-visible cleaner profile. Gallery photos cannot be used.', [
+        { text: hasCurrentCleanerSelfie ? 'Retake selfie' : 'Take selfie', onPress: () => pickImage(true) },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+      return;
+    }
     appAlert('Update Profile Picture', 'Choose how you would like to set your photo', [
       {
         text: 'Take Photo',
@@ -114,7 +123,7 @@ export default function ProfileScreen() {
         ? await ImagePicker.requestCameraPermissionsAsync()
         : await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        showPermissionDenied('Allow camera or photo access to update your profile picture.', permission.canAskAgain);
+        showPermissionDenied(profile?.role === 'CLEANER' ? 'Allow camera access to take your customer-visible cleaner profile selfie.' : 'Allow camera or photo access to update your profile picture.', permission.canAskAgain);
         return;
       }
       const result = fromCamera
@@ -122,6 +131,7 @@ export default function ProfileScreen() {
             allowsEditing: true,
             aspect: [1, 1],
             quality: 0.8,
+            ...(profile?.role === 'CLEANER' ? { cameraType: ImagePicker.CameraType.front } : {}),
           })
         : await ImagePicker.launchImageLibraryAsync({
             allowsEditing: true,
@@ -134,6 +144,10 @@ export default function ProfileScreen() {
       setIsUploadingPhoto(true);
       const photoUrl = await uploadProfilePhoto(result.assets[0].uri);
       await updateProfile({ photoURL: photoUrl });
+      if (profile?.role === 'CLEANER') {
+        await callFunction('confirmCleanerProfileSelfie', {});
+        await refreshProfile();
+      }
       setProfilePhotoFailed(false);
       photoRefreshAttempted.current = null;
     } catch (error) {
@@ -390,6 +404,9 @@ export default function ProfileScreen() {
                 {profile?.displayName ?? 'User'}
               </Text>
               <Text className="font-sans text-sm text-slate-500 font-medium">{user?.email}</Text>
+              {profile?.role === 'CLEANER' && !hasCurrentCleanerSelfie && (
+                <Text className="mt-1 font-sans-bold text-xs text-rose-700">Take a front-camera profile selfie before bidding or going online. Customers will see it.</Text>
+              )}
               <View className="flex-row items-center gap-2 mt-1">
                 <View
                   className={`px-2.5 py-1 rounded-full ${

@@ -43,7 +43,7 @@ const PERMISSIONS = [
     sub: 'Choose profile or portfolio photos, add booking or support photos, and share images in chat.',
     required: false,
   },
-  { id: 'microphone', icon: Mic, title: 'Microphone', sub: 'Use your microphone for voice calls with your booking partner.', required: false },
+  { id: 'microphone', icon: Mic, title: 'Microphone', sub: 'Record voice notes and make voice calls with your booking partner.', required: false },
   ...(Platform.OS === 'android' && Number(Platform.Version) >= 31 ? [{ id: 'bluetooth', icon: Bluetooth, title: 'Bluetooth', sub: 'Connect a Bluetooth headset during voice calls.', required: false }] : []),
 ];
 

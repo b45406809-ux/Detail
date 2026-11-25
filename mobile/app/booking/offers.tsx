@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Clock, Star, ShieldCheck, X, Check, TrendingUp, Timer, ChevronRight, Brush, Banknote, MapPin, Navigation } from 'lucide-react-native';
+import { ArrowLeft, Clock, Star, ShieldCheck, X, Check, TrendingUp, Timer, Brush, Banknote, MapPin, Navigation } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { db, doc, collection, query, where, onSnapshot } from '../../services/supabase';
 import { callFunction } from '../../services/functions';
@@ -93,11 +93,7 @@ export default function OffersScreen() {
   const rankedBids = rankBidsByRating(bids);
 
   const acceptBid = (bid: Bid) => {
-    const quote = Number(bid.bidPrice);
-    appAlert('Accept Offer?', `Accept ${bid.cleanerName ?? 'this cleaner'}'s quote of $${quote.toFixed(2)}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Choose payment', onPress: () => setPaymentChoiceBid(bid) },
-    ]);
+    setPaymentChoiceBid(bid);
   };
 
   const submitAcceptance = async (bid: Bid, paymentMethod: string) => {
@@ -159,7 +155,7 @@ export default function OffersScreen() {
         onPress: async () => {
           try {
             const result = await callFunction<{jobId:string;reason:string;idempotencyKey:string},{refund?:{status?:string}}>('cancelBooking', { jobId, reason: 'Cancelled before assignment', idempotencyKey: `cancel-${jobId}-${Date.now()}` });
-            if(result.refund?.status==='REVIEW_REQUIRED'){appAlert('Review opened','Paynow BuySafe needs support review before this booking can be cancelled. We have opened a case for you.');return;}
+            if(result.refund?.status==='REVIEW_REQUIRED'){appAlert('Review opened','Support needs to review this booking before it can be cancelled. We have opened a case for you.');return;}
             router.replace('/home');
           } catch(error:any) { appAlert('Could not cancel booking',error.message||'Please try again.'); }
         },
@@ -371,11 +367,10 @@ export default function OffersScreen() {
         {!!paymentChoiceBid && <AppDialogHost />}
         <View className="flex-1 justify-center bg-[#150256]/55 px-5"><View className="rounded-[28px] bg-white px-5 pb-9 pt-6">
           <View className="mb-5 h-1 w-12 self-center rounded-full bg-slate-200" />
-          <Text className="text-2xl font-display font-black text-ink">Agree payment with your cleaner</Text>
-          <Text className="mt-1 mb-5 font-sans text-sm leading-5 text-slate-500">Your cleaner quoted ${Number(paymentChoiceBid?.bidPrice ?? 0).toFixed(2)}. Pay them directly by cash, EcoCash, InnBucks, or another method you both agree on. Detail does not receive or hold the booking payment. The cleaner’s 10% commission is reserved from their prepaid credit when you accept.</Text>
+          <Text className="text-2xl font-display font-black text-ink">Accept this quote?</Text>
+          <Text className="mt-1 mb-5 font-sans text-sm leading-5 text-slate-500">Your cleaner quoted ${Number(paymentChoiceBid?.bidPrice ?? 0).toFixed(2)}. If you accept, arrange payment directly with the cleaner using a method you both agree on. Detail does not collect the booking payment.</Text>
           <TouchableOpacity disabled={!!busyBidId} onPress={() => { const bid = paymentChoiceBid; setPaymentChoiceBid(null); if (bid) void submitAcceptance(bid, 'DIRECT_OFFLINE'); }} activeOpacity={0.85} className="rounded-3xl border border-violet-100 bg-[#F7F4FF] p-4">
-            <View className="flex-row items-center"><View className="mr-3 h-12 w-12 items-center justify-center rounded-2xl bg-accent"><Banknote size={22} color="#fff" /></View><View className="flex-1"><Text className="font-display text-base font-black text-ink">Confirm and arrange payment directly</Text><Text className="mt-0.5 font-sans text-xs text-ink/60">Detail records the prepaid commission reserve when you accept.</Text></View><ChevronRight size={20} color="#3906D2"/></View>
-            <View className="mt-3 items-center rounded-2xl bg-accent py-3.5"><Text className="font-display text-sm font-black uppercase tracking-wider text-white">Accept quote and confirm booking</Text></View>
+            <View className="items-center rounded-2xl bg-accent py-3.5"><Text className="font-display text-sm font-black uppercase tracking-wider text-white">Accept quote</Text></View>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setPaymentChoiceBid(null)} className="pt-5"><Text className="font-sans text-center font-bold text-slate-400">Cancel</Text></TouchableOpacity>
         </View></View>

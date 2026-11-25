@@ -30,10 +30,10 @@ Cloudflare D1 waitlist/blog/campaign/settings records use the separate dry-run-f
 
 ## Cutover sequence
 
-1. Configure and deploy Supabase in a staging environment. Exercise email/password, email code, Google/Apple, SMS, cleaner verification, bookings, chat, cancellation, ratings, wallet top-up, Paynow BuySafe status polling/callbacks, and manual cleaner payouts.
+1. Configure and deploy Supabase in a staging environment. Exercise email/password, email code, Google/Apple, SMS, cleaner verification, bookings, chat, cancellation, ratings, cleaner registration payment and commission top-ups. Confirm customers arrange booking payment directly with cleaners.
 2. Schedule a short write freeze. Run the final import, reconcile ledger totals and record counts, and test account recovery with a migrated user. Keep Firebase data intact and available for rollback investigation.
 3. Release mobile and dashboard builds with the Supabase URL/anon key. Watch Auth, database, storage, and Edge Function logs. Re-enable writes only after smoke tests pass.
-4. Paynow pays the Detail merchant account; cleaner payouts remain manual via the existing payout request and admin settlement flow. BuySafe escrow release does not create a Paynow split or automatically transfer funds to a cleaner.
+4. Paynow processes cleaner registration and prepaid commission top-ups. Customers pay cleaners directly; Detail does not collect or hold booking payments or provide in-app payout requests.
 5. Keep the Firebase project and its backups until the rollback window closes and privacy retention obligations are met. Then remove unused Firebase runtime resources deliberately.
 
 The Supabase free plan is suitable for a low-volume pilot, but includes quotas and operational limits that can change. Monitor database/storage/egress/Auth usage and establish backups and a paid-plan trigger before relying on it for production financial records. No production project credentials are present in this repository, so migration, provider delivery, and live callback verification require the project owner to configure secrets and run the documented deployment.

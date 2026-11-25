@@ -18,7 +18,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
-import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -42,9 +41,6 @@ import {
   CalendarDays,
   RotateCcw,
   ChevronRight,
-  Wallet,
-  Banknote,
-  Smartphone,
   Brush,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
@@ -104,7 +100,6 @@ export default function TrackingScreen() {
   const [step, setStep] = useState<TrackingStep>('TRACKING');
   const [rating, setRating] = useState(0);
   const [problemDescription, setProblemDescription] = useState('');
-  const [selectedPayment, setSelectedPayment] = useState<'WALLET' | 'CASH' | 'ECOCASH' | 'INNBUCKS'>('WALLET');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [showCompletionDispute, setShowCompletionDispute] = useState(false);
@@ -229,10 +224,6 @@ export default function TrackingScreen() {
     );
     return () => { active = false; unsubscribe(); };
   }, [jobId, isCustomer, step, jobLoadAttempt]);
-
-  useEffect(() => {
-    if (['WALLET', 'CASH', 'ECOCASH', 'INNBUCKS'].includes(String(job?.paymentMethod))) setSelectedPayment(job!.paymentMethod as any);
-  }, [job?.paymentMethod]);
 
   // Check whether this cleaner is already in the customer's favorites
   useEffect(() => {
@@ -438,64 +429,10 @@ export default function TrackingScreen() {
     if (!job?.price || !user || !job.cleanerId) return;
     setIsSubmitting(true);
     try {
-      if (job.paymentMethod === 'DIRECT_OFFLINE') {
-        await callFunction('settleJobPayment', { jobId, paymentMethod: 'DIRECT_OFFLINE' });
-        setStep('RATING');
-        return;
-      }
-      await callFunction('settleJobPayment', { jobId, paymentMethod: selectedPayment });
+      await callFunction('settleJobPayment', { jobId, paymentMethod: 'DIRECT_OFFLINE' });
       setStep('RATING');
     } catch (err: any) {
       appAlert('Payment Failed', err.message || 'Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handlePaynowRefresh = async () => {
-    if (!jobId) return;
-    setIsSubmitting(true);
-    try {
-      const result = await callFunction<{ jobId: string }, { success: boolean; status: string }>('refreshPaynowBookingPayment', { jobId });
-      appAlert('Paynow status', `Current status: ${result.status.replace(/_/g, ' ')}.`);
-    } catch (err: any) {
-      appAlert('Could not refresh', err.message || 'Please try again shortly.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handlePaynowResume = async () => {
-    if (!jobId) return;
-    setIsSubmitting(true);
-    try {
-      const result = await callFunction<{ jobId: string }, { redirectUrl: string }>('resumePaynowBookingPayment', { jobId });
-      await WebBrowser.openBrowserAsync(result.redirectUrl, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET });
-      await handlePaynowRefresh();
-    } catch (err: any) {
-      appAlert('Could not resume Paynow', err.message || 'Refresh the payment status and try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handlePaynowRetry = async () => {
-    if (!jobId) return;
-    setIsSubmitting(true);
-    const keyStorage = user ? `detail:paynow-retry:${user.uid}:${jobId}` : '';
-    try {
-      let idempotencyKey = '';
-      try { idempotencyKey = keyStorage ? (await AsyncStorage.getItem(keyStorage)) ?? '' : ''; } catch { /* create a fresh retry key */ }
-      if (!idempotencyKey) {
-        idempotencyKey = Crypto.randomUUID();
-        if (keyStorage) await AsyncStorage.setItem(keyStorage, idempotencyKey);
-      }
-      const result = await callFunction<{ jobId: string; idempotencyKey: string }, { success: boolean; redirectUrl: string }>('retryPaynowBookingPayment', { jobId, idempotencyKey });
-      if (keyStorage) await AsyncStorage.removeItem(keyStorage);
-      if (result.redirectUrl) await WebBrowser.openBrowserAsync(result.redirectUrl, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET });
-    } catch (err: any) {
-      if (keyStorage && String(err?.message ?? '').includes('already failed')) await AsyncStorage.removeItem(keyStorage).catch(() => undefined);
-      appAlert('Paynow unavailable', err.message || 'Could not start payment. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -550,8 +487,8 @@ export default function TrackingScreen() {
         <Text className="text-3xl font-display font-black text-ink text-center mb-2">All done!</Text>
         <Text className="font-sans text-base text-ink/50 font-medium text-center mb-10">
           {isCleaner ? (job?.data?.customerCompletionResponse?.status === 'DISPUTED'
-            ? 'The customer reported an issue with this completion. Detail support will review the case before earnings are released.'
-            : 'Your work is marked complete. The customer has been asked to review it. Earnings will appear in your wallet after payment settles.')
+            ? 'The customer reported an issue with this completion. Detail support will review the case and update you.'
+            : 'Your work is marked complete. The customer has been asked to review it. Recorded earnings will update after they confirm completion.')
             : job?.data?.customerCompletionResponse?.status === 'DISPUTED'
               ? 'Your report is recorded. Detail support will review the issue and update you in Support.'
               : 'Thanks for using Detail. We hope your space is sparkling clean.'}
@@ -615,97 +552,15 @@ export default function TrackingScreen() {
   }
 
   if (step === 'PAYMENT') {
-    if (job.paymentMethod === 'DIRECT_OFFLINE') {
-      return (
-        <SafeAreaView className="flex-1 bg-white">
-          <View className="flex-1 px-6 pt-12 pb-10">
-            <Text className="text-3xl font-display font-black text-ink mb-2">Arrange payment directly</Text>
-            <Text className="font-sans text-base text-ink/50 font-medium mb-4">Booking total: <Text className="font-display font-black text-ink">${job.price?.toFixed(2) ?? '—'}</Text></Text>
-            <View className="rounded-3xl border border-amber-200 bg-amber-50 p-5 mb-6">
-              <Text className="text-xs font-display font-black text-amber-800 uppercase tracking-widest mb-2">Pay the cleaner using your agreed method</Text>
-              <Text className="font-sans text-sm text-amber-900 leading-6">Pay the cleaner directly by cash, EcoCash, InnBucks, or another method you agreed on. Detail does not receive or protect this payment. Once you confirm completion, Detail records its 10% commission against the cleaner’s commission credit or amount due.</Text>
-            </View>
-            <TouchableOpacity onPress={handlePayment} disabled={isSubmitting} className="mt-auto bg-accent py-5 rounded-[32px] items-center mb-3">
-              {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-display font-black text-sm uppercase tracking-widest">I paid the cleaner · continue</Text>}
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-      );
-    }
-    if (job.paymentMethod === 'PAYNOW') {
-      const status = String(job.paymentStatus ?? 'PENDING');
-      const statusText: Record<string, string> = {
-        INITIATING: 'Starting secure checkout…', PENDING: 'Complete checkout in Paynow to place the payment in BuySafe escrow.',
-        ESCROWED: 'BuySafe is holding your payment. After the cleaning, confirm delivery in your Paynow account. Paynow releases funds after its 24-hour dispute window.',
-        DELIVERED: 'You confirmed delivery in Paynow. Funds remain in the 24-hour dispute period.',
-        PAID: 'Paynow released the funds to Detail after the dispute window. Cleaner earnings are being finalized.',
-        DISPUTED: 'A Paynow dispute is open. Detail will review the booking and coordinate with Paynow.',
-        REFUNDED: 'Paynow reports this payment was refunded.', FAILED: 'Paynow could not start the checkout. Retry to continue this booking.',
-      };
-      return (
-        <SafeAreaView className="flex-1 bg-white">
-          <View className="flex-1 px-6 pt-12 pb-10">
-            <Text className="text-3xl font-display font-black text-ink mb-2">Paynow BuySafe</Text>
-            <Text className="font-sans text-base text-ink/50 font-medium mb-4">Booking total: <Text className="font-display font-black text-ink">${job.price?.toFixed(2) ?? '—'}</Text></Text>
-            <View className="rounded-3xl bg-accent/5 border border-accent/10 p-5 mb-6">
-              <Text className="text-xs font-display font-black text-accent uppercase tracking-widest mb-2">{status.replace(/_/g, ' ')}</Text>
-              <Text className="font-sans text-sm text-ink/70 leading-6">{statusText[status] ?? 'Paynow is processing this booking payment.'}</Text>
-            </View>
-            {status === 'FAILED' ? (
-              <TouchableOpacity onPress={handlePaynowRetry} disabled={isSubmitting} className="bg-accent py-5 rounded-[32px] items-center mb-3">
-                {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-display font-black text-sm uppercase tracking-widest">Retry Paynow Checkout</Text>}
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity onPress={handlePaynowRefresh} disabled={isSubmitting} className="bg-accent py-5 rounded-[32px] items-center mb-3">
-                {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text className="text-white font-display font-black text-sm uppercase tracking-widest">Refresh Paynow Status</Text>}
-              </TouchableOpacity>
-            )}
-            {status === 'PENDING' && <TouchableOpacity onPress={handlePaynowResume} disabled={isSubmitting} className="border border-accent/20 bg-accent/5 py-4 rounded-[32px] items-center mb-3">
-              <Text className="font-display font-black text-sm uppercase tracking-widest text-accent">Resume Paynow Checkout</Text>
-            </TouchableOpacity>}
-            <TouchableOpacity onPress={() => Linking.openURL('https://www.paynow.co.zw/').catch(() => appAlert('Could not open Paynow', 'Open paynow.co.zw in your browser.'))} className="py-4 items-center">
-              <Text className="font-sans text-accent font-bold">Open Paynow Customer Portal</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setStep('RATING')} className="mt-auto py-4 items-center">
-              <Text className="font-sans text-sm text-ink/40 font-medium">Continue to rating</Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-      );
-    }
-    const PAYMENT_OPTIONS = [
-      { id: 'WALLET', label: 'Detail Wallet', icon: Wallet, sub: `Balance: $${profile?.balance?.toFixed(2) ?? '0.00'} · top up in Wallet` },
-      { id: 'CASH', label: 'Cash', icon: Banknote, sub: 'Pay cleaner directly' },
-      { id: 'ECOCASH', label: 'EcoCash', icon: Smartphone, sub: 'Transfer directly to cleaner' },
-      { id: 'INNBUCKS', label: 'InnBucks', icon: Smartphone, sub: 'Transfer directly to cleaner' },
-    ] as const;
-
     return (
       <SafeAreaView className="flex-1 bg-white">
         <View className="flex-1 px-6 pt-12 pb-10">
-          <Text className="text-3xl font-display font-black text-ink mb-2">Complete Payment</Text>
+          <Text className="text-3xl font-display font-black text-ink mb-2">Pay your cleaner directly</Text>
           <Text className="font-sans text-base text-ink/50 font-medium mb-8">
-            Total: <Text className="font-display font-black text-ink">${job.price?.toFixed(2) ?? '—'}</Text>
+            Booking total: <Text className="font-display font-black text-ink">${job.price?.toFixed(2) ?? '—'}</Text>
           </Text>
-
-          <Text className="text-xs font-display font-black text-ink/40 uppercase tracking-widest mb-3">Payment Method</Text>
-          <View className="gap-3 mb-8">
-            {PAYMENT_OPTIONS.map(({ id, label, icon: PaymentIcon, sub }) => (
-              <TouchableOpacity
-                key={id}
-                onPress={() => setSelectedPayment(id)}
-                activeOpacity={0.8}
-                className={`flex-row items-center gap-4 p-5 rounded-3xl border-2 ${
-                  selectedPayment === id ? 'border-accent bg-accent/5' : 'border-ink/10 bg-ink/[0.02]'
-                }`}
-              >
-                <PaymentIcon size={26} color={selectedPayment === id ? '#3906D2' : '#150256'} />
-                <View className="flex-1">
-                  <Text className={`text-sm font-black ${selectedPayment === id ? 'text-accent' : 'text-ink'}`}>{label}</Text>
-                  <Text className="font-sans text-xs text-ink/40 font-medium mt-0.5">{sub}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+          <View className="rounded-3xl border border-violet-100 bg-[#F7F4FF] p-5 mb-6">
+            <Text className="font-sans text-sm leading-6 text-ink/70">Pay by cash, EcoCash, InnBucks, or another method you and the cleaner agreed on. Detail does not collect or hold the booking payment.</Text>
           </View>
 
           <TouchableOpacity
@@ -718,7 +573,7 @@ export default function TrackingScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <Text className="text-white font-display font-black text-sm uppercase tracking-widest">
-                {IS_MOCK ? '[DEV] ' : ''}Pay ${job.price?.toFixed(2) ?? '—'} via {selectedPayment}
+                {IS_MOCK ? '[DEV] ' : ''}I paid the cleaner · continue
               </Text>
             )}
           </TouchableOpacity>
@@ -802,17 +657,10 @@ export default function TrackingScreen() {
       </SafeAreaView>
 
       <GlassSheet style={{ position: 'absolute', bottom: 0, left: 0, right: 0, paddingBottom: 24 }}>
-        {isCustomer && job.paymentMethod === 'PAYNOW' && job.paymentStatus === 'FAILED' && (
-          <TouchableOpacity onPress={handlePaynowRetry} disabled={isSubmitting} className="bg-rose-50 border border-rose-200 rounded-2xl p-4 mb-4">
-            <Text className="text-sm font-display font-black text-rose-700">Paynow checkout needs attention</Text>
-            <Text className="font-sans text-xs text-rose-700/80 mt-1">The cleaner cannot start until BuySafe confirms the payment.</Text>
-            <Text className="text-xs font-display font-black text-rose-700 uppercase mt-3">{isSubmitting ? 'Opening…' : 'Retry checkout'}</Text>
-          </TouchableOpacity>
-        )}
         {isCustomer&&job.status===JobStatus.COMPLETED&&job.completionSubmittedAt&&!job.customerResponseAt&&(
-          <View className="bg-white rounded-2xl border border-accent/20 p-4 mb-4"><Text className="font-display font-black text-ink">Was the cleaning completed as requested?</Text><Text className="font-sans text-xs text-ink/50 mt-1 mb-3">You have {Number(job.directCommissionPolicyVersion)===1?'48':'24'} hours to confirm or report a problem. Paynow BuySafe funds still follow Paynow’s own status.</Text><View className="flex-row gap-3"><TouchableOpacity disabled={isSubmitting} onPress={()=>setShowCompletionDispute(true)} className="flex-1 rounded-xl bg-rose-50 border border-rose-200 p-3 items-center"><Text className="font-display font-black text-rose-700">Report an issue</Text></TouchableOpacity><TouchableOpacity disabled={isSubmitting} onPress={()=>submitCompletionResponse('CONFIRMED')} className="flex-1 rounded-xl bg-accent p-3 items-center"><Text className="font-display font-black text-white">Confirm completed</Text></TouchableOpacity></View></View>
+          <View className="bg-white rounded-2xl border border-accent/20 p-4 mb-4"><Text className="font-display font-black text-ink">Was the cleaning completed as requested?</Text><Text className="font-sans text-xs text-ink/50 mt-1 mb-3">You have {Number(job.directCommissionPolicyVersion)===1?'48':'24'} hours to confirm or report a problem.</Text><View className="flex-row gap-3"><TouchableOpacity disabled={isSubmitting} onPress={()=>setShowCompletionDispute(true)} className="flex-1 rounded-xl bg-rose-50 border border-rose-200 p-3 items-center"><Text className="font-display font-black text-rose-700">Report an issue</Text></TouchableOpacity><TouchableOpacity disabled={isSubmitting} onPress={()=>submitCompletionResponse('CONFIRMED')} className="flex-1 rounded-xl bg-accent p-3 items-center"><Text className="font-display font-black text-white">Confirm completed</Text></TouchableOpacity></View></View>
         )}
-        {isCustomer&&job.bookingMode==='INSTANT'&&job.status==='PENDING'&&<View className="bg-white rounded-2xl border border-accent/20 p-4 mb-4"><Text className="font-display font-black text-ink">{instantCleanerAccepted?'A cleaner accepted your request':'Finding a nearby cleaner'}</Text><Text className="font-sans text-xs text-ink/50 mt-1">Only verified cleaners who are online and within their travel radius receive your request. You will review the price and payment before the booking is confirmed.</Text>{instantCleanerAccepted&&<TouchableOpacity onPress={()=>router.push({pathname:'/booking/offers',params:{jobId:job.id}})} className="mt-3 rounded-xl bg-accent px-4 py-3 items-center"><Text className="font-display font-black text-white">Review cleaner and choose payment</Text></TouchableOpacity>}{job.matchExpiresAt&&Date.parse(job.matchExpiresAt)<=Date.now()&&!instantCleanerAccepted&&<Text className="font-sans text-xs text-rose-600 mt-2">No cleaner has accepted yet. You can cancel this request and create a scheduled booking.</Text>}</View>}
+        {isCustomer&&job.bookingMode==='INSTANT'&&job.status==='PENDING'&&<View className="bg-white rounded-2xl border border-accent/20 p-4 mb-4"><Text className="font-display font-black text-ink">{instantCleanerAccepted?'A cleaner accepted your request':'Finding a nearby cleaner'}</Text><Text className="font-sans text-xs text-ink/50 mt-1">Only verified cleaners who are online and within their travel radius receive your request. You will review the quote before confirming the booking.</Text>{instantCleanerAccepted&&<TouchableOpacity onPress={()=>router.push({pathname:'/booking/offers',params:{jobId:job.id}})} className="mt-3 rounded-xl bg-accent px-4 py-3 items-center"><Text className="font-display font-black text-white">Review quote</Text></TouchableOpacity>}{job.matchExpiresAt&&Date.parse(job.matchExpiresAt)<=Date.now()&&!instantCleanerAccepted&&<Text className="font-sans text-xs text-rose-600 mt-2">No cleaner has accepted yet. You can cancel this request and create a scheduled booking.</Text>}</View>}
         {isCustomer&&job.bookingMode==='INSTANT'&&job.status==='CANCELLED'&&job.instantMatchingExpired&&<View className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4"><Text className="font-display font-black text-amber-900">This instant request has expired</Text><Text className="font-sans text-xs text-amber-800 mt-1">No cleaner accepted in time, or the accepted offer was not confirmed. Create a new booking to try again.</Text><TouchableOpacity onPress={()=>router.replace('/booking/create')} className="mt-3 rounded-xl bg-accent px-4 py-3 items-center"><Text className="font-display font-black text-white">Create another booking</Text></TouchableOpacity></View>}
         {rescheduleProposal&&<View className="bg-violet-50 border border-violet-200 rounded-2xl p-4 mb-4"><Text className="font-display font-black text-violet-950">Proposed booking time</Text><Text className="font-sans text-sm text-violet-900 mt-1">{new Date(rescheduleProposal.proposedDateTime).toLocaleString()}</Text>{rescheduleProposal.status==='PENDING'&&Date.parse(rescheduleProposal.expiresAt)>Date.now()?user?.uid===rescheduleProposal.recipientId?<><Text className="font-sans text-xs text-violet-800 mt-2">The other participant proposed this change. The existing time stays in place until you respond.</Text><View className="flex-row gap-3 mt-3"><TouchableOpacity disabled={isSubmitting} onPress={()=>respondToReschedule(false)} className="flex-1 rounded-xl bg-white border border-violet-200 p-3 items-center"><Text className="font-display font-black text-violet-900">Decline</Text></TouchableOpacity><TouchableOpacity disabled={isSubmitting} onPress={()=>respondToReschedule(true)} className="flex-1 rounded-xl bg-accent p-3 items-center"><Text className="font-display font-black text-white">Accept new time</Text></TouchableOpacity></View></>:<Text className="font-sans text-xs text-violet-800 mt-2">Waiting for the other participant to respond. The current time is still confirmed.</Text>:rescheduleProposal.status==='ACCEPTED'?<Text className="font-sans text-xs text-emerald-800 mt-2">Accepted. The booking time has been updated.</Text>:<Text className="font-sans text-xs text-slate-600 mt-2">{rescheduleProposal.status==='DECLINED'?'Declined. The original time remains in place.':'This proposal expired. The original time remains in place.'}</Text>}</View>}
         {isCustomer&&job.customerResponseAt&&<Text className="font-sans text-xs text-ink/50 mb-4">Your completion response has been recorded.</Text>}

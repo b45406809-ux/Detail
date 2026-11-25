@@ -7,14 +7,11 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, CheckCircle } from 'lucide-react-native';
 import { callFunction } from '../services/functions';
 
-// Full text of the Detail Cleaner Agreement (Catalyst Labs (PRIVATE) LIMITED,
-// trading as Detail — Zimbabwe). Condensed section-by-section from the source
-// legal document into readable paragraph cards; section numbers/headers match
-// the source 1:1 so nothing is renumbered or reordered.
+// Detail Cleaner Agreement, Catalyst Labs (PRIVATE) LIMITED, trading as Detail — Zimbabwe.
 const TERMS = [
   {
     title: '1–2. Purpose of this Agreement',
-    body: 'This Agreement governs your registration, use of the Detail Platform, and provision of cleaning services to Customers through Detail. Detail operates a technology platform that connects Customers with Cleaners — it does not guarantee any particular number of Bookings, customers, income, or minimum earnings.',
+    body: 'This Agreement governs your registration, use of the Detail Platform, and provision of cleaning services to Customers through Detail. Detail operates a technology platform that connects Customers with Cleaners. Detail does not guarantee any particular number of Bookings, customers, income, or minimum earnings.',
   },
   {
     title: '3. Independent Service Provider',
@@ -22,67 +19,71 @@ const TERMS = [
   },
   {
     title: '4. Registration and Verification',
-    body: 'You must provide accurate, complete, and current information when registering, including identity documents and any other information reasonably required for verification. Cleaner accounts must pass identity verification through Didit before accepting jobs. Cleaner registration requires a $2.00 wallet deposit: $1.00 pays the one-time identity check and $1.00 remains as minimum prepaid commission credit, covering up to $10 of offline bookings. Where permitted by law, the identity fee is non-refundable after a Didit session starts, except where the verification service was not provided or a refund is required by law. If Didit rejects your check, you cannot accept jobs; contact Detail support to correct your information or appeal. A retry does not incur another verification fee.',
+    body: 'You must provide accurate, complete, and current information when registering, including identity documents and any other information reasonably required for verification.\n\nCleaner accounts must pass identity verification through Didit before bidding for or accepting jobs.\n\nCleaner registration requires a $2.00 wallet deposit:\n• $1.00 pays the one-time identity verification fee.\n• $1.00 remains as prepaid wallet credit for platform commissions.\n\nWhere permitted by law, the identity verification fee is non-refundable after a Didit session starts, except where the verification service was not provided or a refund is required by law.\n\nIf Didit rejects your verification, you cannot bid for or accept jobs. Contact Detail Support to correct your information or appeal. A retry does not incur another verification fee.',
   },
   {
     title: '5. Cleaner Account',
-    body: 'You may hold only one Account, must keep your credentials confidential, and must not sell, lend, or share access to your Account or use another person’s Account. Notify Detail immediately if you suspect your Account has been compromised.',
+    body: 'You may hold only one Account, must keep your credentials confidential, and must not sell, lend, or share access to your Account or use another person’s Account.\n\nNotify Detail immediately if you suspect your Account has been compromised.',
   },
   {
     title: '6–8. Services & Bookings',
-    body: 'You may only offer services you’re qualified to provide, must accurately describe your skills and equipment, and must not accept a Booking you know you can’t complete. Once accepted, you’re expected to honour a Booking, arrive on time, and communicate promptly if something prevents you from attending. You must never falsify attendance, completion, GPS data, or timestamps, and must not substitute another person without the Customer’s and Detail’s consent.',
+    body: 'You may only offer services you are qualified to provide, must accurately describe your skills and equipment, and must not submit a bid for a Booking you know you cannot complete.\n\nOnce a Customer accepts your bid, you are expected to honour the Booking, arrive on time, and communicate promptly if something prevents you from attending.\n\nYou must never falsify attendance, completion, GPS data, or timestamps, and must not substitute another person without the Customer’s and Detail’s consent.',
   },
   {
-    title: '9–10. Pricing & Platform Commission',
-    body: 'You must accurately represent your prices with no hidden fees. The standard Detail commission is currently 10% of the Transaction value. Detail reserves the right to change, increase, or decrease commission and other fees at any time, subject to applicable law — changes will be communicated through the Platform and apply prospectively from their effective date. Attempting to avoid commission through false reporting or off-platform transactions is a breach of this Agreement.',
+    title: '9. Pricing & Platform Commission',
+    body: 'You must accurately represent your prices with no hidden fees.\n\nDetail currently charges a standard platform commission of 10% of the agreed Booking value.\n\nDetail reserves the right to change, increase, or decrease its commission and other fees at any time, subject to applicable law. Changes will be communicated through the Platform and apply prospectively from their effective date.\n\nAttempting to avoid commission through false reporting, manipulating Booking values, or off-platform transactions is a breach of this Agreement.',
   },
   {
-    title: '11. Offline Customer Payments & Detail Commission',
-    body: 'For bookings, the customer pays you directly using cash, EcoCash, InnBucks, or another method you both agree on. Detail does not receive or hold that customer payment. When the customer accepts your quote, Detail reserves 10% of the quoted amount from your prepaid commission credit. For example, a $20 booking reserves $2; a $1 credit covers up to $10 of accepted work. After completion is confirmed, that reserve is recorded as the platform commission. If the booking is cancelled, Detail returns the reserve according to the cancellation process. Use EcoCash in Detail to top up your prepaid commission credit. Keep enough prepaid credit to cover the commission on each booking you accept.',
+    title: '10. Prepaid Wallet & Bidding Requirements',
+    body: 'Detail operates a prepaid commission wallet system similar to the inDrive top-up model.\n\nBefore submitting a bid or quote for a Booking, you must have sufficient available wallet credit to cover at least 10% of the value of the job you intend to bid for.\n\nFor example:\n• $10 job = at least $1 wallet credit.\n• $20 job = at least $2 wallet credit.\n• $50 job = at least $5 wallet credit.\n• $100 job = at least $10 wallet credit.\n\nYou must top up your wallet before bidding if your available balance is insufficient.\n\nDetail may prevent you from submitting bids, accepting Bookings, or accessing certain Platform features if you do not have sufficient wallet credit.\n\nWallet credit is prepaid commission credit and is not customer payment, cleaner earnings, or a bank deposit.',
   },
   {
-    title: '12. Balance & Withdrawals',
-    body: 'Cleared earnings can be withdrawn through an in-app payout request to EcoCash, InnBucks, or a bank account. Detail reviews and manually transfers payouts while automated payout rails are unavailable. Requests reserve the requested earnings; rejected requests return the funds. Processing time depends on review and the receiving provider. Detail may hold a request to investigate suspected fraud or disputes.',
+    title: '11. Commission Deduction & Customer Payments',
+    body: 'When a Customer accepts your bid, the applicable platform commission of 10% of the agreed Booking value will be deducted from your prepaid wallet credit, or the applicable amount will be reserved and subsequently deducted in accordance with the Platform’s booking and cancellation process.\n\nFor example, if you successfully secure a $20 Booking, Detail’s commission is $2. If you have already prepaid $2 in commission credit, that credit will be used to cover the commission.\n\nCustomers pay Cleaners directly for completed services using cash, EcoCash, InnBucks, bank transfer, or another payment method agreed between the Customer and Cleaner.\n\nDetail does not receive, hold, process, or transfer Customer payments to Cleaners.\n\nYou are responsible for collecting payment directly from the Customer and resolving payment arrangements between you and the Customer, subject to Detail’s complaint and dispute procedures.\n\nYou must keep sufficient wallet credit to participate in the Platform and submit bids.\n\nYou may top up your wallet through the payment methods made available by Detail from time to time.',
+  },
+  {
+    title: '12. Wallet Balance & Top-Ups',
+    body: 'Your Detail wallet is used exclusively for prepaid platform commission and applicable Platform fees.\n\nWallet balances are not earnings accounts and cannot be withdrawn as cleaner income.\n\nDetail does not offer cleaner payouts, earnings withdrawals, or transfers of Customer payments.\n\nWallet top-ups may be used to cover commissions for Bookings in accordance with this Agreement.\n\nDetail may review wallet transactions where fraud, payment errors, disputes, or suspicious activity are reasonably suspected.\n\nAny refund of unused wallet credit will be handled in accordance with applicable law and Detail’s wallet refund policy.',
   },
   {
     title: '13–14. Customer Complaints & Refunds',
-    body: 'A Customer may report you if they believe a job was poorly performed, materially incomplete, or different from what was agreed. Detail may investigate and request evidence from both sides. A complaint doesn’t automatically mean you’re at fault, but you must cooperate honestly — if you don’t respond to a reasonable request for information, Detail may decide using the evidence it has.',
+    body: 'A Customer may report you if they believe a job was poorly performed, materially incomplete, or different from what was agreed.\n\nDetail may investigate and request evidence from both sides. A complaint does not automatically mean you are at fault, but you must cooperate honestly.\n\nIf you do not respond to a reasonable request for information, Detail may decide using the evidence available.\n\nBecause Customers pay Cleaners directly, any service refund, price adjustment, or repayment to a Customer is generally handled directly between the Customer and Cleaner.\n\nDetail may facilitate communication, investigate complaints, recommend resolutions, and take appropriate Platform action where necessary.',
   },
   {
-    title: '15. Recovery of Refunds from Cleaners',
-    body: 'Where you’ve already been paid in cash and Detail determines the Customer is entitled to a refund, the refund amount may be charged against your Detail Account, available balance, or future earnings/withdrawals, to the extent permitted by law. If your balance is insufficient, the remainder may be recorded as an amount you owe Detail, and Detail may restrict your ability to accept new Bookings until it’s recovered.',
+    title: '15. Refunds, Disputes & Commission Adjustments',
+    body: 'Where a Booking is cancelled, the commission charged or reserved may be refunded to your wallet or adjusted in accordance with Detail’s cancellation policy.\n\nWhere a dispute arises after a Booking has been completed, Detail may investigate the circumstances and determine whether a commission adjustment or wallet credit is appropriate, subject to applicable law and Platform policies.\n\nDetail does not automatically guarantee reimbursement to either party for disputes involving payments made directly between Customers and Cleaners.\n\nYou remain responsible for resolving legitimate Customer refund obligations arising from your services.\n\nDetail may restrict your ability to bid for or accept new Bookings where your wallet balance is insufficient, where a dispute remains unresolved, or where you have breached this Agreement.',
   },
   {
     title: '16. Off-Platform Transactions',
-    body: 'You must not use Customer information from Detail to move a Customer off-platform to avoid commission — including asking a Customer to cancel a Detail Booking so you can perform it privately, or offering a private deal specifically to bypass Detail.',
+    body: 'You must not use Customer information obtained through Detail to move a Customer off-platform for the purpose of avoiding commission.\n\nThis includes asking a Customer to cancel a Detail Booking so you can perform it privately, or offering a private deal specifically to bypass Detail’s commission.',
   },
   {
     title: '17–18. Customer Property & Prohibited Conduct',
-    body: 'Treat Customer property with reasonable care and report accidental damage immediately — never conceal it. You must never steal, commit fraud, submit fraudulent Bookings, manipulate ratings, impersonate someone, or otherwise damage or interfere with Detail’s Platform.',
+    body: 'Treat Customer property with reasonable care and report accidental damage immediately. Never conceal damage.\n\nYou must never steal, commit fraud, submit fraudulent Bookings, manipulate ratings, impersonate someone, or otherwise damage or interfere with Detail’s Platform.',
   },
   {
     title: '19–20. Ratings & Job Evidence',
-    body: 'You must not manipulate ratings/reviews or pressure a Customer for a particular rating. Any photos submitted as job evidence must be genuine, related to the actual Booking, and must respect Customer privacy.',
+    body: 'You must not manipulate ratings or reviews or pressure a Customer for a particular rating.\n\nAny photos submitted as job evidence must be genuine, related to the actual Booking, and must respect Customer privacy.',
   },
   {
     title: '21–24. Data, Confidentiality & Intellectual Property',
-    body: 'Customer information may only be used for legitimate purposes connected to an authorised service — never sold, published, or misused. You must keep non-public Detail information confidential, and may not copy, reproduce, or commercially exploit Detail’s branding or platform outside approved use, or represent yourself as an official Detail spokesperson or employee.',
+    body: 'Customer information may only be used for legitimate purposes connected to an authorised service. It must never be sold, published, or misused.\n\nYou must keep non-public Detail information confidential, and may not copy, reproduce, or commercially exploit Detail’s branding or platform outside approved use, or represent yourself as an official Detail spokesperson or employee.',
   },
   {
     title: '25–26. Health, Safety, Taxes & Insurance',
-    body: 'Take reasonable measures to protect yourself, Customers, and property, and report serious incidents promptly. You are solely responsible for your own tax obligations, required licences/permits, and any insurance appropriate to your work — Detail does not offer insurance coverage unless expressly stated in writing.',
+    body: 'Take reasonable measures to protect yourself, Customers, and property, and report serious incidents promptly.\n\nYou are solely responsible for your own tax obligations, required licences/permits, and any insurance appropriate to your work.\n\nDetail does not offer insurance coverage unless expressly stated in writing.',
   },
   {
     title: '27–28. Suspension & Termination',
-    body: 'Detail may suspend or restrict your Account where it reasonably believes this Agreement has been breached, safety is at risk, fraud may have occurred, or amounts owed to Detail remain unpaid. Either Party may terminate the Agreement subject to law; Detail may terminate immediately for serious misconduct (fraud, theft, violence, deliberate commission avoidance, etc.). Termination does not erase amounts you already owe.',
+    body: 'Detail may suspend or restrict your Account where it reasonably believes this Agreement has been breached, safety is at risk, fraud may have occurred, or amounts owed to Detail remain unpaid.\n\nEither Party may terminate the Agreement subject to law. Detail may terminate immediately for serious misconduct, including fraud, theft, violence, deliberate commission avoidance, or other serious breaches.\n\nTermination does not erase amounts already owed to Detail or obligations arising from completed Bookings.',
   },
   {
     title: '29–33. Liability, Indemnity & Communications',
-    body: 'Detail is a technology platform and does not guarantee uninterrupted availability or any specific volume of work. To the extent permitted by law, you agree to indemnify Detail against third-party claims arising directly from your fraud, theft, or intentional misconduct. Detail may contact you through the Platform, email, SMS, or WhatsApp, and electronic records may be used as evidence of Bookings and Account activity.',
+    body: 'Detail is a technology platform and does not guarantee uninterrupted availability or any specific volume of work.\n\nTo the extent permitted by law, you agree to indemnify Detail against third-party claims arising directly from your fraud, theft, or intentional misconduct.\n\nDetail may contact you through the Platform, email, SMS, or WhatsApp, and electronic records may be used as evidence of Bookings and Account activity.\n\nDetail is not responsible for collecting Customer payments on your behalf or making cleaner payouts.',
   },
   {
     title: '34–38. Governing Law & General Terms',
-    body: 'This Agreement is governed by the laws of Zimbabwe, and disputes should first go through Detail’s internal support process before pursuing other legal remedies. If any provision is found unenforceable, the rest of the Agreement remains in effect. You may not assign your rights under this Agreement without Detail’s written consent.',
+    body: 'This Agreement is governed by the laws of Zimbabwe, and disputes should first go through Detail’s internal support process before pursuing other legal remedies.\n\nIf any provision is found unenforceable, the rest of the Agreement remains in effect.\n\nYou may not assign your rights under this Agreement without Detail’s written consent.',
   },
 ];
 
@@ -134,7 +135,7 @@ export default function CleanerAgreementScreen() {
         >
           <ArrowLeft size={18} color="#0f172a" />
         </TouchableOpacity>
-        <Text className="text-xl font-display font-black text-slate-900">Cleaner Agreement</Text>
+        <Text className="text-xl font-display font-black text-slate-900">Detail Cleaner Agreement</Text>
       </View>
 
       {accepted ? (
@@ -182,7 +183,7 @@ export default function CleanerAgreementScreen() {
             <Text className="font-sans text-xs text-slate-400 font-medium mb-6">
               Please read all terms before accepting
             </Text>
-            <Text className="font-sans text-xs text-slate-500 font-bold mb-6">Version cleaner-2026-10-23</Text>
+            <Text className="font-sans text-xs text-slate-500 font-bold mb-6">Version cleaner-2026-11-25-wallet-direct-payments-v2</Text>
             {TERMS.map(({ title, body }) => (
               <View key={title} className="mb-6">
                 <Text className="text-base font-display font-black text-slate-900 mb-2">{title}</Text>

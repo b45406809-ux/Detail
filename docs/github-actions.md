@@ -32,7 +32,6 @@ Create a GitHub environment named `production`, enable required reviewers if des
 | `DIDIT_API_KEY` or `DIDIT_KYC_SECRET_KEY`, `DIDIT_WORKFLOW_ID` | Cleaner identity verification provider settings. Either API-key secret name is accepted; the workflow maps both to `DIDIT_API_KEY`. |
 | `TURNSTILE_SECRET` | Server-side Turnstile verification secret. |
 | `RESEND_API_KEY` or `EXPO_RESEND_API_KEY` | Transactional and marketing email delivery. Either secret name is accepted; the workflow maps both to `RESEND_API_KEY`. |
-| `PAYOUT_ENCRYPTION_KEY` | Dedicated 32-byte key for encrypting payout destinations. |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_SERVICE_SID` | SMS delivery from the Supabase delivery worker. |
 | `TWILIO_FROM_NUMBER` | Optional fallback sender when no Messaging Service SID is used. |
 | `CRON_SECRET` | Authenticates the scheduled notification delivery workflow and server worker. |

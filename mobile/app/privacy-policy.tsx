@@ -8,7 +8,7 @@ import { ArrowLeft } from 'lucide-react-native';
 const SECTIONS = [
   {
     title: '1. Information used to operate Detail',
-    body: 'Depending on the features you use, we process your name, email address, phone number, role, profile photo, service area, cleaner profile and portfolio, verification status, device and app information, push token, booking details, bids, reviews, support requests, payment and payout records, and the service instructions, address, schedule, checklist, and photos you provide for a booking.',
+    body: 'Depending on the features you use, we process your name, email address, phone number, role, profile photo, service area, cleaner profile and portfolio, verification status, device and app information, push token, booking details, bids, reviews, support requests, payment records for cleaner registration and prepaid commission, and the service instructions, address, schedule, checklist, and photos you provide for a booking. A cleaner profile selfie is shown to customers browsing cleaner profiles and quotes.',
   },
   {
     title: '2. Location',
@@ -16,7 +16,7 @@ const SECTIONS = [
   },
   {
     title: '3. Photos, chat, and voice calls',
-    body: 'Photos are processed when you choose to add a profile photo, cleaner portfolio image, booking or completion photo, chat photo, or support evidence. Booking chat is available to the booking participants and authorized Detail support staff. Common abusive language is screened before text messages are stored, and users can report messages or block a booking partner. Messages stop appearing in chat after 24 hours, but remain stored in Detail’s database; the 24-hour display period is not a database deletion period. In-app voice calls use Twilio, which processes call connection information and carries call audio. The app does not provide call recording.',
+    body: 'Photos are processed when you choose to add a profile photo, cleaner portfolio image, booking or completion photo, chat photo, or support evidence. Cleaner profile selfies are visible to customers browsing cleaner profiles and quotes. Vehicle and home photos supplied with a booking are shared with eligible cleaners reviewing that booking. Booking chat, including voice notes, is available to the booking participants for 24 hours. After that, retained chat records and media are accessible only to authorized Detail administrators for support and safety. Voice notes are stored as private booking media and can be played by the other booking participant during the 24-hour access period. Common abusive language is screened before text messages are stored, and users can report messages or block a booking partner. The 24-hour access period is not a database deletion period. In-app voice calls use Twilio, which processes call connection information and carries call audio. The app does not provide call recording.',
   },
   {
     title: '4. Identity checks',
@@ -24,7 +24,7 @@ const SECTIONS = [
   },
   {
     title: '5. Payments and marketplace records',
-    body: 'Payment providers process payments for cleaning services, refunds, and related settlement. Detail records booking and transaction status, amounts, provider references, wallet ledger entries, and payout information needed to operate the service, resolve disputes, and maintain financial records. Payment information is shared with the relevant customer, cleaner, payment provider, and authorized support or finance staff as needed for the transaction. Keep communication and payments in Detail.',
+    body: 'Paynow processes cleaner registration and prepaid commission top-ups. Customers pay cleaners directly for bookings; Detail does not receive or hold those booking payments. Detail records top-up status, amounts, provider references, commission records, and related financial entries needed to operate the service and resolve disputes. Payment information is shared with the relevant customer, cleaner, payment provider, and authorized support or finance staff as needed. Keep booking communication in Detail.',
   },
   {
     title: '6. Service providers and sharing',
@@ -36,7 +36,7 @@ const SECTIONS = [
   },
   {
     title: '8. Retention and account deletion',
-    body: 'We keep information while needed to operate Detail, support bookings, prevent abuse, resolve disputes, and meet financial or legal recordkeeping obligations. Chat messages remain in the database after they leave the chat view. When an account is deleted, Detail removes or anonymizes identifying profile information and private media where feasible. Some booking, support, payment, payout, and accounting records may be retained in de-identified form to resolve obligations or maintain required records. Active bookings, wallet balances, commission, or pending payouts must be resolved before deletion can finish. Start deletion from Profile in the app.',
+    body: 'We keep information while needed to operate Detail, support bookings, prevent abuse, resolve disputes, and meet financial or legal recordkeeping obligations. Chat messages remain in the database after they leave the chat view. When an account is deleted, Detail removes or anonymizes identifying profile information and private media where feasible. Some booking, support, payment, and accounting records may be retained in de-identified form to resolve obligations or maintain required records. Active bookings, prepaid commission, or unresolved top-up payments must be resolved before deletion can finish. Start deletion from Profile in the app.',
   },
   {
     title: '9. Website and beta waitlist',

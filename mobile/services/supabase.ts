@@ -211,7 +211,7 @@ const newId = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, char
   return (char === 'x' ? value : (value & 0x3) | 0x8).toString(16);
 });
 const camelColumns: Record<string, string[]> = {
-  users: ['email','displayName','photoURL','role','accountType','organizationId','balance','earningsBalance','commissionBalance','commissionOwed','cleanerVerificationFeePaidAt','status','hasAgreedToTerms','cleanerAgreementAccepted','cleanerOnboardingComplete','hasCompletedProfile','hasSetupPermissions','isSuspended','isBanned','verificationStatus','verificationLevel','serviceCategories','serviceRadiusKm','experienceYears','address','serviceArea','phone','location','jobsCompleted','ratingAverage','ratingCount','responseTimeAverage','createdAt','updatedAt','metadata'],
+  users: ['email','displayName','photoURL','role','accountType','organizationId','balance','earningsBalance','commissionBalance','commissionOwed','cleanerVerificationFeePaidAt','cleanerSelfieAt','status','hasAgreedToTerms','cleanerAgreementAccepted','cleanerOnboardingComplete','hasCompletedProfile','hasSetupPermissions','isSuspended','isBanned','verificationStatus','verificationLevel','serviceCategories','serviceRadiusKm','experienceYears','address','serviceArea','phone','location','jobsCompleted','ratingAverage','ratingCount','responseTimeAverage','createdAt','updatedAt','metadata'],
   jobs: ['customerId','cleanerId','customerName','customerPhoto','customerPhone','cleanerName','cleanerPhoto','cleanerPhone','cleanerRating','category','serviceType','checklist','description','location','scheduledTime','scheduledDateTime','timePreference','status','pricingStrategy','budget','price','photos','completionPhotos','biddingExpiresAt','reminderSent','estimatedDuration','cleanerLocation','cleanerLocationUpdatedAt','paidAt','paymentMethod','paymentStatus','earnings','rating','ratedAt','isFavoriteRebook','createdAt','updatedAt','data','bookingMode','suppliesRequired','suppliesFee','arrivalAt','serviceStartedAt','completionSubmittedAt','customerResponseAt','directCommissionPolicyVersion','matchExpiresAt','lastMessage','lastMessageAt','cleanerUnread','customerUnread'],
   openJobs: ['jobId','status','category','serviceType','budget','biddingExpiresAt','customerId','createdAt','data'],
   bids: ['jobId','cleanerId','cleanerName','cleanerPhoto','cleanerRating','cleanerReviewCount','cleanerJobsCompleted','cleanerEliteVerified','bidPrice','estimatedArrival','status','message','history','createdAt','updatedAt'],
@@ -338,7 +338,7 @@ export async function setDoc(ref: DocumentRef, input: Record<string, any>, optio
     if (old) {
       if (row.data) row.data = { ...((old as Record<string, any>).data ?? {}), ...row.data };
       delete row[keyOf(ref.table)];
-      if (ref.table === 'users') for (const key of ['email','role','accounttype','organizationid','balance','earningsbalance','commissionbalance','commissionowed','status','verificationstatus','verificationlevel','issuspended','isbanned','cleaneragreementaccepted','cleaneronboardingcomplete','jobscompleted','ratingaverage','ratingcount','responsetimeaverage','walletRestricted','locationPoint','locationUpdatedAt','accountDeletedAt','createdAt']) delete row[key.toLowerCase()];
+      if (ref.table === 'users') for (const key of ['email','role','accounttype','organizationid','balance','earningsbalance','commissionbalance','commissionowed','cleanerselfieat','status','verificationstatus','verificationlevel','issuspended','isbanned','cleaneragreementaccepted','cleaneronboardingcomplete','jobscompleted','ratingaverage','ratingcount','responsetimeaverage','walletRestricted','locationPoint','locationUpdatedAt','accountDeletedAt','createdAt']) delete row[key.toLowerCase()];
       const { error } = await supabase.from(physicalTable(ref.table)).update(row).eq(keyOf(ref.table), ref.id);
       if (error) throw error;
       return;
@@ -365,7 +365,7 @@ export async function updateDoc(ref: DocumentRef, input: Record<string, any>) {
       row[physicalColumn(key)] = Number((old as Record<string, any>)[physicalColumn(key)] ?? 0) + Number((value as any).__increment);
     }
   }
-  if (ref.table === 'users') for (const key of ['role','accounttype','organizationid','balance','earningsbalance','commissionbalance','commissionowed','status','verificationstatus','verificationlevel','issuspended','isbanned','cleaneragreementaccepted','createdat']) delete row[key];
+  if (ref.table === 'users') for (const key of ['role','accounttype','organizationid','balance','earningsbalance','commissionbalance','commissionowed','cleanerselfieat','status','verificationstatus','verificationlevel','issuspended','isbanned','cleaneragreementaccepted','createdat']) delete row[key];
   const { error } = await supabase.from(physicalTable(ref.table)).update(row).eq(keyOf(ref.table), ref.id);
   if (error) throw error;
 }

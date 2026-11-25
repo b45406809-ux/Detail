@@ -731,7 +731,7 @@ export default function CreateBookingScreen() {
             <View>
               {bookingMode==='INSTANT'?<>
                 <Text className="text-2xl font-display font-black text-ink mb-2">Confirm your price</Text>
-                <Text className="font-sans text-sm text-ink/50 mb-5">Book Now uses the listed starting price. A cleaner can accept or decline; the cleaner’s estimated platform payout is 90% of this amount.</Text>
+                <Text className="font-sans text-sm text-ink/50 mb-5">Book Now uses the listed starting price. A cleaner can accept or decline. If accepted, arrange payment directly with them.</Text>
                 <View className="rounded-2xl border border-ink/10 bg-white p-4 gap-2"><Text className="font-sans text-sm text-ink">{serviceLabel()} starting price: ${Number(Catalog.SERVICE_PACKAGES[category!].find(item=>item.id===serviceId)?.price.replace('$','')??0).toFixed(2)}</Text><Text className="font-display font-black text-lg text-ink">Total: ${(Number(Catalog.SERVICE_PACKAGES[category!].find(item=>item.id===serviceId)?.price.replace('$','')??0)+(suppliesRequired?suppliesFee:0)).toFixed(2)}</Text></View>
               </>:<>
               <Text className="text-2xl font-display font-black text-ink mb-1">Set your budget</Text>

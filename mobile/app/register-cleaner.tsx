@@ -16,11 +16,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Image,
 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
+import * as ImagePicker from 'expo-image-picker';
 import {
   ArrowLeft,
   User,
@@ -35,6 +37,7 @@ import { useAuth } from '../context/AuthContext';
 import { auth, sendEmailVerification, supabase } from '../services/supabase';
 import { callFunction } from '../services/functions';
 import { ServiceCategory } from '../types';
+import { uploadProfilePhoto } from '../services/storage';
 
 const CATEGORY_OPTIONS: { id: ServiceCategory; label: string; icon: any }[] = [
   { id: 'HOUSE', label: 'House Cleaning', icon: HomeIcon },
@@ -43,7 +46,7 @@ const CATEGORY_OPTIONS: { id: ServiceCategory; label: string; icon: any }[] = [
 const DEFAULT_SERVICE_RADIUS_KM = 15;
 
 export default function RegisterCleanerScreen() {
-  const { profile } = useAuth();
+  const { profile, updateProfile, refreshProfile } = useAuth();
   const [introStep, setIntroStep] = useState(0);
   const [fullName, setFullName] = useState(profile?.displayName ?? '');
   const [phone, setPhone] = useState(profile?.phone ?? '');
@@ -55,12 +58,19 @@ export default function RegisterCleanerScreen() {
   const [organizationCode, setOrganizationCode] = useState('');
   const [isCheckingIdentity, setIsCheckingIdentity] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploadingSelfie, setIsUploadingSelfie] = useState(false);
+  const [selfieCaptured, setSelfieCaptured] = useState(false);
+  const [selfiePreviewUri, setSelfiePreviewUri] = useState<string | null>(null);
   const [verifiedPhone, setVerifiedPhone] = useState('');
   const [phoneCode, setPhoneCode] = useState('');
   const [codeSentTo, setCodeSentTo] = useState('');
   const [phoneBusy, setPhoneBusy] = useState(false);
   const normalizedPhone = phone.trim().replace(/[\s()-]/g, '');
   const phoneIsVerified = /^\+[1-9]\d{7,14}$/.test(normalizedPhone) && verifiedPhone.replace(/\D/g, '') === normalizedPhone.replace(/\D/g, '');
+
+  const photoPath = profile?.photoURL?.split('?')[0] ?? '';
+  const hasCurrentProfileSelfie = Boolean(profile?.cleanerSelfieAt && photoPath.endsWith(`/profile-photos/${profile.uid}/avatar.jpg`));
+  useEffect(() => { setSelfieCaptured(hasCurrentProfileSelfie); }, [hasCurrentProfileSelfie]);
 
   useEffect(() => {
     let active = true;
@@ -131,6 +141,35 @@ export default function RegisterCleanerScreen() {
   const verificationStatus = profile?.verificationStatus ?? 'NOT_STARTED';
   const isIdentityVerified = verificationStatus === 'VERIFIED';
 
+  const captureCleanerSelfie = async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        appAlert('Camera permission required', 'Allow camera access to take the selfie customers will see on your cleaner profile.');
+        return;
+      }
+      setIsUploadingSelfie(true);
+      const result = await ImagePicker.launchCameraAsync({
+        cameraType: ImagePicker.CameraType.front,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      const uri = result.assets?.[0]?.uri;
+      if (result.canceled || !uri) return;
+      const photoURL = await uploadProfilePhoto(uri);
+      await updateProfile({ photoURL });
+      await callFunction('confirmCleanerProfileSelfie', {});
+      await refreshProfile();
+      setSelfiePreviewUri(uri);
+      setSelfieCaptured(true);
+    } catch (error) {
+      appAlert('Selfie upload failed', error instanceof Error ? error.message : 'Could not save your profile selfie. Please try again.');
+    } finally {
+      setIsUploadingSelfie(false);
+    }
+  };
+
   const refreshIdentityCheck = async () => {
     setIsCheckingIdentity(true);
     try {
@@ -148,7 +187,7 @@ export default function RegisterCleanerScreen() {
   const startIdentityCheck = async () => {
     appAlert(
       'Identity verification',
-      'Cleaner registration requires a $2.00 wallet deposit: $1.00 pays the one-time identity check and $1.00 remains as your minimum cleaner commission credit, covering up to $10 of offline bookings. Once verification starts, the fee is non-refundable where permitted by law, except where the verification service was not provided. If your check is declined, you cannot accept jobs; contact Detail support to correct your details or appeal. You can retry without paying the one-time fee again. Your identity documents are handled by our verification provider; Detail receives the decision, not your ID images.',
+      'Cleaner registration requires a $2.00 payment: $1.00 pays the one-time identity check and $1.00 remains as your minimum prepaid commission credit, covering up to $10 of bookings. Once verification starts, the fee is non-refundable where permitted by law, except where the verification service was not provided. If your check is declined, you cannot accept jobs; contact Detail support to correct your details or appeal. You can retry without paying the one-time fee again. Your identity documents are handled by our verification provider; Detail receives the decision, not your ID images.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Continue', onPress: () => { void launchIdentityCheck(); } },
@@ -172,6 +211,10 @@ export default function RegisterCleanerScreen() {
   };
 
   const handleSubmit = async () => {
+    if (!selfieCaptured) {
+      appAlert('Profile selfie required', 'Take a current selfie with your front camera. Customers will see it on your cleaner profile.');
+      return;
+    }
     if (!fullName.trim() || !phone.trim() || !address.trim()) {
       appAlert('Missing info', 'Please fill in your full name, phone, and physical address.');
       return;
@@ -205,8 +248,8 @@ export default function RegisterCleanerScreen() {
         serviceRadiusKm, experienceYears: Number(experience) || 0,
       });
       router.push({ pathname: '/cleaner-agreement', params: organizationCode.trim() ? { organizationCode: organizationCode.trim() } : {} });
-    } catch {
-      appAlert('Error', 'Failed to submit your registration. Please try again.');
+    } catch (error) {
+      appAlert('Could not submit registration', error instanceof Error ? error.message : 'Please check your details and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -214,10 +257,10 @@ export default function RegisterCleanerScreen() {
 
   const introSlides = [
     { title: 'Work with Detail', body: 'Choose the cleaning services and areas you offer. Complete identity verification and the cleaner agreement before accepting bookings.' },
-    { title: 'Your earnings', body: 'Detail charges a 10% platform commission. For a $30 Paynow booking, $3 is taken from the payment and your $27 share is credited after settlement. For offline bookings, the customer pays you directly and the 10% commission is reserved from your prepaid commission credit when they accept your quote.' },
-    { title: 'When you get paid', body: 'For now, customers pay you directly using cash, EcoCash, InnBucks, or another method you both agree on. Detail does not receive or hold customer booking payments. You keep the remaining 90% after your prepaid 10% commission is reserved.' },
-    { title: 'Prepaid commission', body: 'Keep prepaid commission credit to accept offline bookings. At least $1 credit lets you accept up to $10 of offline work; a $20 accepted quote reserves $2. Detail returns the reserve if the booking is cancelled before completion. Paynow bookings do not use this reserve because the 10% is taken from your payout.' },
-    { title: 'Registration deposit and identity check', body: 'Cleaner registration requires a $2.00 wallet deposit: $1.00 pays the one-time identity check and $1.00 remains as minimum prepaid commission credit, covering up to $10 of offline bookings. You must be verified before accepting jobs. If your check is declined, you cannot accept jobs; contact support to correct details or appeal. You can retry without paying the identity fee again. The fee is non-refundable where permitted by law, except if the verification service was not provided.' },
+    { title: 'Your earnings', body: 'Detail charges a 10% platform commission. Customers pay you directly using cash, EcoCash, InnBucks, or another method you both agree on. After commission, you keep the remaining 90%; the Wallet records total earnings for completed bookings.' },
+    { title: 'When you get paid', body: 'Customers pay you directly. Detail does not receive or hold customer booking payments and does not offer in-app payout requests.' },
+    { title: 'Prepaid commission', body: 'Keep enough prepaid wallet credit to cover at least 10% of the value of every job you bid for. A $1 credit covers a $10 job; a $25 quote needs $2.50 in credit. The commission is deducted or reserved when a Customer accepts your quote, then handled under the booking and cancellation process.' },
+    { title: 'Registration deposit and identity check', body: 'Cleaner registration requires a $2.00 payment: $1.00 pays the one-time identity check and $1.00 remains as minimum prepaid commission credit, covering up to $10 of bookings. You must be verified before accepting jobs. If your check is declined, you cannot accept jobs; contact support to correct details or appeal. You can retry without paying the identity fee again. The fee is non-refundable where permitted by law, except if the verification service was not provided.' },
     { title: 'Deliver with care', body: 'Keep your availability accurate, arrive on time, communicate through Detail and provide the required completion photos. Review the full cleaner agreement before joining.' },
   ];
   if (introStep < introSlides.length) {
@@ -255,6 +298,22 @@ export default function RegisterCleanerScreen() {
           <View className="gap-3 mb-6">
             <LabeledInput icon={User} label="Full Name" value={fullName} onChangeText={setFullName} placeholder="Your full legal name" />
             <LabeledInput icon={User} label="Phone Number" value={phone} onChangeText={setPhone} placeholder="+263 7X XXX XXXX" keyboardType="phone-pad" />
+            <View className="rounded-3xl border border-accent/15 bg-accent/[0.04] p-4">
+              <View className="flex-row items-center gap-3">
+                <View className="h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-accent/10">
+                  {isUploadingSelfie ? <ActivityIndicator color="#3906D2" /> : selfiePreviewUri || hasCurrentProfileSelfie ? (
+                    <Image source={{ uri: selfiePreviewUri || profile?.photoURL || '' }} className="h-full w-full" />
+                  ) : <User size={25} color="#3906D2" />}
+                </View>
+                <View className="flex-1">
+                  <Text className="font-display font-black text-ink">Cleaner profile selfie · Required</Text>
+                  <Text className="mt-1 font-sans text-xs leading-5 text-ink/60">Take a current photo of yourself with the front camera. Customers will see it on your profile; gallery photos are not accepted.</Text>
+                  <TouchableOpacity disabled={isUploadingSelfie} onPress={() => void captureCleanerSelfie()} className="mt-2 self-start rounded-xl bg-accent px-3 py-2">
+                    <Text className="font-sans-bold text-xs text-white">{isUploadingSelfie ? 'Saving selfie…' : selfieCaptured ? 'Retake selfie' : 'Take selfie'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
             <View className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
               <Text className="font-sans text-sm text-ink">{phoneIsVerified ? 'Phone number verified' : 'Cleaners must verify their mobile number.'}</Text>
               {!phoneIsVerified && <TouchableOpacity disabled={phoneBusy} onPress={() => void sendPhoneCode()} className="mt-3 rounded-xl bg-accent px-4 py-3"><Text className="text-center font-sans-bold text-white">{phoneBusy ? 'Please wait…' : codeSentTo === normalizedPhone ? 'Send a new code' : 'Send verification code'}</Text></TouchableOpacity>}
@@ -341,7 +400,7 @@ export default function RegisterCleanerScreen() {
                 {isIdentityVerified ? 'Identity verified' : verificationStatus === 'REJECTED' ? 'Verification needs attention' : 'Identity verification'}
               </Text>
               <Text className="font-sans text-xs text-slate-500 font-medium mt-0.5">
-                {isIdentityVerified ? 'Verified cleaners can accept jobs.' : verificationStatus === 'REJECTED' ? 'You cannot accept jobs yet. Contact support to correct details or appeal; a retry does not cost again.' : 'Cleaner registration requires $2.00: $1.00 for the identity check and $1.00 remaining as minimum commission credit, covering up to $10 of offline bookings.'}
+                {isIdentityVerified ? 'Verified cleaners can accept jobs.' : verificationStatus === 'REJECTED' ? 'You cannot accept jobs yet. Contact support to correct details or appeal; a retry does not cost again.' : 'Cleaner registration requires $2.00: $1.00 for the identity check and $1.00 remaining as minimum commission credit, covering up to $10 of bookings.'}
               </Text>
             </View>
             {!isIdentityVerified && (
@@ -362,7 +421,7 @@ export default function RegisterCleanerScreen() {
             </TouchableOpacity>
           )}
           <Text className="font-sans text-[11px] text-slate-400 font-medium mb-8 leading-relaxed">
-            Our verification provider checks your identity. Detail receives the decision, not your ID images. Cleaner registration requires $2.00: $1.00 pays the identity check and $1.00 remains as minimum commission credit, covering up to $10 of offline bookings. The verification fee is non-refundable where permitted by law, except if the service was not provided. If your check is declined, you cannot accept jobs and can contact support to appeal or correct your details.
+            Our verification provider checks your identity. Detail receives the decision, not your ID images. Cleaner registration requires $2.00: $1.00 pays the identity check and $1.00 remains as minimum commission credit, covering up to $10 of bookings. The verification fee is non-refundable where permitted by law, except if the service was not provided. If your check is declined, you cannot accept jobs and can contact support to appeal or correct your details.
           </Text>
 
           <TouchableOpacity

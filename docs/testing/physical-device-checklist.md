@@ -4,10 +4,10 @@ Use this checklist after installing a build from the exact commit under test. Ap
 
 ## Before testing
 
-- Use a dedicated QA backend and sandbox credentials for every provider. Do not run booking, KYC, payout, or payment checks against production data.
+- Use a dedicated QA backend and sandbox credentials for every provider. Do not run booking, KYC, or Paynow top-up checks against production data.
 - Use one synthetic customer and two synthetic cleaners. Use a second customer only when testing concurrency. Keep no more than four QA accounts active for this checklist.
 - Record platform, OS version, app version, source commit, build identifier, backend environment, and test account aliases. Do not record tokens, identity documents, card details, or full phone numbers.
-- Confirm that booking, notifications, email, SMS, KYC, payment, and payout endpoints are in the intended sandbox/QA mode. Stop that provider flow if its mode is unknown.
+- Confirm that booking, notifications, email, SMS, KYC, and Paynow top-up endpoints are in the intended sandbox/QA mode. Stop that provider flow if its mode is unknown.
 - Capture screenshots or screen recordings and the matching backend record IDs. Mark each row **Pass**, **Fail**, **Blocked**, or **Not run**. Clean up only the synthetic QA records created for that run.
 
 ## Customer and cleaner marketplace journey
@@ -30,11 +30,10 @@ Use this checklist after installing a build from the exact commit under test. Ap
 
 Run only after Paynow confirms the configured integration is sandbox and the QA backend is isolated. Use provider-supplied test instruments; never use a real card, wallet, or bank account.
 
-1. Accept a QA bid with Paynow and complete the provider sandbox checkout.
-2. Verify the signed callback and persisted payment state before treating the booking as paid or escrowed.
-3. Complete the QA booking, then verify the platform fee and cleaner share in the ledger and wallet.
-4. Request a sandbox withdrawal and verify its provider status and idempotency. Check replayed or forged callbacks are rejected.
-5. Test cancellation/refund and confirm the ledger balances reconcile with the provider sandbox record.
+1. Create a cleaner registration payment or prepaid commission top-up through Paynow EcoCash and approve or cancel the phone prompt.
+2. Verify the signed callback, payment history status, and commission balance update. Confirm retries do not create duplicate credits.
+3. Accept a QA quote and confirm the customer sees direct payment instructions without a customer wallet or Paynow checkout.
+4. Complete and cancel QA bookings; verify commission reserve/release and ledger balances without treating the customer payment as a Detail-held payment.
 
 ## Push, email, SMS, and campaign checks
 

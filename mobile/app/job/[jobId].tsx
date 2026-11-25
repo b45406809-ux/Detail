@@ -12,16 +12,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Linking,
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MapPin, Clock, DollarSign, MessageSquare, Hash, Home, Layers, Sparkles, X, CheckCircle2, Car, Image as ImageIcon } from 'lucide-react-native';
+import { ArrowLeft, MapPin, Navigation, Clock, DollarSign, MessageSquare, Hash, Home, Layers, Sparkles, X, CheckCircle2, Car, Image as ImageIcon } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { db, doc, collection, onSnapshot, query, where, getDocs, limit } from '../../services/supabase';
 import { callFunction } from '../../services/functions';
 import { Job, JobStatus, HouseChecklist, CarChecklist } from '../../types';
-import { IS_MOCK } from '../../utils/env';
 
 export default function CleanerJobDetailScreen() {
   const { jobId } = useLocalSearchParams<{ jobId: string }>();
@@ -31,6 +31,7 @@ export default function CleanerJobDetailScreen() {
   const [alreadyBid, setAlreadyBid] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState('');
 
   const [bidPrice, setBidPrice] = useState('');
   const [estimatedArrival, setEstimatedArrival] = useState('');
@@ -40,6 +41,8 @@ export default function CleanerJobDetailScreen() {
     if (!jobId) return;
     let active = true;
     let unavailable = false;
+    setPreviewError('');
+    setIsLoading(true);
     const unsubscribe = onSnapshot(
       doc(db, 'openJobs', jobId),
       (snap) => {
@@ -54,7 +57,7 @@ export default function CleanerJobDetailScreen() {
     );
     callFunction('getCleanerBookingPreview', { jobId })
       .then((preview) => { if (active && !unavailable) setJob(preview as Job); })
-      .catch(() => { if (active && !unavailable) setJob(null); })
+      .catch((error) => { if (active && !unavailable) { setPreviewError(error instanceof Error ? error.message : 'Could not load this booking.'); setJob(null); } })
       .finally(() => { if (active) setIsLoading(false); });
     return () => { active = false; unsubscribe(); };
   }, [jobId]);
@@ -82,7 +85,19 @@ export default function CleanerJobDetailScreen() {
       appAlert('Too Late', 'This job is no longer accepting bids.');
       return;
     }
-
+    const topupShortfall = commissionTopupShortfall(price, profile.commissionBalance, profile.commissionOwed);
+    if (topupShortfall > 0) {
+      const suggestedTopup = Math.max(1, topupShortfall);
+      appAlert(
+        'Top up prepaid commission',
+        `A $${price.toFixed(2)} quote needs $${commissionReserve(price).toFixed(2)} in prepaid commission credit. Add $${suggestedTopup.toFixed(2)} to cover the shortfall, then return here to send your quote.`,
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: `Top up $${suggestedTopup.toFixed(2)}`, onPress: () => router.push({ pathname: '/(tabs)/wallet', params: { topupAmount: suggestedTopup.toFixed(2) } }) },
+        ],
+      );
+      return;
+    }
     setIsSubmitting(true);
     try {
       await callFunction('submitBid', {
@@ -94,6 +109,15 @@ export default function CleanerJobDetailScreen() {
       setAlreadyBid(true);
       appAlert('Bid Placed!', "Your offer has been sent to the customer. You'll be notified if they accept.");
     } catch (err: any) {
+      const topupMatch = String(err?.message ?? '').match(/PREPAID_TOPUP_REQUIRED:(\d+(?:\.\d{1,2})?)/);
+      if (topupMatch) {
+        const suggestedTopup = Math.max(1, Number(topupMatch[1]));
+        appAlert('Top up prepaid commission', `Add $${suggestedTopup.toFixed(2)} to cover the commission reserve for this quote. You can return here and send it after the top-up clears.`, [
+          { text: 'Not now', style: 'cancel' },
+          { text: `Top up $${suggestedTopup.toFixed(2)}`, onPress: () => router.push({ pathname: '/(tabs)/wallet', params: { topupAmount: suggestedTopup.toFixed(2) } }) },
+        ]);
+        return;
+      }
       appAlert('Error', err.message || 'Failed to submit bid. Please try again.');
     } finally {
       setIsSubmitting(false);
@@ -109,20 +133,48 @@ export default function CleanerJobDetailScreen() {
   }
 
   if (!job) {
+    const selfieRequired = /front-camera selfie/i.test(previewError);
     return (
       <SafeAreaView className="flex-1 bg-white items-center justify-center px-6">
-        <Text className="text-lg font-display font-black text-ink text-center">Job not found</Text>
+        <Text className="text-lg font-display font-black text-ink text-center">{selfieRequired ? 'Cleaner profile selfie required' : 'Booking unavailable'}</Text>
+        <Text className="mt-2 text-center font-sans text-sm text-ink/60">{selfieRequired ? 'Take a current selfie with your front camera in Profile. Customers will see it on your cleaner profile.' : previewError || 'This booking may no longer be available.'}</Text>
+        {selfieRequired && <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} className="mt-5 rounded-2xl bg-accent px-5 py-3"><Text className="font-display font-black text-white">Open Profile</Text></TouchableOpacity>}
         <TouchableOpacity onPress={() => goBackSafely()} className="mt-4">
-          <Text className="text-accent font-display font-black">Go Back</Text>
+          <Text className="text-accent font-display font-black">{selfieRequired ? 'Go back to bookings' : 'Go Back'}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
   const isTaken = job.status !== JobStatus.PENDING;
-  const distance = IS_MOCK ? '2.3 km away' : 'Approximate area only';
+  const isVisitWash = job.category === 'CAR' && job.serviceMode === 'VISIT_WASH';
+  const latitude = Number(job.location?.lat);
+  const longitude = Number(job.location?.lng);
+  const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude) &&
+    Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180 && (latitude !== 0 || longitude !== 0);
+  const openLocation = () => {
+    if (!hasCoordinates && !isVisitWash) {
+      appAlert('Location unavailable', 'The customer did not provide a mappable location.');
+      return;
+    }
+    const destination = hasCoordinates ? `${latitude},${longitude}` : job.location?.address ?? job.washSiteName ?? '';
+    if (!destination) {
+      appAlert('Location unavailable', 'The car wash location is not available yet.');
+      return;
+    }
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}&travelmode=driving`;
+    void Linking.openURL(url).catch(() => appAlert('Maps unavailable', 'Could not open directions on this device.'));
+  };
 
   const budgetLabel = job.budget ? `$${job.budget}` : 'Open — send your best price';
+  const numericBidPrice = Number(bidPrice);
+  const validBidPrice = Number.isFinite(numericBidPrice) && numericBidPrice >= 1;
+  const availableCommission = Math.max(0, Number(profile?.commissionBalance ?? 0) || 0);
+  const outstandingCommission = Math.max(0, Number(profile?.commissionOwed ?? 0) || 0);
+  const requiredCommission = validBidPrice ? commissionReserve(numericBidPrice) : 0;
+  const suggestedCommissionTopup = validBidPrice
+    ? Math.max(0, outstandingCommission, outstandingCommission + requiredCommission - availableCommission)
+    : 0;
 
   const checklistTags = getChecklistTags(job);
   const checklist = job.checklist as any;
@@ -160,12 +212,17 @@ export default function CleanerJobDetailScreen() {
             </View>
 
             <View className="gap-3">
-              <DetailRow icon={MapPin} title="Location" value={job.location?.address ?? 'Address not provided'} accent={distance ?? undefined} />
+              <DetailRow
+                icon={MapPin}
+                title={isVisitWash ? 'Car wash location' : 'Customer location'}
+                value={isVisitWash ? job.location?.address || job.washSiteName || 'Selected car wash' : 'Approximate area only'}
+                accent={isVisitWash ? undefined : 'Exact address is shared after quote acceptance'}
+              />
               <DetailRow icon={DollarSign} title="Customer Budget" value={budgetLabel} />
               <DetailRow icon={Clock} title="Estimated Duration" value={formatDuration(job.estimatedDuration)} />
               <DetailRow icon={Sparkles} title={job.category === 'HOUSE' ? 'Property condition' : 'Vehicle condition'} value={conditionLabel} highlight />
               {!!job.suppliesRequired && <DetailRow icon={Sparkles} title="Cleaner supplies" value={job.suppliesFee ? `Customer offers $${Number(job.suppliesFee).toFixed(2)} for supplies` : 'Cleaner should bring supplies'} />}
-              {job.category === 'CAR' && job.serviceMode === 'VISIT_WASH' && <DetailRow icon={MapPin} title="Car wash location" value={job.washSiteName || 'Customer selected car wash'} />}
+              {isVisitWash && <DetailRow icon={Home} title="Selected car wash" value={job.washSiteName || 'Customer selected car wash'} />}
               {job.category === 'HOUSE' && (
                 <>
                   {Boolean(houseLayout) && (
@@ -189,6 +246,26 @@ export default function CleanerJobDetailScreen() {
               {job.description && <DetailRow icon={MessageSquare} title="Notes" value={job.description} />}
             </View>
 
+            {(hasCoordinates || isVisitWash) && (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={isVisitWash ? 'Get directions to the selected car wash' : 'View the approximate customer location'}
+                onPress={openLocation}
+                activeOpacity={0.8}
+                className="mt-4 flex-row items-center gap-3 rounded-2xl border border-accent/15 bg-accent/[0.04] p-4"
+              >
+                <View className="w-10 h-10 rounded-xl bg-accent items-center justify-center">
+                  <Navigation size={17} color="#fff" />
+                </View>
+                <View className="flex-1">
+                  <Text className="font-display font-black text-ink">{isVisitWash ? 'Directions to car wash' : 'View approximate area'}</Text>
+                  <Text className="font-sans text-xs text-ink/55 mt-1">
+                    {isVisitWash ? 'Open the selected wash location in Maps.' : 'The map pin is approximate. Exact address is shared after acceptance.'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
             {checklistTags.length > 0 && (
               <View className="flex-row flex-wrap gap-2 mt-4 pt-4 border-t border-ink/5">
                 {checklistTags.map((tag) => (
@@ -204,7 +281,7 @@ export default function CleanerJobDetailScreen() {
                 <View className="flex-row items-center justify-between mb-2">
                   <View className="flex-row items-center gap-1.5">
                     <ImageIcon size={13} color="#3906D2" />
-                    <Text className="text-xs font-display font-black text-ink/60 uppercase tracking-wider">Photos of What Needs Cleaning ({job.photos.length})</Text>
+                    <Text className="text-xs font-display font-black text-ink/60 uppercase tracking-wider">{job.category === 'CAR' ? 'Vehicle photos' : 'Home photos'} ({job.photos.length})</Text>
                   </View>
                   <Text className="font-sans text-[10px] font-bold text-accent">Tap to enlarge</Text>
                 </View>
@@ -280,12 +357,22 @@ export default function CleanerJobDetailScreen() {
                 onChangeText={setBidPrice}
               />
 
-              {Number.isFinite(Number(bidPrice)) && Number(bidPrice) > 0 && (
+              {validBidPrice && (
                 <View className="-mt-2 mb-4 rounded-2xl border border-violet-100 bg-violet-50 p-3">
-                  <Text className="font-display text-xs font-black text-violet-900">Offline commission reserve · ${(Math.round(Number(bidPrice) * 10) / 100).toFixed(2)}</Text>
+                  <Text className="font-display text-xs font-black text-violet-900">Required prepaid commission (10%) · ${commissionReserve(Number(bidPrice)).toFixed(2)}</Text>
                   <Text className="mt-1 font-sans text-[11px] leading-4 text-violet-800/80">
-                    If the customer pays you directly, this 10% is reserved from your prepaid commission credit when they accept. $1 credit covers up to $10 of accepted offline jobs. Paynow bookings take 10% from your payout instead.
+                    Available credit: ${availableCommission.toFixed(2)}. You need the full 10% available before submitting. If accepted, Detail reserves it and the customer pays you directly.
                   </Text>
+                  {suggestedCommissionTopup > 0 ? (
+                    <>
+                      <Text className="mt-1 font-sans-bold text-[11px] leading-4 text-violet-900">
+                        {outstandingCommission > 0 ? `Clear $${outstandingCommission.toFixed(2)} commission due and cover the reserve. ` : ''}You are short. Top up $${Math.max(1, suggestedCommissionTopup).toFixed(2)} to unlock this bid.
+                      </Text>
+                      <TouchableOpacity onPress={() => router.push({ pathname: '/(tabs)/wallet', params: { topupAmount: Math.max(1, suggestedCommissionTopup).toFixed(2) } })} className="mt-3 self-start rounded-xl bg-accent px-3 py-2">
+                        <Text className="font-sans-bold text-xs text-white">Top up ${Math.max(1, suggestedCommissionTopup).toFixed(2)}</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : <Text className="mt-1 font-sans text-[11px] text-emerald-700">Your prepaid credit covers this quote.</Text>}
                 </View>
               )}
 
@@ -325,15 +412,15 @@ export default function CleanerJobDetailScreen() {
 
               <TouchableOpacity
                 onPress={handleSubmitBid}
-                disabled={isSubmitting || !bidPrice || !estimatedArrival}
+                disabled={isSubmitting || !bidPrice || !estimatedArrival || suggestedCommissionTopup > 0}
                 activeOpacity={0.85}
-                className={`py-5 rounded-[32px] items-center ${bidPrice && estimatedArrival ? 'bg-accent shadow-lg shadow-accent/30' : 'bg-ink/10'}`}
+                className={`py-5 rounded-[32px] items-center ${bidPrice && estimatedArrival && suggestedCommissionTopup <= 0 ? 'bg-accent shadow-lg shadow-accent/30' : 'bg-ink/10'}`}
               >
                 {isSubmitting ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text className={`font-black text-sm uppercase tracking-widest ${bidPrice && estimatedArrival ? 'text-white' : 'text-ink/30'}`}>
-                    Submit Bid ${bidPrice || '—'}
+                  <Text className={`font-black text-sm uppercase tracking-widest ${bidPrice && estimatedArrival && suggestedCommissionTopup <= 0 ? 'text-white' : 'text-ink/30'}`}>
+                    {suggestedCommissionTopup > 0 ? `Top up $${Math.max(1, suggestedCommissionTopup).toFixed(2)} first` : `Submit Bid $${bidPrice || '—'}`}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -406,4 +493,19 @@ function formatDuration(minutes?: number): string {
   const remainingMinutes = minutes % 60;
   if (!hours) return `${remainingMinutes} min`;
   return remainingMinutes ? `${hours} hr ${remainingMinutes} min` : `${hours} hr`;
+}
+
+function roundUsd(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function commissionReserve(bidPrice: number): number {
+  return roundUsd(bidPrice * 0.1);
+}
+
+function commissionTopupShortfall(bidPrice: number, balance?: number, commissionOwed?: number): number {
+  if (!Number.isFinite(bidPrice) || bidPrice < 1) return 0;
+  const debt = Math.max(0, Number(commissionOwed) || 0);
+  const available = Math.max(0, Number(balance) || 0);
+  return roundUsd(Math.max(0, debt, debt + commissionReserve(bidPrice) - available));
 }
