@@ -27,7 +27,11 @@ jobs:
         run: |
           supabase start
           supabase db reset --local
-          supabase test db --local
+          supabase test db --local > "$RUNNER_TEMP/detail-db-tests.log" 2>&1 || {
+            tail -n 100 "$RUNNER_TEMP/detail-db-tests.log" >> "$GITHUB_STEP_SUMMARY"
+            cat "$RUNNER_TEMP/detail-db-tests.log"
+            exit 1
+          }
           supabase db lint --local --schema public --fail-on error
           deno check --config supabase/functions/deno.json supabase/functions/marketplace-api/index.ts
       - name: Apply pending migrations and deploy API

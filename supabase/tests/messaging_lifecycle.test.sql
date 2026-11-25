@@ -28,7 +28,7 @@ select throws_ok(
   $$select public.send_job_message('508d398f-5481-402f-807e-c730a62fdf80','Different body',null,'customer-message-1')$$,
   'P0001','Idempotency key reused for a different message','one message key cannot be reused for another payload'
 );
-select is((select lastMessage from public.jobs where id='508d398f-5481-402f-807e-c730a62fdf80'),'Hello cleaner','the booking summary stores the latest message preview');
+select is((select lastMessage from public.jobs where id='508d398f-5481-402f-807e-c730a62fdf80'),'New message','the booking summary does not retain message text');
 select is((select cleanerUnread from public.jobs where id='508d398f-5481-402f-807e-c730a62fdf80'),1,'a customer message increments the cleaner unread count');
 select is((select customerUnread from public.jobs where id='508d398f-5481-402f-807e-c730a62fdf80'),0,'a customer message clears that sender unread count');
 

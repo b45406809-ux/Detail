@@ -16,6 +16,8 @@ values
 on conflict(id) do update set email=excluded.email,displayName=excluded.displayName,role=excluded.role,status=excluded.status,
   verificationStatus=excluded.verificationStatus,cleanerAgreementAccepted=excluded.cleanerAgreementAccepted,
   cleanerOnboardingComplete=excluded.cleanerOnboardingComplete,balance=excluded.balance,commissionBalance=excluded.commissionBalance;
+update public.users set photoURL='detail-media/profile-photos/'||id::text||'/avatar.jpg', cleanerSelfieAt=now()
+where id='f97f2526-06b2-4c34-a42d-2fbb66984ea7';
 
 insert into public.jobs(id,customerId,category,serviceType,status,bookingMode,biddingExpiresAt,checklist,location,budget)
 values('a9643c87-a840-42e3-91ed-eeced76c103a','35f3162f-0ea7-4e36-a02e-c98525a5fc18',
