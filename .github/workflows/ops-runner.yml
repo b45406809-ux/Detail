@@ -25,6 +25,7 @@ on:
           - deploy-prepaid-commission
           - deploy-marketplace-api
           - deploy-wallet-payment-fixes
+          - deploy-booking-presence-fixes
           - waitlist-migration-dry-run
           - live-readiness
           - live-core-readiness
@@ -538,6 +539,77 @@ jobs:
           path: ${{ runner.temp }}/detail-ops-result.txt
           if-no-files-found: warn
           retention-days: 3
+
+  deploy-booking-presence-fixes:
+    if: github.event_name == 'workflow_dispatch' && inputs.task == 'deploy-booking-presence-fixes' && inputs.confirm_production_access == true && inputs.confirm_live_side_effects == true && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
+    name: Deploy 24-25 Nov migrations and marketplace API
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 25
+    env:
+      OPS_LOG: ${{ github.workspace }}/detail-ops.log
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.75.0
+
+      - name: Validate deployment target and credentials
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$REF" == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh' ]]
+          test -n "$SUPABASE_ACCESS_TOKEN" || { echo 'Missing SUPABASE_ACCESS_TOKEN.'; exit 1; }
+          test -n "$SUPABASE_PROJECT_REF" || { echo 'Missing SUPABASE_PROJECT_REF.'; exit 1; }
+          test -n "$SUPABASE_DB_PASSWORD" || { echo 'Missing SUPABASE_DB_PASSWORD.'; exit 1; }
+          printf 'Deploying 24-25 Nov booking, presence and location migrations and marketplace-api.\n' > "$OPS_LOG"
+
+      - name: Link production project and check pending migrations
+        run: |
+          set -euo pipefail
+          supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD" >> "$OPS_LOG" 2>&1
+          supabase migration list --linked >> "$OPS_LOG" 2>&1
+          dry_run="$RUNNER_TEMP/migration-dry-run.txt"
+          supabase db push --dry-run > "$dry_run" 2>&1 || { cat "$dry_run" >> "$OPS_LOG"; echo 'Supabase migration dry-run failed.' >> "$OPS_LOG"; exit 1; }
+          cat "$dry_run" >> "$OPS_LOG"
+          mapfile -t pending_ids < <(grep -oE '[0-9]{14}' "$dry_run" | sort -u || true)
+          printf 'Pending migration IDs: %s\n' "${pending_ids[*]:-none}" | tee -a "$OPS_LOG"
+          for id in "${pending_ids[@]}"; do
+            if [[ "$id" < '20261124000000' ]]; then
+              echo "Deployment stopped: pending migration $id predates 24 Nov and was not reviewed for this deploy." | tee -a "$OPS_LOG"
+              exit 1
+            fi
+          done
+
+      - name: Apply pending migrations
+        run: |
+          set -euo pipefail
+          supabase db push --yes >> "$OPS_LOG" 2>&1
+          echo 'Pending migrations applied.' >> "$OPS_LOG"
+
+      - name: Deploy marketplace API Edge Function
+        run: |
+          set -euo pipefail
+          supabase functions deploy marketplace-api --project-ref "$SUPABASE_PROJECT_REF" --use-api >> "$OPS_LOG" 2>&1
+          echo 'marketplace-api Edge Function deployed.' >> "$OPS_LOG"
+
+      - name: Redact and summarize deployment output
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [[ -f "$OPS_LOG" ]]; then
+            python scripts/redact_gha_ops_log.py "$OPS_LOG" "$RUNNER_TEMP/detail-ops-result.txt"
+          else
+            printf 'Deployment did not reach the Supabase steps.\n' > "$RUNNER_TEMP/detail-ops-result.txt"
+          fi
+          cat "$RUNNER_TEMP/detail-ops-result.txt"
+          { echo '## Supabase deployment result'; echo; echo "- Workflow result: \`$JOB_STATUS\`"; echo; echo '```text'; cat "$RUNNER_TEMP/detail-ops-result.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
   deploy-prepaid-commission:
     if: github.event_name == 'workflow_dispatch' && inputs.task == 'deploy-prepaid-commission' && inputs.confirm_production_access == true && inputs.confirm_live_side_effects == true && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
