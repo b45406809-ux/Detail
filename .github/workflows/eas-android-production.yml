@@ -77,6 +77,37 @@ jobs:
             npx eas-cli@latest build --platform android --profile production --non-interactive --local --output "$RUNNER_TEMP/detail-production.aab"
           fi
 
+      - name: Report Android app bundle size breakdown
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          aab="$RUNNER_TEMP/detail-production.aab"
+          if [[ ! -f "$aab" ]]; then echo 'No local bundle to measure (built remotely on EAS).'; exit 0; fi
+          python3 - "$aab" <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
+          import os, sys, zipfile, collections
+          path = sys.argv[1]
+          mb = lambda n: f"{n / 1048576:.1f} MB"
+          z = zipfile.ZipFile(path)
+          groups, libs = collections.Counter(), collections.Counter()
+          for i in z.infolist():
+              parts = i.filename.split('/')
+              if len(parts) > 2 and parts[1] == 'lib':
+                  groups[f"native libs ({parts[2]})"] += i.compress_size
+                  libs[parts[-1]] += i.compress_size
+              elif len(parts) > 1 and parts[1] == 'dex':
+                  groups['dex (Java/Kotlin code)'] += i.compress_size
+              elif len(parts) > 1 and parts[1] in ('assets', 'res'):
+                  groups[parts[1]] += i.compress_size
+              else:
+                  groups['other'] += i.compress_size
+          print(f"### Android bundle: {mb(os.path.getsize(path))}")
+          print("| Part | Compressed |\n|---|---|")
+          for k, v in groups.most_common(): print(f"| {k} | {mb(v)} |")
+          print("\n### Largest native libraries (all ABIs)\n| Library | Compressed |\n|---|---|")
+          for k, v in libs.most_common(15): print(f"| {k} | {mb(v)} |")
+          PY
+
       - name: Upload locally built Android app bundle
         if: success()
         uses: actions/upload-artifact@v4
