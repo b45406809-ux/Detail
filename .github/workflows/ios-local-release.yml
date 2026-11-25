@@ -43,6 +43,9 @@ jobs:
         if: inputs.signing_run_id == ''
         env:
           SIGNING_DIR: ${{ runner.temp }}/detail-ios-signing
+          EXPO_ASC_KEY_ID: ${{ secrets.EXPO_ASC_KEY_ID }}
+          EXPO_ASC_ISSUER_ID: ${{ secrets.EXPO_ASC_ISSUER_ID }}
+          ASC_API_KEY_P8: ${{ secrets.EXPO_ASC_API_KEY_P8 }}
         run: node scripts/prepare-ios-signing.mjs
       - name: Report signing certificate serial for Apple inventory comparison
         if: inputs.audit_signing_only
