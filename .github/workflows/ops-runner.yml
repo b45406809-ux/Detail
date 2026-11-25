@@ -41,6 +41,7 @@ on:
           - play-store-listing
           - configure-paynow-sandbox
           - email-play-test-link
+          - create-review-demo-account
       email_recipient:
         description: Recipient of the Play internal test link
         required: false
@@ -610,6 +611,66 @@ jobs:
           fi
           cat "$RUNNER_TEMP/detail-ops-result.txt"
           { echo '## Supabase deployment result'; echo; echo "- Workflow result: \`$JOB_STATUS\`"; echo; echo '```text'; cat "$RUNNER_TEMP/detail-ops-result.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  create-review-demo-account:
+    if: github.event_name == 'workflow_dispatch' && inputs.task == 'create-review-demo-account' && inputs.confirm_production_access == true && inputs.confirm_live_side_effects == true && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
+    name: Create Apple App Review demo account
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    env:
+      OPS_LOG: ${{ github.workspace }}/detail-ops.log
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate target and credentials
+        env:
+          REF: ${{ github.ref }}
+          CONFIRM_PRODUCTION: ${{ inputs.confirm_production_access }}
+          CONFIRM_SIDE_EFFECTS: ${{ inputs.confirm_live_side_effects }}
+        run: |
+          set -euo pipefail
+          [[ "$REF" == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh' ]]
+          [[ "$CONFIRM_PRODUCTION" == 'true' && "$CONFIRM_SIDE_EFFECTS" == 'true' ]]
+          test -n "$SUPABASE_URL" || { echo 'Missing SUPABASE_URL.'; exit 1; }
+          test -n "$SUPABASE_SERVICE_ROLE_KEY" || { echo 'Missing SUPABASE_SERVICE_ROLE_KEY.'; exit 1; }
+          printf 'Creating or repairing the Apple App Review demo account.\n' > "$OPS_LOG"
+
+      - name: Create or repair the demo account
+        run: |
+          set -euo pipefail
+          # The script masks the generated password and writes credentials only to the step summary.
+          # The ::add-mask:: command must reach the runner's stdout, but is kept out of the ops log.
+          node scripts/create-review-demo-account.mjs 2>&1 | tee >(grep -v '^::add-mask::' >> "$OPS_LOG") || { echo 'Demo account script failed.' >> "$OPS_LOG"; exit 1; }
+
+      - name: Redact and summarize result
+        if: always()
+        env:
+          TASK: create-review-demo-account
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [[ -f "$OPS_LOG" ]]; then
+            python scripts/redact_gha_ops_log.py "$OPS_LOG" "$RUNNER_TEMP/detail-ops-result.txt"
+          else
+            printf 'The job did not reach the demo account step.\n' > "$RUNNER_TEMP/detail-ops-result.txt"
+          fi
+          cat "$RUNNER_TEMP/detail-ops-result.txt"
+          {
+            echo '## Demo account operation result'
+            echo
+            echo "- Task: \`$TASK\`"
+            echo "- Workflow result: \`$JOB_STATUS\`"
+            echo
+            echo '```text'
+            cat "$RUNNER_TEMP/detail-ops-result.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   deploy-prepaid-commission:
     if: github.event_name == 'workflow_dispatch' && inputs.task == 'deploy-prepaid-commission' && inputs.confirm_production_access == true && inputs.confirm_live_side_effects == true && github.ref == 'refs/heads/codex/separate-dashboard-into-routed-modules-fl7jlh'
