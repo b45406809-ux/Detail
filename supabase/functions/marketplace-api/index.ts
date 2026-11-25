@@ -2037,10 +2037,6 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const actor=authed(); const actorRole=await requireAdmin(actor,'admins.manage'); await requireRecentAdminAuth(actor);
       const email=text(input.email,254).toLowerCase();const permissions=Array.isArray(input.permissions)?input.permissions.filter((p:unknown)=>typeof p==='string'&&['marketing.read','marketing.send','finance.read','finance.write','bookings.manage','users.manage','support.manage','audit.read','admins.manage'].includes(p)):[];
       if(!email.includes('@'))fail(400,'Enter a valid email address.');
-      // Dashboard access is for organization members only: an email that already
-      // has a Detail app (customer/cleaner) account cannot be invited.
-      {const {data:appAccount,error:appError}=await admin.from('users').select('id').eq('email',email).or('hasagreedtoterms.eq.true,hascompletedprofile.eq.true').limit(1).maybeSingle();
-       if(appError)throw appError; if(appAccount)fail(409,'This email already has a Detail app account. Invite a separate organization email for dashboard access.');}
       if(actorRole.elevated!==true&&permissions.some((permission:string)=>!(actorRole.permissions??[]).includes(permission)))fail(403,'You cannot grant permissions you do not hold.');
       const token=crypto.randomUUID()+crypto.randomUUID(); const {error}=await admin.from('admininvites').insert({email,tokenhash:await hash(token),permissions,elevated:false,status:'PENDING',createdby:actor,expiresat:new Date(Date.now()+7*86400000).toISOString()});
       if(error)throw error;
@@ -2069,8 +2065,6 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const actor=authed();const token=text(input.token,200);const {data:invite}=await admin.from('admininvites').select('*').eq('tokenhash',await hash(token)).eq('status','PENDING').gt('expiresat',new Date().toISOString()).maybeSingle();
       if(!invite||invite.email!==String(user?.email??'').toLowerCase())fail(403,'Invitation is invalid, expired, or belongs to another email.');
       if(!user?.email_confirmed_at)fail(403,'Confirm your email address before accepting this invitation.');
-      {const {data:appProfile,error:appError}=await admin.from('users').select('hasagreedtoterms,hascompletedprofile').eq('id',actor).maybeSingle();
-       if(appError)throw appError; if(appProfile?.hasagreedtoterms||appProfile?.hascompletedprofile)fail(403,'This email is used for a Detail app account. Dashboard access needs a separate organization account.');}
       await admin.from('adminroles').upsert({userid:actor,elevated:invite.elevated,permissions:invite.permissions},{onConflict:'userid'});
       await admin.from('admininvites').update({status:'ACCEPTED'}).eq('id',invite.id);
       await admin.auth.admin.updateUserById(actor,{app_metadata:{admin:true,elevated:invite.elevated,permissions:invite.permissions}});
