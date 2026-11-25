@@ -99,6 +99,15 @@ export default function HomeScreen() {
   );
 
   const isCustomer = viewRole === 'CUSTOMER';
+  const openBooking = (category?: 'HOUSE' | 'CAR') => {
+    router.push({
+      pathname: '/booking/create',
+      params: {
+        ...(category ? { category } : {}),
+        ...(currentLocation ? { mapLat: String(currentLocation.lat), mapLng: String(currentLocation.lng) } : {}),
+      },
+    });
+  };
   const { summary: earnings } = useCleanerEarnings(
     !isCustomer && profile?.role === 'CLEANER' ? userId : undefined,
     refreshNonce,
@@ -551,7 +560,7 @@ export default function HomeScreen() {
                 showsVerticalScrollIndicator={false}
                 refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor="#3906D2" />}
               >
-                <CustomerPanel favorites={favorites} recentJobs={recentJobs} />
+                <CustomerPanel favorites={favorites} recentJobs={recentJobs} onCreateBooking={openBooking} />
               </ScrollView>
             </GlassSheet>
             <View
@@ -606,12 +615,16 @@ export default function HomeScreen() {
   );
 }
 
-function CustomerPanel({ favorites, recentJobs }: { favorites: Favorite[]; recentJobs: Job[] }) {
+function CustomerPanel({ favorites, recentJobs, onCreateBooking }: {
+  favorites: Favorite[];
+  recentJobs: Job[];
+  onCreateBooking: (category?: 'HOUSE' | 'CAR') => void;
+}) {
   return (
     <View className="pb-6">
       <View className="flex-row gap-3 mb-5">
         <TouchableOpacity
-          onPress={() => router.push({ pathname: '/booking/create', params: { category: 'HOUSE' } })}
+          onPress={() => onCreateBooking('HOUSE')}
           activeOpacity={0.85}
           className="flex-1 bg-white border border-slate-100 rounded-2xl p-4 items-center"
         >
@@ -621,7 +634,7 @@ function CustomerPanel({ favorites, recentJobs }: { favorites: Favorite[]; recen
           <Text className="text-xs font-display font-black text-slate-900">House</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => router.push({ pathname: '/booking/create', params: { category: 'CAR' } })}
+          onPress={() => onCreateBooking('CAR')}
           activeOpacity={0.85}
           className="flex-1 bg-white border border-slate-100 rounded-2xl p-4 items-center"
         >
@@ -639,7 +652,7 @@ function CustomerPanel({ favorites, recentJobs }: { favorites: Favorite[]; recen
       </TouchableOpacity>
 
       <TouchableOpacity
-        onPress={() => router.push('/booking/create')}
+        onPress={() => onCreateBooking()}
         activeOpacity={0.88}
         className="bg-accent rounded-3xl py-4 px-5 flex-row items-center gap-3 mb-5"
         style={{ shadowColor: '#3906D2', shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 8 } }}

@@ -78,7 +78,11 @@ function toggleItem(list: string[], item: string) {
 }
 
 export default function CreateBookingScreen() {
-  const { category: preselectedCategory } = useLocalSearchParams<{ category?: ServiceCategory }>();
+  const { category: preselectedCategory, mapLat, mapLng } = useLocalSearchParams<{
+    category?: ServiceCategory;
+    mapLat?: string;
+    mapLng?: string;
+  }>();
   const { user, profile } = useAuth();
 
   // Keep shortcut-selected categories, but show the category/mode step so
@@ -108,9 +112,18 @@ export default function CreateBookingScreen() {
   const [washSites, setWashSites] = useState<{id:string;cleanerId:string;name:string;address:string;lat:number;lng:number}[]>([]);
   const [selectedWashSiteId, setSelectedWashSiteId] = useState('');
   const [loadingWashSites, setLoadingWashSites] = useState(false);
-  const [searchProximity, setSearchProximity] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [searchProximity, setSearchProximity] = useState<{ latitude: number; longitude: number } | null>(() => {
+    if (!mapLat || !mapLng) return null;
+    const latitude = Number(mapLat), longitude = Number(mapLng);
+    return Number.isFinite(latitude) && Math.abs(latitude) <= 90 && Number.isFinite(longitude) && Math.abs(longitude) <= 180
+      ? { latitude, longitude }
+      : null;
+  });
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+  const locationSelection = React.useRef(0);
+  const bookingMapCamera = React.useRef<React.ElementRef<typeof Mapbox.Camera>>(null);
   const [showWashMap, setShowWashMap] = useState(false);
   const [addressSuggestions, setAddressSuggestions] = useState<{ id: string; label: string; lat: number; lng: number }[]>([]);
   useEffect(() => {
@@ -119,8 +132,10 @@ export default function CreateBookingScreen() {
       try {
         const permission = await Location.getForegroundPermissionsAsync();
         if (!permission.granted) return;
-        const lastKnown = await Location.getLastKnownPositionAsync();
-        if (active && lastKnown) setSearchProximity({ latitude: lastKnown.coords.latitude, longitude: lastKnown.coords.longitude });
+        const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 120_000 });
+        if (active && lastKnown) {
+          setSearchProximity(current => current ?? { latitude: lastKnown.coords.latitude, longitude: lastKnown.coords.longitude });
+        }
       } catch { /* Global address search remains available when device location is unavailable. */ }
     })();
     return () => { active = false; };
@@ -140,16 +155,36 @@ export default function CreateBookingScreen() {
     return () => { clearTimeout(timer); controller.abort(); };
   }, [address, coordinates, searchProximity]);
 
-  const selectMapLocation = async (longitude: number, latitude: number) => {
+  const selectMapLocation = async (longitude: number, latitude: number, accuracy: number | null = null) => {
     if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return;
+    const selection = ++locationSelection.current;
     setCoordinates({ lat: latitude, lng: longitude });
+    setSearchProximity({ latitude, longitude });
+    setGpsAccuracy(accuracy);
     setAddressSuggestions([]);
     setAddress(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
     try {
       const [place] = await Location.reverseGeocodeAsync({ latitude, longitude });
       const label = place && [place.streetNumber, place.street, place.city, place.region].filter(Boolean).join(', ');
-      if (label) setAddress(label);
+      if (label && selection === locationSelection.current) setAddress(label);
     } catch { /* Coordinates remain valid even without a street address. */ }
+  };
+
+  const editBookingAddress = (value: string) => {
+    locationSelection.current += 1;
+    setAddress(value);
+    setCoordinates(null);
+    setGpsAccuracy(null);
+  };
+
+  const selectAddressSuggestion = (item: { label: string; lat: number; lng: number }) => {
+    locationSelection.current += 1;
+    setAddress(item.label);
+    setCoordinates({ lat: item.lat, lng: item.lng });
+    setSearchProximity({ latitude: item.lat, longitude: item.lng });
+    setGpsAccuracy(null);
+    setAddressSuggestions([]);
+    bookingMapCamera.current?.setCamera({ centerCoordinate: [item.lng, item.lat], zoomLevel: 17 });
   };
 
   const [timePreference, setTimePreference] = useState<(typeof Catalog.TIME_OPTIONS)[number]['id']>('ASAP');
@@ -191,6 +226,7 @@ export default function CreateBookingScreen() {
   }, [preselectedCategory]);
 
   const useCurrentLocation = async () => {
+    const selection = ++locationSelection.current;
     setIsFetchingLocation(true);
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
@@ -199,18 +235,20 @@ export default function CreateBookingScreen() {
         return;
       }
       const position = await Promise.race([
-        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Location timed out')), 15000)),
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Location timed out')), 20000)),
       ]);
+      if (selection !== locationSelection.current) return;
       const { coords } = position;
-      setCoordinates({ lat: coords.latitude, lng: coords.longitude });
-      setSearchProximity({ latitude: coords.latitude, longitude: coords.longitude });
-      const [place] = await Location.reverseGeocodeAsync({ latitude: coords.latitude, longitude: coords.longitude });
-      if (place) {
-        setAddress([place.streetNumber, place.street, place.city, place.region].filter(Boolean).join(', '));
+      if (category !== 'CAR' || carServiceMode !== 'VISIT_WASH') {
+        setShowMapPicker(true);
+        bookingMapCamera.current?.setCamera({ centerCoordinate: [coords.longitude, coords.latitude], zoomLevel: 17 });
       }
+      void selectMapLocation(coords.longitude, coords.latitude, coords.accuracy);
     } catch {
-      appAlert('Location unavailable', 'Check that location services are enabled and try again, or enter the address manually. Emulators may need a simulated location.');
+      if (selection === locationSelection.current) {
+        appAlert('Location unavailable', 'Check that location services are enabled and try again, or choose the job location on the map.');
+      }
     } finally {
       setIsFetchingLocation(false);
     }
@@ -575,8 +613,8 @@ export default function CreateBookingScreen() {
               </>}
               {category==='CAR'&&carServiceMode==='VISIT_WASH'?<>
                 <Text className="text-sm font-display font-black text-ink mt-4 mb-2">Find a wash near</Text>
-                <View className="mb-3"><TextInput className="font-sans rounded-2xl px-4 py-4 text-sm text-ink bg-ink/5" placeholder="Enter a town or area to search…" placeholderTextColor="#9C94C4" value={address} onChangeText={value=>{setAddress(value);setCoordinates(null);}} /></View>
-                {addressSuggestions.length>0&&<View className="mb-3 rounded-2xl border border-ink/10 bg-white">{addressSuggestions.map(item=><TouchableOpacity key={item.id} onPress={()=>{setAddress(item.label);setCoordinates({lat:item.lat,lng:item.lng});setSearchProximity({latitude:item.lat,longitude:item.lng});setAddressSuggestions([]);}} className="px-4 py-3 border-b border-ink/5"><Text className="font-sans text-sm text-ink">{item.label}</Text></TouchableOpacity>)}</View>}
+                <View className="mb-3"><TextInput className="font-sans rounded-2xl px-4 py-4 text-sm text-ink bg-ink/5" placeholder="Enter a town or area to search…" placeholderTextColor="#9C94C4" value={address} onChangeText={editBookingAddress} /></View>
+                {addressSuggestions.length>0&&<View className="mb-3 rounded-2xl border border-ink/10 bg-white">{addressSuggestions.map(item=><TouchableOpacity key={item.id} onPress={() => selectAddressSuggestion(item)} className="px-4 py-3 border-b border-ink/5"><Text className="font-sans text-sm text-ink">{item.label}</Text></TouchableOpacity>)}</View>}
                 <TouchableOpacity onPress={useCurrentLocation} disabled={isFetchingLocation} className="flex-row items-center gap-3 bg-accent/10 border border-accent/20 rounded-2xl px-4 py-3 mb-4">{isFetchingLocation?<ActivityIndicator size="small" color="#3906D2"/>:<MapPin size={18} color="#3906D2"/>}<Text className="text-sm font-display font-black text-accent">{isFetchingLocation?'Finding your area…':'Use my current area'}</Text></TouchableOpacity>
                 <View className="flex-row items-center justify-between mb-2"><Text className="font-display font-black text-ink">Choose on the map</Text><TouchableOpacity onPress={()=>setShowWashMap(value=>!value)} accessibilityRole="button"><Text className="font-display font-black text-accent">{showWashMap?'Hide map':'Select on map'}</Text></TouchableOpacity></View>
                 {showWashMap&&<View className="mb-4 overflow-hidden rounded-3xl border border-ink/10 bg-ink/5" style={{height:420}}>
@@ -604,13 +642,68 @@ export default function CreateBookingScreen() {
                     placeholder="Enter an address…"
                     placeholderTextColor="#9C94C4"
                     value={address}
-                    onChangeText={(value) => { setAddress(value); setCoordinates(null); }}
+                    onChangeText={value => {
+                      if (!coordinates) return editBookingAddress(value);
+                      locationSelection.current += 1;
+                      setAddress(value);
+                    }}
                   />
                 </View>
               </View>
 
-              {addressSuggestions.length > 0 && <View className="mb-4 rounded-2xl border border-ink/10 bg-white">{addressSuggestions.map(item => <TouchableOpacity key={item.id} onPress={() => { setAddress(item.label); setCoordinates({ lat: item.lat, lng: item.lng }); setAddressSuggestions([]); }} className="px-4 py-3 border-b border-ink/5"><Text className="font-sans text-sm text-ink">{item.label}</Text></TouchableOpacity>)}</View>}
-              {IS_MAPBOX_AVAILABLE && <View className="mb-4"><TouchableOpacity onPress={() => setShowMapPicker(value => !value)} className="rounded-2xl border border-accent/20 bg-accent/5 px-4 py-4"><Text className="font-display font-black text-accent">{showMapPicker ? 'Hide map' : 'Select on map'}</Text></TouchableOpacity>{showMapPicker && <View className="mt-2 overflow-hidden rounded-2xl" style={{ height: 240 }}><Mapbox.MapView style={{ flex: 1 }} styleURL={Mapbox.StyleURL.Street} onDidFinishLoadingMap={() => recordMapboxUsage('map_view')} onPress={feature => { const point = feature.geometry?.type === 'Point' ? feature.geometry.coordinates : undefined; if (point && point.length >= 2) void selectMapLocation(point[0], point[1]); }}><Mapbox.Camera defaultSettings={{ centerCoordinate: coordinates ? [coordinates.lng, coordinates.lat] : [31.0522, -17.8292], zoomLevel: coordinates ? 15 : 11 }} />{coordinates && <Mapbox.PointAnnotation id="booking-location" coordinate={[coordinates.lng, coordinates.lat]}><View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#3906D2', borderWidth: 2, borderColor: 'white' }} /></Mapbox.PointAnnotation>}</Mapbox.MapView></View>}{showMapPicker && <Text className="font-sans text-xs text-ink/60 mt-2">Tap the map to choose the job location.</Text>}</View>}
+              {addressSuggestions.length > 0 && <View className="mb-4 rounded-2xl border border-ink/10 bg-white">{addressSuggestions.map(item => <TouchableOpacity key={item.id} onPress={() => selectAddressSuggestion(item)} className="px-4 py-3 border-b border-ink/5"><Text className="font-sans text-sm text-ink">{item.label}</Text></TouchableOpacity>)}</View>}
+              {coordinates && (
+                <View className="mb-3 flex-row items-center justify-between">
+                  <Text className="flex-1 font-sans text-xs text-ink/60">
+                    {gpsAccuracy !== null && gpsAccuracy > 60
+                      ? `GPS accuracy is about ${Math.round(gpsAccuracy)} m. Tap the map to adjust your pin.`
+                      : 'Booking pin selected. You can add address details above.'}
+                  </Text>
+                  <TouchableOpacity accessibilityRole="button" onPress={() => editBookingAddress('')} className="ml-2 p-2">
+                    <Text className="font-sans-bold text-xs text-accent">Clear pin</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {IS_MAPBOX_AVAILABLE && (
+                <View className="mb-4">
+                  <TouchableOpacity onPress={() => setShowMapPicker(value => !value)} className="rounded-2xl border border-accent/20 bg-accent/5 px-4 py-4">
+                    <Text className="font-display font-black text-accent">{showMapPicker ? 'Hide map' : 'Select on map'}</Text>
+                  </TouchableOpacity>
+                  {showMapPicker && (
+                    <>
+                      <View className="mt-2 overflow-hidden rounded-2xl" style={{ height: 240 }}>
+                        <Mapbox.MapView
+                          style={{ flex: 1 }}
+                          styleURL={Mapbox.StyleURL.Street}
+                          onDidFinishLoadingMap={() => recordMapboxUsage('map_view')}
+                          onPress={feature => {
+                            const point = feature.geometry?.type === 'Point' ? feature.geometry.coordinates : undefined;
+                            if (point && point.length >= 2) void selectMapLocation(point[0], point[1]);
+                          }}
+                        >
+                          <Mapbox.Camera
+                            ref={bookingMapCamera}
+                            defaultSettings={{
+                              centerCoordinate: coordinates
+                                ? [coordinates.lng, coordinates.lat]
+                                : searchProximity
+                                  ? [searchProximity.longitude, searchProximity.latitude]
+                                  : [31.0522, -17.8292],
+                              zoomLevel: coordinates || searchProximity ? 17 : 11,
+                            }}
+                          />
+                          {coordinates && (
+                            <Mapbox.PointAnnotation id="booking-location" coordinate={[coordinates.lng, coordinates.lat]}>
+                              <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#3906D2', borderWidth: 2, borderColor: 'white' }} />
+                            </Mapbox.PointAnnotation>
+                          )}
+                        </Mapbox.MapView>
+                      </View>
+                      <Text className="mt-2 font-sans text-xs text-ink/60">Tap the house or entrance to set the exact booking pin.</Text>
+                    </>
+                  )}
+                </View>
+              )}
               <TouchableOpacity
                 onPress={useCurrentLocation}
                 disabled={isFetchingLocation}

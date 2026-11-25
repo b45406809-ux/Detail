@@ -15,6 +15,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Linking,
+  Image,
 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,9 +24,43 @@ import { ArrowLeft, Clock, Star, ShieldCheck, X, Check, TrendingUp, Timer, Brush
 import { useAuth } from '../../context/AuthContext';
 import { db, doc, collection, query, where, onSnapshot } from '../../services/supabase';
 import { callFunction } from '../../services/functions';
+import { signMediaValue } from '../../services/storage';
 import { rankBidsByRating } from '../../services/matching';
 import { Job, Bid, JobStatus } from '../../types';
 import { IS_MOCK } from '../../utils/env';
+
+function QuoteCleanerPhoto({ cleanerId, photo }: { cleanerId: string; photo?: string }) {
+  const [failed, setFailed] = useState(false);
+  const [currentPhoto, setCurrentPhoto] = useState<string>();
+
+  useEffect(() => {
+    if ((photo && !failed) || !cleanerId) return;
+    let active = true;
+    void signMediaValue(`detail-media/profile-photos/${cleanerId}/avatar.jpg`)
+      .then(url => {
+        if (active && typeof url === 'string' && url !== photo) setCurrentPhoto(url);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [cleanerId, failed, photo]);
+
+  const uri = failed || !photo ? currentPhoto : photo;
+  return (
+    <View className="h-14 w-14 items-center justify-center overflow-hidden rounded-3xl bg-accent/10">
+      {uri ? (
+        <Image
+          accessibilityLabel="Cleaner profile picture"
+          source={{ uri }}
+          style={{ width: '100%', height: '100%' }}
+          onError={() => {
+            if (uri === currentPhoto) setCurrentPhoto(undefined);
+            else setFailed(true);
+          }}
+        />
+      ) : <Brush size={24} color="#3906D2" />}
+    </View>
+  );
+}
 
 function formatCountdown(ms: number) {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -294,9 +329,7 @@ export default function OffersScreen() {
           renderItem={({ item: bid }) => (
             <View className="bg-white rounded-[28px] p-5 border border-ink/5 shadow-sm">
               <View className="flex-row items-center gap-4">
-                <View className="w-14 h-14 bg-accent/10 rounded-3xl items-center justify-center">
-                  <Brush size={24} color="#3906D2" />
-                </View>
+                <QuoteCleanerPhoto key={`${bid.cleanerId}:${bid.cleanerPhoto ?? ''}`} cleanerId={bid.cleanerId} photo={bid.cleanerPhoto} />
                 <View className="min-w-0 flex-1">
                   <View className="flex-row items-center gap-2">
                     <Text numberOfLines={2} className="min-w-0 flex-1 text-base font-display font-black text-ink">{bid.cleanerName ?? 'Professional Cleaner'}</Text>

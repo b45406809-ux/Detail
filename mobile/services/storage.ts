@@ -113,7 +113,10 @@ export async function signMediaValue(value: unknown, context: { jobId?: string }
   if (value && typeof value === 'object') {
     const object = value as Record<string, unknown>;
     const nestedContext = typeof object.id === 'string' ? { ...context, jobId: object.id } : context;
-    const pairs = await Promise.all(Object.entries(object).map(async ([key, item]) => [key, await signMediaValue(item, nestedContext)] as const));
+    const pairs = await Promise.all(Object.entries(object).map(async ([key, item]) => {
+      const signed = signMediaValue(item, nestedContext);
+      return [key, await (key === 'cleanerPhoto' ? signed.catch(() => null) : signed)] as const;
+    }));
     return Object.fromEntries(pairs);
   }
   return value;

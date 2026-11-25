@@ -162,8 +162,11 @@ export default function CleanerJobDetailScreen() {
       appAlert('Location unavailable', 'The car wash location is not available yet.');
       return;
     }
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}&travelmode=driving`;
-    void Linking.openURL(url).catch(() => appAlert('Maps unavailable', 'Could not open directions on this device.'));
+    const point = encodeURIComponent(destination);
+    const url = isVisitWash
+      ? `https://www.google.com/maps/dir/?api=1&destination=${point}&travelmode=driving`
+      : `https://www.google.com/maps/search/?api=1&query=${point}`;
+    void Linking.openURL(url).catch(() => appAlert('Maps unavailable', 'Could not open the location on this device.'));
   };
 
   const budgetLabel = job.budget ? `$${job.budget}` : 'Open — send your best price';
@@ -260,7 +263,7 @@ export default function CleanerJobDetailScreen() {
                 <View className="flex-1">
                   <Text className="font-display font-black text-ink">{isVisitWash ? 'Directions to car wash' : 'View approximate area'}</Text>
                   <Text className="font-sans text-xs text-ink/55 mt-1">
-                    {isVisitWash ? 'Open the selected wash location in Maps.' : 'The map pin is approximate. Exact address is shared after acceptance.'}
+                    {isVisitWash ? 'Open the selected wash location in Maps.' : 'Use this area to estimate travel for your bid. The exact pin appears in booking directions once the customer accepts.'}
                   </Text>
                 </View>
               </TouchableOpacity>
