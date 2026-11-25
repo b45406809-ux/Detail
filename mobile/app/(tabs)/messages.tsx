@@ -15,14 +15,12 @@ import {
   Platform,
   ActivityIndicator,
   Image,
-  PermissionsAndroid,
 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../../components/LoadingList';
 import { useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Send, MessageSquare, ImagePlus, Mic, Play, Pause, Square, X, PhoneCall, PhoneOff, MoreHorizontal, Flag } from 'lucide-react-native';
-import type { Call, CallInvite, Voice as VoiceClient } from '@twilio/voice-react-native-sdk';
+import { ArrowLeft, Send, MessageSquare, ImagePlus, Mic, Play, Pause, Square, X, MoreHorizontal, Flag } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -42,43 +40,8 @@ import { ChatMessage } from '../../types';
 
 const QUICK_REPLIES = ['On my way!', 'Sounds good', "I'm here", 'Thank you!'];
 const MESSAGE_RETENTION_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_CALL_LIMIT_SECONDS = 120;
-const MAX_CALL_LIMIT_SECONDS = 3600;
 const MAX_VOICE_NOTE_MS = 60_000;
 const messageTime = (value: any) => value?.toDate?.().getTime?.() ?? new Date(value).getTime();
-
-interface VoiceTokenResponse {
-  token: string;
-  maxCallDurationSeconds: number;
-}
-
-async function ensureVoiceMicrophonePermission(): Promise<void> {
-  if (Platform.OS !== 'android') return;
-  const permission = PermissionsAndroid.PERMISSIONS.RECORD_AUDIO;
-  const status = await PermissionsAndroid.request(permission);
-  if (status !== PermissionsAndroid.RESULTS.GRANTED) {
-    throw new Error('Microphone access is needed for calls. Allow it in your device settings to continue.');
-  }
-}
-
-async function requestTwilioVoiceToken(jobId: string): Promise<VoiceTokenResponse> {
-  const { data, error } = await supabase.functions.invoke('twilio-voice-token', { body: { jobId, platform: Platform.OS } });
-  if (error) {
-    let serverMessage = typeof data?.error === 'string' ? data.error : '';
-    const context = (error as { context?: unknown }).context;
-    if (!serverMessage && context && typeof context === 'object' && 'clone' in context && typeof (context as Response).clone === 'function') {
-      try { serverMessage = (await (context as Response).clone().json())?.error || ''; } catch { /* use the safe fallback below */ }
-    }
-    throw new Error(serverMessage || 'Voice calling is not available right now.');
-  }
-  if (!data?.token) throw new Error(data?.error || 'Voice calling is not configured yet.');
-  if (!data.incomingEnabled) throw new Error('Incoming calls are not configured for this device yet.');
-  const configuredLimit = Number(data.maxCallDurationSeconds);
-  const maxCallDurationSeconds = Number.isInteger(configuredLimit) && configuredLimit >= 60 && configuredLimit <= MAX_CALL_LIMIT_SECONDS
-    ? configuredLimit
-    : DEFAULT_CALL_LIMIT_SECONDS;
-  return { token: data.token as string, maxCallDurationSeconds };
-}
 
 interface Conversation {
   jobId: string;
@@ -106,11 +69,6 @@ export default function MessagesScreen() {
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [chatError, setChatError] = useState('');
-  const [callState, setCallState] = useState<'loading' | 'ready' | 'calling' | 'ringing' | 'connected' | 'incoming' | 'unavailable'>('loading');
-  const [callError, setCallError] = useState('');
-  const [callDuration, setCallDuration] = useState(0);
-  const [incomingCaller, setIncomingCaller] = useState('');
-  const [voiceIncomingEnabled, setVoiceIncomingEnabled] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [isSendingVoice, setIsSendingVoice] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
@@ -143,16 +101,10 @@ export default function MessagesScreen() {
   const preserveChatScrollRef = useRef(false);
   const reachedHistoryStartRef = useRef(false);
   const pendingMessageIntentsRef = useRef(new Map<string, { key: string; storageKey: string; imagePath?: string }>());
-  const voiceRef = useRef<VoiceClient | null>(null);
-  const voiceCallRef = useRef<Call | null>(null);
-  const incomingInviteRef = useRef<CallInvite | null>(null);
   const voiceRecordingRef = useRef<Audio.Recording | null>(null);
   const playbackSoundRef = useRef<Audio.Sound | null>(null);
   const playbackMessageRef = useRef<string | null>(null);
   const playbackGenerationRef = useRef(0);
-  const voiceTokenRef = useRef('');
-  const connectedAtRef = useRef(0);
-  const callDurationLimitRef = useRef(DEFAULT_CALL_LIMIT_SECONDS);
   const activeConversation = conversations.find(conversation => conversation.jobId === activeJobId);
   const chatReadOnly = !activeConversation?.otherUserId || ['CANCELLED', 'CANCELED'].includes(activeConversation.jobStatus);
 
@@ -205,7 +157,7 @@ export default function MessagesScreen() {
   const blockConversationPartner = () => {
     if (!activeJobId || !activeConversation?.otherUserId) return;
     if (blockedByMe) {
-      appAlert('Unblock this person?', 'They will be able to send messages and start calls for this booking again.', [
+      appAlert('Unblock this person?', 'They will be able to send messages for this booking again.', [
         { text: 'Unblock', onPress: async () => {
           const { error } = await supabase.rpc('unblock_user', { p_target_user_id: activeConversation.otherUserId });
           if (error) { appAlert('Could not unblock person', error.message); return; }
@@ -215,23 +167,11 @@ export default function MessagesScreen() {
       ]);
       return;
     }
-    appAlert('Block this person?', 'They will not be able to send you messages or start calls in Detail. Your booking history and existing messages stay available.', [
+    appAlert('Block this person?', 'They will not be able to send you messages in Detail. Your booking history and existing messages stay available.', [
       { text: 'Block person', style: 'destructive', onPress: async () => {
         const { error } = await supabase.rpc('block_user', { p_job_id: activeJobId, p_target_user_id: activeConversation.otherUserId });
         if (error) { appAlert('Could not block person', error.message); return; }
         setBlockedByMe(true);
-        const call = voiceCallRef.current;
-        voiceCallRef.current = null;
-        if (call) await call.disconnect().catch(() => undefined);
-        const invite = incomingInviteRef.current;
-        incomingInviteRef.current = null;
-        if (invite) await invite.reject().catch(() => undefined);
-        const voice = voiceRef.current;
-        if (voice && voiceTokenRef.current) void voice.unregister(voiceTokenRef.current).catch(() => undefined);
-        voiceRef.current = null;
-        voiceTokenRef.current = '';
-        setCallState('unavailable');
-        setCallError('Calls are disabled because this person is blocked.');
       } },
       { text: 'Cancel', style: 'cancel' },
     ]);
@@ -338,178 +278,6 @@ export default function MessagesScreen() {
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     }, err => setChatError(err.message || 'Messages could not be refreshed.'));
   }, [activeJobId, userId, chatRetry]);
-
-  useEffect(() => {
-    if (conversationBlocked) {
-      setCallState('unavailable');
-      setCallError(blockedByMe ? 'Calls are disabled because this person is blocked.' : 'Calls are unavailable because this person has blocked this account.');
-      return;
-    }
-    if (Platform.OS === 'web' || !activeJobId || !activeConversation?.otherUserId || !userId) {
-      setCallState('unavailable');
-      return;
-    }
-    let disposed = false;
-    let voice: VoiceClient | null = null;
-    let tokenRefreshTimer: ReturnType<typeof setInterval> | undefined;
-    const initializeVoice = async () => {
-      setCallState('loading');
-      setCallError('');
-      try {
-        const sdk = await import('@twilio/voice-react-native-sdk');
-        voice = new sdk.Voice();
-        voiceRef.current = voice;
-        const tokenResponse = await requestTwilioVoiceToken(activeJobId);
-        if (disposed) return;
-        voiceTokenRef.current = tokenResponse.token;
-        callDurationLimitRef.current = tokenResponse.maxCallDurationSeconds;
-        setVoiceIncomingEnabled(true);
-        voice.addListener(sdk.Voice.Event.CallInvite as any, (...events: any[]) => {
-          const invite = events[0] as CallInvite;
-          const parameters = invite.getCustomParameters() as Record<string, string>;
-          if ((parameters.jobId ?? parameters.JobId) !== activeJobId || voiceCallRef.current || incomingInviteRef.current) {
-            void invite.reject();
-            return;
-          }
-          const incomingLimit = Number(parameters.maxDurationSeconds);
-          callDurationLimitRef.current = Number.isInteger(incomingLimit) && incomingLimit >= 60 && incomingLimit <= MAX_CALL_LIMIT_SECONDS
-            ? incomingLimit
-            : DEFAULT_CALL_LIMIT_SECONDS;
-          incomingInviteRef.current = invite;
-          if (voiceRecordingRef.current) void finishVoiceRecording(false);
-          setIncomingCaller(invite.getFrom().replace(/^client:/, '').slice(0, 12));
-          setCallState('incoming');
-        });
-        try { await voice.register(tokenResponse.token); }
-        catch (registerError) {
-          console.warn('Twilio incoming-call registration failed:', registerError instanceof Error ? registerError.message : 'unknown error');
-          throw new Error('Incoming calls could not be enabled on this device. Check notification permissions and try again.');
-        }
-        if (!disposed) {
-          setCallState('ready');
-          tokenRefreshTimer = setInterval(() => {
-            void requestTwilioVoiceToken(activeJobId).then(async refreshed => {
-              if (disposed || !voice) return;
-              await voice.register(refreshed.token);
-              voiceTokenRef.current = refreshed.token;
-              callDurationLimitRef.current = refreshed.maxCallDurationSeconds;
-            }).catch(error => console.warn('Twilio Voice token refresh failed:', error instanceof Error ? error.message : 'unknown error'));
-          }, 45 * 60 * 1000);
-        }
-      } catch (error) {
-        if (!disposed) {
-          setCallError(error instanceof Error ? error.message : 'Voice calling is not configured yet.');
-          setCallState('unavailable');
-        }
-      }
-    };
-    void initializeVoice();
-    return () => {
-      disposed = true;
-      if (tokenRefreshTimer) clearInterval(tokenRefreshTimer);
-      const call = voiceCallRef.current;
-      voiceCallRef.current = null;
-      if (call) void call.disconnect().catch(() => undefined);
-      const invite = incomingInviteRef.current;
-      incomingInviteRef.current = null;
-      if (invite) void invite.reject().catch(() => undefined);
-      const currentVoice = voiceRef.current;
-      voiceRef.current = null;
-      if (currentVoice && voiceTokenRef.current) void currentVoice.unregister(voiceTokenRef.current).catch(() => undefined);
-      voiceTokenRef.current = '';
-    };
-  }, [activeJobId, activeConversation?.otherUserId, userId, conversationBlocked, blockedByMe]);
-
-  const attachCallEvents = async (call: Call) => {
-    const sdk = await import('@twilio/voice-react-native-sdk');
-    voiceCallRef.current = call;
-    if (call.getState() === 'connected') {
-      connectedAtRef.current = Date.now();
-      setCallDuration(0);
-      setCallState('connected');
-    } else {
-      setCallState('calling');
-    }
-    call.addListener(sdk.Call.Event.Ringing, () => setCallState('ringing'));
-    call.addListener(sdk.Call.Event.Connected, () => {
-      connectedAtRef.current = Date.now();
-      setCallDuration(0);
-      setCallState('connected');
-    });
-    call.addListener(sdk.Call.Event.Disconnected, () => {
-      voiceCallRef.current = null;
-      connectedAtRef.current = 0;
-      setIncomingCaller('');
-      setCallState('ready');
-    });
-    call.addListener(sdk.Call.Event.ConnectFailure, () => {
-      voiceCallRef.current = null;
-      connectedAtRef.current = 0;
-      setCallError('The call could not connect. Check your connection and try again.');
-      setCallState('ready');
-    });
-  };
-
-  const startVoiceCall = async () => {
-    if (conversationBlocked || isRecordingVoice || isSendingVoice || !activeConversation?.otherUserId || !activeJobId || callState !== 'ready' || !voiceRef.current || !voiceTokenRef.current) return;
-    setCallError('');
-    setCallState('calling');
-    try {
-      await ensureVoiceMicrophonePermission();
-      const refreshedToken = await requestTwilioVoiceToken(activeJobId);
-      await voiceRef.current.register(refreshedToken.token);
-      voiceTokenRef.current = refreshedToken.token;
-      callDurationLimitRef.current = refreshedToken.maxCallDurationSeconds;
-      const call = await voiceRef.current.connect(refreshedToken.token, {
-        contactHandle: activeConversation.otherUserName,
-        notificationDisplayName: 'Detail booking call',
-        params: { To: activeConversation.otherUserId, jobId: activeJobId },
-      });
-      await attachCallEvents(call);
-    } catch (error) {
-      setCallError(error instanceof Error ? error.message : 'The call could not start. Please try again.');
-      setCallState('ready');
-    }
-  };
-
-  const acceptVoiceCall = async () => {
-    if (conversationBlocked) return;
-    const invite = incomingInviteRef.current;
-    if (!invite) return;
-    try {
-      await ensureVoiceMicrophonePermission();
-      const call = await invite.accept();
-      incomingInviteRef.current = null;
-      await attachCallEvents(call);
-    } catch {
-      incomingInviteRef.current = null;
-      setCallError('The incoming call could not be answered.');
-      setCallState('ready');
-    }
-  };
-
-  const endVoiceCall = async () => {
-    const invite = incomingInviteRef.current;
-    incomingInviteRef.current = null;
-    if (invite) await invite.reject().catch(() => undefined);
-    const call = voiceCallRef.current;
-    if (call) await call.disconnect().catch(() => undefined);
-    voiceCallRef.current = null;
-    connectedAtRef.current = 0;
-    setIncomingCaller('');
-    setCallState('ready');
-  };
-
-  useEffect(() => {
-    if (callState !== 'connected' || !connectedAtRef.current) return;
-    const timer = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - connectedAtRef.current) / 1000);
-      setCallDuration(elapsed);
-      // TwiML enforces the same server-side limit if this device pauses.
-      if (elapsed >= callDurationLimitRef.current && voiceCallRef.current) void voiceCallRef.current.disconnect();
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [callState]);
 
   const loadOlderMessages = async () => {
     const oldest = messages[0];
@@ -627,7 +395,7 @@ export default function MessagesScreen() {
   };
 
   const startVoiceRecording = async () => {
-    if (Platform.OS === 'web' || !activeJobId || !user || chatReadOnly || conversationBlocked || isSendingVoice || ['calling', 'ringing', 'connected', 'incoming'].includes(callState)) return;
+    if (Platform.OS === 'web' || !activeJobId || !user || chatReadOnly || conversationBlocked || isSendingVoice) return;
     try {
       const permission = await Audio.requestPermissionsAsync();
       if (!permission.granted) {
@@ -773,50 +541,12 @@ export default function MessagesScreen() {
             >
               <MoreHorizontal size={20} color="#334155" />
             </TouchableOpacity>
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel="Start booking voice call"
-              accessibilityState={{ disabled: conversationBlocked || isRecordingVoice || isSendingVoice || callState !== 'ready' || !['ASSIGNED', 'EN_ROUTE', 'IN_PROGRESS'].includes(activeConversation?.jobStatus ?? '') }}
-              disabled={conversationBlocked || isRecordingVoice || isSendingVoice || callState !== 'ready' || !['ASSIGNED', 'EN_ROUTE', 'IN_PROGRESS'].includes(activeConversation?.jobStatus ?? '')}
-              onPress={() => void startVoiceCall()}
-              className="h-10 w-10 items-center justify-center rounded-full bg-accent/10"
-            >
-              <PhoneCall size={19} color={callState === 'ready' ? '#3906D2' : '#94a3b8'} />
-            </TouchableOpacity>
           </View>
-
-          {activeConversation && ['ASSIGNED', 'EN_ROUTE', 'IN_PROGRESS'].includes(activeConversation.jobStatus) ? (
-            <View className="mx-4 mt-3 rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3">
-              <View className="flex-row items-center justify-between gap-3">
-                <View className="flex-1">
-                  <Text className="text-sm font-bold text-violet-950">
-                    {callState === 'incoming' ? `Incoming call${incomingCaller ? ` · ${incomingCaller}` : ''}` : callState === 'connected' ? 'In-app call' : callState === 'ringing' ? 'Ringing…' : callState === 'calling' ? 'Calling…' : callState === 'loading' ? 'Setting up calls…' : callState === 'unavailable' ? 'Calls unavailable' : 'Call your booking partner'}
-                  </Text>
-                  <Text className="mt-1 text-xs leading-4 text-violet-800">
-                    {callState === 'connected'
-                      ? `${Math.floor(callDuration / 60)}:${String(callDuration % 60).padStart(2, '0')} elapsed · calls end at 5 minutes`
-                      : callState === 'unavailable'
-                        ? callError || 'Voice calling is not configured yet.'
-                      : callError || 'Detail calls use your internet connection. The call duration limit is set by Detail. Microphone access is needed for calls.'}
-                  </Text>
-                  {callState === 'ready' && <Text className="mt-1 text-[11px] leading-4 text-violet-700">{voiceIncomingEnabled ? 'Keep this chat open to receive calls.' : 'Incoming-call push is not configured yet; the other person must keep Detail open.'}</Text>}
-                </View>
-                {callState === 'incoming' ? (
-                  <View className="flex-row gap-2">
-                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Decline call" onPress={() => void endVoiceCall()} className="h-11 w-11 items-center justify-center rounded-full bg-rose-100"><PhoneOff size={18} color="#be123c" /></TouchableOpacity>
-                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Answer call" onPress={() => void acceptVoiceCall()} className="h-11 w-11 items-center justify-center rounded-full bg-emerald-600"><PhoneCall size={18} color="#fff" /></TouchableOpacity>
-                  </View>
-                ) : ['connected', 'ringing', 'calling'].includes(callState) ? (
-                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="End call" onPress={() => void endVoiceCall()} className="h-11 w-11 items-center justify-center rounded-full bg-rose-600"><PhoneOff size={18} color="#fff" /></TouchableOpacity>
-                ) : null}
-              </View>
-            </View>
-          ) : null}
 
           {/* Messages */}
           {chatError ? <View className="items-center px-4 py-2"><Text accessibilityRole="alert" className="text-center text-xs text-rose-700">{chatError}</Text><TouchableOpacity accessibilityRole="button" onPress={() => setChatRetry(value => value + 1)} className="mt-1 rounded-full bg-rose-50 px-3 py-1"><Text className="text-xs font-bold text-rose-800">Retry messages</Text></TouchableOpacity></View> : null}
         {chatReadOnly ? <View className="mx-4 mt-3 rounded-2xl bg-slate-100 px-4 py-3"><Text className="text-xs font-bold text-slate-700">{activeConversation ? 'This booking is cancelled. Recent messages are read-only.' : 'Chat is available once a cleaner is assigned.'}</Text></View> : null}
-        {conversationBlocked ? <View className="mx-4 mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3"><Text className="text-xs font-bold text-rose-900">{blockedByMe ? 'You blocked this person' : 'This person blocked you'}</Text><Text className="mt-1 text-xs leading-5 text-rose-800">Existing history stays available. New messages, photos, voice notes, and calls are disabled{blockedByMe ? ' until you unblock them from the conversation menu.' : ' in this conversation.'}</Text></View> : null}
+        {conversationBlocked ? <View className="mx-4 mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3"><Text className="text-xs font-bold text-rose-900">{blockedByMe ? 'You blocked this person' : 'This person blocked you'}</Text><Text className="mt-1 text-xs leading-5 text-rose-800">Existing history stays available. New messages, photos and voice notes are disabled{blockedByMe ? ' until you unblock them from the conversation menu.' : ' in this conversation.'}</Text></View> : null}
         <View className="mx-4 mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
           <Text className="text-xs font-bold text-amber-950">Stay safe on Detail</Text>
           <Text className="mt-1 text-xs leading-5 text-amber-900">Messages stay visible to booking participants for 24 hours. After that, only authorized Detail admins can access the retained conversation for support and safety. Abusive language is screened automatically. Keep booking communication in Detail and arrange payment directly with your cleaner. Never share verification codes. Use the conversation menu to report or block someone; you can also report a message below.</Text>
@@ -920,7 +650,7 @@ export default function MessagesScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Record voice note"
                     onPress={() => void startVoiceRecording()}
-                    disabled={isSendingPhoto || isSendingVoice || conversationBlocked || chatReadOnly || ['calling', 'ringing', 'connected', 'incoming'].includes(callState)}
+                    disabled={isSendingPhoto || isSendingVoice || conversationBlocked || chatReadOnly}
                     className="w-11 h-11 rounded-2xl items-center justify-center bg-accent/10"
                   >
                     {isSendingVoice ? <ActivityIndicator size="small" color="#3906D2" /> : <Mic size={18} color="#3906D2" />}

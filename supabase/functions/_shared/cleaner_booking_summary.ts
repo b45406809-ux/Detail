@@ -93,8 +93,8 @@ export function toCleanerBookingSummary(job: Json) {
       // A selected public car wash is the destination, so cleaners need its
       // exact coordinates and address. Residential/mobile jobs stay rounded
       // until the cleaner has accepted the booking.
-      lat: Number.isFinite(lat) && Math.abs(lat) <= 90 ? (isPublicWashSite ? lat : Math.round(lat * 100) / 100) : 0,
-      lng: Number.isFinite(lng) && Math.abs(lng) <= 180 ? (isPublicWashSite ? lng : Math.round(lng * 100) / 100) : 0,
+      lat: Number.isFinite(lat) && Math.abs(lat) <= 90 ? (isPublicWashSite ? lat : Math.round(lat * 1000) / 1000) : 0,
+      lng: Number.isFinite(lng) && Math.abs(lng) <= 180 ? (isPublicWashSite ? lng : Math.round(lng * 1000) / 1000) : 0,
       address: isPublicWashSite ? safeText(location.address, 180) || 'Selected car wash' : 'Approximate area',
     },
     scheduledTime: job.scheduledtime,

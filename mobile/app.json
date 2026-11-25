@@ -22,7 +22,7 @@
         "NSLocationWhenInUseUsageDescription": "Detail uses your location to find nearby cleaners.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "If you choose to go online as a cleaner, Detail shares your location with the service while you are online and on an active booking so nearby customers can be matched and customers can follow your arrival.",
         "NSCameraUsageDescription": "Take profile and portfolio photos, add photos to bookings, capture cleaning progress or completion, and share photos in chat.",
-        "NSMicrophoneUsageDescription": "Detail uses the microphone when you record a chat voice note or start or answer a voice call with your booking partner."
+        "NSMicrophoneUsageDescription": "Detail uses the microphone when you record a chat voice note for your booking partner."
       }
     },
     "android": {

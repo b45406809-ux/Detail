@@ -653,7 +653,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if (cleanerError) throw cleanerError;
       if (configError) throw configError;
       if (operationsError) throw operationsError;
-      if (!cleaner || cleaner.role !== 'CLEANER' || cleaner.verificationStatus !== 'VERIFIED'
+      if (!cleaner || cleaner.verificationStatus !== 'VERIFIED'
         || !cleaner.cleanerAgreementAccepted || cleaner.isSuspended || cleaner.isBanned || cleaner.accountDeletedAt) {
         fail(409, 'The previous cleaner is no longer eligible. Start a regular booking to find another cleaner.');
       }
@@ -930,6 +930,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       }
       const {data:operations}=await admin.from('configuration').select('value').eq('key','operations').maybeSingle();
       if(operations?.value?.switches?.maintenance===true||operations?.value?.switches?.bidAcceptance===true)fail(503,'Cleaner bidding is temporarily paused.');
+      if (job.customerid===actor) fail(409,'You cannot quote on your own booking.');
       if (job.status!=='PENDING' || job.bookingmode==='INSTANT' || (job.biddingexpiresat && new Date(job.biddingexpiresat).getTime()<Date.now())) fail(409,'This booking is not accepting cleaner bids.');
       const { data, error } = await admin.rpc('submit_bid_secure',{p_job_id:jobId,p_cleaner_id:actor,p_bid_price:bidPrice,p_estimated_arrival:eta,p_message:text(input.message,500)});
       if(error?.message?.includes('active quote'))fail(409,'You already have an active quote for this booking.');
@@ -975,6 +976,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         if(/pay any outstanding commission/i.test(message))fail(409,'This cleaner cannot accept another booking right now. Choose another quote or ask them to contact support.');
         if(/JOB_UNAVAILABLE|job is not available/i.test(message))fail(409,'This booking has already been accepted or is no longer available. Refresh the offers.');
         if(/BID_UNAVAILABLE|bid is not available/i.test(message))fail(409,'This quote is no longer available. Refresh the offers and choose another quote.');
+        if(/OWN_QUOTE/.test(message))fail(409,'You cannot accept a quote from your own account. Use a separate customer account to test bookings.');
         if(/Cleaner is not eligible/i.test(message))fail(409,'This cleaner is not currently approved to accept bookings. Choose another quote.');
         if(/idempotency key is already bound/i.test(message))fail(409,'This quote acceptance was already used for another action. Refresh the offers and try again.');
         if(/bid not found/i.test(message))fail(404,'This quote is no longer available. Refresh the offers.');

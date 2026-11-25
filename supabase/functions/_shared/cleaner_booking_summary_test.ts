@@ -16,7 +16,7 @@ Deno.test('cleaner booking preview preserves quote scope without leaking custome
   });
   assertEquals(summary.customerId, '');
   assertEquals(summary.description, '');
-  assertEquals(summary.location, { lat: -17.83, lng: 31.03, address: 'Approximate area' });
+  assertEquals(summary.location, { lat: -17.825, lng: 31.033, address: 'Approximate area' });
   assertEquals(summary.checklist, {
     category: 'HOUSE', areas: ['Kitchen', 'Living room'], cleaningTypes: ['Deep House Clean', 'Standard House Clean'],
     condition: 'HEAVY', addOns: [], attentionServices: ['Kitchen: Oven'], propertyType: undefined, propertySize: undefined, areaSize: undefined,

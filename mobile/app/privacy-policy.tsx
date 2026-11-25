@@ -16,7 +16,7 @@ const SECTIONS = [
   },
   {
     title: '3. Photos, chat, and voice calls',
-    body: 'Photos are processed when you choose to add a profile photo, cleaner portfolio image, booking or completion photo, chat photo, or support evidence. Cleaner profile selfies are visible to customers browsing cleaner profiles and quotes. Vehicle and home photos supplied with a booking are shared with eligible cleaners reviewing that booking. Booking chat, including voice notes, is available to the booking participants for 24 hours. After that, retained chat records and media are accessible only to authorized Detail administrators for support and safety. Voice notes are stored as private booking media and can be played by the other booking participant during the 24-hour access period. Common abusive language is screened before text messages are stored, and users can report messages or block a booking partner. The 24-hour access period is not a database deletion period. In-app voice calls use Twilio, which processes call connection information and carries call audio. The app does not provide call recording.',
+    body: 'Photos are processed when you choose to add a profile photo, cleaner portfolio image, booking or completion photo, chat photo, or support evidence. Cleaner profile selfies are visible to customers browsing cleaner profiles and quotes. Vehicle and home photos supplied with a booking are shared with eligible cleaners reviewing that booking. Booking chat, including voice notes, is available to the booking participants for 24 hours. After that, retained chat records and media are accessible only to authorized Detail administrators for support and safety. Voice notes are stored as private booking media and can be played by the other booking participant during the 24-hour access period. Common abusive language is screened before text messages are stored, and users can report messages or block a booking partner. The 24-hour access period is not a database deletion period.',
   },
   {
     title: '4. Identity checks',
@@ -28,7 +28,7 @@ const SECTIONS = [
   },
   {
     title: '6. Service providers and sharing',
-    body: 'Information is shared with the customer and cleaner involved in a booking and with providers that deliver app services. Current providers include Supabase for authentication and the marketplace backend, Cloudflare R2 for private media, Mapbox for maps and routes, Didit for identity checks, Paynow for payments, Resend for email, SMSPOP for SMS, Meta for WhatsApp messages, Expo Push Service, Apple Push Notification service and Firebase Cloud Messaging for push delivery as configured, Twilio for voice calls, and Apple or Google when you choose their sign-in option. We do not sell personal information.',
+    body: 'Information is shared with the customer and cleaner involved in a booking and with providers that deliver app services. Current providers include Supabase for authentication and the marketplace backend, Cloudflare R2 for private media, Mapbox for maps and routes, Didit for identity checks, Paynow for payments, Resend for email, SMSPOP for SMS, Meta for WhatsApp messages, Expo Push Service, Apple Push Notification service and Firebase Cloud Messaging for push delivery as configured, and Apple or Google when you choose their sign-in option. We do not sell personal information.',
   },
   {
     title: '7. Notifications and marketing',

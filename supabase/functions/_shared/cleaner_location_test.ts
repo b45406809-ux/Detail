@@ -6,7 +6,8 @@ Deno.test('cleaner discovery requires available status and a fresh location', ()
   assertEquals(cleanerLocationIsFresh('AVAILABLE', '2026-10-23T11:59:59.000Z', now), true);
   assertEquals(cleanerLocationIsFresh('OFFLINE', '2026-10-23T11:59:59.000Z', now), false);
   assertEquals(cleanerLocationIsFresh('BUSY', '2026-10-23T11:59:59.000Z', now), false);
-  assertEquals(cleanerLocationIsFresh('AVAILABLE', '2026-10-23T11:54:59.999Z', now), false);
+  assertEquals(cleanerLocationIsFresh('AVAILABLE', '2026-10-23T11:30:00.000Z', now), true);
+  assertEquals(cleanerLocationIsFresh('AVAILABLE', '2026-10-23T10:59:59.999Z', now), false);
   assertEquals(cleanerLocationIsFresh('AVAILABLE', null, now), false);
   assertEquals(cleanerLocationIsFresh('AVAILABLE', 'invalid', now), false);
 });

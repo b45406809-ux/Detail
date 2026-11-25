@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Linking, ScrollView, PermissionsAndroid, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MapPin, Bell, Shield, Camera as CameraIcon, Images, Mic, Bluetooth } from 'lucide-react-native';
+import { MapPin, Bell, Shield, Camera as CameraIcon, Images, Mic } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import * as ImagePicker from 'expo-image-picker';
@@ -43,8 +43,7 @@ const PERMISSIONS = [
     sub: 'Choose profile or portfolio photos, add booking or support photos, and share images in chat.',
     required: false,
   },
-  { id: 'microphone', icon: Mic, title: 'Microphone', sub: 'Record voice notes and make voice calls with your booking partner.', required: false },
-  ...(Platform.OS === 'android' && Number(Platform.Version) >= 31 ? [{ id: 'bluetooth', icon: Bluetooth, title: 'Bluetooth', sub: 'Connect a Bluetooth headset during voice calls.', required: false }] : []),
+  { id: 'microphone', icon: Mic, title: 'Microphone', sub: 'Record voice notes for your booking partner.', required: false },
 ];
 
 export default function PermissionsScreen() {
@@ -133,7 +132,7 @@ export default function PermissionsScreen() {
       else if (id === 'microphone') {
         const result = await Audio.requestPermissionsAsync();
         setGranted(prev => ({ ...prev, microphone: result.granted }));
-        if (!result.granted && !result.canAskAgain) appAlert('Microphone access is off', 'Open device settings to enable voice calls.', [{ text: 'Later', style: 'cancel' }, { text: 'Open Settings', onPress: () => void Linking.openSettings() }]);
+        if (!result.granted && !result.canAskAgain) appAlert('Microphone access is off', 'Open device settings to record voice notes.', [{ text: 'Later', style: 'cancel' }, { text: 'Open Settings', onPress: () => void Linking.openSettings() }]);
       }
       else if (id === 'bluetooth' && Platform.OS === 'android' && Number(Platform.Version) >= 31) {
         const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT);
@@ -155,7 +154,6 @@ export default function PermissionsScreen() {
         async () => { const p = await ExpoCamera.Camera.requestCameraPermissionsAsync(); setGranted(prev => ({ ...prev, camera: p.granted })); },
         async () => { const p = await ImagePicker.requestMediaLibraryPermissionsAsync(); setGranted(prev => ({ ...prev, photos: p.granted })); },
         async () => { const p = await Audio.requestPermissionsAsync(); setGranted(prev => ({ ...prev, microphone: p.granted })); },
-        ...(Platform.OS === 'android' && Number(Platform.Version) >= 31 ? [async () => { const p = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT); setGranted(prev => ({ ...prev, bluetooth: p === PermissionsAndroid.RESULTS.GRANTED })); }] : []),
       ];
       for (const step of steps) { try { await step(); } catch (error) { console.warn('Permission request failed:', error); } }
     } finally { setRequestingAll(false); }
