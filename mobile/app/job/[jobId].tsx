@@ -219,8 +219,8 @@ export default function CleanerJobDetailScreen() {
               <DetailRow
                 icon={MapPin}
                 title={isVisitWash ? 'Car wash location' : 'Customer location'}
-                value={isVisitWash ? job.location?.address || job.washSiteName || 'Selected car wash' : 'Approximate area only'}
-                accent={isVisitWash ? undefined : 'Exact address is shared after quote acceptance'}
+                value={isVisitWash ? job.location?.address || job.washSiteName || 'Selected car wash' : 'Exact pin on map'}
+                accent={isVisitWash ? undefined : 'Street address is shared after quote acceptance'}
               />
               <DetailRow icon={DollarSign} title="Customer Budget" value={budgetLabel} />
               <DetailRow icon={Clock} title="Estimated Duration" value={formatDuration(job.estimatedDuration)} />
@@ -253,7 +253,7 @@ export default function CleanerJobDetailScreen() {
             {(hasCoordinates || isVisitWash) && (
               <TouchableOpacity
                 accessibilityRole="button"
-                accessibilityLabel={isVisitWash ? 'Get directions to the selected car wash' : 'View the approximate customer location'}
+                accessibilityLabel={isVisitWash ? 'Get directions to the selected car wash' : 'View the customer location on the map'}
                 onPress={openLocation}
                 activeOpacity={0.8}
                 className="mt-4 flex-row items-center gap-3 rounded-2xl border border-accent/15 bg-accent/[0.04] p-4"
@@ -262,9 +262,9 @@ export default function CleanerJobDetailScreen() {
                   <Navigation size={17} color="#fff" />
                 </View>
                 <View className="flex-1">
-                  <Text className="font-display font-black text-ink">{isVisitWash ? 'Directions to car wash' : 'View approximate area'}</Text>
+                  <Text className="font-display font-black text-ink">{isVisitWash ? 'Directions to car wash' : 'View location'}</Text>
                   <Text className="font-sans text-xs text-ink/55 mt-1">
-                    {isVisitWash ? 'Open the selected wash location in Maps.' : 'Use this area to estimate travel for your bid. The exact pin appears in booking directions once the customer accepts.'}
+                    {isVisitWash ? 'Open the selected wash location in Maps.' : 'Open the customer’s pin in Maps to estimate travel for your bid.'}
                   </Text>
                 </View>
               </TouchableOpacity>
