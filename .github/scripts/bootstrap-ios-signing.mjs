@@ -81,8 +81,11 @@ if (bundleMatches.length !== 1) {
 const bundleId = bundleMatches[0].id;
 
 const certQuery = new URLSearchParams({ 'filter[certificateType]': 'IOS_DISTRIBUTION' });
-const certsResponse = await appleRequest(`/certificates?${certQuery}`);
-const certificates = certsResponse.data ?? [];
+const listCertificates = async () => {
+  const response = await appleRequest(`/certificates?${certQuery}`);
+  return response.data ?? [];
+};
+let certificates = await listCertificates();
 if (process.env.AUDIT_CERTIFICATE_SERIAL) {
   const auditSerial = process.env.AUDIT_CERTIFICATE_SERIAL.trim().toUpperCase();
   if (!/^[0-9A-F]{8,64}$/.test(auditSerial)) throw new Error('Enter a valid certificate serial number.');
@@ -118,6 +121,24 @@ if (process.env.AUDIT_CERTIFICATE_SERIAL) {
     console.log(`Provisioning profile: ${profile.attributes?.name ?? 'unnamed'}; type ${profile.attributes?.profileType ?? 'unknown'}; app ${appName}; expires ${profile.attributes?.expirationDate}; certificates ${linked}.`);
   }
   process.exit(0);
+}
+if (process.env.REVOKE_CERTIFICATE_SERIAL) {
+  const approvedSerial = process.env.REVOKE_CERTIFICATE_SERIAL.trim().toUpperCase();
+  if (!/^[0-9A-F]{8,64}$/.test(approvedSerial)) throw new Error('Enter a valid certificate serial number to revoke.');
+  const normalized = approvedSerial.replace(/^0+/, '');
+  const target = certificates.find(cert =>
+    String(cert.attributes?.serialNumber ?? '').toUpperCase().replace(/^0+/, '') === normalized);
+  if (!target) throw new Error('The approved certificate serial is not present in Apple\'s current inventory; nothing was revoked.');
+  console.log(`Revoking the specifically approved certificate serial ${approvedSerial}.`);
+  await appleRequest(`/certificates/${encodeURIComponent(target.id)}`, { method: 'DELETE' });
+  certificates = await listCertificates();
+  if (certificates.some(cert => String(cert.attributes?.serialNumber ?? '').toUpperCase().replace(/^0+/, '') === normalized)) {
+    throw new Error('Apple still lists the approved certificate after revocation; no replacement was created.');
+  }
+  if (certificates.length >= 3) {
+    throw new Error('The approved certificate was revoked, but Apple still reports three distribution certificates. A replacement was not created.');
+  }
+  console.log(`Apple confirmed revocation. ${certificates.length} iOS distribution certificates remain; proceeding to create the replacement.`);
 }
 const certificateName = `Detail GitHub App Store Signing ${process.env.GITHUB_RUN_ID ?? 'GHA'}`;
 if (certificates.some(cert => JSON.stringify(cert.attributes ?? {}).includes(certificateName))) {
