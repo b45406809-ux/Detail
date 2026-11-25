@@ -61,6 +61,7 @@ import { Mapbox, IS_MAPBOX_AVAILABLE } from '../../services/mapbox';
 import { recordMapboxUsage } from '../../services/usageMetrics';
 import { CleanerLocationPermissionError, completeCleanerPresenceStart, startCleanerLocationUpdates, stopCleanerLocationUpdates } from '../../services/locationTracking';
 import { needsCleanerVerificationTopUp } from '../../utils/cleanerVerification';
+import { useCleanerEarnings } from '../../hooks/useCleanerEarnings';
 
 function requiresCleanerRegistration(message: string) {
   return /complete cleaner verification and onboarding|verify this phone number before (?:applying as a cleaner|switching roles)|verify your phone number in cleaner registration/i.test(message);
@@ -98,6 +99,10 @@ export default function HomeScreen() {
   );
 
   const isCustomer = viewRole === 'CUSTOMER';
+  const { summary: earnings } = useCleanerEarnings(
+    !isCustomer && profile?.role === 'CLEANER' ? userId : undefined,
+    refreshNonce,
+  );
   const sheetSnapPoints = {
     expanded: Math.max(insets.top + 80, 104),
     normal: sheetHeight * 0.58,
@@ -579,6 +584,7 @@ export default function HomeScreen() {
           >
             <CleanerPanel
                 profile={profile}
+                totalEarnings={earnings?.totalEarnings ?? null}
                 status={cleanerStatus}
                 trackingIssue={locationTrackingError}
                 locationUpdatedAt={profile.locationUpdatedAt}
@@ -717,6 +723,7 @@ function LocationFreshness({ updatedAt }: { updatedAt?: string }) {
 
 function CleanerPanel({
   profile,
+  totalEarnings,
   status,
   trackingIssue,
   locationUpdatedAt,
@@ -731,6 +738,7 @@ function CleanerPanel({
   onChangeMapVisibility,
 }: {
   profile: any;
+  totalEarnings: number | null;
   status: string;
   trackingIssue: string | null;
   locationUpdatedAt?: string;
@@ -808,7 +816,7 @@ function CleanerPanel({
         {[
           { label: 'Jobs', value: profile.jobsCompleted ?? 0, icon: CheckCircle },
           { label: 'Rating', value: profile.ratingAverage?.toFixed(1) ?? '—', icon: Star },
-          { label: 'Earned', value: `$${profile.balance?.toFixed(0) ?? 0}`, icon: DollarSign },
+          { label: 'Earned', value: totalEarnings === null ? '—' : `$${totalEarnings.toFixed(2)}`, icon: DollarSign },
         ].map(({ label, value, icon: Icon }) => (
           <View key={label} className="flex-1 bg-white rounded-2xl p-3 items-center border border-slate-100">
             <Icon size={16} color="#3906D2" />

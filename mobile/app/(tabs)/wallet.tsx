@@ -38,7 +38,7 @@ import {
   limit,
 } from '../../services/supabase';
 import { addFundsToWallet, cancelEcoCashWalletPayment, isTopupFinished, listEcoCashWalletPayments, pendingEcoCashTopup, refreshEcoCashTopup, type EcoCashPayment } from '../../services/payments';
-import { callFunction } from '../../services/functions';
+import { useCleanerEarnings } from '../../hooks/useCleanerEarnings';
 import { WalletTransaction } from '../../types';
 import { formatDate } from '../../utils/date';
 
@@ -52,12 +52,9 @@ export default function WalletScreen() {
   const [transactionsError, setTransactionsError] = useState(false);
   const [transactionsRetry, setTransactionsRetry] = useState(0);
   const [transactionLimit, setTransactionLimit] = useState(20);
-  const [totalEarnings, setTotalEarnings] = useState(0);
-  const [completedEarningsJobs, setCompletedEarningsJobs] = useState(0);
-  const [earningsLoading, setEarningsLoading] = useState(true);
-  const [earningsError, setEarningsError] = useState(false);
   const [earningsRetry, setEarningsRetry] = useState(0);
   const userId = user?.uid;
+  const { summary: earnings, error: earningsError, loading: earningsLoading } = useCleanerEarnings(isCleaner ? userId : undefined, earningsRetry);
   const [paymentHistory, setPaymentHistory] = useState<EcoCashPayment[]>([]);
   const [paymentPage, setPaymentPage] = useState<number | null>(null);
   const [paymentHistoryLoading, setPaymentHistoryLoading] = useState(false);
@@ -180,28 +177,6 @@ export default function WalletScreen() {
       setTransactionsError(false);
     }, () => { setTransactionsLoading(false); setTransactionsError(true); });
   }, [userId, isVerification, transactionsRetry, transactionLimit]);
-
-  useFocusEffect(React.useCallback(() => {
-    if (!userId || !isCleaner) {
-      setTotalEarnings(0);
-      setCompletedEarningsJobs(0);
-      setEarningsLoading(false);
-      return;
-    }
-    let active = true;
-    setEarningsLoading(true);
-    setEarningsError(false);
-    void callFunction('getCleanerEarningsSummary').then((summary: { totalEarnings?: number; completedJobs?: number }) => {
-      if (!active || auth.currentUser?.uid !== userId) return;
-      setTotalEarnings(Number(summary.totalEarnings ?? 0));
-      setCompletedEarningsJobs(Number(summary.completedJobs ?? 0));
-    }).catch(() => {
-      if (active && auth.currentUser?.uid === userId) setEarningsError(true);
-    }).finally(() => {
-      if (active) setEarningsLoading(false);
-    });
-    return () => { active = false; };
-  }, [userId, isCleaner, earningsRetry]));
 
   const handleAddFunds = async () => {
     if (!pendingReference && !isCleaner && !isVerification) {
@@ -354,12 +329,12 @@ export default function WalletScreen() {
             </View>
           ) : earningsLoading ? (
             <ActivityIndicator accessibilityLabel="Loading earnings" color="#3906D2" style={{ alignSelf: 'flex-start', marginTop: 8 }} />
-          ) : (
+          ) : earnings ? (
             <>
-              <Text className="mt-2 text-3xl font-display font-black text-slate-900">${totalEarnings.toFixed(2)}</Text>
-              <Text className="mt-1 font-sans text-sm text-slate-500">After Detail commission across {completedEarningsJobs} completed {completedEarningsJobs === 1 ? 'booking' : 'bookings'}. Customer payments are settled directly with you.</Text>
+              <Text className="mt-2 text-3xl font-display font-black text-slate-900">${earnings.totalEarnings.toFixed(2)}</Text>
+              <Text className="mt-1 font-sans text-sm text-slate-500">After Detail commission across {earnings.completedJobs} completed {earnings.completedJobs === 1 ? 'booking' : 'bookings'}. Customer payments are settled directly with you.</Text>
             </>
-          )}
+          ) : null}
         </View>
       </View> : <View className="mx-5 mb-6 bg-accent rounded-4xl p-6 shadow-xl shadow-accent/30">
         <View className="flex-row items-center gap-2 mb-4">
