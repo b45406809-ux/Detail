@@ -34,7 +34,7 @@ import {
   getDocs,
   supabase,
 } from '../../services/supabase';
-import { uploadChatPhoto, uploadChatVoiceNote } from '../../services/storage';
+import { signMediaValue, uploadChatPhoto, uploadChatVoiceNote } from '../../services/storage';
 import { callFunction } from '../../services/functions';
 import { ChatMessage } from '../../types';
 
@@ -42,6 +42,25 @@ const QUICK_REPLIES = ['On my way!', 'Sounds good', "I'm here", 'Thank you!'];
 const MESSAGE_RETENTION_MS = 24 * 60 * 60 * 1000;
 const MAX_VOICE_NOTE_MS = 60_000;
 const messageTime = (value: any) => value?.toDate?.().getTime?.() ?? new Date(value).getTime();
+
+function ChatAvatar({ userId, photo, name, size }: { userId?: string; photo?: string; name?: string; size: number }) {
+  const [uri, setUri] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    setUri(null);
+    const source = photo || (userId ? `detail-media/profile-photos/${userId}/avatar.jpg` : '');
+    if (!source) return;
+    void signMediaValue(source).then(url => { if (active && typeof url === 'string') setUri(url); }).catch(() => {});
+    return () => { active = false; };
+  }, [userId, photo]);
+  const initial = (name || '?').trim().charAt(0).toUpperCase();
+  return (
+    <View style={{ width: size, height: size, borderRadius: size / 3, overflow: 'hidden' }} className="bg-accent/10 items-center justify-center">
+      {uri ? <RemoteImage uri={uri} style={{ width: size, height: size }} accessibilityLabel={`${name || 'User'} profile picture`} />
+        : <Text className="font-display font-black text-accent">{initial}</Text>}
+    </View>
+  );
+}
 
 interface Conversation {
   jobId: string;
@@ -520,6 +539,7 @@ export default function MessagesScreen() {
             >
               <ArrowLeft size={22} color="#0f172a" />
             </TouchableOpacity>
+            <ChatAvatar userId={convo?.otherUserId} photo={convo?.otherUserPhoto} name={convo?.otherUserName} size={40} />
             <View className="flex-1">
               <Text className="text-base font-display font-black text-slate-900">
                 {convo?.otherUserName ?? 'Chat'}
@@ -708,9 +728,7 @@ export default function MessagesScreen() {
               className="bg-white rounded-3xl p-4 flex-row items-center gap-4 border border-slate-100 shadow-sm"
               activeOpacity={0.8}
             >
-              <View className="w-12 h-12 bg-accent/10 rounded-2xl items-center justify-center">
-                <MessageSquare size={22} color="#3906D2" />
-              </View>
+              <ChatAvatar userId={item.otherUserId} photo={item.otherUserPhoto} name={item.otherUserName} size={48} />
               <View className="flex-1">
                 <Text className="text-sm font-display font-black text-slate-900">{item.otherUserName}</Text>
                 <Text className="font-sans text-xs text-slate-400 font-medium mt-0.5" numberOfLines={1}>
