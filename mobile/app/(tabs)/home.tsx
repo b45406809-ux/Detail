@@ -811,6 +811,17 @@ function CleanerPanel({
           </Text>
         </TouchableOpacity>
       </View>
+      {profile?.cleanerOnboardingComplete && profile?.verificationStatus === 'VERIFIED' && !profile?.cleanerAgreementAccepted && (
+        <TouchableOpacity
+          accessibilityRole="button"
+          onPress={() => router.push('/cleaner-agreement')}
+          activeOpacity={0.85}
+          className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 mb-4"
+        >
+          <Text className="font-display font-black text-red-900">Accept the updated cleaner agreement</Text>
+          <Text className="font-sans text-xs text-red-800 mt-1">Detail updated its cleaner agreement. Customers can't accept your quotes until you review and accept it. Tap to review.</Text>
+        </TouchableOpacity>
+      )}
       {trackingIssue && (
         <View className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 mb-4">
           <Text className="font-display font-black text-amber-950">Location sharing needs attention</Text>

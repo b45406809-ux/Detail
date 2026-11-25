@@ -25,8 +25,10 @@ async function registerCleanerLocationUpdates(){
   if (Platform.OS === 'web') throw new Error('Background cleaner location is available in the Detail mobile app.');
   if(await TaskManager.isTaskRegisteredAsync(CLEANER_LOCATION_TASK))return;
   await Location.startLocationUpdatesAsync(CLEANER_LOCATION_TASK,{
-    accuracy:Location.Accuracy.Balanced,timeInterval:15000,distanceInterval:50,
-    pausesUpdatesAutomatically:true,showsBackgroundLocationIndicator:true,
+    // High accuracy and no automatic pausing: iOS stops paused updates until the
+    // app is reopened, so a cleaner waiting in one place silently went stale.
+    accuracy:Location.Accuracy.High,timeInterval:15000,distanceInterval:25,
+    pausesUpdatesAutomatically:false,activityType:Location.ActivityType.OtherNavigation,showsBackgroundLocationIndicator:true,
     foregroundService:{notificationTitle:'Detail cleaner availability is on',notificationBody:'Your location is shared while you are online and during an active booking.',notificationColor:'#3906d2'},
   });
 }

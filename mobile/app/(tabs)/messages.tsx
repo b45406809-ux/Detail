@@ -1,4 +1,5 @@
 import { showPermissionDenied } from '@/utils/permissionPrompt';
+import { RemoteImage, prefetchPhotos } from '../../components/RemoteImage';
 import { appAlert } from '@/components/AppDialog';
 import React, { useEffect, useState, useRef } from 'react';
 import { Audio } from 'expo-av';
@@ -843,7 +844,7 @@ export default function MessagesScreen() {
                         <Text className={`text-sm font-semibold ${isMe ? 'text-white' : 'text-slate-900'}`}>Voice note</Text>
                       </TouchableOpacity>
                     ) : item.imageUrl ? (
-                      <Image source={{ uri: item.imageUrl }} style={{ width: 180, height: 180, borderRadius: 20 }} />
+                      <RemoteImage uri={item.imageUrl} style={{ width: 180, height: 180, borderRadius: 20, overflow: 'hidden' }} />
                     ) : (
                       <View className={`px-4 py-3 rounded-3xl ${isMe ? 'bg-accent rounded-tr-sm' : 'bg-slate-100 rounded-tl-sm'}`}>
                         <Text className={`text-sm font-medium ${isMe ? 'text-white' : 'text-slate-900'}`}>{item.text}</Text>

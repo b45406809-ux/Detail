@@ -1,4 +1,5 @@
 import { appAlert, AppDialogHost } from '@/components/AppDialog';
+import { RemoteImage, prefetchPhotos } from '../../components/RemoteImage';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState, useRef } from 'react';
 import {
@@ -202,6 +203,7 @@ export default function TrackingScreen() {
         if (!active) return;
         if (snap.exists()) {
           const data = { id: snap.id, ...snap.data() } as Job;
+          prefetchPhotos([...(data?.photos ?? []), ...(data?.completionPhotos ?? [])]);
           setJob(data);
           setJobLoadState('READY');
           if (data.status === JobStatus.COMPLETED && step === 'TRACKING') {
@@ -805,7 +807,7 @@ export default function TrackingScreen() {
                     onPress={() => setSelectedPhotoModal(url)}
                     className="relative rounded-xl overflow-hidden border border-emerald-200"
                   >
-                    <Image source={{ uri: url }} style={{ width: 64, height: 64 }} />
+                    <RemoteImage uri={url} style={{ width: 64, height: 64 }} />
                     <View className="absolute bottom-1 left-1 bg-emerald-700/80 px-1 rounded">
                       <Text className="text-[8px] font-display font-black text-white">Done</Text>
                     </View>
@@ -959,7 +961,7 @@ export default function TrackingScreen() {
                           activeOpacity={0.85}
                           className="w-[47%] aspect-square rounded-2xl overflow-hidden border border-ink/10 relative"
                         >
-                          <Image source={{ uri: url }} style={{ width: '100%', height: '100%' }} />
+                          <RemoteImage uri={url} style={{ width: '100%', height: '100%' }} />
                           <View className="absolute bottom-2 left-2 bg-black/75 px-2 py-1 rounded-lg">
                             <Text className="text-[10px] font-display font-black text-white uppercase">Dirty / Before</Text>
                           </View>
@@ -986,7 +988,7 @@ export default function TrackingScreen() {
                           activeOpacity={0.85}
                           className="w-[47%] aspect-square rounded-2xl overflow-hidden border border-emerald-300 relative"
                         >
-                          <Image source={{ uri: url }} style={{ width: '100%', height: '100%' }} />
+                          <RemoteImage uri={url} style={{ width: '100%', height: '100%' }} />
                           <View className="absolute bottom-2 left-2 bg-emerald-700/85 px-2 py-1 rounded-lg">
                             <View className="flex-row items-center gap-1"><CheckCircle size={11} color="#fff" /><Text className="text-[10px] font-display font-black text-white uppercase">Clean / Done</Text></View>
                           </View>
@@ -1049,10 +1051,7 @@ export default function TrackingScreen() {
             <X size={22} color="#fff" />
           </TouchableOpacity>
           {selectedPhotoModal && (
-            <Image
-              source={{ uri: selectedPhotoModal }}
-              style={{ width: '100%', height: '80%', resizeMode: 'contain' }}
-            />
+<RemoteImage uri={selectedPhotoModal} contentFit="contain" spinnerColor="#fff" style={{ width: '100%', height: '80%' }} />
           )}
         </View>
       </Modal>

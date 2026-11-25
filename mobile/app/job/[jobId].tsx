@@ -1,4 +1,5 @@
 import { appAlert } from '@/components/AppDialog';
+import { RemoteImage, prefetchPhotos } from '../../components/RemoteImage';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState } from 'react';
 import {
@@ -56,7 +57,7 @@ export default function CleanerJobDetailScreen() {
       }
     );
     callFunction('getCleanerBookingPreview', { jobId })
-      .then((preview) => { if (active && !unavailable) setJob(preview as Job); })
+      .then((preview) => { if (active && !unavailable) { const next = preview as Job; prefetchPhotos([...(next?.photos ?? []), ...(next?.completionPhotos ?? [])]); setJob(next); } })
       .catch((error) => { if (active && !unavailable) { setPreviewError(error instanceof Error ? error.message : 'Could not load this booking.'); setJob(null); } })
       .finally(() => { if (active) setIsLoading(false); });
     return () => { active = false; unsubscribe(); };
@@ -296,7 +297,7 @@ export default function CleanerJobDetailScreen() {
                       activeOpacity={0.8}
                       className="relative rounded-2xl overflow-hidden border border-ink/10"
                     >
-                      <Image source={{ uri: url }} style={{ width: 88, height: 88 }} />
+                      <RemoteImage uri={url} style={{ width: 88, height: 88 }} />
                       <View className="absolute bottom-1 left-1 bg-black/75 px-1.5 py-0.5 rounded-md">
                         <Text className="text-[8px] font-display font-black text-white uppercase">Dirty / Before</Text>
                       </View>
@@ -323,7 +324,7 @@ export default function CleanerJobDetailScreen() {
                       activeOpacity={0.8}
                       className="relative rounded-2xl overflow-hidden border border-emerald-200"
                     >
-                      <Image source={{ uri: url }} style={{ width: 88, height: 88 }} />
+                      <RemoteImage uri={url} style={{ width: 88, height: 88 }} />
                       <View className="absolute bottom-1 left-1 bg-emerald-700/85 px-1.5 py-0.5 rounded-md">
                         <Text className="text-[8px] font-display font-black text-white uppercase">Completed</Text>
                       </View>
@@ -446,10 +447,7 @@ export default function CleanerJobDetailScreen() {
             <X size={22} color="#fff" />
           </TouchableOpacity>
           {selectedPhotoUrl && (
-            <Image
-              source={{ uri: selectedPhotoUrl }}
-              style={{ width: '100%', height: '80%', resizeMode: 'contain' }}
-            />
+<RemoteImage uri={selectedPhotoUrl} contentFit="contain" spinnerColor="#fff" style={{ width: '100%', height: '80%' }} />
           )}
         </View>
       </Modal>
