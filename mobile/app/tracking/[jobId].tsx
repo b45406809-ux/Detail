@@ -186,8 +186,8 @@ export default function TrackingScreen() {
       await callFunction('addCompletionPhoto', { jobId, url });
       setPhotoTab('AFTER');
       appAlert('Photo Uploaded', 'Completion proof photo added to the job.');
-    } catch {
-      appAlert('Upload Failed', 'Could not upload completion photo. Please try again.');
+    } catch (error) {
+      appAlert('Upload Failed', error instanceof Error && error.message ? error.message : 'Could not upload completion photo. Please try again.');
     } finally {
       setIsUploadingDonePhoto(false);
     }

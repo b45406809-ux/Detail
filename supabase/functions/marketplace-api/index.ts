@@ -623,6 +623,16 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
     case 'addCompletionPhoto': {
       const actor = authed(); const jobId = text(input.jobId, 80), path = text(input.url, 500);
       if (!path.startsWith(`detail-media/job-completion/${jobId}/${actor}/`)) fail(400,'A valid uploaded completion photo is required.');
+      // Media uploads go to R2, so confirm the object exists there with a supported
+      // image type and size before recording it on the booking.
+      try {
+        const head = await r2Client().send(new HeadObjectCommand({ Bucket: r2Bucket(), Key: path.slice('detail-media/'.length) }));
+        const size = Number(head.ContentLength ?? 0), type = String(head.ContentType ?? '').toLowerCase();
+        if (!(size > 0 && size <= 15 * 1024 * 1024) || !['image/jpeg','image/png','image/webp','image/heic'].includes(type)) fail(400, 'Completion photo must be a JPEG, PNG, WebP or HEIC image under 15 MB.');
+      } catch (error) {
+        if (error instanceof ApiError) throw error;
+        fail(404, 'The uploaded photo could not be found. Please try again.');
+      }
       const { error } = await admin.rpc('add_completion_photo', { p_job_id: jobId, p_cleaner_id: actor, p_path: path });
       if (error) throw error;
       return { ok: true };
