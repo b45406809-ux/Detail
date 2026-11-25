@@ -2,6 +2,12 @@ name: Build Detail Android on EAS
 
 on:
   workflow_dispatch:
+    inputs:
+      upload_to_play:
+        description: Upload the built app bundle to Google Play internal testing.
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -70,7 +76,7 @@ jobs:
           else
             build_status=$?
             tail -n 35 "$build_log"
-            if ! grep -Fq 'This account has used its Android builds from the Free plan this month' "$build_log"; then
+            if ! grep -Eq 'This account has used its (Android )?builds from the Free plan' "$build_log"; then
               exit "$build_status"
             fi
             echo 'Expo free Android build quota is exhausted; falling back to a local signed production build.'
@@ -116,3 +122,34 @@ jobs:
           path: ${{ runner.temp }}/detail-production.aab
           if-no-files-found: ignore
           retention-days: 7
+
+  upload:
+    name: Upload app bundle to Google Play internal testing
+    needs: build
+    if: inputs.upload_to_play
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: detail-android-production-${{ github.run_id }}
+          path: ${{ runner.temp }}/detail-android
+
+      - name: Locate Android app bundle
+        id: bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$(find "$RUNNER_TEMP/detail-android" -maxdepth 2 -type f -name '*.aab' -print -quit)"
+          if [[ -z "$bundle" ]]; then echo 'No app bundle artifact; the build ran remotely on EAS. Submit it from EAS instead.'; exit 1; fi
+          echo "path=$bundle" >> "$GITHUB_OUTPUT"
+
+      - name: Upload bundle to Google Play internal testing
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: zw.co.detailapp.mobile
+          releaseFiles: ${{ steps.bundle.outputs.path }}
+          tracks: internal
+          status: completed
