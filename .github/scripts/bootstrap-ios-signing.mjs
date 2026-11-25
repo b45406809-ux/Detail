@@ -97,17 +97,25 @@ if (process.env.AUDIT_CERTIFICATE_SERIAL) {
     console.log(`Certificate: ${cert.attributes?.name ?? 'unnamed'}; expires ${cert.attributes?.expirationDate}; serial ${cert.attributes?.serialNumber ?? 'unavailable'}; id ${cert.id}.`);
   }
   const profilesQuery = new URLSearchParams({
-    'filter[profileType]': 'IOS_APP_STORE',
     include: 'bundleId,certificates',
     limit: '200',
   });
   const profilesResponse = await appleRequest(`/profiles?${profilesQuery}`);
   const certificateNames = new Map(certificates.map(cert => [cert.id, cert.attributes?.name ?? 'unnamed']));
+  const certificateSerials = new Map(certificates.map(cert => [cert.id, cert.attributes?.serialNumber ?? 'unavailable']));
   const profileIncludes = new Map((profilesResponse.included ?? []).map(resource => [resource.id, resource]));
   for (const profile of profilesResponse.data ?? []) {
-    if (profile.relationships?.bundleId?.data?.id !== bundleId) continue;
     const linkedCerts = profile.relationships?.certificates?.data ?? [];
-    console.log(`App Store profile: ${profile.attributes?.name ?? 'unnamed'}; expires ${profile.attributes?.expirationDate}; certificates ${linkedCerts.map(cert => profileIncludes.get(cert.id)?.attributes?.name ?? certificateNames.get(cert.id) ?? cert.id).join(', ') || 'none'}.`);
+    if (!linkedCerts.length) continue;
+    const appId = profile.relationships?.bundleId?.data?.id;
+    const appName = profileIncludes.get(appId)?.attributes?.identifier ?? 'unknown app';
+    const linked = linkedCerts.map(cert => {
+      const included = profileIncludes.get(cert.id);
+      const name = included?.attributes?.name ?? certificateNames.get(cert.id) ?? cert.id;
+      const serial = included?.attributes?.serialNumber ?? certificateSerials.get(cert.id) ?? 'unavailable';
+      return `${name} (serial ${serial})`;
+    }).join(', ');
+    console.log(`Provisioning profile: ${profile.attributes?.name ?? 'unnamed'}; type ${profile.attributes?.profileType ?? 'unknown'}; app ${appName}; expires ${profile.attributes?.expirationDate}; certificates ${linked}.`);
   }
   process.exit(0);
 }
