@@ -97,16 +97,17 @@ if (process.env.AUDIT_CERTIFICATE_SERIAL) {
     console.log(`Certificate: ${cert.attributes?.name ?? 'unnamed'}; expires ${cert.attributes?.expirationDate}; serial ${cert.attributes?.serialNumber ?? 'unavailable'}; id ${cert.id}.`);
   }
   const profilesQuery = new URLSearchParams({
-    'filter[bundleId]': bundleId,
     'filter[profileType]': 'IOS_APP_STORE',
-    include: 'certificates',
+    include: 'bundleId,certificates',
     limit: '200',
   });
   const profilesResponse = await appleRequest(`/profiles?${profilesQuery}`);
   const certificateNames = new Map(certificates.map(cert => [cert.id, cert.attributes?.name ?? 'unnamed']));
+  const profileIncludes = new Map((profilesResponse.included ?? []).map(resource => [resource.id, resource]));
   for (const profile of profilesResponse.data ?? []) {
+    if (profile.relationships?.bundleId?.data?.id !== bundleId) continue;
     const linkedCerts = profile.relationships?.certificates?.data ?? [];
-    console.log(`App Store profile: ${profile.attributes?.name ?? 'unnamed'}; expires ${profile.attributes?.expirationDate}; certificates ${linkedCerts.map(cert => certificateNames.get(cert.id) ?? cert.id).join(', ') || 'none'}.`);
+    console.log(`App Store profile: ${profile.attributes?.name ?? 'unnamed'}; expires ${profile.attributes?.expirationDate}; certificates ${linkedCerts.map(cert => profileIncludes.get(cert.id)?.attributes?.name ?? certificateNames.get(cert.id) ?? cert.id).join(', ') || 'none'}.`);
   }
   process.exit(0);
 }
