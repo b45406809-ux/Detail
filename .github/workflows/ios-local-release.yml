@@ -3,8 +3,8 @@ on:
   workflow_dispatch:
     inputs:
       signing_run_id:
-        description: Run containing the existing iOS signing artifact
-        required: true
+        description: Run containing an iOS signing artifact. Leave blank to use EAS project signing.
+        required: false
         type: string
 permissions:
   contents: read
@@ -28,12 +28,14 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
       - uses: actions/download-artifact@v4
+        if: inputs.signing_run_id != ''
         with:
           name: detail-ios-signing-${{ inputs.signing_run_id }}
           path: ${{ runner.temp }}/detail-ios-signing
           github-token: ${{ github.token }}
           run-id: ${{ inputs.signing_run_id }}
       - name: Prepare signing credentials
+        if: inputs.signing_run_id != ''
         env:
           SIGNING_DIR: ${{ runner.temp }}/detail-ios-signing
         run: |
@@ -50,7 +52,15 @@ jobs:
         run: npm ci --prefix mobile --no-audit --no-fund
       - name: Build signed iOS app locally
         working-directory: mobile
-        run: npx --yes eas-cli@16.28.0 build --platform ios --profile production-github --local --non-interactive --output "$RUNNER_TEMP/detail.ipa"
+        env:
+          SIGNING_RUN_ID: ${{ inputs.signing_run_id }}
+        run: |
+          set -euo pipefail
+          profile=production
+          if [[ -n "$SIGNING_RUN_ID" ]]; then
+            profile=production-github
+          fi
+          npx --yes eas-cli@16.28.0 build --platform ios --profile "$profile" --local --non-interactive --output "$RUNNER_TEMP/detail.ipa"
       - name: Upload to App Store Connect
         env:
           ASC_API_KEY_P8: ${{ secrets.EXPO_ASC_API_KEY_P8 }}
