@@ -874,7 +874,10 @@ export default function TrackingScreen() {
             { id: 'call', label: 'Call', icon: Phone, color: '#0FB77A', action: () => {
               const phone = isCleaner ? job.customerPhone : job.cleanerPhone;
               if (!phone) { appAlert('Phone unavailable', 'This account has not added a phone number.'); return; }
-              Linking.openURL(`tel:${phone}`).catch(() => appAlert('Call unavailable', 'Your device could not start a phone call.'));
+              appAlert('Direct phone call', 'This opens your phone\'s dialer and makes a normal phone call. Your carrier\'s call charges apply and your number will be visible to them. Continue?', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Continue', onPress: () => void Linking.openURL(`tel:${phone}`).catch(() => appAlert('Call unavailable', 'Your device could not start a phone call.')) },
+              ]);
             } },
             { id: 'cancel', label: 'Abort', icon: ShieldAlert, color: '#E5484D', action: handleCancelJob },
           ].map(({ id, label, icon: Icon, color, action }) => (

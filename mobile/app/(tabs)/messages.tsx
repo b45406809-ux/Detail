@@ -21,7 +21,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../../components/LoadingList';
 import { useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Send, MessageSquare, ImagePlus, Mic, Play, Pause, Square, X, MoreHorizontal, ShieldCheck, Clock, ChevronDown, ChevronUp, Flag } from 'lucide-react-native';
+import { ArrowLeft, Send, MessageSquare, ImagePlus, Mic, Play, Pause, Square, X, MoreHorizontal, Phone, ShieldCheck, Clock, ChevronDown, ChevronUp, Flag } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -68,6 +68,7 @@ interface Conversation {
   otherUserId: string;
   otherUserName: string;
   otherUserPhoto: string;
+  otherUserPhone: string;
   lastMessage: string;
   lastMessageAt: any;
   unreadCount: number;
@@ -251,6 +252,7 @@ export default function MessagesScreen() {
               ? job.cleanerName ?? 'Cleaner'
               : job.customerName ?? 'Customer',
             otherUserPhoto: isCustomer ? job.cleanerPhoto ?? '' : job.customerPhoto ?? '',
+            otherUserPhone: isCustomer ? job.cleanerPhone ?? '' : job.customerPhone ?? '',
             lastMessage: job.lastMessageAt && messageTime(job.lastMessageAt) < Date.now() - MESSAGE_RETENTION_MS ? 'No recent messages' : job.lastMessage ?? 'No messages yet',
             lastMessageAt: job.lastMessageAt,
             unreadCount: job.lastMessageAt && messageTime(job.lastMessageAt) < Date.now() - MESSAGE_RETENTION_MS ? 0 : job[unreadField] ?? 0,
@@ -563,6 +565,19 @@ export default function MessagesScreen() {
             >
               <MoreHorizontal size={20} color="#334155" />
             </TouchableOpacity>
+            {!!convo?.otherUserPhone && ['ASSIGNED', 'EN_ROUTE', 'IN_PROGRESS'].includes(convo.jobStatus) && !conversationBlocked ? (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={`Phone ${convo.otherUserName}`}
+                onPress={() => appAlert('Direct phone call', 'This opens your phone\'s dialer and makes a normal phone call. Your carrier\'s call charges apply and your number will be visible to them. Continue?', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Continue', onPress: () => void Linking.openURL(`tel:${convo.otherUserPhone}`).catch(() => appAlert('Call unavailable', 'Your device could not start a phone call.')) },
+                ])}
+                className="h-10 w-10 items-center justify-center rounded-full bg-accent/10"
+              >
+                <Phone size={19} color="#3906D2" />
+              </TouchableOpacity>
+            ) : null}
           </View>
 
           {/* Messages */}
