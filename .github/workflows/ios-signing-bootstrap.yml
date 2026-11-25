@@ -3,6 +3,10 @@ name: Bootstrap iOS signing and build on GitHub
 on:
   workflow_dispatch:
     inputs:
+      audit_certificate_serial:
+        description: Check this distribution certificate in Apple's portal without creating credentials or starting a build.
+        required: false
+        type: string
       reuse_signing_run_id:
         description: Previous successful signing-artifact run ID (leave blank to create Apple signing credentials)
         required: false
@@ -59,10 +63,11 @@ jobs:
           echo 'Required Apple and Expo settings are present.'
 
       - name: Install mobile dependencies
+        if: inputs.audit_certificate_serial == ''
         run: npm ci --prefix mobile --no-audit --no-fund
 
       - name: Create Apple distribution certificate and App Store profile
-        if: ${{ inputs.reuse_signing_run_id == '' }}
+        if: inputs.reuse_signing_run_id == '' || inputs.audit_certificate_serial != ''
         env:
           ASC_KEY_PATH: ${{ runner.temp }}/AuthKey_${{ secrets.EXPO_ASC_KEY_ID }}.p8
           ASC_KEY_ID: ${{ secrets.EXPO_ASC_KEY_ID }}
@@ -70,10 +75,11 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.EXPO_APPLE_TEAM_ID }}
           BUNDLE_ID: zw.co.detailapp.mobile
           SIGNING_DIR: ${{ runner.temp }}/detail-ios-signing
+          AUDIT_CERTIFICATE_SERIAL: ${{ inputs.audit_certificate_serial }}
         run: node .github/scripts/bootstrap-ios-signing.mjs
 
       - name: Download existing signing artifact for a build retry
-        if: ${{ inputs.reuse_signing_run_id != '' }}
+        if: inputs.audit_certificate_serial == '' && inputs.reuse_signing_run_id != ''
         uses: actions/download-artifact@v4
         with:
           name: detail-ios-signing-${{ inputs.reuse_signing_run_id }}
@@ -82,7 +88,7 @@ jobs:
           run-id: ${{ inputs.reuse_signing_run_id }}
 
       - name: Upload short-lived signing artifact for Expo dashboard import
-        if: ${{ inputs.reuse_signing_run_id == '' }}
+        if: inputs.audit_certificate_serial == '' && inputs.reuse_signing_run_id == ''
         uses: actions/upload-artifact@v4
         with:
           name: detail-ios-signing-${{ github.run_id }}
@@ -91,9 +97,11 @@ jobs:
           if-no-files-found: error
 
       - name: Check mobile types
+        if: inputs.audit_certificate_serial == ''
         run: npm run type-check --prefix mobile
 
       - name: Configure local signing files for this build
+        if: inputs.audit_certificate_serial == ''
         shell: bash
         env:
           SIGNING_DIR: ${{ runner.temp }}/detail-ios-signing
@@ -105,6 +113,7 @@ jobs:
           node -e 'const fs=require("node:fs"); const password=fs.readFileSync(process.env.SIGNING_DIR+"/import/p12-password.txt","utf8").trim(); fs.writeFileSync("mobile/credentials.json", JSON.stringify({ios:{provisioningProfilePath:".eas/credentials/profile.mobileprovision",distributionCertificate:{path:".eas/credentials/distribution.p12",password}},}, null, 2));'
 
       - name: Start signed iOS production build with local credentials
+        if: inputs.audit_certificate_serial == ''
         working-directory: mobile
         run: npx --yes eas-cli@16.28.0 build --platform ios --profile production-github --non-interactive --no-wait
 

@@ -83,6 +83,18 @@ const bundleId = bundleMatches[0].id;
 const certQuery = new URLSearchParams({ 'filter[certificateType]': 'IOS_DISTRIBUTION' });
 const certsResponse = await appleRequest(`/certificates?${certQuery}`);
 const certificates = certsResponse.data ?? [];
+if (process.env.AUDIT_CERTIFICATE_SERIAL) {
+  const auditSerial = process.env.AUDIT_CERTIFICATE_SERIAL.trim().toUpperCase();
+  if (!/^[0-9A-F]{8,64}$/.test(auditSerial)) throw new Error('Enter a valid certificate serial number.');
+  const serial = auditSerial.replace(/^0+/, '');
+  const match = certificates.find(cert =>
+    String(cert.attributes?.serialNumber ?? '').toUpperCase().replace(/^0+/, '') === serial);
+  console.log(`Apple lists ${certificates.length} iOS distribution certificates for this team.`);
+  console.log(match
+    ? `The specified certificate is listed. Expiration: ${match.attributes?.expirationDate}.`
+    : 'Apple does not list the specified certificate for this team.');
+  process.exit(0);
+}
 const certificateName = `Detail GitHub App Store Signing ${process.env.GITHUB_RUN_ID ?? 'GHA'}`;
 if (certificates.some(cert => JSON.stringify(cert.attributes ?? {}).includes(certificateName))) {
   throw new Error(`The signing certificate for run ${process.env.GITHUB_RUN_ID ?? 'GHA'} already exists. Do not create another for this run.`);
