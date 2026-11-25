@@ -21,7 +21,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../../components/LoadingList';
 import { useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Send, MessageSquare, ImagePlus, Mic, Play, Pause, Square, X, MoreHorizontal, Phone, Flag } from 'lucide-react-native';
+import { ArrowLeft, Send, MessageSquare, ImagePlus, Mic, Play, Pause, Square, X, MoreHorizontal, Phone, ShieldCheck, Clock, ChevronDown, ChevronUp, Flag } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -118,6 +118,7 @@ export default function MessagesScreen() {
       void Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true }).catch(() => undefined);
     };
   }, [activeJobId]);
+  const [safetyExpanded, setSafetyExpanded] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const preserveChatScrollRef = useRef(false);
   const reachedHistoryStartRef = useRef(false);
@@ -580,10 +581,21 @@ export default function MessagesScreen() {
           {chatError ? <View className="items-center px-4 py-2"><Text accessibilityRole="alert" className="text-center text-xs text-rose-700">{chatError}</Text><TouchableOpacity accessibilityRole="button" onPress={() => setChatRetry(value => value + 1)} className="mt-1 rounded-full bg-rose-50 px-3 py-1"><Text className="text-xs font-bold text-rose-800">Retry messages</Text></TouchableOpacity></View> : null}
         {chatReadOnly ? <View className="mx-4 mt-3 rounded-2xl bg-slate-100 px-4 py-3"><Text className="text-xs font-bold text-slate-700">{activeConversation ? 'This booking is cancelled. Recent messages are read-only.' : 'Chat is available once a cleaner is assigned.'}</Text></View> : null}
         {conversationBlocked ? <View className="mx-4 mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3"><Text className="text-xs font-bold text-rose-900">{blockedByMe ? 'You blocked this person' : 'This person blocked you'}</Text><Text className="mt-1 text-xs leading-5 text-rose-800">Existing history stays available. New messages, photos and voice notes are disabled{blockedByMe ? ' until you unblock them from the conversation menu.' : ' in this conversation.'}</Text></View> : null}
-        <View className="mx-4 mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-          <Text className="text-xs font-bold text-amber-950">Stay safe on Detail</Text>
-          <Text className="mt-1 text-xs leading-5 text-amber-900">Messages stay visible to booking participants for 24 hours. After that, only authorized Detail admins can access the retained conversation for support and safety. Abusive language is screened automatically. Keep booking communication in Detail and arrange payment directly with your cleaner. Never share verification codes. Use the conversation menu to report or block someone; you can also report a message below.</Text>
-        </View>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityState={{ expanded: safetyExpanded }}
+          onPress={() => setSafetyExpanded(value => !value)}
+          activeOpacity={0.85}
+          className="mx-4 mt-3 flex-row items-start gap-3 rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-3"
+        >
+          <ShieldCheck size={20} color="#15803d" style={{ marginTop: 2 }} />
+          <View className="flex-1">
+            <Text className="text-sm font-bold text-emerald-950">Stay safe on Detail</Text>
+            <Text className="mt-0.5 text-xs leading-5 text-emerald-900">{safetyExpanded ? 'Messages stay visible to booking participants for 24 hours. After that, only authorized Detail admins can access the retained conversation for support and safety. Abusive language is screened automatically. Keep booking communication in Detail and arrange payment directly with your cleaner. Never share verification codes. Use the conversation menu to report or block someone; you can also report a message below.' : 'Keep booking chat in Detail and never share verification codes.'}</Text>
+            <View className="mt-1.5 flex-row items-center gap-1.5"><Clock size={13} color="#14532d" /><Text className="text-xs font-bold text-emerald-950">This chat expires after 24 hours</Text></View>
+          </View>
+          {safetyExpanded ? <ChevronUp size={18} color="#14532d" /> : <ChevronDown size={18} color="#14532d" />}
+        </TouchableOpacity>
         <FlatList
             ref={flatListRef}
           data={messages.filter(message => messageTime(message.createdAt) >= now - MESSAGE_RETENTION_MS)}
