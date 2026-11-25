@@ -5,8 +5,8 @@
 import { randomInt } from 'node:crypto';
 import { appendFileSync } from 'node:fs';
 
-const EMAIL = 'appreview@detailapp.co.zw';
-const PHONE = '+263770000123';
+const EMAIL = process.env.DEMO_EMAIL || 'appreview@detailapp.co.zw';
+const PHONE = process.env.DEMO_PHONE || '+263770000123';
 const COMMISSION_FLOOR = 10;
 const CUSTOMER_VERSION = 'customer-2026-10-23';
 const CLEANER_VERSION = 'cleaner-2026-11-25-wallet-direct-payments-v2';
@@ -88,7 +88,7 @@ console.log('Selfie uploaded to storage bucket detail-media.');
 // 4. Profile fields. cleanerselfieat can only be set by service_role (guard trigger).
 const now = new Date().toISOString();
 await call(`/rest/v1/users?id=eq.${userId}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: {
-  email: EMAIL, phone: PHONE, displayname: 'Apple Review',
+  email: EMAIL, phone: PHONE, displayname: process.env.DEMO_NAME || 'Apple Review',
   hasagreedtoterms: true, hascompletedprofile: true, hassetuppermissions: true,
   cleaneronboardingcomplete: true, verificationstatus: 'VERIFIED', verificationlevel: 2,
   issuspended: false, isbanned: false, accountdeletedat: null,
@@ -142,7 +142,7 @@ console.log(`Commission credited this run: ${credited.toFixed(2)} (balance now $
 
 // 9. Credentials go only to the step summary.
 if (process.env.GITHUB_STEP_SUMMARY) {
-  appendFileSync(process.env.GITHUB_STEP_SUMMARY, ['## Apple App Review demo account', '', `- Email: \`${EMAIL}\``, `- Password: \`${password}\``, `- Phone (pre-verified): \`${PHONE}\``, '- Modes: customer and verified cleaner (switch in-app). Prepaid commission credit: at least $10.', ''].join('\n'));
+  appendFileSync(process.env.GITHUB_STEP_SUMMARY, [`## Apple App Review demo account (${EMAIL})`, '', `- Email: \`${EMAIL}\``, `- Password: \`${password}\``, `- Phone (pre-verified): \`${PHONE}\``, '- Modes: customer and verified cleaner (switch in-app). Prepaid commission credit: at least $10.', ''].join('\n'));
   console.log('Credentials written to the job step summary.');
 } else {
   console.log('GITHUB_STEP_SUMMARY is not set; credentials were not written anywhere.');

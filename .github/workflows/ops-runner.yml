@@ -648,6 +648,8 @@ jobs:
           # The script masks the generated password and writes credentials only to the step summary.
           # The ::add-mask:: command must reach the runner's stdout, but is kept out of the ops log.
           node scripts/create-review-demo-account.mjs 2>&1 | tee >(grep -v '^::add-mask::' >> "$OPS_LOG") || { echo 'Demo account script failed.' >> "$OPS_LOG"; exit 1; }
+          DEMO_EMAIL='appreview.cleaner@detailapp.co.zw' DEMO_PHONE='+263770000124' DEMO_NAME='Apple Review Cleaner' \
+            node scripts/create-review-demo-account.mjs 2>&1 | tee >(grep -v '^::add-mask::' >> "$OPS_LOG") || { echo 'Second demo account script failed.' >> "$OPS_LOG"; exit 1; }
 
       - name: Redact and summarize result
         if: always()
