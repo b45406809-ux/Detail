@@ -6,6 +6,11 @@ on:
         description: Run containing an iOS signing artifact. Leave blank to use EAS project signing.
         required: false
         type: string
+      audit_signing_only:
+        description: Inspect saved Expo signing metadata without building or uploading.
+        required: false
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
@@ -39,7 +44,30 @@ jobs:
         env:
           SIGNING_DIR: ${{ runner.temp }}/detail-ios-signing
         run: node scripts/prepare-ios-signing.mjs
+      - name: Report signing certificate serial for Apple inventory comparison
+        if: inputs.audit_signing_only
+        env:
+          SIGNING_DIR: ${{ runner.temp }}/detail-ios-signing
+        run: |
+          set -euo pipefail
+          openssl pkcs12 -provider default -provider legacy -in "$SIGNING_DIR/distribution.p12" -passin "file:$SIGNING_DIR/p12-password.txt" -clcerts -nokeys -out "$SIGNING_DIR/audit-cert.pem"
+          openssl x509 -in "$SIGNING_DIR/audit-cert.pem" -noout -serial -fingerprint -sha256 -enddate
+          openssl smime -verify -inform DER -in "$SIGNING_DIR/profile.mobileprovision" -noverify -out "$SIGNING_DIR/profile.plist" >/dev/null 2>&1
+          python3 - "$SIGNING_DIR/profile.plist" "$SIGNING_DIR" <<'PY'
+          import pathlib, plistlib, subprocess, sys
+          data = plistlib.loads(pathlib.Path(sys.argv[1]).read_bytes())
+          for index, cert in enumerate(data.get('DeveloperCertificates', [])):
+              path = pathlib.Path(sys.argv[2]) / f'profile-cert-{index}.der'
+              path.write_bytes(cert)
+              serial = subprocess.check_output(['openssl', 'x509', '-inform', 'DER', '-in', str(path), '-noout', '-serial'], text=True).strip()
+              print(f"Provisioning profile certificate {index}: {serial}")
+          print(f"Provisioning profile expiration: {data.get('ExpirationDate')}")
+          PY
+      - name: Stop after signing audit
+        if: inputs.audit_signing_only
+        run: echo 'Read-only signing audit complete; no app was built or uploaded.'
       - name: Prepare signing credentials
+        if: inputs.audit_signing_only != true
         env:
           SIGNING_DIR: ${{ runner.temp }}/detail-ios-signing
         run: |
@@ -54,11 +82,14 @@ jobs:
           cp "$SIGNING_DIR/profile.mobileprovision" mobile/.eas/credentials/profile.mobileprovision
           node -e 'const fs=require("fs");const password=fs.readFileSync(process.env.SIGNING_DIR+"/p12-password.txt","utf8").trim();fs.writeFileSync("mobile/credentials.json",JSON.stringify({ios:{provisioningProfilePath:".eas/credentials/profile.mobileprovision",distributionCertificate:{path:".eas/credentials/distribution.p12",password}}}));'
       - name: Install dependencies
+        if: inputs.audit_signing_only != true
         run: npm ci --prefix mobile --no-audit --no-fund
       - name: Build signed iOS app locally
+        if: inputs.audit_signing_only != true
         working-directory: mobile
         run: npx --yes eas-cli@16.28.0 build --platform ios --profile production-github --local --non-interactive --output "$RUNNER_TEMP/detail.ipa"
       - name: Upload to App Store Connect
+        if: inputs.audit_signing_only != true
         env:
           ASC_API_KEY_P8: ${{ secrets.EXPO_ASC_API_KEY_P8 }}
         run: |
