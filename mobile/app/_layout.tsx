@@ -49,8 +49,8 @@ function AuthGuard() {
         if (currentScreen !== 'create-profile') router.replace('/(auth)/create-profile');
       } else if (!profile?.hasSetupPermissions) {
         if (currentScreen !== 'permissions') router.replace('/(auth)/permissions');
-      } else if (profile?.role === 'CLEANER' && profile.verificationStatus === 'VERIFIED' && profile.cleanerOnboardingComplete && !profile.cleanerAgreementAccepted) {
-        if (currentScreen !== 'cleaner-agreement') router.replace('/cleaner-agreement');
+        // The Cleaner Agreement is shown only from the cleaner registration
+        // flow (register-cleaner -> cleaner-agreement), never on app launch.
       } else if ((inAuthGroup && currentScreen !== 'customer-agreement') || currentScreen === '' || currentScreen === 'index') {
         router.replace(currentScreen==='permissions'&&next==='cleaner'?'/register-cleaner':'/home');
       }
@@ -123,7 +123,6 @@ function NotificationRouter({ response, onConsumed }: { response: Notifications.
     // Keep a cold-start destination pending while the normal auth guard walks
     // the user through required account setup.
     if (!profile.hasAgreedToTerms || !profile.hasCompletedProfile || !profile.hasSetupPermissions) return;
-    if (profile.role === 'CLEANER' && profile.verificationStatus === 'VERIFIED' && profile.cleanerOnboardingComplete && !profile.cleanerAgreementAccepted) return;
 
     const data = response.notification.request.content.data as { jobId?: string; supportCaseId?: string; type?: string; title?: string; body?: string };
     const target = resolveNotificationTarget(data);
