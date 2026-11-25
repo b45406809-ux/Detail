@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import { FlatList, Pressable, SectionList, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../../components/LoadingList';
@@ -18,6 +18,108 @@ const STATUS: Record<string, { label: string; tone: string }> = {
   COMPLETED: { label: 'Completed', tone: 'text-emerald-700' },
   CANCELLED: { label: 'Cancelled', tone: 'text-slate-500' },
 };
+
+const pastStatuses = new Set(['COMPLETED', 'CANCELLED']);
+const bookingDay = new Intl.DateTimeFormat('en', { day: 'numeric' });
+const bookingMonth = new Intl.DateTimeFormat('en', { month: 'short' });
+
+function openBooking(job: Job) {
+  const scheduledRequest = job.status === 'PENDING' && job.bookingMode !== 'INSTANT';
+  router.push(scheduledRequest
+    ? { pathname: '/booking/offers', params: { jobId: job.id } }
+    : { pathname: '/tracking/[jobId]', params: { jobId: job.id } });
+}
+
+function CustomerBookingCard({ job }: { job: Job }) {
+  const past = pastStatuses.has(job.status);
+  const status = job.status === 'PENDING' && job.bookingMode === 'INSTANT'
+    ? { label: 'Finding a cleaner', tone: 'text-amber-800' }
+    : STATUS[job.status] ?? { label: job.status.replaceAll('_', ' '), tone: 'text-slate-600' };
+  const title = job.serviceType || (job.category === 'CAR' ? 'Vehicle cleaning' : 'Home cleaning');
+  const timestamp = toMillis(job.scheduledDateTime) || toMillis(job.createdAt);
+  const date = timestamp ? new Date(timestamp) : null;
+  const mode = job.bookingMode === 'INSTANT' ? 'Instant' : 'Scheduled';
+  const dateTone = past ? 'text-slate-500' : 'text-accent';
+  const dotTone = {
+    PENDING: 'bg-amber-500',
+    CONFIRMED: 'bg-blue-500',
+    ASSIGNED: 'bg-blue-500',
+    EN_ROUTE: 'bg-emerald-500',
+    IN_PROGRESS: 'bg-violet-500',
+    COMPLETED: 'bg-emerald-500',
+    CANCELLED: 'bg-slate-400',
+  }[job.status] ?? 'bg-slate-400';
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${title}, ${status.label}, ${mode}${date ? `, ${formatDate(date)}` : ''}`}
+      onPress={() => openBooking(job)}
+      className={`mb-2.5 min-h-[74px] flex-row items-center rounded-3xl border border-ink/5 bg-white px-4 py-3 active:opacity-75 ${past ? '' : 'shadow-sm'}`}
+    >
+      <View className="w-12 items-center">
+        <Text className={`text-2xl font-display font-black leading-7 ${dateTone}`}>{date ? bookingDay.format(date) : '—'}</Text>
+        {date && <Text className={`font-sans-bold text-[10px] uppercase tracking-widest ${dateTone}`}>{bookingMonth.format(date)}</Text>}
+      </View>
+      <View className="ml-2 min-w-0 flex-1 border-l border-ink/10 pl-3">
+        <Text numberOfLines={2} className={`font-display text-base font-black ${past ? 'text-ink/65' : 'text-ink'}`}>{title}</Text>
+        <View className="mt-1 flex-row items-center gap-1.5">
+          <View className={`h-1.5 w-1.5 rounded-full ${dotTone}`} />
+          <Text className={`min-w-0 flex-1 font-sans text-xs ${status.tone}`}>{status.label} · {mode}</Text>
+        </View>
+      </View>
+      <ArrowRight size={17} color={past ? '#9893AA' : '#3906D2'} />
+    </Pressable>
+  );
+}
+
+function CustomerBookings({ jobs }: { jobs: Job[] }) {
+  const active = jobs.filter(job => !pastStatuses.has(job.status));
+  const past = jobs.filter(job => pastStatuses.has(job.status));
+  const waiting = active.filter(job => job.status === 'PENDING' && job.bookingMode !== 'INSTANT').length;
+  const activeCount = active.length - waiting;
+  const cancelled = past.filter(job => job.status === 'CANCELLED').length;
+  const completed = past.length - cancelled;
+  const counts = [
+    { count: waiting, label: 'waiting for offers', tone: 'text-amber-800' },
+    { count: activeCount, label: 'active', tone: 'text-accent' },
+    { count: completed, label: 'completed', tone: 'text-emerald-700' },
+    { count: cancelled, label: 'cancelled', tone: 'text-ink/55' },
+  ].filter(item => item.count > 0);
+  const sections = [{ title: 'Active', data: active }, { title: 'Past', data: past }]
+    .filter(section => section.data.length > 0);
+
+  return (
+    <SectionList
+      sections={sections}
+      keyExtractor={job => job.id}
+      stickySectionHeadersEnabled={false}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}
+      ListHeaderComponent={counts.length ? (
+        <Text className="mb-7 px-1 font-sans text-sm text-ink/55">
+          {counts.map(({ count, label, tone }, index) => (
+            <Text key={label}>
+              {index > 0 ? ' · ' : ''}<Text className={`font-sans-bold ${tone}`}>{count} {label}</Text>
+            </Text>
+          ))}
+        </Text>
+      ) : null}
+      renderSectionHeader={({ section }) => (
+        <Text accessibilityRole="header" className="mb-3 px-1 font-sans-bold text-sm text-ink/65">{section.title}</Text>
+      )}
+      renderSectionFooter={() => <View className="h-4" />}
+      renderItem={({ item }) => <CustomerBookingCard job={item} />}
+      ListEmptyComponent={(
+        <View className="items-center px-8 py-16">
+          <CalendarDays size={36} color="#3906D2" />
+          <Text className="mt-4 font-display text-xl font-black text-ink">No bookings yet</Text>
+          <Text className="mt-2 text-center font-sans text-sm text-ink/50">Your requests and completed services will show here.</Text>
+        </View>
+      )}
+    />
+  );
+}
 
 function toMillis(value: unknown): number {
   if (value instanceof Date) return value.getTime();
@@ -74,12 +176,8 @@ export default function ActivityScreen() {
   }, [userId, profile?.role, reloadKey]);
 
   const jobs = useMemo(() => {
-    if (profile?.role === 'CLEANER') return [...cleanerJobs].sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
-    const unique = new Map<string, Job>();
-    [...customerJobs, ...cleanerJobs].forEach(job => unique.set(job.id, job));
-    return [...unique.values()].sort((a, b) => {
-      return toMillis(b.createdAt) - toMillis(a.createdAt);
-    });
+    const roleJobs = profile?.role === 'CLEANER' ? cleanerJobs : customerJobs;
+    return [...roleJobs].sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
   }, [customerJobs, cleanerJobs, profile?.role]);
 
   const cleanerActivityHeader = profile?.role === 'CLEANER' ? <View className="gap-3 mb-1">
@@ -89,18 +187,22 @@ export default function ActivityScreen() {
   </View> : null;
 
   return <SafeAreaView className="flex-1 bg-canvas">
-    <View className="px-5 pt-5 pb-4"><Text className="text-2xl font-display font-black text-ink">{profile?.role === 'CLEANER' ? 'Work & earnings' : 'Your bookings'}</Text><Text className="mt-1 font-sans text-sm text-ink/50">{profile?.role === 'CLEANER' ? 'Track completed jobs, commission and amounts due.' : 'Pending, active and completed services in one place.'}</Text></View>
+    <View className="px-6 pb-3 pt-5">
+      <Text accessibilityRole="header" className="font-display text-[32px] font-black text-ink">
+        {profile?.role === 'CLEANER' ? 'Work & earnings' : 'Your bookings'}
+      </Text>
+      {profile?.role === 'CLEANER' && <Text className="mt-1 font-sans text-sm text-ink/50">Track completed jobs, commission and amounts due.</Text>}
+    </View>
     {loading ? <LoadingList />
       : loadError ? <View className="flex-1 items-center justify-center px-8"><Text className="text-center font-sans text-ink/60 mb-5">{loadError}</Text><Pressable accessibilityRole="button" onPress={() => { setCustomerJobs([]); setCleanerJobs([]); setLoading(true); setLoadError(''); setReloadKey(key => key + 1); }} className="flex-row items-center gap-2 rounded-2xl bg-accent px-5 py-4"><RefreshCw size={17} color="white"/><Text className="font-display font-bold text-white">Retry</Text></Pressable></View>
-      : jobs.length === 0 && profile?.role !== 'CLEANER' ? <View className="flex-1 items-center justify-center px-8"><CalendarDays size={36} color="#3906d2"/><Text className="mt-4 text-xl font-display font-black text-ink">No bookings yet</Text><Text className="mt-2 text-center font-sans text-sm text-ink/50">Your requests and completed services will show here.</Text></View>
+      : profile?.role !== 'CLEANER' ? <CustomerBookings jobs={jobs} />
       : <FlatList data={jobs} keyExtractor={job => job.id} contentContainerClassName="px-5 pb-8 gap-3" ListHeaderComponent={cleanerActivityHeader} ListEmptyComponent={profile?.role === 'CLEANER' ? <Text className="py-5 text-center font-sans text-sm text-ink/50">No jobs in your activity yet.</Text> : null} renderItem={({ item: job }) => {
         const status = STATUS[job.status] ?? { label: job.status.replaceAll('_', ' '), tone: 'text-slate-600' };
-        const isScheduledRequest = job.status === 'PENDING' && job.bookingMode !== 'INSTANT';
         const when = job.scheduledDateTime ? formatDate(job.scheduledDateTime, 'Schedule pending') : formatDate(job.createdAt, 'Date unavailable');
         const gross = Number(job.earnings?.gross ?? job.price ?? 0);
         const commission = Number(job.earnings?.commission ?? 0);
         const net = Number(job.earnings?.net ?? Math.max(0, gross - commission));
-        return <Pressable accessibilityRole="button" accessibilityLabel={`${job.category === 'CAR' ? 'Vehicle' : 'Home'} cleaning, ${status.label}, open booking`} onPress={() => router.push(isScheduledRequest ? { pathname: '/booking/offers', params: { jobId: job.id } } : { pathname: '/tracking/[jobId]', params: { jobId: job.id } })} className="rounded-3xl border border-ink/5 bg-white p-4 shadow-sm">
+        return <Pressable accessibilityRole="button" accessibilityLabel={`${job.category === 'CAR' ? 'Vehicle' : 'Home'} cleaning, ${status.label}, open booking`} onPress={() => openBooking(job)} className="rounded-3xl border border-ink/5 bg-white p-4 shadow-sm">
           <View className="flex-row items-start justify-between gap-3"><View className="flex-1"><Text className="font-display text-lg font-black text-ink">{job.serviceType || `${job.category === 'CAR' ? 'Vehicle' : 'Home'} cleaning`}</Text><Text className={`mt-1 font-sans text-sm font-bold ${status.tone}`}>{status.label}</Text></View><ArrowRight size={19} color="#3906d2"/></View>
           <View className="mt-4 flex-row items-center gap-2"><Clock3 size={15} color="#77718b"/><Text className="font-sans text-xs text-ink/55">{when}</Text><Text className="font-sans text-xs text-ink/30">·</Text><Text className="font-sans text-xs text-ink/55">{job.bookingMode === 'INSTANT' ? 'Instant request' : 'Scheduled'}</Text></View>
           {profile?.role === 'CLEANER' && job.status === 'COMPLETED' && gross > 0 && <View className="mt-3 rounded-2xl bg-violet-50 p-3"><View className="flex-row justify-between"><Text className="font-sans text-xs text-violet-900">Job amount</Text><Text className="font-sans-bold text-xs text-violet-950">${gross.toFixed(2)}</Text></View><View className="mt-1 flex-row justify-between"><Text className="font-sans text-xs text-violet-900">Detail commission</Text><Text className="font-sans-bold text-xs text-violet-950">-${commission.toFixed(2)}</Text></View><View className="mt-1 flex-row justify-between border-t border-violet-200 pt-1"><Text className="font-sans-bold text-xs text-violet-900">After commission</Text><Text className="font-sans-bold text-xs text-violet-950">${net.toFixed(2)}</Text></View><Text className="mt-2 font-sans text-[10px] leading-4 text-violet-700">This is the recorded job amount after Detail’s fee. Direct customer payments are settled outside Detail.</Text></View>}
