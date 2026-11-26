@@ -1,5 +1,6 @@
 import { appAlert } from '@/components/AppDialog';
 import { goBackSafely } from '@/utils/navigation';
+import { ProfileAvatar } from '../components/ProfileAvatar';
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -73,13 +74,7 @@ export default function FavoritesScreen() {
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
             <View className="bg-white rounded-3xl p-4 flex-row items-center gap-4 border border-ink/5">
-              <View className="w-14 h-14 rounded-2xl bg-accent/10 items-center justify-center overflow-hidden">
-                {item.cleanerPhoto ? (
-                  <Image source={{ uri: item.cleanerPhoto }} style={{ width: 56, height: 56 }} />
-                ) : (
-                  <Brush size={24} color="#3906D2" />
-                )}
-              </View>
+              <ProfileAvatar userId={item.cleanerId} photo={item.cleanerPhoto} name={item.cleanerName} size={56} radius={16} />
               <View className="flex-1">
                 <Text className="text-sm font-display font-black text-ink">{item.cleanerName ?? 'Cleaner'}</Text>
                 <View className="flex-row items-center gap-1 mt-1">

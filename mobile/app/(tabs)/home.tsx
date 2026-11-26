@@ -1,5 +1,6 @@
 import { showPermissionDenied } from '@/utils/permissionPrompt';
 import { appAlert } from '@/components/AppDialog';
+import { ProfileAvatar } from '../../components/ProfileAvatar';
 // Home tab — Uber-style live map with a floating glass control panel.
 // Customer mode: map + "Request Cleaning" sheet + service shortcuts + favorites.
 // Cleaner mode: map + online/offline sheet + live incoming job requests.
@@ -675,12 +676,8 @@ function CustomerPanel({ favorites, recentJobs, onCreateBooking }: {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
             {favorites.map((f) => (
               <View key={f.id} className="items-center w-20">
-                <View className="w-16 h-16 rounded-full bg-accent/10 items-center justify-center mb-1.5 border-2 border-white overflow-hidden">
-                  {f.cleanerPhoto ? (
-                    <Image source={{ uri: f.cleanerPhoto }} style={{ width: 64, height: 64 }} />
-                  ) : (
-                    <Heart size={20} color="#3906D2" />
-                  )}
+                <View className="mb-1.5 rounded-full border-2 border-white">
+                  <ProfileAvatar userId={f.cleanerId} photo={f.cleanerPhoto} name={f.cleanerName} size={64} radius={32} />
                 </View>
                 <Text className="font-sans text-[10px] font-bold text-ink text-center" numberOfLines={1}>
                   {f.cleanerName ?? 'Cleaner'}

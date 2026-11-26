@@ -1,5 +1,6 @@
 import { showPermissionDenied } from '@/utils/permissionPrompt';
 import { RemoteImage, prefetchPhotos } from '../../components/RemoteImage';
+import { ProfileAvatar } from '../../components/ProfileAvatar';
 import { appAlert } from '@/components/AppDialog';
 import React, { useEffect, useState, useRef } from 'react';
 import { Audio } from 'expo-av';
@@ -44,24 +45,6 @@ const MESSAGE_RETENTION_MS = 24 * 60 * 60 * 1000;
 const MAX_VOICE_NOTE_MS = 60_000;
 const messageTime = (value: any) => value?.toDate?.().getTime?.() ?? new Date(value).getTime();
 
-function ChatAvatar({ userId, photo, name, size }: { userId?: string; photo?: string; name?: string; size: number }) {
-  const [uri, setUri] = useState<string | null>(null);
-  useEffect(() => {
-    let active = true;
-    setUri(null);
-    const source = photo || (userId ? `detail-media/profile-photos/${userId}/avatar.jpg` : '');
-    if (!source) return;
-    void signMediaValue(source).then(url => { if (active && typeof url === 'string') setUri(url); }).catch(() => {});
-    return () => { active = false; };
-  }, [userId, photo]);
-  const initial = (name || '?').trim().charAt(0).toUpperCase();
-  return (
-    <View style={{ width: size, height: size, borderRadius: size / 3, overflow: 'hidden' }} className="bg-accent/10 items-center justify-center">
-      {uri ? <RemoteImage uri={uri} style={{ width: size, height: size }} accessibilityLabel={`${name || 'User'} profile picture`} />
-        : <Text className="font-display font-black text-accent">{initial}</Text>}
-    </View>
-  );
-}
 
 interface Conversation {
   jobId: string;
@@ -77,6 +60,34 @@ interface Conversation {
 }
 
 const ACTIVE_BOOKING_STATUSES = ['ASSIGNED', 'EN_ROUTE', 'IN_PROGRESS'];
+
+/**
+ * One chat per person, and finished chats vanish 24 hours after their last activity.
+ * - A booking that is still active always keeps its chat.
+ * - A completed or cancelled booking's chat disappears once its last message (or completion,
+ *   if nobody wrote) is more than 24 hours old.
+ * - When the same person appears on several bookings, only one chat is shown: the active
+ *   booking if there is one, otherwise the most recent. Unread counts are added together.
+ */
+function visibleConversations(convos: Conversation[], jobs: any[], now = Date.now()): Conversation[] {
+  const jobById = new Map(jobs.map(job => [job.id, job]));
+  const lastActivity = (convo: Conversation) => {
+    const job = jobById.get(convo.jobId) ?? {};
+    return Math.max(messageTime(convo.lastMessageAt) || 0, messageTime(job.completionSubmittedAt) || 0, messageTime(job.createdAt) || 0);
+  };
+  const isActive = (convo: Conversation) => !['COMPLETED', 'CANCELLED', 'CANCELED'].includes(convo.jobStatus);
+  const recent = convos.filter(convo => isActive(convo) || lastActivity(convo) >= now - MESSAGE_RETENTION_MS);
+  const byPerson = new Map<string, Conversation>();
+  for (const convo of recent) {
+    const key = convo.otherUserId || convo.jobId;
+    const current = byPerson.get(key);
+    if (!current) { byPerson.set(key, convo); continue; }
+    const preferNew = isActive(convo) !== isActive(current) ? isActive(convo) : lastActivity(convo) > lastActivity(current);
+    const merged = preferNew ? convo : current;
+    byPerson.set(key, { ...merged, unreadCount: (current.unreadCount || 0) + (convo.unreadCount || 0) });
+  }
+  return [...byPerson.values()];
+}
 
 /** "15:14" today, "Yesterday", weekday this week, otherwise a short date. */
 function conversationTime(value: any, now: number) {
@@ -275,7 +286,7 @@ export default function MessagesScreen() {
             jobStatus: String(job.status ?? '').toUpperCase(),
             serviceType: job.serviceType || (job.category === 'CAR' ? 'Car cleaning' : 'Home cleaning'),
           }));
-        setConversations(convos);
+        setConversations(visibleConversations(convos, jobs));
         setIsLoading(false);
         setConversationError('');
       },
@@ -560,7 +571,7 @@ export default function MessagesScreen() {
             >
               <ArrowLeft size={22} color="#0f172a" />
             </TouchableOpacity>
-            <ChatAvatar userId={convo?.otherUserId} photo={convo?.otherUserPhoto} name={convo?.otherUserName} size={40} />
+            <ProfileAvatar userId={convo?.otherUserId} photo={convo?.otherUserPhoto} name={convo?.otherUserName} size={40} />
             <View className="flex-1">
               <Text className="text-base font-display font-black text-slate-900">
                 {convo?.otherUserName ?? 'Chat'}
@@ -802,7 +813,7 @@ export default function MessagesScreen() {
                 activeOpacity={0.8}
               >
                 <View>
-                  <ChatAvatar userId={item.otherUserId} photo={item.otherUserPhoto} name={item.otherUserName} size={64} />
+                  <ProfileAvatar userId={item.otherUserId} photo={item.otherUserPhoto} name={item.otherUserName} size={64} />
                   {activeBooking && <View accessibilityLabel="Active booking" className="absolute -bottom-0.5 -right-0.5 h-5 w-5 rounded-full border-[3px] border-white bg-emerald-600" />}
                 </View>
                 <View className="flex-1">
