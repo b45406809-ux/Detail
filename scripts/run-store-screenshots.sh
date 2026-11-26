@@ -48,7 +48,7 @@ run_flow() {
   maestro "${device_args[@]}" test \
     --env CUSTOMER_EMAIL="$CUSTOMER_EMAIL" --env CUSTOMER_PASSWORD="$CUSTOMER_PASSWORD" \
     --env CLEANER_EMAIL="$CLEANER_EMAIL" --env CLEANER_PASSWORD="$CLEANER_PASSWORD" \
-    --env SHOTS="$shots" \
+    --env SHOTS=store \
     --test-output-dir "$report/$1" \
     ".maestro/store/$1.yaml"
 }
@@ -67,6 +67,10 @@ for flow in 01-customer-books 02-cleaner-quotes 03-customer-accepts; do
   echo "::endgroup::"
 done
 
+# Maestro writes takeScreenshot files inside its own output folder (or the working directory);
+# collect the named store shots (NN-name.png), skipping its per-step debug captures.
+find "$report" . -path ./node_modules -prune -o -type f -name '[0-9][0-9]-*.png' -not -path '*/screenshots/step-*' -print 2>/dev/null \
+  | while read -r f; do cp -f "$f" "$shots/"; done
 count=$(find "$shots" -name '*.png' | wc -l | tr -d ' ')
 {
   echo "## $platform: review-account journey $([[ $status == 0 ]] && echo passed || echo FAILED)"
