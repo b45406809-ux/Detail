@@ -70,7 +70,8 @@ function resolveScheduledDate(
   return now; // ASAP / TODAY
 }
 
-const STEPS = ['CATEGORY', 'CHECKLIST', 'DETAILS', 'LOCATION', 'SCHEDULE', 'BUDGET'] as const;
+// No timing step: every booking is ASAP. Separate date/time choices caused confusion in chat about when the job is.
+const STEPS = ['CATEGORY', 'CHECKLIST', 'DETAILS', 'LOCATION', 'BUDGET'] as const;
 type Step = (typeof STEPS)[number];
 
 function toggleItem(list: string[], item: string) {
@@ -333,8 +334,6 @@ export default function CreateBookingScreen() {
         return true;
       case 'LOCATION':
         return category==='CAR'&&carServiceMode==='VISIT_WASH' ? !!selectedWashSiteId : !!address || !!coordinates;
-      case 'SCHEDULE':
-        return bookingMode==='INSTANT' || (!!timePreference && (timePreference !== 'CUSTOM' || (!!customDateTime && customDateTime.getTime() >= Date.now() + MIN_CUSTOM_BOOKING_LEAD_MS && customDateTime.getTime() <= Date.now() + MAX_CUSTOM_BOOKING_HORIZON_MS)));
       case 'BUDGET':
         return bookingMode==='INSTANT' || budgetOption === 'NOT_SURE' || (!!budget && Number(budget) > 0);
       default:
@@ -715,107 +714,6 @@ export default function CreateBookingScreen() {
                   {isFetchingLocation ? 'Detecting location…' : 'Use my current location'}
                 </Text>
               </TouchableOpacity>
-              </>}
-            </View>
-          )}
-
-          {step === 'SCHEDULE' && (
-            <View>
-              <Text className="text-2xl font-display font-black text-ink mb-1">{bookingMode==='INSTANT'?'Book now':'When do you need it?'}</Text>
-              {bookingMode==='INSTANT'?<Text className="font-sans text-sm text-ink/50 font-medium mb-6">We will notify eligible online cleaners near your address. Your exact address stays private until a cleaner accepts.</Text>:<>
-              <Text className="font-sans text-sm text-ink/50 font-medium mb-6">Pick a time that works for you</Text>
-              <View className="gap-3">
-        {Catalog.TIME_OPTIONS.map(({ id, label, sub }) => (
-                  <TouchableOpacity
-                    key={id}
-                    onPress={() => {
-                      setTimePreference(id);
-                      // Android's picker is a modal dialog (one field at a time,
-                      // auto-advance date -> time on confirm). iOS renders both
-                      // compact pickers inline below instead — see the block
-                      // after this list.
-                      if (id === 'CUSTOM' && Platform.OS === 'android') setPickerMode('date');
-                    }}
-                    activeOpacity={0.8}
-                    className={`flex-row items-center gap-4 p-4 rounded-3xl border-2 ${
-                      timePreference === id ? 'border-accent bg-accent/5' : 'border-ink/10 bg-ink/[0.02]'
-                    }`}
-                  >
-                    <View className={`w-10 h-10 rounded-2xl items-center justify-center ${timePreference === id ? 'bg-accent' : 'bg-white border border-ink/10'}`}>
-                      <Clock size={18} color={timePreference === id ? '#fff' : '#9C94C4'} />
-                    </View>
-                    <View className="flex-1">
-                      <Text className={`text-sm font-black ${timePreference === id ? 'text-accent' : 'text-ink'}`}>{label}</Text>
-                      <Text className="font-sans text-xs text-ink/50 font-medium mt-0.5">
-                        {id === 'CUSTOM' && customDateTime
-                          ? customDateTime.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
-                          : sub}
-                      </Text>
-                    </View>
-                    {id === 'CUSTOM' && timePreference === 'CUSTOM' && Platform.OS === 'android' && (
-                      <TouchableOpacity onPress={() => setPickerMode('date')} className="p-2">
-                        <CalendarDays size={18} color="#3906D2" />
-                      </TouchableOpacity>
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Android: modal dialog, one field at a time, auto-advances date -> time. */}
-              {Platform.OS === 'android' && pickerMode && (
-                <DateTimePicker
-                  value={customDateTime ?? new Date()}
-                  mode={pickerMode}
-                  minimumDate={new Date(Date.now() + MIN_CUSTOM_BOOKING_LEAD_MS)}
-                  maximumDate={new Date(Date.now() + MAX_CUSTOM_BOOKING_HORIZON_MS)}
-                  onChange={(event, selected) => {
-                    setPickerMode(null);
-                    if (event.type === 'dismissed' || !selected) return;
-                    if (pickerMode === 'date') {
-                      const base = customDateTime ?? new Date();
-                      const merged = new Date(selected);
-                      merged.setHours(base.getHours(), base.getMinutes());
-                      setCustomDateTime(merged);
-                      setPickerMode('time');
-                    } else {
-                      const merged = new Date(customDateTime ?? selected);
-                      merged.setHours(selected.getHours(), selected.getMinutes());
-                      setCustomDateTime(merged);
-                    }
-                  }}
-                />
-              )}
-
-              {/* iOS: two compact inline pickers (tap to open a sheet), no modal juggling. */}
-              {Platform.OS === 'ios' && timePreference === 'CUSTOM' && (
-                <View className="flex-row gap-3 mt-3">
-                  <DateTimePicker
-                    value={customDateTime ?? new Date()}
-                    mode="date"
-                    display="compact"
-                    minimumDate={new Date(Date.now() + MIN_CUSTOM_BOOKING_LEAD_MS)}
-                    maximumDate={new Date(Date.now() + MAX_CUSTOM_BOOKING_HORIZON_MS)}
-                    onChange={(_, selected) => {
-                      if (!selected) return;
-                      const base = customDateTime ?? new Date();
-                      const merged = new Date(selected);
-                      merged.setHours(base.getHours(), base.getMinutes());
-                      setCustomDateTime(merged);
-                    }}
-                  />
-                  <DateTimePicker
-                    value={customDateTime ?? new Date()}
-                    mode="time"
-                    display="compact"
-                    onChange={(_, selected) => {
-                      if (!selected) return;
-                      const merged = new Date(customDateTime ?? selected);
-                      merged.setHours(selected.getHours(), selected.getMinutes());
-                      setCustomDateTime(merged);
-                    }}
-                  />
-                </View>
-              )}
               </>}
             </View>
           )}
