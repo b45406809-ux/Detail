@@ -20,7 +20,7 @@ To test a booking:
 2. Sign in as the cleaner account on a second device (or sign out and back in), switch to Cleaner, tap Go Online, open the booking under Nearby jobs and send a quote.
 3. Back on the customer account, open Bids Received and accept the quote. Chat and live tracking then open for both accounts.
 
-A user cannot accept a quote on their own booking, which is why two accounts are provided.
+Either account can complete the whole flow on its own: create a booking as Customer, switch to Cleaner and send a quote, then switch back to Customer and accept it. The second account is provided in case you prefer testing on two devices.
 
 Location: precise location is used to place the booking pin and to match nearby cleaners. Background location is used only while a cleaner has chosen to be online or is on an active booking, and the cleaner can go offline at any time.
 

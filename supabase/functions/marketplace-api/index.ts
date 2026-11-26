@@ -962,7 +962,8 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       }
       const {data:operations}=await admin.from('configuration').select('value').eq('key','operations').maybeSingle();
       if(operations?.value?.switches?.maintenance===true||operations?.value?.switches?.bidAcceptance===true)fail(503,'Cleaner bidding is temporarily paused.');
-      if (job.customerid===actor) fail(409,'You cannot quote on your own booking.');
+      // Real accounts cannot quote on their own booking; a review (sandbox) account may, so one reviewer can test both sides.
+      if (job.customerid===actor && profile.isreviewaccount!==true) fail(409,'You cannot quote on your own booking.');
       if (job.status!=='PENDING' || job.bookingmode==='INSTANT' || (job.biddingexpiresat && new Date(job.biddingexpiresat).getTime()<Date.now())) fail(409,'This booking is not accepting cleaner bids.');
       const { data, error } = await admin.rpc('submit_bid_secure',{p_job_id:jobId,p_cleaner_id:actor,p_bid_price:bidPrice,p_estimated_arrival:eta,p_message:text(input.message,500)});
       if(error?.message?.includes('active quote'))fail(409,'You already have an active quote for this booking.');
@@ -1340,7 +1341,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       let ids:string[];
       if(profile.isreviewaccount===true){
         // Review cleaners see the other review account's open bookings from anywhere, and nothing else.
-        const {data:reviewJobs,error:reviewError}=await admin.from('jobs').select('id').eq('status','PENDING').in('customerid',[...reviewIds].filter(id=>id!==actor)).order('createdat',{ascending:false}).limit(20);
+        const {data:reviewJobs,error:reviewError}=await admin.from('jobs').select('id').eq('status','PENDING').in('customerid',[...reviewIds]).order('createdat',{ascending:false}).limit(20);
         if(reviewError)throw reviewError;
         ids=(reviewJobs??[]).map((row:Json)=>String(row.id));
       }else{
