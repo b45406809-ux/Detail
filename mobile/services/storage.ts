@@ -1,5 +1,27 @@
 import { supabase, auth } from './supabase';
 import { callFunction } from './functions';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
+
+/** Longest side of an uploaded photo. Phone cameras take 4000px+ images of several MB; 1600px is sharp on any phone screen. */
+const MAX_PHOTO_EDGE = 1600;
+
+/** Shrink and re-encode a photo to a ~200-400 KB JPEG before upload so it uploads and loads quickly on mobile data. */
+async function shrinkPhoto(uri: string): Promise<string> {
+  try {
+    const context = ImageManipulator.manipulate(uri);
+    const original = await context.renderAsync();
+    let image = original;
+    if (Math.max(original.width, original.height) > MAX_PHOTO_EDGE) {
+      context.resize(original.width >= original.height ? { width: MAX_PHOTO_EDGE } : { height: MAX_PHOTO_EDGE });
+      image = await context.renderAsync();
+    }
+    const saved = await image.saveAsync({ compress: 0.7, format: SaveFormat.JPEG });
+    return saved.uri;
+  } catch {
+    return uri; // Fall back to the original file rather than blocking the upload.
+  }
+}
 
 const BUCKET = 'detail-media';
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
@@ -7,6 +29,29 @@ const SIGNED_URL_TTL_MS = 55 * 60 * 1000;
 const SIGNED_URL_CACHE_LIMIT = 2000;
 const signedUrlCache = new Map<string, { url: string; expiresAt: number }>();
 const signedUrlRequests = new Map<string, Promise<string>>();
+const SIGNED_URL_STORE_KEY = 'detail.signedMediaUrls.v1';
+let signedUrlCacheLoaded = false;
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+/** Reuse photo links from the last launch (they stay valid for up to an hour), so photos show without a server round trip. */
+async function loadSignedUrlCache() {
+  if (signedUrlCacheLoaded) return;
+  signedUrlCacheLoaded = true;
+  try {
+    const raw = await AsyncStorage.getItem(SIGNED_URL_STORE_KEY);
+    const entries = raw ? JSON.parse(raw) as [string, { url: string; expiresAt: number }][] : [];
+    const now = Date.now();
+    for (const [key, value] of entries) if (value?.expiresAt > now && !signedUrlCache.has(key)) signedUrlCache.set(key, value);
+  } catch { /* the cache is only an optimisation */ }
+}
+function persistSignedUrlCache() {
+  if (persistTimer) return;
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    const now = Date.now();
+    const entries = [...signedUrlCache.entries()].filter(([, value]) => value.expiresAt > now + 60_000).slice(-300);
+    void AsyncStorage.setItem(SIGNED_URL_STORE_KEY, JSON.stringify(entries)).catch(() => undefined);
+  }, 1500);
+}
 function filename() { return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
 function mimeTypeFromUri(uri: string) {
   const extension = uri.split(/[?#]/, 1)[0].split('.').pop()?.toLowerCase();
@@ -16,6 +61,7 @@ function mimeTypeFromUri(uri: string) {
 async function uploadUri(uri: string, path: string, onProgress?: (pct: number) => void, upsert = false) {
   const isVoiceNote = path.startsWith('chat-audio/');
   if (!auth.currentUser) throw new Error(isVoiceNote ? 'Sign in before sending a voice note.' : 'Sign in before uploading a photo.');
+  if (!isVoiceNote) uri = await shrinkPhoto(uri);
   const response = await fetch(uri);
   if (!response.ok) throw new Error(isVoiceNote ? 'Could not read the voice note. Please record it again.' : 'Could not read the selected photo. Please choose it again.');
   const bytes = await response.arrayBuffer();
@@ -84,6 +130,7 @@ export function uploadProofOfResidence(uri: string) {
 export async function signMediaValue(value: unknown, context: { jobId?: string } = {}): Promise<unknown> {
   if (typeof value === 'string' && value.startsWith(`${BUCKET}/`)) {
     const path = value.slice(BUCKET.length + 1);
+    await loadSignedUrlCache();
     const cacheKey = `${auth.currentUser?.uid ?? 'anonymous'}:${path}`;
     const now = Date.now();
     const cached = signedUrlCache.get(cacheKey);
@@ -98,7 +145,7 @@ export async function signMediaValue(value: unknown, context: { jobId?: string }
     const request = callFunction<{path:string;jobId?:string},{url:string;expiresIn?:number}>('mediaReadUrl',{path:`${BUCKET}/${path}`, ...(context.jobId ? { jobId: context.jobId } : {})}).then(({url,expiresIn}) => {
       const providerTtlMs=Number.isFinite(Number(expiresIn))?Math.max(0,(Number(expiresIn)-5)*1000):SIGNED_URL_TTL_MS;
       const cacheTtlMs=Math.min(SIGNED_URL_TTL_MS,providerTtlMs);
-      if(cacheTtlMs>0)signedUrlCache.set(cacheKey, { url, expiresAt: Date.now() + cacheTtlMs });
+      if(cacheTtlMs>0){signedUrlCache.set(cacheKey, { url, expiresAt: Date.now() + cacheTtlMs });persistSignedUrlCache();}
       while (signedUrlCache.size > SIGNED_URL_CACHE_LIMIT) {
         const oldest = signedUrlCache.keys().next().value;
         if (oldest === undefined) break;

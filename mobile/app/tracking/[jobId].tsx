@@ -682,9 +682,12 @@ export default function TrackingScreen() {
 
         <View className="flex-row items-center gap-4 bg-white/60 rounded-3xl p-4 mb-4 border border-white">
           <View className="relative">
-            <View className="w-14 h-14 bg-accent/10 rounded-[22px] items-center justify-center">
-              <Brush size={24} color="#3906D2" />
-            </View>
+            {(() => {
+              const otherPhoto = isCustomer ? job.cleanerPhoto : job.customerPhoto;
+              return typeof otherPhoto === 'string' && /^https?:/i.test(otherPhoto)
+                ? <RemoteImage uri={otherPhoto} style={{ width: 56, height: 56, borderRadius: 22, overflow: 'hidden' }} accessibilityLabel="Profile photo" />
+                : <View className="w-14 h-14 bg-accent/10 rounded-[22px] items-center justify-center"><Brush size={24} color="#3906D2" /></View>;
+            })()}
             <View className="absolute -bottom-1.5 -right-1.5 w-7 h-7 bg-accent rounded-lg items-center justify-center border-2 border-white">
               <ShieldCheck size={12} color="#fff" />
             </View>
