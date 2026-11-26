@@ -1,0 +1,34 @@
+name: Review account API test
+
+# Non-UI check of the App Review sandbox against the live API: both review accounts
+# sign in, book, quote and accept (with two accounts and with one account). The
+# sandbox is reset before and after, so no bookings are left open.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  api-test:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    env:
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.SUPABASE_SERVICE_ROLE || secrets.SUPABASE_SECRET_KEY }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_PUBLIC_ANON || secrets.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_ANON_KEY || secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+      CUSTOMER_PASSWORD: ${{ secrets.REVIEW_CUSTOMER_PASSWORD }}
+      CLEANER_PASSWORD: ${{ secrets.REVIEW_CLEANER_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Reset the review sandbox
+        run: node scripts/reset-review-sandbox.mjs
+      - name: Sign in, book, quote and accept through the API
+        run: node scripts/review-account-api-test.mjs
+      - name: Reset the review sandbox again
+        if: always()
+        run: node scripts/reset-review-sandbox.mjs
