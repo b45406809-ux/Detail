@@ -13,7 +13,7 @@ Two demo accounts are provided so the full booking flow can be tested:
 - Customer: appreview@detailapp.co.zw
 - Cleaner: appreview.cleaner@detailapp.co.zw
 
-Both accounts can switch between Customer and Cleaner with the toggle on the home screen. Identity verification (Didit) and the cleaner registration fee are already completed for both accounts, so no ID document is needed.
+Both accounts can switch between Customer and Cleaner with the toggle on the home screen. The two accounts are a private test pair: bookings from one reach only the other, from any country, and they never interact with real customers or cleaners. The cleaner account has prepaid test credit, so no payment is needed. Identity verification (Didit) and the cleaner registration fee are already completed for both accounts, so no ID document is needed.
 
 To test a booking:
 1. Sign in as the customer account and create a booking (any Harare address, e.g. Solomon Mujuru Drive).
@@ -31,5 +31,5 @@ Account deletion: Profile > Delete account.
 ## Owner checklist before submitting
 
 - [ ] Make sure appreview@detailapp.co.zw and appreview.cleaner@detailapp.co.zw are real mailboxes someone reads (or forward them).
-- [ ] Optional but recommended: record a 1-2 minute screen video of the booking flow and add the link to the notes, in case reviewers outside Zimbabwe see no nearby jobs.
+- [ ] Optional: record a 1-2 minute screen video of the booking flow and add the link to the notes.
 - [ ] Re-run `create-review-demo-account` if a reviewer reports a login problem; it repairs both accounts and resets the passwords.

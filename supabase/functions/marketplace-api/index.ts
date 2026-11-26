@@ -143,6 +143,13 @@ async function getUser(request: Request): Promise<User> {
   if (error || !data.user) throw new ApiError(401, 'Sign in required.');
   return data.user;
 }
+/** App Review accounts form a closed pair: they only ever match each other, never real users. */
+async function reviewAccountIds(): Promise<Set<string>> {
+  const {data,error}=await admin.from('users').select('id').eq('isreviewaccount',true).limit(20);
+  if(error)throw error;
+  return new Set((data??[]).map((row:Json)=>String(row.id)));
+}
+
 async function userRow(uid: string) {
   const { data, error } = await admin.from('users').select('*').eq('id', uid).maybeSingle();
   if (error) throw error;
@@ -799,8 +806,10 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if (bookingMode === 'INSTANT') {
         const { data: candidates, error: matchError } = await admin.rpc('search_instant_cleaners', { p_job_id: jobId, p_actor_id: actor, p_limit: 20 });
         if (matchError) throw matchError;
-        const cleanerIds = (candidates ?? []).map((candidate: Json) => candidate.cleaner_id);
-        const distances = (candidates ?? []).map((candidate: Json) => Number(candidate.distance_meters)||0);
+        const instantReviewIds = await reviewAccountIds(), instantAsReview = instantReviewIds.has(actor);
+        const pairedCandidates = (candidates ?? []).filter((candidate: Json) => instantReviewIds.has(String(candidate.cleaner_id)) === instantAsReview);
+        const cleanerIds = pairedCandidates.map((candidate: Json) => candidate.cleaner_id);
+        const distances = pairedCandidates.map((candidate: Json) => Number(candidate.distance_meters)||0);
         const { error: offerError } = await admin.rpc('create_instant_offers', { p_job_id: jobId, p_actor_id: actor, p_cleaner_ids: cleanerIds, p_distances:distances, p_expires_at: new Date(Date.now()+3*60*1000).toISOString() });
         if (offerError) throw offerError;
         await Promise.all(cleanerIds.map((cleanerId: string) => notify(cleanerId, { type:'INSTANT_BOOKING_OFFER', title:'Nearby cleaning request', body:`A ${booking.serviceType || 'cleaning'} request is available nearby. Open Detail to respond.`, jobId })));
@@ -824,11 +833,13 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const {data:existingBids,error:bidError}=await admin.from('bids').select('id').eq('jobid',jobId).in('status',['PENDING','COUNTERED','ACCEPTED']).limit(1);if(bidError)throw bidError;
       if(existingBids?.length)return {matchedCleaners:0,customerActionRequired:true};
       const {data:candidates,error}=await admin.rpc('search_instant_cleaners',{p_job_id:jobId,p_actor_id:actor,p_limit:20});if(error)throw error;
-      const candidateIds=(candidates??[]).map((candidate:Json)=>candidate.cleaner_id);
+      const refreshReviewIds=await reviewAccountIds(),refreshAsReview=refreshReviewIds.has(actor);
+      const pairedRefresh=(candidates??[]).filter((candidate:Json)=>refreshReviewIds.has(String(candidate.cleaner_id))===refreshAsReview);
+      const candidateIds=pairedRefresh.map((candidate:Json)=>candidate.cleaner_id);
       if(!candidateIds.length)return {matchedCleaners:0,expired:false};
       const {data:activeOffers,error:offerReadError}=await admin.from('instantoffers').select('cleanerid').eq('jobid',jobId).eq('status','OFFERED').gt('expiresat',new Date().toISOString()).in('cleanerid',candidateIds);if(offerReadError)throw offerReadError;
       const alreadyOffered=new Set((activeOffers??[]).map(item=>item.cleanerid));
-      const fresh=(candidates??[]).filter((candidate:Json)=>!alreadyOffered.has(candidate.cleaner_id));
+      const fresh=pairedRefresh.filter((candidate:Json)=>!alreadyOffered.has(candidate.cleaner_id));
       if(fresh.length){
         const matchingExpiry=Date.parse(job.matchexpiresat||'');
         const offerExpiry=Math.min(Date.now()+3*60*1000,Number.isFinite(matchingExpiry)?matchingExpiry:Date.now()+3*60*1000);
@@ -938,6 +949,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if (profileResult.error || jobResult.error) fail(404,'Job or cleaner not found.');
       const profile=profileResult.data, job=jobResult.data;
       if (profile.role!=='CLEANER' || profile.verificationstatus!=='VERIFIED' || !profile.cleaneragreementaccepted || !profile.cleaneronboardingcomplete || profile.issuspended || profile.isbanned || profile.accountdeletedat || Number(profile.balance)<0) fail(403,'Complete cleaner verification and resolve any outstanding commission before bidding.');
+      if ((await reviewAccountIds()).has(String(job.customerid)) !== (profile.isreviewaccount===true)) fail(404,'This booking is no longer available.');
       if (!hasCleanerSelfie(profile, actor)) fail(409,'Take a front-camera selfie for your cleaner profile before bidding. Customers will see this photo.');
       if (!user?.phone_confirmed_at || !user?.phone || String(profile.phone ?? '').replace(/\D/g, '') !== user.phone.replace(/\D/g, '')) fail(409, 'Verify your phone number in cleaner registration before bidding.');
       const commissionReserve = round2(bidPrice * 0.10);
@@ -1271,7 +1283,8 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         ? await admin.from('users').select('id,photourl,cleanerselfieat').in('id',cleanerIds)
         : {data:[],error:null};
       if(profileError)throw profileError;
-      const photoById = new Map((profiles ?? []).filter((profile:Json)=>hasCleanerSelfie(profile,String(profile.id))).map((profile:Json) => [profile.id,profile.photourl]));
+      const mapReviewIds=await reviewAccountIds(),mapAsReview=mapReviewIds.has(actor);
+      const photoById = new Map((profiles ?? []).filter((profile:Json)=>mapReviewIds.has(String(profile.id))===mapAsReview&&hasCleanerSelfie(profile,String(profile.id))).map((profile:Json) => [profile.id,profile.photourl]));
       return {cleaners:await Promise.all(cleaners.filter((cleaner:Json)=>photoById.has(cleaner.id)).map(async (cleaner:Json) => ({
         ...cleaner,
         photo_url:await signedMediaUrl(photoById.get(cleaner.id)),
@@ -1288,7 +1301,8 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(category)query=query.contains('servicecategories',[category]);
       const {data,error}=await query;
       if(error)throw error;
-      const candidates=(data??[]).filter((row:Json)=>hasCleanerSelfie(row,String(row.id))).map((row:Json)=>{const point=row.location??{};const cleanerLat=Number(point.lat??point.latitude),cleanerLng=Number(point.lng??point.longitude);const online=cleanerLocationIsFresh(row.status,row.locationupdatedat);let distanceKm:number|null=null;if(useNearby&&online&&Number.isFinite(cleanerLat)&&Number.isFinite(cleanerLng)){const radians=(n:number)=>n*Math.PI/180;const dLat=radians(cleanerLat-lat),dLng=radians(cleanerLng-lng),a=Math.sin(dLat/2)**2+Math.cos(radians(lat))*Math.cos(radians(cleanerLat))*Math.sin(dLng/2)**2;distanceKm=6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}return {row,distanceKm,online};}).filter((item:any)=>!useNearby||(item.online&&item.distanceKm!==null&&item.distanceKm<=Math.min(radius,Number(item.row.serviceradiuskm)||radius))).sort((a:any,b:any)=>useNearby?(a.distanceKm??99999)-(b.distanceKm??99999):Number(b.row.ratingaverage??0)-Number(a.row.ratingaverage??0)).slice(0,100);
+      const searchReviewIds=await reviewAccountIds(),searchAsReview=searchReviewIds.has(actor);
+      const candidates=(data??[]).filter((row:Json)=>row.id!==actor&&searchReviewIds.has(String(row.id))===searchAsReview&&hasCleanerSelfie(row,String(row.id))).map((row:Json)=>{const point=row.location??{};const cleanerLat=Number(point.lat??point.latitude),cleanerLng=Number(point.lng??point.longitude);const online=cleanerLocationIsFresh(row.status,row.locationupdatedat);let distanceKm:number|null=null;if(useNearby&&online&&Number.isFinite(cleanerLat)&&Number.isFinite(cleanerLng)){const radians=(n:number)=>n*Math.PI/180;const dLat=radians(cleanerLat-lat),dLng=radians(cleanerLng-lng),a=Math.sin(dLat/2)**2+Math.cos(radians(lat))*Math.cos(radians(cleanerLat))*Math.sin(dLng/2)**2;distanceKm=6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}return {row,distanceKm,online};}).filter((item:any)=>!useNearby||(item.online&&item.distanceKm!==null&&item.distanceKm<=Math.min(radius,Number(item.row.serviceradiuskm)||radius))).sort((a:any,b:any)=>useNearby?(a.distanceKm??99999)-(b.distanceKm??99999):Number(b.row.ratingaverage??0)-Number(a.row.ratingaverage??0)).slice(0,100);
       const profiles=await Promise.all(candidates.map(async ({row,distanceKm}:any)=>{
         const {data:portfolio}=await admin.from('cleanerportfolio').select('imagepath,caption').eq('cleanerid',row.id).order('createdat',{ascending:false}).limit(6);
         const photos=await Promise.all((portfolio??[]).map(async (photo:Json)=>{const url=await signedMediaUrl(`detail-media/${photo.imagepath}`);return url?{url,caption:photo.caption}:null;}));
@@ -1322,13 +1336,22 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       await enforceRateLimit(request,actor,'nearby_cleaner_jobs',30,300);
       const lat=input.lat,lng=input.lng;
       if(typeof lat!=='number'||typeof lng!=='number'||!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)fail(400,'A valid location is required.');
-      const {data:nearby,error:nearbyError}=await admin.rpc('nearby_open_job_ids',{p_cleaner_id:actor,p_lat:lat,p_lng:lng});
-      if(nearbyError)throw nearbyError;
-      const ids:string[]=(nearby??[]).map((row:Json)=>row.jobid).filter((id:unknown):id is string=>typeof id==='string');
+      const reviewIds=await reviewAccountIds();
+      let ids:string[];
+      if(profile.isreviewaccount===true){
+        // Review cleaners see the other review account's open bookings from anywhere, and nothing else.
+        const {data:reviewJobs,error:reviewError}=await admin.from('jobs').select('id').eq('status','PENDING').in('customerid',[...reviewIds].filter(id=>id!==actor)).order('createdat',{ascending:false}).limit(20);
+        if(reviewError)throw reviewError;
+        ids=(reviewJobs??[]).map((row:Json)=>String(row.id));
+      }else{
+        const {data:nearby,error:nearbyError}=await admin.rpc('nearby_open_job_ids',{p_cleaner_id:actor,p_lat:lat,p_lng:lng});
+        if(nearbyError)throw nearbyError;
+        ids=(nearby??[]).map((row:Json)=>row.jobid).filter((id:unknown):id is string=>typeof id==='string');
+      }
       if(!ids.length)return {jobs:[]};
-      const {data:jobs,error}=await admin.from('jobs').select('id,category,servicetype,checklist,description,photos,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status,data').in('id',ids).eq('status','PENDING');
+      const {data:jobs,error}=await admin.from('jobs').select('id,customerid,category,servicetype,checklist,description,photos,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status,data').in('id',ids).eq('status','PENDING');
       if(error)throw error;
-      const eligibleJobs=(jobs??[]).filter((job:Json)=>job.data?.serviceMode!=='VISIT_WASH'||job.data?.washSiteCleanerId===actor);
+      const eligibleJobs=(jobs??[]).filter((job:Json)=>(job.data?.serviceMode!=='VISIT_WASH'||job.data?.washSiteCleanerId===actor)&&reviewIds.has(String(job.customerid))===(profile.isreviewaccount===true));
       const byId=new Map<string,Json>(eligibleJobs.map((job:Json):[string,Json]=>[String(job.id),job]));
       return {jobs:await Promise.all(ids.map(id=>byId.get(id)).filter((job):job is Json=>!!job).map(job=>cleanerBookingSummary(job)))};
     }

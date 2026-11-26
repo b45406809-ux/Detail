@@ -108,14 +108,14 @@ if (currentCommission < COMMISSION_FLOOR) {
   credited = Math.round((COMMISSION_FLOOR - currentCommission) * 100) / 100;
   await call('/rest/v1/rpc/record_wallet_transaction', { method: 'POST', body: {
     p_user_id: userId, p_type: 'CREDIT', p_amount: credited, p_balance_type: 'COMMISSION',
-    p_description: 'App Review demo prepaid commission credit', p_idempotency_key: `review-demo-commission-${userId}-${Date.now()}`,
+    p_description: 'App Review test credit (sandbox, not real money)', p_idempotency_key: `review-demo-commission-${userId}-${Date.now()}`,
   } });
 }
 
 // 7. Start in customer mode, offline, no stored location, no commission debt.
 await call(`/rest/v1/users?id=eq.${userId}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: {
   role: 'CUSTOMER', status: 'OFFLINE', location: {}, locationpoint: null, locationupdatedat: null,
-  commissionowed: 0, cleaneragreementaccepted: true, updatedat: new Date().toISOString(),
+  commissionowed: 0, cleaneragreementaccepted: true, isreviewaccount: true, updatedat: new Date().toISOString(),
 } });
 
 // 8. Verify every server check a cleaner hits.
@@ -132,6 +132,7 @@ const checks = {
   'commission prepaid >= 10 and nothing owed': Number(profile.commissionbalance) >= COMMISSION_FLOOR && Number(profile.commissionowed) === 0,
   'not suspended/banned/deleted': !profile.issuspended && !profile.isbanned && !profile.accountdeletedat,
   'role CUSTOMER, status OFFLINE': profile.role === 'CUSTOMER' && profile.status === 'OFFLINE',
+  'review sandbox flag set': profile.isreviewaccount === true,
   'customer agreement recorded': acceptances.some((a) => a.documenttype === 'CUSTOMER' && a.documentversion === CUSTOMER_VERSION) && profile.hasagreedtoterms === true,
   'cleaner agreement recorded': acceptances.some((a) => a.documenttype === 'CLEANER' && a.documentversion === CLEANER_VERSION),
 };
