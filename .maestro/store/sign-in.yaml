@@ -11,10 +11,10 @@ appId: zw.co.detailapp.mobile
     timeout: 30000
 - tapOn:
     id: welcome-skip
-- tapOn:
-    id: auth-email-tab
-- tapOn:
-    id: auth-email-mode-password
+- extendedWaitUntil:
+    visible:
+      id: auth-email-input
+    timeout: 20000
 - tapOn:
     id: auth-email-input
 - inputText: ${EMAIL}
