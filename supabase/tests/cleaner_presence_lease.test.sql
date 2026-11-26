@@ -15,10 +15,10 @@ values
 set local request.jwt.claim.role = 'service_role';
 insert into public.users(id,email,displayName,role,status,verificationStatus,cleanerAgreementAccepted,location,locationPoint,locationUpdatedAt,photoURL,cleanerSelfieAt)
 values
- ('801342e6-d0a3-4473-85d2-e9557cc1a010','presence-stale@detail.invalid','Stale Cleaner','CLEANER','AVAILABLE','VERIFIED',true,'{"lat":-17.8,"lng":31.0}',extensions.st_setsrid(extensions.st_makepoint(31.0,-17.8),4326)::extensions.geography,now()-interval '6 minutes','detail-media/profile-photos/801342e6-d0a3-4473-85d2-e9557cc1a010/avatar.jpg',now()),
- ('801342e6-d0a3-4473-85d2-e9557cc1a011','presence-stale-second@detail.invalid','Second Stale Cleaner','CLEANER','AVAILABLE','VERIFIED',true,'{"lat":-17.8,"lng":31.0}',extensions.st_setsrid(extensions.st_makepoint(31.0,-17.8),4326)::extensions.geography,now()-interval '6 minutes','detail-media/profile-photos/801342e6-d0a3-4473-85d2-e9557cc1a011/avatar.jpg',now()),
- ('801342e6-d0a3-4473-85d2-e9557cc1a012','presence-fresh@detail.invalid','Fresh Cleaner','CLEANER','AVAILABLE','VERIFIED',true,'{"lat":-17.8,"lng":31.0}',extensions.st_setsrid(extensions.st_makepoint(31.0,-17.8),4326)::extensions.geography,now()-interval '1 minute','detail-media/profile-photos/801342e6-d0a3-4473-85d2-e9557cc1a012/avatar.jpg',now()),
- ('801342e6-d0a3-4473-85d2-e9557cc1a013','presence-offline@detail.invalid','Offline Cleaner','CLEANER','OFFLINE','VERIFIED',true,'{"lat":-17.8,"lng":31.0}',extensions.st_setsrid(extensions.st_makepoint(31.0,-17.8),4326)::extensions.geography,now()-interval '1 hour','detail-media/profile-photos/801342e6-d0a3-4473-85d2-e9557cc1a013/avatar.jpg',now())
+ ('801342e6-d0a3-4473-85d2-e9557cc1a010','presence-stale@detail.invalid','Stale Cleaner','CLEANER','AVAILABLE','VERIFIED',true,'{"lat":-17.8,"lng":31.0}',extensions.st_setsrid(extensions.st_makepoint(31.0,-17.8),4326)::extensions.geography,now()-interval '25 hours','detail-media/profile-photos/801342e6-d0a3-4473-85d2-e9557cc1a010/avatar.jpg',now()),
+ ('801342e6-d0a3-4473-85d2-e9557cc1a011','presence-stale-second@detail.invalid','Second Stale Cleaner','CLEANER','AVAILABLE','VERIFIED',true,'{"lat":-17.8,"lng":31.0}',extensions.st_setsrid(extensions.st_makepoint(31.0,-17.8),4326)::extensions.geography,now()-interval '25 hours','detail-media/profile-photos/801342e6-d0a3-4473-85d2-e9557cc1a011/avatar.jpg',now()),
+ ('801342e6-d0a3-4473-85d2-e9557cc1a012','presence-fresh@detail.invalid','Fresh Cleaner','CLEANER','AVAILABLE','VERIFIED',true,'{"lat":-17.8,"lng":31.0}',extensions.st_setsrid(extensions.st_makepoint(31.0,-17.8),4326)::extensions.geography,now()-interval '2 hours','detail-media/profile-photos/801342e6-d0a3-4473-85d2-e9557cc1a012/avatar.jpg',now()),
+ ('801342e6-d0a3-4473-85d2-e9557cc1a013','presence-offline@detail.invalid','Offline Cleaner','CLEANER','OFFLINE','VERIFIED',true,'{"lat":-17.8,"lng":31.0}',extensions.st_setsrid(extensions.st_makepoint(31.0,-17.8),4326)::extensions.geography,now()-interval '30 hours','detail-media/profile-photos/801342e6-d0a3-4473-85d2-e9557cc1a013/avatar.jpg',now())
 on conflict(id) do update set email=excluded.email,displayName=excluded.displayName,role=excluded.role,status=excluded.status,
   verificationStatus=excluded.verificationStatus,cleanerAgreementAccepted=excluded.cleanerAgreementAccepted,
   location=excluded.location,locationPoint=excluded.locationPoint,locationUpdatedAt=excluded.locationUpdatedAt, photoURL=excluded.photoURL, cleanerSelfieAt=excluded.cleanerSelfieAt;
@@ -28,7 +28,7 @@ select is(public.expire_stale_cleaner_presence(now(),1),1,'a bounded run expires
 select is((select status from public.users where id='801342e6-d0a3-4473-85d2-e9557cc1a010'),'OFFLINE'::text,'stale available cleaner is marked offline');
 select ok((select location='{}'::jsonb and locationPoint is null and locationUpdatedAt is null from public.users where id='801342e6-d0a3-4473-85d2-e9557cc1a010'),'expired location and freshness data are cleared');
 select is((select status from public.users where id='801342e6-d0a3-4473-85d2-e9557cc1a011'),'AVAILABLE'::text,'the first run leaves stale rows beyond its batch limit untouched');
-select is((select status from public.users where id='801342e6-d0a3-4473-85d2-e9557cc1a012'),'AVAILABLE'::text,'fresh online cleaner is preserved');
+select is((select status from public.users where id='801342e6-d0a3-4473-85d2-e9557cc1a012'),'AVAILABLE'::text,'a cleaner online for hours without moving stays online');
 select is((select status from public.users where id='801342e6-d0a3-4473-85d2-e9557cc1a013'),'OFFLINE'::text,'already-offline cleaner is preserved');
 select is(public.expire_stale_cleaner_presence(now(),100),1,'the next bounded run expires the remaining stale cleaner');
 

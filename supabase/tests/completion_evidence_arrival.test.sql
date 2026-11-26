@@ -19,9 +19,10 @@ insert into public.jobs(id,customerId,cleanerId,category,serviceType,status,loca
 values('cd6506f6-0f60-4b48-963b-cc78783b37b8','b6b3a50a-96a1-46a4-9b1f-e5b26aa9c6c1','a6131e89-42e2-4b3c-b919-8ae8339b469a',
   'HOUSE','Basic house clean','EN_ROUTE','{"lat":-17.8,"lng":31.05}'::jsonb,'{}');
 
+-- The upload itself is verified in R2 by the edge function; the database rejects paths outside this booking.
 select throws_ok(
-  $$select public.add_completion_photo('cd6506f6-0f60-4b48-963b-cc78783b37b8','a6131e89-42e2-4b3c-b919-8ae8339b469a','detail-media/job-completion/cd6506f6-0f60-4b48-963b-cc78783b37b8/a6131e89-42e2-4b3c-b919-8ae8339b469a/missing.jpg')$$,
-  'P0001','Uploaded completion photo was not found',
+  $$select public.add_completion_photo('cd6506f6-0f60-4b48-963b-cc78783b37b8','a6131e89-42e2-4b3c-b919-8ae8339b469a','detail-media/job-completion/00000000-0000-0000-0000-000000000000/a6131e89-42e2-4b3c-b919-8ae8339b469a/forged.jpg')$$,
+  'P0001','Invalid photo path',
   'a forged path cannot count as completion evidence'
 );
 
