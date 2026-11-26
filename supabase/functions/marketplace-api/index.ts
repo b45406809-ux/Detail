@@ -203,9 +203,12 @@ async function notify(userId: string, payload: Json) {
     p_job_id:text(payload.jobId,80)||null,p_data:storedData,
   });
   if(error){console.error('notification and delivery enqueue failed',error.message);return;}
-  if(result?.hasDeliveries){
-    // Run the durable outbox immediately for low-latency booking and safety
-    // alerts. The scheduled worker remains the retry/recovery path.
+  if(result?.hasDeliveries)await dispatchDeliveriesNow();
+}
+
+/** Run the durable outbox immediately for low-latency booking and safety alerts. The scheduled worker remains the retry path. */
+async function dispatchDeliveriesNow() {
+  {
     const schedulerSecret=Deno.env.get('CRON_SECRET')??'';
     if(schedulerSecret){
       try{const dispatched=await fetch(`${url}/functions/v1/delivery-worker`,{method:'POST',headers:{'x-scheduler-secret':schedulerSecret,'content-type':'application/json'},body:'{}',signal:AbortSignal.timeout(5000)});if(!dispatched.ok)console.warn('Immediate notification dispatch deferred to scheduler',dispatched.status);}
@@ -323,6 +326,11 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         allowed=parts[1]===actor;
         if(folder==='profile-photos'&&!allowed){const {data:profile}=await admin.from('users').select('verificationstatus,role').eq('id',parts[1]).maybeSingle();allowed=profile?.role==='CLEANER'&&profile?.verificationstatus==='VERIFIED';}
         if(folder==='cleaner-portfolio'&&!allowed){const {data:profile}=await admin.from('users').select('verificationstatus,role').eq('id',parts[1]).maybeSingle();allowed=profile?.role==='CLEANER'&&profile?.verificationstatus==='VERIFIED';}
+        if(folder==='profile-photos'&&!allowed&&/^[0-9a-f-]{36}$/i.test(parts[1]??'')){
+          // Booking participants can see each other's profile photo (chat avatars).
+          const {data:shared,error:sharedError}=await admin.from('jobs').select('id').or(`and(customerid.eq.${actor},cleanerid.eq.${parts[1]}),and(customerid.eq.${parts[1]},cleanerid.eq.${actor})`).limit(1);
+          if(sharedError)throw sharedError;allowed=(shared?.length??0)>0;
+        }
       }
       if(['job-photos','job-completion','chat-photos','chat-audio','support-evidence'].includes(folder)){
         if(folder==='chat-photos'||folder==='chat-audio'){
@@ -342,7 +350,8 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
           allowed=!!job&&[job.customerid,job.cleanerid].includes(actor);
           if(folder==='job-photos')allowed=allowed&&Array.isArray(job?.photos)&&job.photos.includes(`detail-media/${path}`);
           if(folder==='support-evidence')allowed=allowed&&parts[2]===actor;
-          if(folder==='job-completion')allowed=allowed&&parts[2]===actor;
+          // Completion photos are evidence for both participants: the customer reviews them before confirming.
+          if(folder==='job-completion')allowed=allowed&&[job?.customerid,job?.cleanerid].includes(actor);
         }
       }
       if(!allowed)fail(403,'You cannot view this private media.');
@@ -804,6 +813,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       }
       const {data:scheduledNotices,error:noticeError}=await admin.rpc('notify_scheduled_job_cleaners',{p_job_id:jobId,p_customer_id:actor,p_limit:20});
       if(noticeError)throw noticeError;
+      if(Number(scheduledNotices??0)>0)await dispatchDeliveriesNow();
       return { success: true, jobId, notifiedCleaners:Number(scheduledNotices??0) };
     }
     case 'refreshInstantMatching': {
@@ -917,7 +927,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if (!Array.isArray(job.completionphotos) || job.completionphotos.length < 1) fail(409,'Add at least one completion photo before submitting the finished booking.');
       const { error } = await admin.rpc('transition_booking',{p_job_id:jobId,p_actor_id:actor,p_new_status:'COMPLETED',p_idempotency_key:key,p_reason:null});
       if (error) throw error;
-      await notify(job.customerid,{type:'COMPLETED',title:'Booking completed',body:'Review the work and confirm completion within 48 hours, or report a problem. Pay your cleaner through the method you agreed on, then leave a rating.',jobId});
+      await notify(job.customerid,{type:'COMPLETED',title:'Your cleaner has finished',body:'Check the completion photos, then confirm the work and rate your cleaner, or report a problem. Pay your cleaner the way you agreed.',jobId});
       return { success:true };
     }
     case 'submitBid': {

@@ -109,13 +109,17 @@ export async function signMediaValue(value: unknown, context: { jobId?: string }
     signedUrlRequests.set(cacheKey, request);
     return request;
   }
-  if (Array.isArray(value)) return Promise.all(value.map(item => signMediaValue(item, context)));
+  // One photo that cannot be signed must not hide the whole booking or conversation list.
+  if (Array.isArray(value)) {
+    const items = await Promise.all(value.map(item => signMediaValue(item, context).catch(() => null)));
+    return items.filter(item => item !== null);
+  }
   if (value && typeof value === 'object') {
     const object = value as Record<string, unknown>;
     const nestedContext = typeof object.id === 'string' ? { ...context, jobId: object.id } : context;
     const pairs = await Promise.all(Object.entries(object).map(async ([key, item]) => {
       const signed = signMediaValue(item, nestedContext);
-      return [key, await (key === 'cleanerPhoto' ? signed.catch(() => null) : signed)] as const;
+      return [key, await signed.catch(() => null)] as const;
     }));
     return Object.fromEntries(pairs);
   }

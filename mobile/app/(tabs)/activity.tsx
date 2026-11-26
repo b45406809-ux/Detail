@@ -20,6 +20,11 @@ const STATUS: Record<string, { label: string; tone: string }> = {
 };
 
 const pastStatuses = new Set(['COMPLETED', 'CANCELLED']);
+
+/** The cleaner has submitted completion photos and the customer has not confirmed or reported a problem yet. */
+function awaitingCustomerReview(job: Job) {
+  return job.status === 'COMPLETED' && !!job.completionSubmittedAt && !job.customerResponseAt;
+}
 const bookingDay = new Intl.DateTimeFormat('en', { day: 'numeric' });
 const bookingMonth = new Intl.DateTimeFormat('en', { month: 'short' });
 
@@ -31,8 +36,11 @@ function openBooking(job: Job) {
 }
 
 function CustomerBookingCard({ job }: { job: Job }) {
-  const past = pastStatuses.has(job.status);
-  const status = job.status === 'PENDING' && job.bookingMode === 'INSTANT'
+  const reviewDue = awaitingCustomerReview(job);
+  const past = pastStatuses.has(job.status) && !reviewDue;
+  const status = reviewDue
+    ? { label: 'Review & rate the work', tone: 'text-amber-800' }
+    : job.status === 'PENDING' && job.bookingMode === 'INSTANT'
     ? { label: 'Finding a cleaner', tone: 'text-amber-800' }
     : STATUS[job.status] ?? { label: job.status.replaceAll('_', ' '), tone: 'text-slate-600' };
   const title = job.serviceType || (job.category === 'CAR' ? 'Vehicle cleaning' : 'Home cleaning');
@@ -74,8 +82,8 @@ function CustomerBookingCard({ job }: { job: Job }) {
 }
 
 function CustomerBookings({ jobs }: { jobs: Job[] }) {
-  const active = jobs.filter(job => !pastStatuses.has(job.status));
-  const past = jobs.filter(job => pastStatuses.has(job.status));
+  const active = jobs.filter(job => !pastStatuses.has(job.status) || awaitingCustomerReview(job));
+  const past = jobs.filter(job => pastStatuses.has(job.status) && !awaitingCustomerReview(job));
   const waiting = active.filter(job => job.status === 'PENDING' && job.bookingMode !== 'INSTANT').length;
   const activeCount = active.length - waiting;
   const cancelled = past.filter(job => job.status === 'CANCELLED').length;
@@ -205,10 +213,13 @@ export default function ActivityScreen() {
       : loadError ? <View className="flex-1 items-center justify-center px-8"><Text className="text-center font-sans text-ink/60 mb-5">{loadError}</Text><Pressable accessibilityRole="button" onPress={() => { setCustomerJobs([]); setCleanerJobs([]); setLoading(true); setLoadError(''); setReloadKey(key => key + 1); }} className="flex-row items-center gap-2 rounded-2xl bg-accent px-5 py-4"><RefreshCw size={17} color="white"/><Text className="font-display font-bold text-white">Retry</Text></Pressable></View>
       : profile?.role !== 'CLEANER' ? <CustomerBookings jobs={jobs} />
       : <FlatList data={jobs} keyExtractor={job => job.id} contentContainerClassName="px-5 pb-8 gap-3" ListHeaderComponent={cleanerActivityHeader} ListEmptyComponent={profile?.role === 'CLEANER' ? <Text className="py-5 text-center font-sans text-sm text-ink/50">No jobs in your activity yet.</Text> : null} renderItem={({ item: job }) => {
-        const status = STATUS[job.status] ?? { label: job.status.replaceAll('_', ' '), tone: 'text-slate-600' };
+        const status = awaitingCustomerReview(job)
+          ? { label: 'Waiting for customer review', tone: 'text-amber-700' }
+          : STATUS[job.status] ?? { label: job.status.replaceAll('_', ' '), tone: 'text-slate-600' };
         const when = job.scheduledDateTime ? formatDate(job.scheduledDateTime, 'Schedule pending') : formatDate(job.createdAt, 'Date unavailable');
         const gross = Number(job.earnings?.gross ?? job.price ?? 0);
-        const commission = Number(job.earnings?.commission ?? 0);
+        // Commission is taken when the cleaner marks the job completed, so show it even before earnings are recorded.
+        const commission = Number(job.earnings?.commission ?? (job.status === 'COMPLETED' ? Math.round(gross * 10) / 100 : 0));
         const net = Number(job.earnings?.net ?? Math.max(0, gross - commission));
         return <Pressable accessibilityRole="button" accessibilityLabel={`${job.category === 'CAR' ? 'Vehicle' : 'Home'} cleaning, ${status.label}, open booking`} onPress={() => openBooking(job)} className="rounded-3xl border border-ink/5 bg-white p-4 shadow-sm">
           <View className="flex-row items-start justify-between gap-3"><View className="flex-1"><Text className="font-display text-lg font-black text-ink">{job.serviceType || `${job.category === 'CAR' ? 'Vehicle' : 'Home'} cleaning`}</Text><Text className={`mt-1 font-sans text-sm font-bold ${status.tone}`}>{status.label}</Text></View><ArrowRight size={19} color="#3906d2"/></View>

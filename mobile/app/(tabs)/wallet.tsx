@@ -339,9 +339,10 @@ export default function WalletScreen() {
       </View> : <View className="mx-5 mb-6 bg-accent rounded-4xl p-6 shadow-xl shadow-accent/30">
         <View className="flex-row items-center gap-2 mb-4">
           <Wallet size={18} color="rgba(255,255,255,0.7)" />
-          <Text className="text-xs font-display font-black text-white/70 uppercase tracking-widest">Cleaner registration payment</Text>
+          <Text className="text-xs font-display font-black text-white/70 uppercase tracking-widest">Cleaner registration · amount to pay</Text>
         </View>
-        <Text className="text-2xl font-display font-black text-white mb-1">$2.00</Text>
+        <Text className="text-2xl font-display font-black text-white mb-1">$2.00 due</Text>
+        <Text className="font-sans text-xs text-white/60 mb-1">This is the amount to pay, not money in your account.</Text>
         <Text className="font-sans text-sm text-white/70 font-medium">$1 pays the one-time identity check and $1 remains as prepaid commission credit.</Text>
         {(isVerification || pendingReference) && <TouchableOpacity onPress={() => setIsAddFundsOpen(true)} className="mt-6 bg-white/20 py-3 rounded-2xl flex-row items-center justify-center gap-2" activeOpacity={0.8}>
           <Plus size={16} color="#fff" />

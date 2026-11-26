@@ -27,6 +27,20 @@ jobs:
       MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+      - name: Select Xcode 27 (iOS 27 SDK)
+        run: |
+          set -euo pipefail
+          ls -d /Applications/Xcode*.app || true
+          xcode=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1 || true)
+          if [ -n "$xcode" ]; then
+            sudo xcode-select -s "$xcode/Contents/Developer"
+          else
+            echo "::warning::Xcode 27 is not installed on this runner; building with the default Xcode."
+          fi
+          xcodebuild -version
+          sdk=$(xcrun --sdk iphoneos --show-sdk-version)
+          echo "Building with iOS SDK $sdk"
+          echo "### iOS SDK: $sdk ($(xcodebuild -version | head -1))" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/setup-node@v4
         with:
           node-version: 22

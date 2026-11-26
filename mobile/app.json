@@ -19,7 +19,7 @@
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSLocationWhenInUseUsageDescription": "Detail uses your location to find nearby cleaners.",
+        "NSLocationWhenInUseUsageDescription": "Detail uses your location to place your booking pin, find nearby cleaners and show cleaners nearby jobs.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "If you choose to go online as a cleaner, Detail shares your location with the service while you are online and on an active booking so nearby customers can be matched and customers can follow your arrival.",
         "NSCameraUsageDescription": "Take profile and portfolio photos, add photos to bookings, capture cleaning progress or completion, and share photos in chat.",
         "NSMicrophoneUsageDescription": "Detail uses the microphone when you record a chat voice note for your booking partner."
@@ -91,7 +91,7 @@
           "isAndroidForegroundServiceEnabled": true,
           "isIosBackgroundLocationEnabled": true,
           "locationAlwaysAndWhenInUsePermission": "If you choose to go online as a cleaner, allow Detail to share your location with the service while you are online and on an active booking so nearby customers can be matched and customers can follow your arrival.",
-          "locationWhenInUsePermission": "Detail uses your location to find nearby cleaners. Cleaner location is shared only while online or on an active booking."
+          "locationWhenInUsePermission": "Detail uses your location to place your booking pin, find nearby cleaners and show cleaners nearby jobs. Cleaner location is shared only while online or on an active booking."
         }
       ],
       [
