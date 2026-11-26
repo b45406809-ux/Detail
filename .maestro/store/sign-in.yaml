@@ -1,0 +1,55 @@
+# Signs in with ${EMAIL}/${PASSWORD} from a clean install and passes any first-run screens.
+appId: zw.co.detailapp.mobile
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible:
+      id: welcome-skip
+    timeout: 30000
+- tapOn:
+    id: welcome-skip
+- tapOn:
+    id: auth-email-tab
+- tapOn:
+    id: auth-email-mode-password
+- tapOn:
+    id: auth-email-input
+- inputText: ${EMAIL}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: auth-password-input
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: auth-password-input
+- inputText: ${PASSWORD}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: auth-email-submit
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: auth-email-submit
+- runFlow:
+    when:
+      visible: "Customer Agreement"
+    commands:
+      - scrollUntilVisible:
+          element:
+            text: "I have read and accept"
+          direction: DOWN
+      - tapOn: "I have read and accept"
+- runFlow:
+    when:
+      visible: "Allow permissions"
+    commands:
+      - tapOn: "Continue to App"
+- extendedWaitUntil:
+    visible:
+      id: role-toggle-customer
+    timeout: 30000

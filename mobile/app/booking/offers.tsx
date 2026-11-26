@@ -369,6 +369,7 @@ export default function OffersScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => acceptBid(bid)}
+                  testID="offer-accept"
                   disabled={!!busyBidId}
                   activeOpacity={0.85}
                   className="flex-1 py-3 rounded-2xl items-center bg-accent shadow-md shadow-accent/30 flex-row justify-center gap-1.5"
@@ -402,7 +403,7 @@ export default function OffersScreen() {
           <View className="mb-5 h-1 w-12 self-center rounded-full bg-slate-200" />
           <Text className="text-2xl font-display font-black text-ink">Accept this quote?</Text>
           <Text className="mt-1 mb-5 font-sans text-sm leading-5 text-slate-500">Your cleaner quoted ${Number(paymentChoiceBid?.bidPrice ?? 0).toFixed(2)}. If you accept, arrange payment directly with the cleaner using a method you both agree on. Detail does not collect the booking payment.</Text>
-          <TouchableOpacity disabled={!!busyBidId} onPress={() => { const bid = paymentChoiceBid; setPaymentChoiceBid(null); if (bid) void submitAcceptance(bid, 'DIRECT_OFFLINE'); }} activeOpacity={0.85} className="rounded-3xl border border-violet-100 bg-[#F7F4FF] p-4">
+          <TouchableOpacity testID="offer-accept-confirm" disabled={!!busyBidId} onPress={() => { const bid = paymentChoiceBid; setPaymentChoiceBid(null); if (bid) void submitAcceptance(bid, 'DIRECT_OFFLINE'); }} activeOpacity={0.85} className="rounded-3xl border border-violet-100 bg-[#F7F4FF] p-4">
             <View className="items-center rounded-2xl bg-accent py-3.5"><Text className="font-display text-sm font-black uppercase tracking-wider text-white">Accept quote</Text></View>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setPaymentChoiceBid(null)} className="pt-5"><Text className="font-sans text-center font-bold text-slate-400">Cancel</Text></TouchableOpacity>

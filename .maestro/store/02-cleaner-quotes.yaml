@@ -1,0 +1,60 @@
+# Review cleaner: switch to cleaner mode, open the review customer's booking and send a quote.
+appId: zw.co.detailapp.mobile
+---
+- runFlow:
+    file: sign-in.yaml
+    env:
+      EMAIL: ${CLEANER_EMAIL}
+      PASSWORD: ${CLEANER_PASSWORD}
+- tapOn:
+    id: role-toggle-cleaner
+- runFlow:
+    when:
+      visible: "(?i)go online"
+    commands:
+      - tapOn:
+          id: cleaner-availability-toggle
+      - runFlow:
+          when:
+            visible: "(?i)(allow|continue|ok)"
+          commands:
+            - tapOn: "(?i)(allow|continue|ok)"
+- scrollUntilVisible:
+    element:
+      id: available-job-card
+    direction: DOWN
+    timeout: 60000
+- takeScreenshot: ${SHOTS}/07-cleaner-nearby-jobs
+- tapOn:
+    id: available-job-card
+- extendedWaitUntil:
+    visible:
+      id: bid-price-input
+    timeout: 20000
+- takeScreenshot: ${SHOTS}/08-job-details
+- tapOn:
+    id: bid-price-input
+- inputText: "25"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: bid-eta-input
+    direction: DOWN
+- tapOn:
+    id: bid-eta-input
+- inputText: "30"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: bid-submit
+    direction: DOWN
+- takeScreenshot: ${SHOTS}/09-send-quote
+- tapOn:
+    id: bid-submit
+- waitForAnimationToEnd:
+    timeout: 5000
+- runFlow:
+    when:
+      visible: "(?i)ok"
+    commands:
+      - tapOn: "(?i)ok"

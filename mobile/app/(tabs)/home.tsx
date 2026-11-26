@@ -798,6 +798,7 @@ function CleanerPanel({
         </View>
         <TouchableOpacity
           onPress={onToggleStatus}
+          testID="cleaner-availability-toggle"
           activeOpacity={0.85}
           className="flex-row items-center gap-2 px-5 py-3 rounded-2xl"
           style={{ backgroundColor: isAvailable ? 'rgba(21,2,86,0.08)' : '#3906D2' }}
@@ -902,6 +903,7 @@ function CleanerPanel({
                   <TouchableOpacity
                     key={job.id}
                     onPress={() => router.push({ pathname: '/job/[jobId]', params: { jobId: job.id } })}
+                    testID="available-job-card"
                     className="bg-white rounded-2xl p-4 border border-slate-100 flex-row items-center gap-3"
                     activeOpacity={0.8}
                   >

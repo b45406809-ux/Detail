@@ -643,12 +643,15 @@ jobs:
           printf 'Creating or repairing the Apple App Review demo account.\n' > "$OPS_LOG"
 
       - name: Create or repair the demo account
+        env:
+          REVIEW_CUSTOMER_PASSWORD: ${{ secrets.REVIEW_CUSTOMER_PASSWORD }}
+          REVIEW_CLEANER_PASSWORD: ${{ secrets.REVIEW_CLEANER_PASSWORD }}
         run: |
           set -euo pipefail
           # The script masks the generated password and writes credentials only to the step summary.
           # The ::add-mask:: command must reach the runner's stdout, but is kept out of the ops log.
-          node scripts/create-review-demo-account.mjs 2>&1 | tee >(grep -v '^::add-mask::' >> "$OPS_LOG") || { echo 'Demo account script failed.' >> "$OPS_LOG"; exit 1; }
-          DEMO_EMAIL='appreview.cleaner@detailapp.co.zw' DEMO_PHONE='+263770000124' DEMO_NAME='Apple Review Cleaner' \
+          DEMO_PASSWORD="$REVIEW_CUSTOMER_PASSWORD" node scripts/create-review-demo-account.mjs 2>&1 | tee >(grep -v '^::add-mask::' >> "$OPS_LOG") || { echo 'Demo account script failed.' >> "$OPS_LOG"; exit 1; }
+          DEMO_PASSWORD="$REVIEW_CLEANER_PASSWORD" DEMO_EMAIL='appreview.cleaner@detailapp.co.zw' DEMO_PHONE='+263770000124' DEMO_NAME='Apple Review Cleaner' \
             node scripts/create-review-demo-account.mjs 2>&1 | tee >(grep -v '^::add-mask::' >> "$OPS_LOG") || { echo 'Second demo account script failed.' >> "$OPS_LOG"; exit 1; }
 
       - name: Redact and summarize result

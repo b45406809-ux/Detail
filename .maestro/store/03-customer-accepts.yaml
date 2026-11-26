@@ -1,0 +1,41 @@
+# Review customer: open the request, accept the quote, then tracking and chat.
+appId: zw.co.detailapp.mobile
+---
+- runFlow:
+    file: sign-in.yaml
+    env:
+      EMAIL: ${CUSTOMER_EMAIL}
+      PASSWORD: ${CUSTOMER_PASSWORD}
+- tapOn:
+    id: tab-activity
+- extendedWaitUntil:
+    visible: "(?i).*(waiting for offers|quote).*"
+    timeout: 20000
+- tapOn: "(?i).*waiting for offers.*"
+- extendedWaitUntil:
+    visible:
+      id: offer-accept
+    timeout: 60000
+- takeScreenshot: ${SHOTS}/10-quotes-received
+- tapOn:
+    id: offer-accept
+- tapOn:
+    id: offer-accept-confirm
+- extendedWaitUntil:
+    visible: "(?i).*(on the way|assigned|cleaner).*"
+    timeout: 30000
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: ${SHOTS}/11-booking-tracking
+- tapOn:
+    id: tracking-message
+- waitForAnimationToEnd:
+    timeout: 5000
+- runFlow:
+    when:
+      visible: "(?i)type a message.*"
+    commands:
+      - tapOn: "(?i)type a message.*"
+      - inputText: "Hi! The gate code is 1234. See you soon."
+      - hideKeyboard
+- takeScreenshot: ${SHOTS}/12-chat

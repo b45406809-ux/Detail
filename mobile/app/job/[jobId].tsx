@@ -355,6 +355,7 @@ export default function CleanerJobDetailScreen() {
               <TextInput
                 className="border-2 border-ink/10 rounded-2xl px-4 py-3.5 text-xl font-display font-black text-ink bg-ink/[0.02] mb-4"
                 placeholder={`${job.budget ?? '0'}.00`}
+                testID="bid-price-input"
                 placeholderTextColor="#9C94C4"
                 keyboardType="decimal-pad"
                 value={bidPrice}
@@ -384,6 +385,7 @@ export default function CleanerJobDetailScreen() {
               <TextInput
                 className="font-sans border-2 border-ink/10 rounded-2xl px-4 py-3.5 text-base font-bold text-ink bg-ink/[0.02] mb-4"
                 placeholder="e.g. 20"
+                testID="bid-eta-input"
                 placeholderTextColor="#9C94C4"
                 keyboardType="number-pad"
                 value={estimatedArrival}
@@ -416,6 +418,7 @@ export default function CleanerJobDetailScreen() {
 
               <TouchableOpacity
                 onPress={handleSubmitBid}
+                testID="bid-submit"
                 disabled={isSubmitting || !bidPrice || !estimatedArrival || suggestedCommissionTopup > 0}
                 activeOpacity={0.85}
                 className={`py-5 rounded-[32px] items-center ${bidPrice && estimatedArrival && suggestedCommissionTopup <= 0 ? 'bg-accent shadow-lg shadow-accent/30' : 'bg-ink/10'}`}

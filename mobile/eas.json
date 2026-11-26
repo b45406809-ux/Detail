@@ -52,6 +52,11 @@
       "environment": "production",
       "credentialsSource": "local"
     },
+    "store-screenshots-ios-simulator": {
+      "extends": "production",
+      "environment": "production",
+      "ios": { "simulator": true, "buildConfiguration": "Release" }
+    },
     "production-apk": {
       "extends": "production",
       "distribution": "internal",

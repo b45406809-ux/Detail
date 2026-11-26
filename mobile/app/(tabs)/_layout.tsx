@@ -48,23 +48,23 @@ export default function TabsLayout() {
     >
       <Tabs.Screen
         name="home"
-        options={{ tabBarAccessibilityLabel: 'Home', tabBarIcon: ({ focused }) => <TabIcon Icon={Home} focused={focused} /> }}
+        options={{ tabBarAccessibilityLabel: 'Home', tabBarButtonTestID: 'tab-home', tabBarIcon: ({ focused }) => <TabIcon Icon={Home} focused={focused} /> }}
       />
       <Tabs.Screen
         name="activity"
-        options={{ tabBarAccessibilityLabel: 'Activity and bookings', tabBarIcon: ({ focused }) => <TabIcon Icon={Activity} focused={focused} /> }}
+        options={{ tabBarAccessibilityLabel: 'Activity and bookings', tabBarButtonTestID: 'tab-activity', tabBarIcon: ({ focused }) => <TabIcon Icon={Activity} focused={focused} /> }}
       />
       <Tabs.Screen
         name="messages"
-        options={{ tabBarAccessibilityLabel: 'Messages', tabBarIcon: ({ focused }) => <TabIcon Icon={MessageSquare} focused={focused} /> }}
+        options={{ tabBarAccessibilityLabel: 'Messages', tabBarButtonTestID: 'tab-messages', tabBarIcon: ({ focused }) => <TabIcon Icon={MessageSquare} focused={focused} /> }}
       />
       <Tabs.Screen
         name="wallet"
-        options={{ href: profile?.role === 'CLEANER' ? '/(tabs)/wallet' : null, tabBarAccessibilityLabel: 'Wallet', tabBarIcon: ({ focused }) => <TabIcon Icon={Wallet} focused={focused} /> }}
+        options={{ href: profile?.role === 'CLEANER' ? '/(tabs)/wallet' : null, tabBarAccessibilityLabel: 'Wallet', tabBarButtonTestID: 'tab-wallet', tabBarIcon: ({ focused }) => <TabIcon Icon={Wallet} focused={focused} /> }}
       />
       <Tabs.Screen
         name="profile"
-        options={{ tabBarAccessibilityLabel: 'Profile', tabBarIcon: ({ focused }) => <TabIcon Icon={User} focused={focused} /> }}
+        options={{ tabBarAccessibilityLabel: 'Profile', tabBarButtonTestID: 'tab-profile', tabBarIcon: ({ focused }) => <TabIcon Icon={User} focused={focused} /> }}
       />
     </Tabs>
   );

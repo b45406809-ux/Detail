@@ -862,6 +862,7 @@ export default function CreateBookingScreen() {
         <View className="px-5 pb-8 pt-4 border-t border-ink/5 bg-white">
           <TouchableOpacity
             onPress={step === 'BUDGET' ? handleSubmit : goNext}
+            testID="booking-next"
             disabled={!canProceed() || isSubmitting}
             activeOpacity={0.85}
             className={`py-4 rounded-full items-center ${canProceed() ? 'bg-accent' : 'bg-ink/10'}`}

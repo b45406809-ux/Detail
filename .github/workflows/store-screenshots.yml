@@ -1,0 +1,205 @@
+name: Store screenshots and review-account test
+
+# Signs in with the two App Review accounts, runs a full booking (request, quote,
+# accept, tracking, chat) and captures store screenshots on an Android emulator
+# (Play, 1080x1920) and an iPhone Pro Max simulator (App Store 6.9"). Builds stay on
+# GitHub as artifacts; nothing is uploaded to either store. The review accounts are
+# a closed sandbox pair, so the test never reaches real customers or cleaners.
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Which devices to run
+        type: choice
+        options: [both, android, ios]
+        default: both
+      apk_run_id:
+        description: Optional earlier run of this workflow whose APK to reuse (skips the Android build)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: store-screenshots
+  cancel-in-progress: false
+
+env:
+  SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.SUPABASE_SERVICE_ROLE || secrets.SUPABASE_SECRET_KEY }}
+  CUSTOMER_EMAIL: appreview@detailapp.co.zw
+  CLEANER_EMAIL: appreview.cleaner@detailapp.co.zw
+  CUSTOMER_PASSWORD: ${{ secrets.REVIEW_CUSTOMER_PASSWORD }}
+  CLEANER_PASSWORD: ${{ secrets.REVIEW_CLEANER_PASSWORD }}
+  # Central Harare, used as the device location.
+  DEVICE_LAT: '-17.8292'
+  DEVICE_LNG: '31.0522'
+
+jobs:
+  android:
+    if: inputs.platform != 'ios'
+    name: Android emulator
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 90
+    env:
+      CI: '1'
+      EAS_BUILD_PROFILE: production
+      EXPO_PUBLIC_APP_BUILD_PROFILE: production
+      MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
+      EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || secrets.MAPBOX_PUBLIC_TOKEN }}
+      EXPO_PUBLIC_SUPABASE_URL: ${{ vars.SUPABASE_URL || vars.EXPO_PUBLIC_SUPABASE_URL || secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_PUBLIC_ANON || secrets.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_ANON_KEY || secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+      EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || vars.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
+      EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || vars.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID }}
+      FIREBASE_ANDROID_JSON: ${{ secrets.GOOGLE_SERVICES_JSON || secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+      DETAIL_ANDROID_VERSION_CODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Check review-account secrets
+        run: |
+          set -euo pipefail
+          test -n "$CUSTOMER_PASSWORD" || { echo 'Add the REVIEW_CUSTOMER_PASSWORD secret, then re-run create-review-demo-account.'; exit 1; }
+          test -n "$CLEANER_PASSWORD" || { echo 'Add the REVIEW_CLEANER_PASSWORD secret, then re-run create-review-demo-account.'; exit 1; }
+          test -n "$SUPABASE_URL" && test -n "$SUPABASE_SERVICE_ROLE_KEY"
+      - name: Enable emulator acceleration
+        run: |
+          test -c /dev/kvm || { echo 'KVM is unavailable on this runner.'; exit 1; }
+          sudo chmod a+rw /dev/kvm
+
+      - name: Reuse an earlier APK
+        if: inputs.apk_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: detail-store-screenshots-apk
+          path: ${{ runner.temp }}/apk
+          run-id: ${{ inputs.apk_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Prepare Firebase config
+        if: inputs.apk_run_id == ''
+        run: |
+          set -euo pipefail
+          test -n "$FIREBASE_ANDROID_JSON" && test -n "$MAPBOX_DOWNLOADS_TOKEN" && test -n "$EXPO_PUBLIC_SUPABASE_URL" && test -n "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
+          node <<'NODE'
+          const fs = require('fs');
+          const value = process.env.FIREBASE_ANDROID_JSON;
+          const json = value.trim().startsWith('{') ? value : Buffer.from(value, 'base64').toString('utf8');
+          const file = `${process.env.RUNNER_TEMP}/detail-google-services.json`;
+          fs.writeFileSync(file, json, { mode: 0o600 });
+          fs.appendFileSync(process.env.GITHUB_ENV, `GOOGLE_SERVICES_JSON=${file}\n`);
+          NODE
+      - uses: actions/setup-java@v4
+        if: inputs.apk_run_id == ''
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        if: inputs.apk_run_id == ''
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;26.1.10909125 cmake;3.22.1'
+      - name: Build release APK (debug-signed, test only)
+        if: inputs.apk_run_id == ''
+        run: |
+          set -euo pipefail
+          npm ci --prefix mobile --no-audit --no-fund
+          cd mobile
+          npx expo prebuild --platform android --no-install --clean
+          cd android
+          ./gradlew --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" assembleRelease
+          mkdir -p "$RUNNER_TEMP/apk"
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/apk/detail.apk"
+          rm -f "$RUNNER_TEMP/detail-google-services.json"
+      - name: Save APK for re-runs
+        if: inputs.apk_run_id == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: detail-store-screenshots-apk
+          path: ${{ runner.temp }}/apk/detail.apk
+          retention-days: 7
+
+      - name: Reset the review sandbox
+        run: node scripts/reset-review-sandbox.mjs
+      - name: Install Maestro
+        run: |
+          curl --fail --silent --show-error --location https://get.maestro.mobile.dev | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Run review-account journey and capture Play screenshots
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disk-size: 4096M
+          emulator-boot-timeout: 900
+          disable-animations: true
+          script: bash scripts/run-store-screenshots.sh android
+      - name: Upload Android screenshots and test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: play-store-screenshots
+          path: ${{ runner.temp }}/store-shots/
+          if-no-files-found: warn
+          retention-days: 14
+
+  ios:
+    name: iPhone simulator
+    needs: [android]
+    # Run after Android so the two devices do not use the shared review accounts at the same time.
+    if: always() && inputs.platform != 'android'
+    runs-on: macos-26
+    environment: production
+    timeout-minutes: 120
+    env:
+      CI: '1'
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN || secrets.EAS_BOT_ACCESS_TOKEN || secrets.EXPO_EAS_BOT_ACCESS_TOKEN || secrets.EAS_BOT_TOKEN_2 }}
+      MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 27 (iOS 27 SDK) when available
+        run: |
+          set -euo pipefail
+          xcode=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1 || true)
+          if [ -n "$xcode" ]; then sudo xcode-select -s "$xcode/Contents/Developer"; else echo "::warning::Xcode 27 is not installed on this runner; using the default Xcode."; fi
+          xcodebuild -version
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Check review-account secrets
+        run: |
+          test -n "$CUSTOMER_PASSWORD" && test -n "$CLEANER_PASSWORD" || { echo 'Add REVIEW_CUSTOMER_PASSWORD and REVIEW_CLEANER_PASSWORD secrets.'; exit 1; }
+      - name: Build simulator app locally
+        working-directory: mobile
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          npx --yes eas-cli@16.28.0 build --platform ios --profile store-screenshots-ios-simulator --local --non-interactive --output "$RUNNER_TEMP/detail-sim.tar.gz"
+          mkdir -p "$RUNNER_TEMP/sim"
+          tar -xzf "$RUNNER_TEMP/detail-sim.tar.gz" -C "$RUNNER_TEMP/sim"
+      - name: Reset the review sandbox
+        run: node scripts/reset-review-sandbox.mjs
+      - name: Install Maestro
+        run: |
+          curl --fail --silent --show-error --location https://get.maestro.mobile.dev | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Run review-account journey and capture App Store screenshots
+        run: bash scripts/run-store-screenshots.sh ios
+      - name: Upload iPhone screenshots and test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-store-screenshots
+          path: ${{ runner.temp }}/store-shots/
+          if-no-files-found: warn
+          retention-days: 14

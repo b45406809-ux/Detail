@@ -884,7 +884,7 @@ export default function TrackingScreen() {
             } },
             { id: 'cancel', label: 'Abort', icon: ShieldAlert, color: '#E5484D', action: handleCancelJob },
           ].map(({ id, label, icon: Icon, color, action }) => (
-            <TouchableOpacity key={id} onPress={action} className="flex-1 items-center gap-2" activeOpacity={0.7}>
+            <TouchableOpacity key={id} testID={`tracking-${id}`} onPress={action} className="flex-1 items-center gap-2" activeOpacity={0.7}>
               <View className="w-14 h-14 rounded-[22px] items-center justify-center bg-white/60 border border-white">
                 <Icon size={20} color={color} />
               </View>

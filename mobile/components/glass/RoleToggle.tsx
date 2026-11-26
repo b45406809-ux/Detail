@@ -29,10 +29,11 @@ export function RoleToggle({ value, onChange }: RoleToggleProps) {
         style={styles.tab}
         activeOpacity={0.8}
         onPress={() => onChange('CUSTOMER')}
+        testID="role-toggle-customer"
       >
         <Text style={[styles.label, value === 'CUSTOMER' && styles.labelActive]}>Find cleaners</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.tab} activeOpacity={0.8} onPress={() => onChange('CLEANER')}>
+      <TouchableOpacity testID="role-toggle-cleaner" style={styles.tab} activeOpacity={0.8} onPress={() => onChange('CLEANER')}>
         <Text style={[styles.label, value === 'CLEANER' && styles.labelActive]}>Nearby jobs</Text>
       </TouchableOpacity>
     </View>

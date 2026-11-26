@@ -1,0 +1,61 @@
+# Review customer: home, then a house-cleaning request through to "waiting for quotes".
+appId: zw.co.detailapp.mobile
+---
+- runFlow:
+    file: sign-in.yaml
+    env:
+      EMAIL: ${CUSTOMER_EMAIL}
+      PASSWORD: ${CUSTOMER_PASSWORD}
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: ${SHOTS}/01-customer-home
+- tapOn: "House"
+- extendedWaitUntil:
+    visible: "What do you need cleaned?"
+    timeout: 15000
+- tapOn: "House Cleaning"
+- takeScreenshot: ${SHOTS}/02-choose-service
+- tapOn:
+    id: booking-next
+- scrollUntilVisible:
+    element:
+      text: "Specific Room / Part"
+    direction: DOWN
+- tapOn: "Specific Room / Part"
+- scrollUntilVisible:
+    element:
+      text: "Kitchen"
+    direction: DOWN
+- tapOn: "Kitchen"
+- scrollUntilVisible:
+    element:
+      text: "Under 10 m²"
+    direction: DOWN
+- tapOn: "Under 10 m²"
+- takeScreenshot: ${SHOTS}/03-checklist
+- tapOn:
+    id: booking-next
+- tapOn:
+    id: booking-next
+- runFlow:
+    when:
+      visible: "Enter an address…"
+    commands:
+      - tapOn: "Enter an address…"
+      - inputText: "Samora Machel Avenue, Harare"
+      - hideKeyboard
+- takeScreenshot: ${SHOTS}/04-location
+- tapOn:
+    id: booking-next
+- extendedWaitUntil:
+    visible: "Set your budget"
+    timeout: 15000
+- takeScreenshot: ${SHOTS}/05-budget
+- tapOn:
+    id: booking-next
+- extendedWaitUntil:
+    visible: "(?i).*(quote|offer|bid).*"
+    timeout: 30000
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: ${SHOTS}/06-waiting-for-quotes

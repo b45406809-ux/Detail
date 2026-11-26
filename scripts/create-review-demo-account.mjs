@@ -58,7 +58,10 @@ async function findAuthUsers() {
   return matches;
 }
 
-const password = makePassword();
+// A fixed password from a GitHub secret keeps the store listings and the screenshot test in sync.
+const fixedPassword = process.env.DEMO_PASSWORD?.trim() || '';
+if (fixedPassword && fixedPassword.length < 10) throw new Error('DEMO_PASSWORD must be at least 10 characters.');
+const password = fixedPassword || makePassword();
 console.log(`::add-mask::${password}`);
 
 // 1. Auth user (create or update), email and phone confirmed.
@@ -143,7 +146,7 @@ console.log(`Commission credited this run: ${credited.toFixed(2)} (balance now $
 
 // 9. Credentials go only to the step summary.
 if (process.env.GITHUB_STEP_SUMMARY) {
-  appendFileSync(process.env.GITHUB_STEP_SUMMARY, [`## Apple App Review demo account (${EMAIL})`, '', `- Email: \`${EMAIL}\``, `- Password: \`${password}\``, `- Phone (pre-verified): \`${PHONE}\``, '- Modes: customer and verified cleaner (switch in-app). Prepaid commission credit: at least $10.', ''].join('\n'));
+  appendFileSync(process.env.GITHUB_STEP_SUMMARY, [`## Apple App Review demo account (${EMAIL})`, '', `- Email: \`${EMAIL}\``, (fixedPassword ? '- Password: the value stored in this account\'s GitHub secret' : `- Password: \`${password}\``), `- Phone (pre-verified): \`${PHONE}\``, '- Modes: customer and verified cleaner (switch in-app). Prepaid commission credit: at least $10.', ''].join('\n'));
   console.log('Credentials written to the job step summary.');
 } else {
   console.log('GITHUB_STEP_SUMMARY is not set; credentials were not written anywhere.');
