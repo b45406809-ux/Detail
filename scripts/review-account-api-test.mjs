@@ -50,7 +50,7 @@ function booking(label) {
     serviceType: `Specific Room / Part (${label})`,
     checklist: { category: 'HOUSE', packageId: 'SPECIFIC_ROOM', selections: { rooms: ['Kitchen'] }, choices: { areaSize: 'UNDER_10' }, areas: [], cleaningTypes: ['SPECIFIC_ROOM'], addOns: [] },
     description: 'Automated App Review sandbox check', location: HARARE,
-    scheduledTime: 'ASAP', timePreference: 'ASAP', scheduledDateTime: null, status: 'PENDING', pricingStrategy: 'RECEIVE_BIDS',
+    scheduledTime: 'ASAP', timePreference: 'ASAP', scheduledDateTime: new Date().toISOString(), status: 'PENDING', pricingStrategy: 'RECEIVE_BIDS',
     budget: 0, reminderSent: false, photos: [],
   };
 }
