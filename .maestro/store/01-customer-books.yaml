@@ -54,8 +54,8 @@ appId: zw.co.detailapp.mobile
 - tapOn:
     id: booking-next
 - extendedWaitUntil:
-    visible: "(?i).*(quote|offer|bid).*"
-    timeout: 30000
+    visible: "Bids Received"
+    timeout: 60000
 - waitForAnimationToEnd:
     timeout: 5000
 - takeScreenshot: ${SHOTS}/06-waiting-for-quotes

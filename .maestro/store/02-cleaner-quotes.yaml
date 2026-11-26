@@ -19,11 +19,16 @@ appId: zw.co.detailapp.mobile
             visible: "(?i)(allow|continue|ok)"
           commands:
             - tapOn: "(?i)(allow|continue|ok)"
+# Expand the bottom sheet, then scroll its list to the available requests.
+- swipe:
+    start: 50%, 60%
+    end: 50%, 15%
 - scrollUntilVisible:
     element:
       id: available-job-card
     direction: DOWN
     timeout: 60000
+    visibilityPercentage: 50
 - takeScreenshot: ${SHOTS}/07-cleaner-nearby-jobs
 - tapOn:
     id: available-job-card
