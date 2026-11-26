@@ -21,7 +21,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoadingList } from '../../components/LoadingList';
 import { useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Send, MessageSquare, ImagePlus, Mic, Play, Pause, Square, X, MoreHorizontal, Phone, ShieldCheck, Clock, ChevronDown, ChevronUp, Flag } from 'lucide-react-native';
+import { ArrowLeft, Send, MessageSquare, ImagePlus, Mic, Play, Pause, Square, X, MoreHorizontal, Phone, ShieldCheck, Clock, ChevronDown, ChevronUp, Flag, Search } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -73,6 +73,21 @@ interface Conversation {
   lastMessageAt: any;
   unreadCount: number;
   jobStatus: string;
+  serviceType: string;
+}
+
+const ACTIVE_BOOKING_STATUSES = ['ASSIGNED', 'EN_ROUTE', 'IN_PROGRESS'];
+
+/** "15:14" today, "Yesterday", weekday this week, otherwise a short date. */
+function conversationTime(value: any, now: number) {
+  const time = value ? messageTime(value) : NaN;
+  if (!Number.isFinite(time)) return '';
+  const date = new Date(time), today = new Date(now);
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  if (time >= startOfToday) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  if (time >= startOfToday - 86_400_000) return 'Yesterday';
+  if (time >= startOfToday - 6 * 86_400_000) return date.toLocaleDateString([], { weekday: 'short' });
+  return date.toLocaleDateString([], { day: 'numeric', month: 'short' });
 }
 
 export default function MessagesScreen() {
@@ -83,6 +98,7 @@ export default function MessagesScreen() {
   const [activeJobId, setActiveJobId] = useState<string | null>(params.jobId ?? null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [now, setNow] = useState(Date.now());
+  const [conversationSearch, setConversationSearch] = useState('');
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [conversationError, setConversationError] = useState('');
@@ -257,6 +273,7 @@ export default function MessagesScreen() {
             lastMessageAt: job.lastMessageAt,
             unreadCount: job.lastMessageAt && messageTime(job.lastMessageAt) < Date.now() - MESSAGE_RETENTION_MS ? 0 : job[unreadField] ?? 0,
             jobStatus: String(job.status ?? '').toUpperCase(),
+            serviceType: job.serviceType || (job.category === 'CAR' ? 'Car cleaning' : 'Home cleaning'),
           }));
         setConversations(convos);
         setIsLoading(false);
@@ -723,7 +740,7 @@ export default function MessagesScreen() {
     <SafeAreaView className="flex-1 bg-canvas">
       {/* Header */}
       <View className="px-5 pt-4 pb-4">
-        <Text className="text-2xl font-display font-black text-slate-900 tracking-tight">Messages</Text>
+        <Text className="text-3xl font-display font-black text-slate-900 tracking-tight">Messages</Text>
       </View>
 
       {isLoading ? (
@@ -745,33 +762,69 @@ export default function MessagesScreen() {
         </View>
       ) : (
         <FlatList
-          data={conversations.map(conversation => conversation.lastMessageAt && messageTime(conversation.lastMessageAt) < now - MESSAGE_RETENTION_MS
-            ? { ...conversation, lastMessage: 'No recent messages', unreadCount: 0 }
-            : conversation)}
+          data={conversations
+            .map(conversation => conversation.lastMessageAt && messageTime(conversation.lastMessageAt) < now - MESSAGE_RETENTION_MS
+              ? { ...conversation, lastMessage: 'No recent messages', unreadCount: 0 }
+              : conversation)
+            .filter(conversation => {
+              const term = conversationSearch.trim().toLowerCase();
+              return !term || `${conversation.otherUserName} ${conversation.serviceType}`.toLowerCase().includes(term);
+            })
+            .sort((left, right) => (messageTime(right.lastMessageAt) || 0) - (messageTime(left.lastMessageAt) || 0))}
           keyExtractor={(c) => c.jobId}
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingHorizontal: 20, gap: 12, paddingBottom: 32 }}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              onPress={() => openConversation(item.jobId)}
-              className="bg-white rounded-3xl p-4 flex-row items-center gap-4 border border-slate-100 shadow-sm"
-              activeOpacity={0.8}
-            >
-              <ChatAvatar userId={item.otherUserId} photo={item.otherUserPhoto} name={item.otherUserName} size={48} />
-              <View className="flex-1">
-                <Text className="text-sm font-display font-black text-slate-900">{item.otherUserName}</Text>
-                <Text className="font-sans text-xs text-slate-400 font-medium mt-0.5" numberOfLines={1}>
-                  {item.lastMessage}
-                </Text>
-              </View>
-              {item.unreadCount > 0 && (
-                <View className="w-5 h-5 bg-accent rounded-full items-center justify-center">
-                  <Text className="text-[10px] font-display font-black text-white">
-                    {item.unreadCount > 9 ? '9+' : item.unreadCount}
-                  </Text>
+          ListHeaderComponent={
+            <View className="mb-2 flex-row items-center gap-3 rounded-3xl border border-slate-200 bg-white px-4 py-3.5">
+              <Search size={20} color="#64748b" />
+              <TextInput
+                value={conversationSearch}
+                onChangeText={setConversationSearch}
+                placeholder="Search conversations"
+                placeholderTextColor="#64748b"
+                accessibilityLabel="Search conversations"
+                returnKeyType="search"
+                className="flex-1 font-sans text-base text-slate-900"
+              />
+            </View>
+          }
+          ListEmptyComponent={<Text className="py-8 text-center font-sans text-sm text-slate-400">No conversations match your search.</Text>}
+          renderItem={({ item }) => {
+            const unread = item.unreadCount > 0;
+            const noMessages = !item.lastMessageAt || item.lastMessage === 'No messages yet';
+            const activeBooking = ACTIVE_BOOKING_STATUSES.includes(item.jobStatus);
+            return (
+              <TouchableOpacity
+                onPress={() => openConversation(item.jobId)}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.otherUserName}, ${item.serviceType}${unread ? `, ${item.unreadCount} unread` : ''}`}
+                className="flex-row items-center gap-4 rounded-[28px] bg-white px-4 py-4 shadow-sm"
+                activeOpacity={0.8}
+              >
+                <View>
+                  <ChatAvatar userId={item.otherUserId} photo={item.otherUserPhoto} name={item.otherUserName} size={64} />
+                  {activeBooking && <View accessibilityLabel="Active booking" className="absolute -bottom-0.5 -right-0.5 h-5 w-5 rounded-full border-[3px] border-white bg-emerald-600" />}
                 </View>
-              )}
-            </TouchableOpacity>
-          )}
+                <View className="flex-1">
+                  <View className="flex-row items-center justify-between gap-2">
+                    <Text className="flex-1 font-display text-lg font-black text-slate-900" numberOfLines={1}>{item.otherUserName}</Text>
+                    <Text className={`font-sans text-sm ${unread ? 'font-bold text-accent' : 'text-slate-500'}`}>{conversationTime(item.lastMessageAt, now)}</Text>
+                  </View>
+                  <View className="mt-1 flex-row items-center justify-between gap-2">
+                    <Text className={`flex-1 font-sans text-base ${unread ? 'font-bold text-slate-900' : 'text-slate-500'}`} numberOfLines={1}>
+                      {noMessages ? 'No messages yet. Say hello.' : item.lastMessage}
+                    </Text>
+                    {unread && (
+                      <View className="h-7 min-w-7 items-center justify-center rounded-full bg-accent px-1.5">
+                        <Text className="font-display text-xs font-black text-white">{item.unreadCount > 9 ? '9+' : item.unreadCount}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text className="mt-0.5 font-sans text-xs text-slate-400" numberOfLines={1}>{item.serviceType}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          }}
         />
       )}
     </SafeAreaView>
