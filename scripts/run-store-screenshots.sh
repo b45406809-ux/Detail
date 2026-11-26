@@ -10,6 +10,10 @@ mkdir -p "$shots" "$report"
 device_args=()
 
 if [[ "$platform" == android ]]; then
+  # The emulator can briefly drop offline right after boot; wait until it is stable.
+  adb wait-for-device
+  for _ in $(seq 1 30); do [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]] && break; sleep 2; done
+  sleep 15
   adb install -r "$RUNNER_TEMP/apk/detail.apk" || exit 1
   adb emu geo fix "$DEVICE_LNG" "$DEVICE_LAT"
   # Clean status bar for screenshots: full battery and signal, fixed time.
@@ -40,16 +44,22 @@ else
   device_args=(--device "$device_id")
 fi
 
+run_flow() {
+  maestro "${device_args[@]}" test \
+    --env CUSTOMER_EMAIL="$CUSTOMER_EMAIL" --env CUSTOMER_PASSWORD="$CUSTOMER_PASSWORD" \
+    --env CLEANER_EMAIL="$CLEANER_EMAIL" --env CLEANER_PASSWORD="$CLEANER_PASSWORD" \
+    --env SHOTS="$shots" \
+    --test-output-dir "$report/$1" \
+    ".maestro/store/$1.yaml"
+}
+
 status=0
 for flow in 01-customer-books 02-cleaner-quotes 03-customer-accepts; do
   echo "::group::$flow"
-  if ! maestro "${device_args[@]}" test \
-      --env CUSTOMER_EMAIL="$CUSTOMER_EMAIL" --env CUSTOMER_PASSWORD="$CUSTOMER_PASSWORD" \
-      --env CLEANER_EMAIL="$CLEANER_EMAIL" --env CLEANER_PASSWORD="$CLEANER_PASSWORD" \
-      --env SHOTS="$shots" \
-      --test-output-dir "$report/$flow" \
-      ".maestro/store/$flow.yaml"; then
-    echo "::error::$flow failed; later steps depend on it, so stopping here."
+  [[ "$platform" == android ]] && adb wait-for-device
+  # One retry absorbs emulator/simulator glitches (e.g. "device offline"); a real app problem fails twice.
+  if ! run_flow "$flow" && ! { echo "Retrying $flow once"; [[ "$platform" == android ]] && adb wait-for-device; run_flow "$flow"; }; then
+    echo "::error::$flow failed twice; later steps depend on it, so stopping here."
     status=1
     echo "::endgroup::"
     break
