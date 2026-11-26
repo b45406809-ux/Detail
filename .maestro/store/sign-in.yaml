@@ -35,18 +35,14 @@ appId: zw.co.detailapp.mobile
     timeout: 10000
 - tapOn:
     id: auth-email-submit
+# The review accounts have already accepted the agreements; an agreement screen may flash
+# briefly while the profile loads, so wait for the result instead of reacting to it.
+- extendedWaitUntil:
+    visible: "(?i)(Find cleaners|Continue to App)"
+    timeout: 45000
 - runFlow:
     when:
-      visible: "Customer Agreement"
-    commands:
-      - scrollUntilVisible:
-          element:
-            text: "I have read and accept"
-          direction: DOWN
-      - tapOn: "I have read and accept"
-- runFlow:
-    when:
-      visible: "Allow permissions"
+      visible: "Continue to App"
     commands:
       - tapOn: "Continue to App"
 - extendedWaitUntil:
