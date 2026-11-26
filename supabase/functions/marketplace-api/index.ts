@@ -801,6 +801,25 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const latitude=Number(booking.location?.lat),longitude=Number(booking.location?.lng);
       if(!Number.isFinite(latitude)||!Number.isFinite(longitude)||Math.abs(latitude)>90||Math.abs(longitude)>180||(latitude===0&&longitude===0))
         fail(400,'A mappable job location is required. Use the location button or enter a more specific address.');
+      // Direct request to one chosen cleaner (tapped in Favorites or Find a cleaner). Only the server sets
+      // the targeting fields; anything the client sent under these names is discarded first.
+      const requestedCleanerId=text(booking.preferredCleanerId,80);
+      booking={...booking};delete booking.isFavoriteRebook;delete booking.preferredCleanerId;delete booking.previousJobId;
+      let directCleaner:Json|null=null;
+      if(requestedCleanerId){
+        if(bookingMode!=='SCHEDULED'||serviceMode==='VISIT_WASH')fail(400,'A request to a specific cleaner must be a quote request.');
+        const {data:target,error:targetError}=await admin.from('users').select('id,displayname,photourl,cleanerselfieat,role,verificationstatus,cleaneragreementaccepted,cleaneronboardingcomplete,issuspended,isbanned,accountdeletedat,servicecategories,isreviewaccount').eq('id',requestedCleanerId).maybeSingle();
+        if(targetError)throw targetError;
+        const {data:me,error:meError}=await admin.from('users').select('isreviewaccount').eq('id',actor).maybeSingle();
+        if(meError)throw meError;
+        const sameSandbox=(target?.isreviewaccount===true)===(me?.isreviewaccount===true);
+        const categories:string[]=target?.servicecategories??[];
+        if(!target||!sameSandbox||(target.id===actor&&me?.isreviewaccount!==true)||target.verificationstatus!=='VERIFIED'||!target.cleaneragreementaccepted||!target.cleaneronboardingcomplete||target.issuspended||target.isbanned||target.accountdeletedat||!hasCleanerSelfie(target,String(target.id)))
+          fail(409,'This cleaner cannot take requests right now. Choose another cleaner or request any nearby cleaner.');
+        if(categories.length&&!categories.includes(String(booking.category)))fail(409,`${target.displayname||'This cleaner'} does not offer ${String(booking.category).toLowerCase()} cleaning. Choose another service or cleaner.`);
+        directCleaner=target;
+        booking={...booking,isFavoriteRebook:true,preferredCleanerId:target.id,directRequest:true};
+      }
       const { data: jobId, error } = await admin.rpc('create_booking', { p_actor_id: actor, p_idempotency_key: key, p_booking: { ...booking, bookingMode, suppliesRequired, suppliesFee, price:bookingMode==='INSTANT'?basePrice+suppliesFee:null, budget:bookingMode==='INSTANT'?basePrice+suppliesFee:booking.budget, photos } });
       if (error) throw error;
       if (bookingMode === 'INSTANT') {
@@ -819,6 +838,14 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
         const cleanerId=String(washSite.cleanerId);
         await notify(cleanerId,{type:'NEW_SCHEDULED_JOB',title:'Car wash booking request',body:`A customer requested ${String(washSite.name)}. Review the vehicle and send a quote in Detail.`,jobId});
         return {success:true,jobId,notifiedCleaners:1};
+      }
+      if(directCleaner){
+        // Only the chosen cleaner sees this booking (nearby_open_job_ids honours preferredCleanerId), and they are
+        // alerted whether or not they are online right now.
+        const {error:markError}=await admin.from('jobs').update({isfavoriterebook:true}).eq('id',jobId).eq('customerid',actor).eq('status','PENDING');
+        if(markError)throw markError;
+        await notify(String(directCleaner.id),{type:'NEW_SCHEDULED_JOB',title:'A customer requested you',body:`${String(booking.serviceType||'A cleaning')} request sent directly to you. Review the job and send your quote in Detail.`,jobId,data:{directRequest:true}});
+        return {success:true,jobId,notifiedCleaners:1,directRequest:true};
       }
       const {data:scheduledNotices,error:noticeError}=await admin.rpc('notify_scheduled_job_cleaners',{p_job_id:jobId,p_customer_id:actor,p_limit:20});
       if(noticeError)throw noticeError;
@@ -950,6 +977,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const profile=profileResult.data, job=jobResult.data;
       if (profile.role!=='CLEANER' || profile.verificationstatus!=='VERIFIED' || !profile.cleaneragreementaccepted || !profile.cleaneronboardingcomplete || profile.issuspended || profile.isbanned || profile.accountdeletedat || Number(profile.balance)<0) fail(403,'Complete cleaner verification and resolve any outstanding commission before bidding.');
       if ((await reviewAccountIds()).has(String(job.customerid)) !== (profile.isreviewaccount===true)) fail(404,'This booking is no longer available.');
+      if (String(job.data?.isFavoriteRebook)==='true' && job.data?.preferredCleanerId && job.data.preferredCleanerId!==actor) fail(404,'This booking was sent to another cleaner.');
       if (!hasCleanerSelfie(profile, actor)) fail(409,'Take a front-camera selfie for your cleaner profile before bidding. Customers will see this photo.');
       if (!user?.phone_confirmed_at || !user?.phone || String(profile.phone ?? '').replace(/\D/g, '') !== user.phone.replace(/\D/g, '')) fail(409, 'Verify your phone number in cleaner registration before bidding.');
       const commissionReserve = round2(bidPrice * 0.10);
@@ -1328,6 +1356,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       const {data:job,error}=await admin.from('jobs').select('id,customerid,category,servicetype,checklist,description,photos,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status,data').eq('id',openJob.jobid).maybeSingle();
       if(error)throw error;if(!job||job.status!=='PENDING')fail(404,'This booking is no longer accepting quotes.');
       if(job.data?.serviceMode==='VISIT_WASH'&&job.data?.washSiteCleanerId!==actor)fail(404,'This booking is reserved for the selected car wash.');
+      if(String(job.data?.isFavoriteRebook)==='true'&&job.data?.preferredCleanerId&&job.data.preferredCleanerId!==actor)fail(404,'This booking was sent to another cleaner.');
       return await cleanerBookingSummary(job as Json, true);
     }
     case 'nearbyCleanerJobs': {
@@ -1352,7 +1381,7 @@ async function dispatch(name: string, input: Json, request: Request, user: User 
       if(!ids.length)return {jobs:[]};
       const {data:jobs,error}=await admin.from('jobs').select('id,customerid,category,servicetype,checklist,description,photos,location,scheduledtime,scheduleddatetime,timepreference,bookingmode,budget,biddingexpiresat,estimatedduration,suppliesrequired,suppliesfee,createdat,status,data').in('id',ids).eq('status','PENDING');
       if(error)throw error;
-      const eligibleJobs=(jobs??[]).filter((job:Json)=>(job.data?.serviceMode!=='VISIT_WASH'||job.data?.washSiteCleanerId===actor)&&reviewIds.has(String(job.customerid))===(profile.isreviewaccount===true));
+      const eligibleJobs=(jobs??[]).filter((job:Json)=>(job.data?.serviceMode!=='VISIT_WASH'||job.data?.washSiteCleanerId===actor)&&reviewIds.has(String(job.customerid))===(profile.isreviewaccount===true)&&(String(job.data?.isFavoriteRebook)!=='true'||!job.data?.preferredCleanerId||job.data.preferredCleanerId===actor));
       const byId=new Map<string,Json>(eligibleJobs.map((job:Json):[string,Json]=>[String(job.id),job]));
       return {jobs:await Promise.all(ids.map(id=>byId.get(id)).filter((job):job is Json=>!!job).map(job=>cleanerBookingSummary(job)))};
     }

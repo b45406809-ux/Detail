@@ -25,7 +25,7 @@ async function signIn({ email, password }) {
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(`Sign-in failed for ${email}: HTTP ${response.status} ${body.error_description ?? body.msg ?? ''}`);
-  return body.access_token;
+  return { token: body.access_token, id: body.user?.id };
 }
 
 async function api(token, name, data = {}) {
@@ -83,10 +83,22 @@ async function step(name, fn) {
   try { await fn(); } catch (error) { record(name, false, error.message); }
 }
 
-const customerToken = await signIn(accounts.customer);
+const { token: customerToken } = await signIn(accounts.customer);
 record('customer account signs in with its password', true);
-const cleanerToken = await signIn(accounts.cleaner);
+const { token: cleanerToken, id: cleanerId } = await signIn(accounts.cleaner);
 record('cleaner account signs in with its password', true);
+
+// Direct request: the customer taps one cleaner; only that cleaner receives the booking.
+await step('direct request to one cleaner', async () => {
+  await api(customerToken, 'setActiveRole', { role: 'CUSTOMER' });
+  const created = await api(customerToken, 'createBooking', { idempotencyKey: randomUUID(), booking: { ...booking('direct request'), preferredCleanerId: cleanerId } });
+  record('direct request: booking is created for the chosen cleaner', created.directRequest === true && !!created.jobId);
+  await api(cleanerToken, 'setActiveRole', { role: 'CLEANER' });
+  const nearby = await api(cleanerToken, 'nearbyCleanerJobs', { lat: HARARE.lat, lng: HARARE.lng });
+  record('direct request: the chosen cleaner sees it', (nearby.jobs ?? []).some((job) => (job.id ?? job.jobId) === created.jobId));
+  const preview = await api(cleanerToken, 'getCleanerBookingPreview', { jobId: created.jobId });
+  record('direct request: the chosen cleaner can open it to quote', !!preview);
+});
 
 await step('two-account flow', () => journey('two accounts', customerToken, cleanerToken));
 await step('single-account flow', () => journey('one account', customerToken, customerToken));

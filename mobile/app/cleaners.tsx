@@ -82,17 +82,19 @@ export default function CleanersScreen() {
       ListEmptyComponent={<View className="items-center py-16 px-8"><Text className="text-base font-display font-black text-ink">{loadError ? 'Could not load cleaners' : 'No verified cleaners found'}</Text><Text className="font-sans text-sm text-ink/45 text-center mt-2">{loadError ? 'Check your connection and try again.' : 'Try a different name, city, or service.'}</Text>{loadError && <TouchableOpacity onPress={() => setRetry((value) => value + 1)} className="mt-4 rounded-xl bg-accent px-4 py-2"><Text className="text-white text-xs font-display font-black">Try again</Text></TouchableOpacity>}</View>}
       renderItem={({ item }) => {
         const saved = favorites.some((favorite) => favorite.cleanerId === item.uid);
-        return <View className="bg-white rounded-3xl p-4 flex-row items-center gap-3 border border-ink/5">
+        const onlyCategory = item.serviceCategories?.length === 1 ? item.serviceCategories[0] : undefined;
+        return <TouchableOpacity activeOpacity={0.85} accessibilityRole="button" accessibilityLabel={`Book ${item.displayName || 'this cleaner'}`} onPress={() => router.push({ pathname: '/booking/create', params: { cleanerId: item.uid, cleanerName: item.displayName || 'this cleaner', ...(onlyCategory ? { category: onlyCategory } : {}) } })} className="bg-white rounded-3xl p-4 flex-row items-center gap-3 border border-ink/5">
           <View className="w-14 h-14 rounded-2xl bg-accent/10 items-center justify-center overflow-hidden">{item.photoURL ? <Image source={{ uri: item.photoURL }} style={{ width: 56, height: 56 }} /> : <Brush size={24} color="#3906D2" />}</View>
           <View className="flex-1">
             <Text className="text-sm font-display font-black text-ink">{item.displayName || 'Detail cleaner'}</Text>
             <View className="flex-row items-center gap-1 mt-1"><Star size={12} color="#f59e0b" fill="#f59e0b" /><Text className="font-sans text-xs font-bold text-ink/60">{item.ratingAverage ? item.ratingAverage.toFixed(1) : 'New'}{item.ratingCount ? ` · ${item.ratingCount} reviews` : ''}</Text></View>
             <Text className="font-sans text-[11px] text-ink/45 mt-1" numberOfLines={1}>{[item.serviceArea, ...(item.serviceCategories ?? [])].filter(Boolean).join(' · ') || 'Identity verified'}{item.distanceKm!==null&&item.distanceKm!==undefined?` · ${item.distanceKm} km away`:''}</Text>
             <Text className={`font-sans text-[10px] font-bold mt-1 ${item.available ? 'text-emerald-700' : 'text-slate-400'}`}>{item.available ? 'Online now' : 'Not online for immediate requests'}</Text>
+            <Text className="font-sans text-[11px] font-bold text-accent mt-1">Tap to book this cleaner →</Text>
             {!!item.portfolio?.length && <View className="mt-2 flex-row gap-1.5">{item.portfolio.slice(0,3).map((photo,index)=><Image key={`${item.uid}-portfolio-${index}`} source={{uri:photo.url}} className="h-9 w-11 rounded-lg" resizeMode="cover" accessibilityLabel={photo.caption||'Cleaner work sample'}/>)}</View>}
           </View>
           <TouchableOpacity onPress={() => toggleFavorite(item)} accessibilityLabel={saved ? 'Remove from favorites' : 'Save to favorites'} className={`w-10 h-10 rounded-2xl items-center justify-center ${saved ? 'bg-red-50' : 'bg-accent/10'}`}><Heart size={18} color={saved ? '#E5484D' : '#3906D2'} fill={saved ? '#E5484D' : 'transparent'} /></TouchableOpacity>
-        </View>;
+        </TouchableOpacity>;
       }}
     />}
   </SafeAreaView>;

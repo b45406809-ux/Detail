@@ -73,13 +73,13 @@ export default function FavoritesScreen() {
           contentContainerClassName="px-5 pb-10 gap-3"
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
-            <View className="bg-white rounded-3xl p-4 flex-row items-center gap-4 border border-ink/5">
+            <TouchableOpacity activeOpacity={0.85} accessibilityRole="button" accessibilityLabel={`Book ${item.cleanerName ?? 'this cleaner'}`} onPress={() => router.push({ pathname: '/booking/create', params: { cleanerId: item.cleanerId, cleanerName: item.cleanerName ?? 'this cleaner' } })} className="bg-white rounded-3xl p-4 flex-row items-center gap-4 border border-ink/5">
               <ProfileAvatar userId={item.cleanerId} photo={item.cleanerPhoto} name={item.cleanerName} size={56} radius={16} />
               <View className="flex-1">
                 <Text className="text-sm font-display font-black text-ink">{item.cleanerName ?? 'Cleaner'}</Text>
                 <View className="flex-row items-center gap-1 mt-1">
                   <Star size={11} color="#f59e0b" fill="#f59e0b" />
-                  <Text className="font-sans text-xs font-bold text-ink/50">Saved cleaner</Text>
+                  <Text className="font-sans text-xs font-bold text-ink/50">Saved cleaner · tap to book</Text>
                 </View>
               </View>
               <TouchableOpacity
@@ -93,7 +93,7 @@ export default function FavoritesScreen() {
               <TouchableOpacity onPress={() => removeFavorite(item)} className="w-10 h-10 bg-red-50 rounded-2xl items-center justify-center">
                 <Heart size={16} color="#E5484D" fill="#E5484D" />
               </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
           )}
         />
       )}

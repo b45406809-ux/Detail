@@ -79,8 +79,11 @@ function toggleItem(list: string[], item: string) {
 }
 
 export default function CreateBookingScreen() {
-  const { category: preselectedCategory, mapLat, mapLng } = useLocalSearchParams<{
+  const { category: preselectedCategory, mapLat, mapLng, cleanerId: directCleanerId, cleanerName: directCleanerName } = useLocalSearchParams<{
     category?: ServiceCategory;
+    /** Set when the customer tapped a specific cleaner: the request goes only to them. */
+    cleanerId?: string;
+    cleanerName?: string;
     mapLat?: string;
     mapLng?: string;
   }>();
@@ -435,6 +438,7 @@ export default function CreateBookingScreen() {
         biddingExpiresAt: Timestamp.fromMillis(now + BIDDING_WINDOW_MS),
         reminderSent: false,
         photos: photoUris,
+        ...(directCleanerId ? { preferredCleanerId: directCleanerId } : {}),
         createdAt: serverTimestamp(),
       } });
       await AsyncStorage.removeItem(storageKey);
@@ -465,7 +469,7 @@ export default function CreateBookingScreen() {
               {step === 'CATEGORY' ? 'Book a cleaner' : `Book ${category === 'CAR' ? 'Car' : 'House'} Cleaning`}
             </Text>
             <Text className="font-sans text-xs text-ink/50">
-              Step {stepIndex + 1} of {STEPS.length}
+              {directCleanerId ? `Request to ${directCleanerName || 'your cleaner'} · ` : ''}Step {stepIndex + 1} of {STEPS.length}
             </Text>
           </View>
         </View>
@@ -507,7 +511,7 @@ export default function CreateBookingScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-              {instantBookingEnabled && <TouchableOpacity onPress={() => setBookingMode(bookingMode === 'INSTANT' ? 'SCHEDULED' : 'INSTANT')} className="p-4 rounded-2xl border-2 border-accent mt-6"><Text className="font-sans-bold text-ink">{bookingMode === 'INSTANT' ? 'Book now selected' : 'Book now'}</Text><Text className="font-sans text-xs text-ink/50 mt-1">Find an available nearby cleaner at the listed starting price.</Text></TouchableOpacity>}
+              {instantBookingEnabled && !directCleanerId && <TouchableOpacity onPress={() => setBookingMode(bookingMode === 'INSTANT' ? 'SCHEDULED' : 'INSTANT')} className="p-4 rounded-2xl border-2 border-accent mt-6"><Text className="font-sans-bold text-ink">{bookingMode === 'INSTANT' ? 'Book now selected' : 'Book now'}</Text><Text className="font-sans text-xs text-ink/50 mt-1">Find an available nearby cleaner at the listed starting price.</Text></TouchableOpacity>}
             </View>
           )}
 

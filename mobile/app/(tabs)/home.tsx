@@ -675,14 +675,14 @@ function CustomerPanel({ favorites, recentJobs, onCreateBooking }: {
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
             {favorites.map((f) => (
-              <View key={f.id} className="items-center w-20">
+              <TouchableOpacity key={f.id} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel={`Book ${f.cleanerName ?? 'this cleaner'}`} onPress={() => router.push({ pathname: '/booking/create', params: { cleanerId: f.cleanerId, cleanerName: f.cleanerName ?? 'this cleaner' } })} className="items-center w-20">
                 <View className="mb-1.5 rounded-full border-2 border-white">
                   <ProfileAvatar userId={f.cleanerId} photo={f.cleanerPhoto} name={f.cleanerName} size={64} radius={32} />
                 </View>
                 <Text className="font-sans text-[10px] font-bold text-ink text-center" numberOfLines={1}>
                   {f.cleanerName ?? 'Cleaner'}
                 </Text>
-              </View>
+              </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
