@@ -17,6 +17,10 @@ on:
         description: Optional earlier run of this workflow whose APK to reuse (skips the Android build)
         required: false
         type: string
+      ios_app_run_id:
+        description: Optional earlier run of this workflow whose simulator app to reuse (skips the iOS build)
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -179,7 +183,19 @@ jobs:
       - name: Check review-account secrets
         run: |
           test -n "$CUSTOMER_PASSWORD" && test -n "$CLEANER_PASSWORD" || { echo 'Add REVIEW_CUSTOMER_PASSWORD and REVIEW_CLEANER_PASSWORD secrets.'; exit 1; }
+      - name: Reuse an earlier simulator app
+        if: inputs.ios_app_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: detail-store-screenshots-ios-app
+          path: ${{ runner.temp }}/sim-archive
+          run-id: ${{ inputs.ios_app_run_id }}
+          github-token: ${{ github.token }}
+      - name: Unpack reused simulator app
+        if: inputs.ios_app_run_id != ''
+        run: mkdir -p "$RUNNER_TEMP/sim" && tar -xzf "$RUNNER_TEMP/sim-archive/detail-sim.tar.gz" -C "$RUNNER_TEMP/sim"
       - name: Build simulator app locally
+        if: inputs.ios_app_run_id == ''
         working-directory: mobile
         run: |
           set -euo pipefail
@@ -187,6 +203,13 @@ jobs:
           npx --yes eas-cli@16.28.0 build --platform ios --profile store-screenshots-ios-simulator --local --non-interactive --output "$RUNNER_TEMP/detail-sim.tar.gz"
           mkdir -p "$RUNNER_TEMP/sim"
           tar -xzf "$RUNNER_TEMP/detail-sim.tar.gz" -C "$RUNNER_TEMP/sim"
+      - name: Save simulator app for re-runs
+        if: inputs.ios_app_run_id == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: detail-store-screenshots-ios-app
+          path: ${{ runner.temp }}/detail-sim.tar.gz
+          retention-days: 7
       - name: Reset the review sandbox
         run: node scripts/reset-review-sandbox.mjs
       - name: Install Maestro
