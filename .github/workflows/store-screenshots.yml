@@ -159,7 +159,8 @@ jobs:
     name: iPhone simulator
     needs: [android]
     # Run after Android so the two devices do not use the shared review accounts at the same time.
-    if: always() && inputs.platform != 'android'
+    # !cancelled() (not always()) so a cancelled run really stops this job.
+    if: ${{ !cancelled() && inputs.platform != 'android' }}
     runs-on: macos-26
     environment: production
     timeout-minutes: 120
