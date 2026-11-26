@@ -11,6 +11,11 @@ on:
         description: Revoke exactly this previously approved iOS distribution certificate, then create a replacement.
         required: false
         type: string
+      revoke_all_distribution_certificates:
+        description: Owner-approved - revoke every iOS distribution certificate on the team, then create one fresh certificate. Live App Store and TestFlight builds are not affected.
+        required: false
+        type: boolean
+        default: false
       reuse_signing_run_id:
         description: Previous successful signing-artifact run ID (leave blank to create Apple signing credentials)
         required: false
@@ -86,6 +91,7 @@ jobs:
           SIGNING_DIR: ${{ runner.temp }}/detail-ios-signing
           AUDIT_CERTIFICATE_SERIAL: ${{ inputs.audit_certificate_serial }}
           REVOKE_CERTIFICATE_SERIAL: ${{ inputs.revoke_certificate_serial }}
+          REVOKE_ALL_DISTRIBUTION_CERTIFICATES: ${{ inputs.revoke_all_distribution_certificates }}
         run: node .github/scripts/bootstrap-ios-signing.mjs
 
       - name: Download existing signing artifact for a build retry

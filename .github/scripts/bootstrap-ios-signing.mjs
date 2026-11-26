@@ -122,6 +122,17 @@ if (process.env.AUDIT_CERTIFICATE_SERIAL) {
   }
   process.exit(0);
 }
+if (process.env.REVOKE_ALL_DISTRIBUTION_CERTIFICATES === 'true') {
+  if (process.env.REVOKE_CERTIFICATE_SERIAL) throw new Error('Choose either one serial or revoke-all, not both.');
+  console.log(`Owner approved revoking all ${certificates.length} iOS distribution certificates.`);
+  for (const cert of certificates) {
+    console.log(`Revoking ${cert.attributes?.name ?? 'unnamed'} (serial ${cert.attributes?.serialNumber ?? 'unavailable'}, expires ${cert.attributes?.expirationDate}).`);
+    await appleRequest(`/certificates/${encodeURIComponent(cert.id)}`, { method: 'DELETE' });
+  }
+  certificates = await listCertificates();
+  if (certificates.length) throw new Error(`Apple still lists ${certificates.length} distribution certificate(s) after revocation; no replacement was created.`);
+  console.log('Apple confirmed all distribution certificates are revoked; creating one fresh certificate.');
+}
 if (process.env.REVOKE_CERTIFICATE_SERIAL) {
   const approvedSerial = process.env.REVOKE_CERTIFICATE_SERIAL.trim().toUpperCase();
   if (!/^[0-9A-F]{8,64}$/.test(approvedSerial)) throw new Error('Enter a valid certificate serial number to revoke.');
