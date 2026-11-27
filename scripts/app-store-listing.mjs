@@ -11,6 +11,7 @@ import { appendFileSync } from 'node:fs';
 
 const BUNDLE_ID = 'zw.co.detailapp.mobile';
 const VERSION = '1.0.0';
+const BUILD_VERSION = '1.0.0'; // CFBundleShortVersionString of the uploaded builds
 const MODE = process.env.MODE === 'submit' ? 'submit' : 'fill';
 const report = [];
 const note = (ok, text) => { report.push(`${ok ? '✅' : '⚠️'} ${text}`); console.log(`${ok ? 'OK' : 'TODO'}: ${text}`); };
@@ -92,11 +93,14 @@ const app = (await asc(`/v1/apps?filter[bundleId]=${BUNDLE_ID}`)).data?.[0];
 if (!app) throw new Error('App not found in App Store Connect.');
 
 // Version 1.0.0 (create it if needed).
-let version = (await asc(`/v1/apps/${app.id}/appStoreVersions?filter[platform]=IOS&filter[versionString]=${VERSION}`)).data?.[0];
+// Use the version that is still being prepared (it may be named 1.0 rather than 1.0.0).
+const EDITABLE = ['PREPARE_FOR_SUBMISSION', 'DEVELOPER_REJECTED', 'REJECTED', 'METADATA_REJECTED', 'INVALID_BINARY', 'DEVELOPER_REMOVED_FROM_SALE'];
+const allVersions = (await asc(`/v1/apps/${app.id}/appStoreVersions?filter[platform]=IOS&limit=20`)).data ?? [];
+let version = allVersions.find((v) => EDITABLE.includes(v.attributes.appStoreState ?? v.attributes.appVersionState)) ?? allVersions.find((v) => v.attributes.versionString === VERSION);
 if (!version) {
   version = (await asc('/v1/appStoreVersions', { method: 'POST', body: { data: { type: 'appStoreVersions', attributes: { platform: 'IOS', versionString: VERSION }, relationships: { app: { data: { type: 'apps', id: app.id } } } } } })).data;
 }
-note(true, `Version ${VERSION} found (state ${version.attributes.appStoreState ?? version.attributes.appVersionState})`);
+note(true, `Version ${version.attributes.versionString} found (state ${version.attributes.appStoreState ?? version.attributes.appVersionState})`);
 
 await attempt('Copyright set', () => asc(`/v1/appStoreVersions/${version.id}`, { method: 'PATCH', body: { data: { type: 'appStoreVersions', id: version.id, attributes: { copyright: LISTING.copyright } } } }));
 
@@ -148,7 +152,7 @@ await attempt('App Review sign-in, contact and notes set', async () => {
 
 // Build.
 await attempt('Build attached to the version', async () => {
-  const builds = (await asc(`/v1/builds?filter[app]=${app.id}&filter[preReleaseVersion.version]=${VERSION}&filter[processingState]=VALID&sort=-uploadedDate&limit=20`)).data ?? [];
+  const builds = (await asc(`/v1/builds?filter[app]=${app.id}&filter[preReleaseVersion.version]=${BUILD_VERSION}&filter[processingState]=VALID&sort=-uploadedDate&limit=20`)).data ?? [];
   const wanted = process.env.BUILD_NUMBER ? builds.find((b) => b.attributes.version === process.env.BUILD_NUMBER) : builds[0];
   if (!wanted) throw new Error(`build ${process.env.BUILD_NUMBER || '(newest)'} is not processed yet`);
   await asc(`/v1/appStoreVersions/${version.id}/relationships/build`, { method: 'PATCH', body: { data: { type: 'builds', id: wanted.id } } });
