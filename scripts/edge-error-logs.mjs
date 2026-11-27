@@ -6,7 +6,7 @@ import { appendFileSync } from 'node:fs';
 const ref = new URL(process.env.SUPABASE_URL).hostname.split('.')[0];
 const from = process.env.FROM, to = process.env.TO;
 async function logs(sql) {
-  const url = new URL(`https://api.supabase.com/v1/projects/${ref}/analytics/endpoints/logs.all`);
+  const url = new URL(`https://api.supabase.com/v1/projects/${ref}/analytics/endpoints/logs`);
   url.searchParams.set('iso_timestamp_start', from); url.searchParams.set('iso_timestamp_end', to); url.searchParams.set('sql', sql);
   const response = await fetch(url, { headers: { authorization: `Bearer ${process.env.SUPABASE_ACCESS_TOKEN}` } });
   const body = await response.json().catch(() => ({}));
