@@ -176,7 +176,32 @@ await attempt('Build attached to the version', async () => {
   report.push(`   Build ${wanted.attributes.version}`);
 });
 
-// Screenshots: report what is there; uploading needs image files.
+// Screenshots: upload app-store/screenshots/*.png (1290x2796 or 1320x2868), replacing what is there.
+import { readdirSync, readFileSync, existsSync as fileExists } from 'node:fs';
+import { createHash } from 'node:crypto';
+const SHOT_DIR = 'app-store/screenshots';
+const shotFiles = fileExists(SHOT_DIR) ? readdirSync(SHOT_DIR).filter((f) => /\.(png|jpe?g)$/i.test(f)).sort() : [];
+if (shotFiles.length) {
+  await attempt(`Uploaded ${shotFiles.length} iPhone screenshots`, async () => {
+    const locs = (await asc(`/v1/appStoreVersions/${version.id}/appStoreVersionLocalizations`)).data ?? [];
+    const loc = locs.find((l) => l.attributes.locale === 'en-US') ?? locs[0];
+    const displayType = process.env.SCREENSHOT_DISPLAY_TYPE || 'APP_IPHONE_67';
+    const sets = (await asc(`/v1/appStoreVersionLocalizations/${loc.id}/appScreenshotSets`)).data ?? [];
+    let set = sets.find((s) => s.attributes.screenshotDisplayType === displayType);
+    if (!set) set = (await asc('/v1/appScreenshotSets', { method: 'POST', body: { data: { type: 'appScreenshotSets', attributes: { screenshotDisplayType: displayType }, relationships: { appStoreVersionLocalization: { data: { type: 'appStoreVersionLocalizations', id: loc.id } } } } } })).data;
+    for (const old of (await asc(`/v1/appScreenshotSets/${set.id}/appScreenshots`)).data ?? []) await asc(`/v1/appScreenshots/${old.id}`, { method: 'DELETE' });
+    for (const file of shotFiles) {
+      const bytes = readFileSync(`${SHOT_DIR}/${file}`);
+      const shot = (await asc('/v1/appScreenshots', { method: 'POST', body: { data: { type: 'appScreenshots', attributes: { fileName: file, fileSize: bytes.length }, relationships: { appScreenshotSet: { data: { type: 'appScreenshotSets', id: set.id } } } } } })).data;
+      for (const op of shot.attributes.uploadOperations ?? []) {
+        const headers = Object.fromEntries((op.requestHeaders ?? []).map((h) => [h.name, h.value]));
+        const response = await fetch(op.url, { method: op.method, headers, body: bytes.subarray(op.offset, op.offset + op.length) });
+        if (!response.ok) throw new Error(`upload of ${file} failed (HTTP ${response.status})`);
+      }
+      await asc(`/v1/appScreenshots/${shot.id}`, { method: 'PATCH', body: { data: { type: 'appScreenshots', id: shot.id, attributes: { uploaded: true, sourceFileChecksum: createHash('md5').update(bytes).digest('hex') } } } });
+    }
+  });
+}
 await attempt('Screenshots present', async () => {
   const locs = (await asc(`/v1/appStoreVersions/${version.id}/appStoreVersionLocalizations`)).data ?? [];
   const sets = (await asc(`/v1/appStoreVersionLocalizations/${locs[0].id}/appScreenshotSets`)).data ?? [];

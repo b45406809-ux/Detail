@@ -1,0 +1,29 @@
+name: Google Play listing and release
+
+# Updates the Play store listing (text, contact details, icon, feature graphic, phone
+# screenshots from play-store/) and optionally releases a version code to Production.
+on:
+  workflow_dispatch:
+    inputs:
+      promote_version_code:
+        description: Version code to release to Production (blank = listing only)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  play:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    env:
+      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+      PROMOTE_VERSION_CODE: ${{ inputs.promote_version_code }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/play-store-release.mjs
