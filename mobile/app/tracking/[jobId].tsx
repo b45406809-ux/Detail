@@ -1,5 +1,6 @@
 import { appAlert, AppDialogHost } from '@/components/AppDialog';
 import { RemoteImage, prefetchPhotos } from '../../components/RemoteImage';
+import { mapPoint } from '@/utils/mapPoint';
 import { goBackSafely } from '@/utils/navigation';
 import React, { useEffect, useState, useRef } from 'react';
 import {
@@ -130,7 +131,8 @@ export default function TrackingScreen() {
 
   useEffect(()=>{
     let active=true;
-    const origin=isCustomer?job?.cleanerLocation:profile?.location,destination=job?.location;
+    const originRaw=mapPoint(isCustomer?job?.cleanerLocation:profile?.location),destinationRaw=mapPoint(job?.location);
+    const origin=originRaw?{lng:originRaw[0],lat:originRaw[1]}:null,destination=destinationRaw?{lng:destinationRaw[0],lat:destinationRaw[1]}:null;
     if((!isCustomer&&!isCleaner)||!origin||!destination||!['ASSIGNED','EN_ROUTE','IN_PROGRESS'].includes(String(job?.status))){setRouteCoordinates(null);setEtaMinutes(null);setRouteIsRoadBased(false);return()=>{active=false;};}
     getDrivingRoute(origin,destination).then(route=>{if(active){setEtaMinutes(route.durationMinutes);setRouteCoordinates(route.coordinates);setRouteIsRoadBased(true);}}).catch(()=>{
       if(active){setEtaMinutes(Math.max(1,Math.round(haversineDistanceKm(origin,destination)/28*60)));setRouteCoordinates([[origin.lng,origin.lat],[destination.lng,destination.lat]]);setRouteIsRoadBased(false);}
@@ -475,10 +477,13 @@ export default function TrackingScreen() {
     );
   }
 
-  const mapRegion = job.location && (job.location.lat !== 0 || job.location.lng !== 0)
-    ? { latitude: job.location.lat, longitude: job.location.lng, latitudeDelta: 0.015, longitudeDelta: 0.015 }
-    : { latitude: -17.8252, longitude: 31.0335, latitudeDelta: 0.12, longitudeDelta: 0.12 };
   const routeOrigin=isCustomer?job.cleanerLocation:profile?.location;
+  // Stored locations can be empty ({}) when a cleaner is offline; only draw real points.
+  const originPoint=mapPoint(routeOrigin);
+  const jobPoint=mapPoint(job?.location);
+  const mapRegion = jobPoint
+    ? { latitude: jobPoint[1], longitude: jobPoint[0], latitudeDelta: 0.015, longitudeDelta: 0.015 }
+    : { latitude: -17.8252, longitude: 31.0335, latitudeDelta: 0.12, longitudeDelta: 0.12 };
 
   if (step === 'SUCCESS') {
     return (
@@ -599,17 +604,17 @@ export default function TrackingScreen() {
             }}
           />
           <Mapbox.UserLocation visible />
-          {job.location && (
-            <Mapbox.PointAnnotation id="job-location" coordinate={[job.location.lng, job.location.lat]} title={isVisitWash?String(job.washSiteName||'Selected Car Wash'):'Job Location'}>
+          {jobPoint && (
+            <Mapbox.PointAnnotation id="job-location" coordinate={jobPoint} title={isVisitWash?String(job.washSiteName||'Selected Car Wash'):'Job Location'}>
               <View className="w-10 h-10 bg-accent rounded-2xl items-center justify-center shadow-lg">
                 <MapPin size={20} color="#fff" />
               </View>
             </Mapbox.PointAnnotation>
           )}
 
-          {(isCustomer&&job.cleanerLocation||isCleaner&&profile?.location)&&job.location&&(
+          {originPoint&&jobPoint&&(
             <>
-              {isCustomer&&job.cleanerLocation&&<Mapbox.PointAnnotation id="cleaner-location" coordinate={[job.cleanerLocation.lng, job.cleanerLocation.lat]} title={job.cleanerName ?? 'Your Cleaner'}>
+              {isCustomer&&originPoint&&<Mapbox.PointAnnotation id="cleaner-location" coordinate={originPoint} title={job.cleanerName ?? 'Your Cleaner'}>
                 <View className="w-10 h-10 bg-emerald-500 rounded-2xl items-center justify-center shadow-lg">
                   <Navigation size={20} color="#fff" />
                 </View>
@@ -621,7 +626,7 @@ export default function TrackingScreen() {
                   properties: {},
                   geometry: {
                     type: 'LineString',
-                      coordinates: routeCoordinates??[[routeOrigin!.lng,routeOrigin!.lat],[job.location.lng,job.location.lat]],
+                      coordinates: routeCoordinates??[originPoint,jobPoint],
                   },
                 }}
               >
