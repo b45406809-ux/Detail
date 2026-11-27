@@ -12,7 +12,7 @@ import { appendFileSync } from 'node:fs';
 const BUNDLE_ID = 'zw.co.detailapp.mobile';
 const VERSION = '1.0.0';
 const BUILD_VERSION = '1.0.0'; // CFBundleShortVersionString of the uploaded builds
-const MODE = ['submit', 'status'].includes(process.env.MODE) ? process.env.MODE : 'fill';
+const MODE = ['submit', 'status', 'availability'].includes(process.env.MODE) ? process.env.MODE : 'fill';
 const report = [];
 const note = (ok, text) => { report.push(`${ok ? '✅' : '⚠️'} ${text}`); console.log(`${ok ? 'OK' : 'TODO'}: ${text}`); };
 
@@ -100,6 +100,47 @@ if (!app) throw new Error('App not found in App Store Connect.');
 // Use the version that is still being prepared (it may be named 1.0 rather than 1.0.0).
 const EDITABLE = ['PREPARE_FOR_SUBMISSION', 'DEVELOPER_REJECTED', 'REJECTED', 'METADATA_REJECTED', 'INVALID_BINARY', 'DEVELOPER_REMOVED_FROM_SALE'];
 const allVersions = (await asc(`/v1/apps/${app.id}/appStoreVersions?filter[platform]=IOS&limit=20`)).data ?? [];
+// Countries: read them (status) or limit the app to COUNTRIES, e.g. "ZWE" (availability).
+// Changing availability does not touch the version in App Review.
+async function territoryAvailabilities() {
+  const availability = (await asc(`/v1/apps/${app.id}/appAvailabilityV2`).catch((error) => { if (/HTTP 404/.test(error.message)) return null; throw error; }))?.data;
+  if (!availability) return { availability: null, rows: [] };
+  const rows = [];
+  let next = `/v2/appAvailabilities/${availability.id}/territoryAvailabilities?limit=200&include=territory`;
+  while (next) {
+    const page = await asc(next);
+    rows.push(...(page.data ?? []).map((row) => ({ id: row.id, territory: row.relationships?.territory?.data?.id, available: row.attributes?.available })));
+    next = page.links?.next ? page.links.next.replace('https://api.appstoreconnect.apple.com', '') : null;
+  }
+  return { availability, rows };
+}
+if (MODE === 'availability') {
+  const wanted = new Set(String(process.env.COUNTRIES || 'ZWE').split(',').map((c) => c.trim().toUpperCase()).filter(Boolean));
+  const { availability, rows } = await territoryAvailabilities();
+  const lines = ['## App Store countries', ''];
+  if (!availability) {
+    const all = [];
+    let next = '/v1/territories?limit=200';
+    while (next) { const page = await asc(next); all.push(...(page.data ?? []).map((t) => t.id)); next = page.links?.next ? page.links.next.replace('https://api.appstoreconnect.apple.com', '') : null; }
+    const included = all.map((id) => ({ type: 'territoryAvailabilities', id: `\${${id}}`, attributes: { available: wanted.has(id) }, relationships: { territory: { data: { type: 'territories', id } } } }));
+    await asc('/v2/appAvailabilities', { method: 'POST', body: { data: { type: 'appAvailabilities', attributes: { availableInNewTerritories: false }, relationships: { app: { data: { type: 'apps', id: app.id } }, territoryAvailabilities: { data: included.map(({ type, id }) => ({ type, id })) } } }, included } });
+    lines.push(`- Created availability: ${[...wanted].join(', ')} only`);
+  } else {
+    let changed = 0;
+    for (const row of rows) {
+      const shouldBe = wanted.has(row.territory);
+      if (row.available === shouldBe) continue;
+      await asc(`/v1/territoryAvailabilities/${row.id}`, { method: 'PATCH', body: { data: { type: 'territoryAvailabilities', id: row.id, attributes: { available: shouldBe } } } });
+      changed++;
+    }
+    lines.push(`- Updated ${changed} countries; now available only in: ${[...wanted].join(', ')}`);
+  }
+  const after = (await territoryAvailabilities()).rows.filter((row) => row.available).map((row) => row.territory);
+  lines.push(`- Check: available in ${after.length} country(ies): ${after.join(', ') || 'none'}`);
+  console.log(lines.join('\n'));
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
+  process.exit(after.length === wanted.size && after.every((id) => wanted.has(id)) ? 0 : 1);
+}
 if (MODE === 'status') {
   // Read-only: where each version and review submission stands. Changes nothing.
   const lines = ['## App Store status', ''];
@@ -108,6 +149,11 @@ if (MODE === 'status') {
     lines.push(`- Version ${v.attributes.versionString}: **${v.attributes.appVersionState ?? v.attributes.appStoreState}** (store state ${v.attributes.appStoreState})${build ? `, build ${build.attributes.version}` : ''}, created ${v.attributes.createdDate}`);
   }
   const subs = (await asc(`/v1/reviewSubmissions?filter[app]=${app.id}&filter[platform]=IOS&limit=10`)).data ?? [];
+  try {
+    const { availability, rows } = await territoryAvailabilities();
+    const on = rows.filter((row) => row.available).map((row) => row.territory);
+    lines.push(availability ? `- Countries: available in ${on.length} of ${rows.length}${on.length <= 10 ? ` (${on.join(', ')})` : ''}` : '- Countries: not set yet');
+  } catch (error) { lines.push(`- Countries: could not read (${error.message})`); }
   for (const sub of subs) lines.push(`- Review submission ${sub.id}: **${sub.attributes.state}**, submitted ${sub.attributes.submittedDate ?? '-'}`);
   console.log(lines.join('\n'));
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');

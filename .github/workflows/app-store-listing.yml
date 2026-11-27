@@ -7,14 +7,19 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: fill (update the listing only), submit (also send for App Review) or status (read-only review status)
+        description: fill (update the listing only), submit (also send for App Review) status (read-only review status) or availability (limit countries)
         type: choice
-        options: [fill, submit, status]
+        options: [fill, submit, status, availability]
         default: fill
       build_number:
         description: Build to attach (blank = newest processed 1.0.0 build)
         required: false
         type: string
+      countries:
+        description: For mode=availability, 3-letter country codes, comma separated
+        required: false
+        type: string
+        default: ZWE
       contact_first_name:
         description: App Review contact first name (blank keeps what is saved)
         required: false
@@ -48,6 +53,7 @@ jobs:
       CLEANER_PASSWORD: ${{ secrets.REVIEW_CLEANER_PASSWORD }}
       MODE: ${{ inputs.mode }}
       BUILD_NUMBER: ${{ inputs.build_number }}
+      COUNTRIES: ${{ inputs.countries }}
       CONTACT_FIRST_NAME: ${{ inputs.contact_first_name }}
       CONTACT_LAST_NAME: ${{ inputs.contact_last_name }}
       CONTACT_PHONE: ${{ inputs.contact_phone }}
