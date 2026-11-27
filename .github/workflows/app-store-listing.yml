@@ -1,0 +1,60 @@
+name: App Store listing
+
+# Fills in the App Store listing (text, URLs, category, age rating, App Review sign-in
+# and notes, build) through the App Store Connect API. With mode=submit it also sends
+# the version to App Review. App Privacy answers and screenshots are reported if missing.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: fill (update the listing only) or submit (also send for App Review)
+        type: choice
+        options: [fill, submit]
+        default: fill
+      build_number:
+        description: Build to attach (blank = newest processed 1.0.0 build)
+        required: false
+        type: string
+      contact_first_name:
+        description: App Review contact first name (blank keeps what is saved)
+        required: false
+        type: string
+      contact_last_name:
+        description: App Review contact last name
+        required: false
+        type: string
+      contact_phone:
+        description: App Review contact phone, e.g. +263...
+        required: false
+        type: string
+      contact_email:
+        description: App Review contact email
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  listing:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    env:
+      ASC_KEY_ID: ${{ secrets.EXPO_ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.EXPO_ASC_ISSUER_ID }}
+      ASC_API_KEY_P8: ${{ secrets.EXPO_ASC_API_KEY_P8 }}
+      CUSTOMER_PASSWORD: ${{ secrets.REVIEW_CUSTOMER_PASSWORD }}
+      CLEANER_PASSWORD: ${{ secrets.REVIEW_CLEANER_PASSWORD }}
+      MODE: ${{ inputs.mode }}
+      BUILD_NUMBER: ${{ inputs.build_number }}
+      CONTACT_FIRST_NAME: ${{ inputs.contact_first_name }}
+      CONTACT_LAST_NAME: ${{ inputs.contact_last_name }}
+      CONTACT_PHONE: ${{ inputs.contact_phone }}
+      CONTACT_EMAIL: ${{ inputs.contact_email }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/app-store-listing.mjs
