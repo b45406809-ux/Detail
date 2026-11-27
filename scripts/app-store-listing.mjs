@@ -79,7 +79,11 @@ async function asc(path, { method = 'GET', body } = {}) {
   const text = await response.text();
   const data = text ? JSON.parse(text) : null;
   if (!response.ok) {
-    const detail = (data?.errors ?? []).map((e) => `${e.title}: ${e.detail}`).join('; ');
+    const detail = (data?.errors ?? []).map((e) => {
+      // Apple puts the actual blocking reasons in meta.associatedErrors.
+      const associated = Object.values(e.meta?.associatedErrors ?? {}).flat().map((a) => `${a.code ?? ''} ${a.detail ?? a.title ?? ''}`.trim());
+      return `${e.title}: ${e.detail}${associated.length ? ` [${associated.join(' | ')}]` : ''}`;
+    }).join('; ');
     throw new Error(`${method} ${path.split('?')[0]} → HTTP ${response.status} ${detail}`);
   }
   return data;
@@ -213,7 +217,11 @@ await attempt('Screenshots present', async () => {
 
 if (MODE === 'submit') {
   await attempt('Submitted for App Review', async () => {
-    const submission = (await asc('/v1/reviewSubmissions', { method: 'POST', body: { data: { type: 'reviewSubmissions', attributes: { platform: 'IOS' }, relationships: { app: { data: { type: 'apps', id: app.id } } } } } })).data;
+    // Reuse a draft submission from an earlier attempt; Apple allows only one open draft.
+    const drafts = (await asc(`/v1/reviewSubmissions?filter[app]=${app.id}&filter[platform]=IOS&filter[state]=READY_FOR_REVIEW`)).data ?? [];
+    const submission = drafts[0] ?? (await asc('/v1/reviewSubmissions', { method: 'POST', body: { data: { type: 'reviewSubmissions', attributes: { platform: 'IOS' }, relationships: { app: { data: { type: 'apps', id: app.id } } } } } })).data;
+    const existingItems = (await asc(`/v1/reviewSubmissions/${submission.id}/items`)).data ?? [];
+    if (!existingItems.length)
     await asc('/v1/reviewSubmissionItems', { method: 'POST', body: { data: { type: 'reviewSubmissionItems', relationships: { reviewSubmission: { data: { type: 'reviewSubmissions', id: submission.id } }, appStoreVersion: { data: { type: 'appStoreVersions', id: version.id } } } } } });
     await asc(`/v1/reviewSubmissions/${submission.id}`, { method: 'PATCH', body: { data: { type: 'reviewSubmissions', id: submission.id, attributes: { submitted: true } } } });
   });
