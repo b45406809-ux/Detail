@@ -16,20 +16,20 @@ async function logs(sql) {
 const lines = [`## Edge function errors ${from} → ${to}`, ''];
 const ts = (t) => { const n = Number(t); return Number.isFinite(n) ? new Date(n > 1e14 ? n / 1000 : n).toISOString() : String(t); };
 try {
-  const sources = await logs(`SELECT source_name, count() AS n FROM logs GROUP BY source_name`);
-  lines.push(`Sources: ${sources.map((r) => `${r.source_name}=${r.n}`).join(', ')}`, '');
-  const rows = await logs(`SELECT timestamp, source_name, event_message, log_attributes FROM logs
-    WHERE source_name IN ('function_edge_logs','function_logs','edge_logs')
-      AND (positionCaseInsensitive(event_message, 'marketplace-api') > 0 OR source_name = 'function_logs')
+  const sources = await logs(`SELECT source, count() AS n FROM logs GROUP BY source`);
+  lines.push(`Sources: ${sources.map((r) => `${r.source}=${r.n}`).join(', ')}`, '');
+  const rows = await logs(`SELECT timestamp, source, event_message, log_attributes FROM logs
+    WHERE source IN ('function_edge_logs','function_logs','edge_logs')
+      AND (positionCaseInsensitive(event_message, 'marketplace-api') > 0 OR source = 'function_logs')
     ORDER BY timestamp ASC LIMIT 400`);
   const interesting = rows.filter((r) => {
     const a = r.log_attributes ?? {};
     const status = Number(a['response.status_code'] ?? a['status_code'] ?? a['response.status'] ?? (String(r.event_message).match(/\| (\d{3}) \|/) ?? [])[1]);
     r.status = status;
-    return r.source_name === 'function_logs' ? /error|warn|fail/i.test(String(r.event_message) + JSON.stringify(a)) : status >= 400 || !Number.isFinite(status);
+    return r.source === 'function_logs' ? /error|warn|fail/i.test(String(r.event_message) + JSON.stringify(a)) : status >= 400 || !Number.isFinite(status);
   });
   lines.push(`### Rows (${interesting.length} of ${rows.length})`, '');
-  for (const r of interesting.slice(0, 80)) lines.push(`- ${ts(r.timestamp)} [${r.source_name}] ${Number.isFinite(r.status) ? r.status : ''} ${String(r.event_message).slice(0, 220)}`);
+  for (const r of interesting.slice(0, 80)) lines.push(`- ${ts(r.timestamp)} [${r.source}] ${Number.isFinite(r.status) ? r.status : ''} ${String(r.event_message).slice(0, 220)}`);
   if (rows[0]) lines.push('', 'Attribute keys: ' + Object.keys(rows[0].log_attributes ?? {}).join(', '));
 } catch (error) { lines.push(`Could not read logs (${error.message})`); }
 console.log(lines.join('\n'));
