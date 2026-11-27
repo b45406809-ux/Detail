@@ -142,6 +142,9 @@ await attempt('Age rating answered (no objectionable content; users can chat)', 
       return;
     } catch (error) {
       const match = /attribute '([A-Za-z0-9]+)'.*?Expected an? ([a-zA-Z]+)/.exec(error.message);
+      const named = /attribute '([A-Za-z0-9]+)'/.exec(error.message);
+      // An attribute Apple does not accept on update (e.g. a regional rating it derives itself): leave it out.
+      if (!match && named && named[1] in attributes) { delete attributes[named[1]]; continue; }
       if (!match || !(match[1] in attributes)) throw error;
       attributes[match[1]] = /bool/i.test(match[2]) ? (['messagingAndChat', 'userGeneratedContent'].includes(match[1])) : 'NONE';
     }
