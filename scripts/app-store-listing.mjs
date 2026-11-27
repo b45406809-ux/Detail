@@ -135,7 +135,18 @@ await attempt('Age rating answered (no objectionable content; users can chat)', 
   }
   for (const key of ['kidsAgeBand', 'ageRatingOverride', 'ageRatingOverrideV2', 'koreaAgeRatingOverride', 'developerAgeRatingInfoUrl']) delete attributes[key];
   for (const key of ['userGeneratedContent', 'messagingAndChat']) if (key in current) attributes[key] = true;
-  await asc(`/v1/ageRatingDeclarations/${declaration.id}`, { method: 'PATCH', body: { data: { type: 'ageRatingDeclarations', id: declaration.id, attributes } } });
+  // Apple does not publish which questions are yes/no and which are levels; when it rejects a type, switch it and retry.
+  for (let round = 0; round < 40; round += 1) {
+    try {
+      await asc(`/v1/ageRatingDeclarations/${declaration.id}`, { method: 'PATCH', body: { data: { type: 'ageRatingDeclarations', id: declaration.id, attributes } } });
+      return;
+    } catch (error) {
+      const match = /attribute '([A-Za-z0-9]+)'.*?Expected an? ([a-zA-Z]+)/.exec(error.message);
+      if (!match || !(match[1] in attributes)) throw error;
+      attributes[match[1]] = /bool/i.test(match[2]) ? (['messagingAndChat', 'userGeneratedContent'].includes(match[1])) : 'NONE';
+    }
+  }
+  throw new Error('age rating kept being rejected');
 });
 
 // App Review information (demo account and contact).
