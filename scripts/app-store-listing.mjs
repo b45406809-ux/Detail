@@ -12,7 +12,7 @@ import { appendFileSync } from 'node:fs';
 const BUNDLE_ID = 'zw.co.detailapp.mobile';
 const VERSION = '1.0.0';
 const BUILD_VERSION = '1.0.0'; // CFBundleShortVersionString of the uploaded builds
-const MODE = process.env.MODE === 'submit' ? 'submit' : 'fill';
+const MODE = ['submit', 'status'].includes(process.env.MODE) ? process.env.MODE : 'fill';
 const report = [];
 const note = (ok, text) => { report.push(`${ok ? '✅' : '⚠️'} ${text}`); console.log(`${ok ? 'OK' : 'TODO'}: ${text}`); };
 
@@ -100,6 +100,19 @@ if (!app) throw new Error('App not found in App Store Connect.');
 // Use the version that is still being prepared (it may be named 1.0 rather than 1.0.0).
 const EDITABLE = ['PREPARE_FOR_SUBMISSION', 'DEVELOPER_REJECTED', 'REJECTED', 'METADATA_REJECTED', 'INVALID_BINARY', 'DEVELOPER_REMOVED_FROM_SALE'];
 const allVersions = (await asc(`/v1/apps/${app.id}/appStoreVersions?filter[platform]=IOS&limit=20`)).data ?? [];
+if (MODE === 'status') {
+  // Read-only: where each version and review submission stands. Changes nothing.
+  const lines = ['## App Store status', ''];
+  for (const v of allVersions) {
+    const build = (await asc(`/v1/appStoreVersions/${v.id}/build`)).data;
+    lines.push(`- Version ${v.attributes.versionString}: **${v.attributes.appVersionState ?? v.attributes.appStoreState}** (store state ${v.attributes.appStoreState})${build ? `, build ${build.attributes.version}` : ''}, created ${v.attributes.createdDate}`);
+  }
+  const subs = (await asc(`/v1/reviewSubmissions?filter[app]=${app.id}&filter[platform]=IOS&limit=10`)).data ?? [];
+  for (const sub of subs) lines.push(`- Review submission ${sub.id}: **${sub.attributes.state}**, submitted ${sub.attributes.submittedDate ?? '-'}`);
+  console.log(lines.join('\n'));
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
+  process.exit(0);
+}
 let version = allVersions.find((v) => EDITABLE.includes(v.attributes.appStoreState ?? v.attributes.appVersionState)) ?? allVersions.find((v) => v.attributes.versionString === VERSION);
 if (!version) {
   version = (await asc('/v1/appStoreVersions', { method: 'POST', body: { data: { type: 'appStoreVersions', attributes: { platform: 'IOS', versionString: VERSION }, relationships: { app: { data: { type: 'apps', id: app.id } } } } } })).data;

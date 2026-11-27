@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: fill (update the listing only) or submit (also send for App Review)
+        description: fill (update the listing only), submit (also send for App Review) or status (read-only review status)
         type: choice
-        options: [fill, submit]
+        options: [fill, submit, status]
         default: fill
       build_number:
         description: Build to attach (blank = newest processed 1.0.0 build)
