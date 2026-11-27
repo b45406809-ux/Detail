@@ -21,7 +21,7 @@ async function safeFunctionError(error: unknown, responseData: unknown): Promise
   }
   // Never show raw SDK wording such as "Edge Function returned a non-2xx status code".
   const raw = error instanceof Error ? error.message : '';
-  if (/network|fetch|timed? ?out|offline/i.test(raw)) return 'Detail could not reach the server. Check your internet connection and try again.';
+  if (/network|fetch|send a request|timed? ?out|offline/i.test(raw)) return 'Detail could not reach the server. Check your internet connection and try again.';
   return 'Something went wrong on our side. Please try again in a moment.';
 }
 

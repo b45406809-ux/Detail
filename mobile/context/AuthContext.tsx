@@ -71,9 +71,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       reconciling = true;
       try {
         await resumeCleanerLocationUpdates();
-        const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        await callFunction('updateCleanerLocation', { lat: position.coords.latitude, lng: position.coords.longitude });
-        if (active) setLocationTrackingError(null);
+        // A single failed update (going online races the first location send, or a brief
+        // network blip) should not leave a warning on screen: retry before reporting it.
+        let lastError: unknown = null;
+        for (let attempt = 0; attempt < 3 && active; attempt++) {
+          if (attempt) await new Promise((resolve) => setTimeout(resolve, attempt * 3000));
+          try {
+            const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+            await callFunction('updateCleanerLocation', { lat: position.coords.latitude, lng: position.coords.longitude });
+            lastError = null;
+            break;
+          } catch (error) { lastError = error; }
+        }
+        if (active) setLocationTrackingError(lastError ? (lastError instanceof Error ? lastError.message : 'Location sharing needs attention.') : null);
       } catch (error) {
         if (active) setLocationTrackingError(error instanceof Error ? error.message : 'Location sharing needs attention.');
       } finally {
