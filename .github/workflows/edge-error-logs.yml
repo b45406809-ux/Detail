@@ -1,0 +1,34 @@
+name: Edge function error logs
+
+# Read-only: shows failed marketplace-api requests and error logs in a time window.
+on:
+  workflow_dispatch:
+    inputs:
+      from:
+        description: Start, ISO time (UTC), e.g. 2026-11-27T16:08:00Z
+        required: true
+        type: string
+      to:
+        description: End, ISO time (UTC)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  logs:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      FROM: ${{ inputs.from }}
+      TO: ${{ inputs.to }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/edge-error-logs.mjs
