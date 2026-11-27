@@ -4,8 +4,13 @@ async function safeFunctionError(error: unknown, responseData: unknown): Promise
   const candidates: unknown[] = [responseData];
   if (error && typeof error === 'object') {
     const context = (error as { context?: unknown }).context;
-    if (context && typeof context === 'object' && 'clone' in context && typeof (context as Response).clone === 'function') {
-      try { candidates.unshift(await (context as Response).clone().json()); } catch { /* use the SDK message below */ }
+    if (context && typeof context === 'object') {
+      const response = context as Response;
+      // Read the server's own message. The body may already be used, so try a clone, then the body directly.
+      let body: unknown = null;
+      try { if (typeof response.clone === 'function') body = await response.clone().json(); } catch { /* try next */ }
+      if (!body) { try { if (typeof response.text === 'function') { const text = await response.text(); body = text ? JSON.parse(text) : null; } } catch { /* use the friendly fallback */ } }
+      if (body) candidates.unshift(body);
     }
   }
   for (const candidate of candidates) {
@@ -14,7 +19,10 @@ async function safeFunctionError(error: unknown, responseData: unknown): Promise
       if (typeof message === 'string' && message.length <= 500) return message;
     }
   }
-  return error instanceof Error && error.message ? error.message : 'The service could not complete this request.';
+  // Never show raw SDK wording such as "Edge Function returned a non-2xx status code".
+  const raw = error instanceof Error ? error.message : '';
+  if (/network|fetch|timed? ?out|offline/i.test(raw)) return 'Detail could not reach the server. Check your internet connection and try again.';
+  return 'Something went wrong on our side. Please try again in a moment.';
 }
 
 /** Invoke the authenticated Supabase Edge API that owns privileged workflows. */

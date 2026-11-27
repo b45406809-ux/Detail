@@ -88,6 +88,20 @@ record('customer account signs in with its password', true);
 const { token: cleanerToken, id: cleanerId } = await signIn(accounts.cleaner);
 record('cleaner account signs in with its password', true);
 
+// Go online and offline in Cleaner mode (both accounts), as the Go Online button does.
+for (const [label, token] of [['customer account', customerToken], ['cleaner account', cleanerToken]]) {
+  await step(`${label}: go online`, async () => {
+    await api(token, 'setActiveRole', { role: 'CLEANER' });
+    await api(token, 'prepareCleanerLocation', { lat: HARARE.lat, lng: HARARE.lng });
+    await api(token, 'updateCleanerPresence', { status: 'AVAILABLE' });
+    record(`${label}: goes online in Cleaner mode`, true);
+    await api(token, 'updateCleanerLocation', { lat: HARARE.lat, lng: HARARE.lng });
+    record(`${label}: shares location while online`, true);
+    await api(token, 'updateCleanerPresence', { status: 'OFFLINE' });
+    record(`${label}: goes offline`, true);
+  });
+}
+
 // Direct request: the customer taps one cleaner; only that cleaner receives the booking.
 await step('direct request to one cleaner', async () => {
   await api(customerToken, 'setActiveRole', { role: 'CUSTOMER' });
