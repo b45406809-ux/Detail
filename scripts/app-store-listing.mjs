@@ -156,6 +156,20 @@ await attempt('Age rating answered (no objectionable content; users can chat)', 
   throw new Error('age rating kept being rejected');
 });
 
+// Content rights: the app shows licensed third-party content (Mapbox maps).
+await attempt('Content rights declared (uses licensed third-party content: maps)', () => asc(`/v1/apps/${app.id}`, { method: 'PATCH', body: { data: { type: 'apps', id: app.id, attributes: { contentRightsDeclaration: 'USES_THIRD_PARTY_CONTENT' } } } }));
+
+// Price: Free.
+await attempt('Price set to Free', async () => {
+  const points = (await asc(`/v1/apps/${app.id}/appPricePoints?filter[territory]=USA&limit=200`)).data ?? [];
+  const free = points.find((point) => Number(point.attributes.customerPrice) === 0);
+  if (!free) throw new Error('no free price point found');
+  await asc('/v1/appPriceSchedules', { method: 'POST', body: {
+    data: { type: 'appPriceSchedules', relationships: { app: { data: { type: 'apps', id: app.id } }, baseTerritory: { data: { type: 'territories', id: 'USA' } }, manualPrices: { data: [{ type: 'appPrices', id: '${price-free}' }] } } },
+    included: [{ type: 'appPrices', id: '${price-free}', attributes: { startDate: null }, relationships: { appPricePoint: { data: { type: 'appPricePoints', id: free.id } } } }],
+  } });
+});
+
 // App Review information (demo account and contact).
 await attempt('App Review sign-in, contact and notes set', async () => {
   const attributes = {
