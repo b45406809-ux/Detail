@@ -199,7 +199,8 @@ import { readdirSync, readFileSync, existsSync as fileExists } from 'node:fs';
 import { createHash } from 'node:crypto';
 const SHOT_DIR = 'app-store/screenshots';
 const shotFiles = fileExists(SHOT_DIR) ? readdirSync(SHOT_DIR).filter((f) => /\.(png|jpe?g)$/i.test(f)).sort() : [];
-if (shotFiles.length) {
+// Submit mode keeps the screenshots already uploaded (re-uploading restarts Apple's processing).
+if (shotFiles.length && MODE !== 'submit') {
   await attempt(`Uploaded ${shotFiles.length} iPhone screenshots`, async () => {
     const locs = (await asc(`/v1/appStoreVersions/${version.id}/appStoreVersionLocalizations`)).data ?? [];
     const loc = locs.find((l) => l.attributes.locale === 'en-US') ?? locs[0];
