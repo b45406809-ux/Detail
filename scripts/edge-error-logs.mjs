@@ -18,15 +18,15 @@ const ts = (t) => { const n = Number(t); return Number.isFinite(n) ? new Date(n 
 try {
   const sources = await logs(`SELECT source, count() AS n FROM logs GROUP BY source`);
   lines.push(`Sources: ${sources.map((r) => `${r.source}=${r.n}`).join(', ')}`, '');
-  const rows = await logs(`SELECT timestamp, source, event_message, log_attributes FROM logs
-    WHERE source IN ('function_edge_logs','function_logs','edge_logs')
-      AND (positionCaseInsensitive(event_message, 'marketplace-api') > 0 OR source = 'function_logs')
-    ORDER BY timestamp ASC LIMIT 400`);
+  const rows = [];
+  for (const src of ['function_edge_logs', 'function_logs']) {
+    rows.push(...(await logs(`SELECT timestamp, source, event_message, log_attributes FROM logs WHERE source = '${src}' ORDER BY timestamp ASC LIMIT 200`)).map((r) => ({ ...r, source: src })));
+  }
   const interesting = rows.filter((r) => {
     const a = r.log_attributes ?? {};
     const status = Number(a['response.status_code'] ?? a['status_code'] ?? a['response.status'] ?? (String(r.event_message).match(/\| (\d{3}) \|/) ?? [])[1]);
     r.status = status;
-    return r.source === 'function_logs' ? /error|warn|fail/i.test(String(r.event_message) + JSON.stringify(a)) : status >= 400 || !Number.isFinite(status);
+    return true;
   });
   lines.push(`### Rows (${interesting.length} of ${rows.length})`, '');
   for (const r of interesting.slice(0, 80)) lines.push(`- ${ts(r.timestamp)} [${r.source}] ${Number.isFinite(r.status) ? r.status : ''} ${String(r.event_message).slice(0, 220)}`);
