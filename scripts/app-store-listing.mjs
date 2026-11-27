@@ -122,13 +122,16 @@ await attempt('App name, subtitle and privacy policy URL set', async () => {
   await asc(`/v1/appInfoLocalizations/${loc.id}`, { method: 'PATCH', body: { data: { type: 'appInfoLocalizations', id: loc.id, attributes: { name: LISTING.name, subtitle: LISTING.subtitle, privacyPolicyUrl: LISTING.privacyPolicyUrl } } } });
 });
 await attempt('Category set to Lifestyle (secondary: Business)', () => asc(`/v1/appInfos/${appInfo.id}`, { method: 'PATCH', body: { data: { type: 'appInfos', id: appInfo.id, relationships: { primaryCategory: { data: { type: 'appCategories', id: 'LIFESTYLE' } }, secondaryCategory: { data: { type: 'appCategories', id: 'BUSINESS' } } } } } }));
+const BOOLEAN_AGE_KEYS = new Set(['gambling', 'unrestrictedWebAccess', 'lootBox', 'messagingAndChat', 'userGeneratedContent', 'parentalControls', 'ageAssurance', 'healthOrWellnessTopics', 'advertising', 'seventeenPlus', 'gamblingAndContests']);
 await attempt('Age rating answered (no objectionable content; users can chat)', async () => {
   const declaration = (await asc(`/v1/appInfos/${appInfo.id}/ageRatingDeclaration`)).data;
   const current = declaration.attributes ?? {};
   const attributes = {};
   for (const [key, value] of Object.entries(current)) {
     if (typeof value === 'string' && /^(NONE|INFREQUENT_OR_MILD|FREQUENT_OR_INTENSE|INFREQUENT|FREQUENT)$/.test(value)) attributes[key] = 'NONE';
-    else if (typeof value === 'boolean' || value === null) attributes[key] = false;
+    else if (typeof value === 'boolean') attributes[key] = false;
+    // Unanswered questions come back as null: yes/no questions take false, content-level ones take NONE.
+    else if (value === null) attributes[key] = BOOLEAN_AGE_KEYS.has(key) ? false : 'NONE';
   }
   for (const key of ['kidsAgeBand', 'ageRatingOverride', 'ageRatingOverrideV2', 'koreaAgeRatingOverride', 'developerAgeRatingInfoUrl']) delete attributes[key];
   for (const key of ['userGeneratedContent', 'messagingAndChat']) if (key in current) attributes[key] = true;
