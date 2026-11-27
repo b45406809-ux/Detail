@@ -1,0 +1,147 @@
+name: Play background location video
+
+# Records the walkthrough Google Play asks for in the Location permissions and Foreground
+# service declarations: a cleaner goes online, Detail explains background location, the
+# Android prompts are answered, the sharing notification shows, then the cleaner goes
+# offline. Uses the App Review cleaner account (sandbox; never reaches real users).
+# Output: an MP4 with on-screen captions in the play-location-video artifact.
+on:
+  workflow_dispatch:
+    inputs:
+      apk_run_id:
+        description: Optional earlier run of this workflow whose APK to reuse (skips the build)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: store-screenshots
+  cancel-in-progress: false
+
+env:
+  SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.SUPABASE_SERVICE_ROLE || secrets.SUPABASE_SECRET_KEY }}
+  CLEANER_EMAIL: appreview.cleaner@detailapp.co.zw
+  CUSTOMER_PASSWORD: ${{ secrets.REVIEW_CUSTOMER_PASSWORD }}
+  CLEANER_PASSWORD: ${{ secrets.REVIEW_CLEANER_PASSWORD }}
+  DEVICE_LAT: '-17.8292'
+  DEVICE_LNG: '31.0522'
+
+jobs:
+  video:
+    name: Record on Android emulator
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 90
+    env:
+      CI: '1'
+      EAS_BUILD_PROFILE: production
+      EXPO_PUBLIC_APP_BUILD_PROFILE: production
+      MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
+      EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || secrets.MAPBOX_PUBLIC_TOKEN }}
+      EXPO_PUBLIC_SUPABASE_URL: ${{ vars.SUPABASE_URL || vars.EXPO_PUBLIC_SUPABASE_URL || secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_PUBLIC_ANON || secrets.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_ANON_KEY || secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+      EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || vars.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
+      EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || vars.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID }}
+      FIREBASE_ANDROID_JSON: ${{ secrets.GOOGLE_SERVICES_JSON || secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+      DETAIL_ANDROID_VERSION_CODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Check review-account secrets
+        run: |
+          set -euo pipefail
+          test -n "$CUSTOMER_PASSWORD" || { echo 'Add the REVIEW_CUSTOMER_PASSWORD secret, then re-run create-review-demo-account.'; exit 1; }
+          test -n "$CLEANER_PASSWORD" || { echo 'Add the REVIEW_CLEANER_PASSWORD secret, then re-run create-review-demo-account.'; exit 1; }
+          test -n "$SUPABASE_URL" && test -n "$SUPABASE_SERVICE_ROLE_KEY"
+      - name: Enable emulator acceleration
+        run: |
+          test -c /dev/kvm || { echo 'KVM is unavailable on this runner.'; exit 1; }
+          sudo chmod a+rw /dev/kvm
+
+      - name: Reuse an earlier APK
+        if: inputs.apk_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: detail-location-video-apk
+          path: ${{ runner.temp }}/apk
+          run-id: ${{ inputs.apk_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Prepare Firebase config
+        if: inputs.apk_run_id == ''
+        run: |
+          set -euo pipefail
+          test -n "$FIREBASE_ANDROID_JSON" && test -n "$MAPBOX_DOWNLOADS_TOKEN" && test -n "$EXPO_PUBLIC_SUPABASE_URL" && test -n "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
+          node <<'NODE'
+          const fs = require('fs');
+          const value = process.env.FIREBASE_ANDROID_JSON;
+          const json = value.trim().startsWith('{') ? value : Buffer.from(value, 'base64').toString('utf8');
+          const file = `${process.env.RUNNER_TEMP}/detail-google-services.json`;
+          fs.writeFileSync(file, json, { mode: 0o600 });
+          fs.appendFileSync(process.env.GITHUB_ENV, `GOOGLE_SERVICES_JSON=${file}\n`);
+          NODE
+      - uses: actions/setup-java@v4
+        if: inputs.apk_run_id == ''
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        if: inputs.apk_run_id == ''
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;26.1.10909125 cmake;3.22.1'
+      - name: Build release APK (debug-signed, test only)
+        if: inputs.apk_run_id == ''
+        run: |
+          set -euo pipefail
+          npm ci --prefix mobile --no-audit --no-fund
+          cd mobile
+          npx expo prebuild --platform android --no-install --clean
+          cd android
+          ./gradlew --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" assembleRelease
+          mkdir -p "$RUNNER_TEMP/apk"
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/apk/detail.apk"
+          rm -f "$RUNNER_TEMP/detail-google-services.json"
+      - name: Save APK for re-runs
+        if: inputs.apk_run_id == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: detail-location-video-apk
+          path: ${{ runner.temp }}/apk/detail.apk
+          retention-days: 7
+
+      - name: Reset the review sandbox
+        run: node scripts/reset-review-sandbox.mjs
+      - name: Install ffmpeg
+        run: command -v ffmpeg || { sudo apt-get update -q && sudo apt-get install -y -q ffmpeg; }
+      - name: Install Maestro
+        run: |
+          curl --fail --silent --show-error --location https://get.maestro.mobile.dev | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Record the background location walkthrough
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disk-size: 4096M
+          emulator-boot-timeout: 900
+          disable-animations: true
+          script: bash scripts/record-location-video.sh
+      - name: Upload the video and test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: play-location-video
+          path: ${{ runner.temp }}/location-video/
+          if-no-files-found: warn
+          retention-days: 14
+

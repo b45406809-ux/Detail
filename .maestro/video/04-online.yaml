@@ -1,0 +1,6 @@
+# Back in Detail and online.
+appId: zw.co.detailapp.mobile
+---
+- extendedWaitUntil:
+    visible: "(?i)go offline"
+    timeout: 30000

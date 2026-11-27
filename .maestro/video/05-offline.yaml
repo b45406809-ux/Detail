@@ -1,0 +1,8 @@
+# Going offline stops location sharing.
+appId: zw.co.detailapp.mobile
+---
+- tapOn:
+    id: cleaner-availability-toggle
+- extendedWaitUntil:
+    visible: "(?i)go online"
+    timeout: 20000

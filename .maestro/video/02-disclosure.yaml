@@ -1,0 +1,8 @@
+# Cleaner taps Go Online; Detail explains background location before any system prompt.
+appId: zw.co.detailapp.mobile
+---
+- tapOn:
+    id: cleaner-availability-toggle
+- extendedWaitUntil:
+    visible: "Location while you are online"
+    timeout: 20000

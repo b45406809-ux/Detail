@@ -2,6 +2,7 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { Platform } from 'react-native';
 import { callFunction } from './functions';
+import { appAlert } from '../components/AppDialog';
 
 export class CleanerLocationPermissionError extends Error {
   constructor(message: string, public canAskAgain: boolean) { super(message); }
@@ -36,9 +37,34 @@ async function registerCleanerLocationUpdates(){
   });
 }
 
+/**
+ * Google Play prominent disclosure: on Android, explain background location in the
+ * app before the system permission prompt. Shown until background access is granted.
+ */
+async function confirmBackgroundLocationDisclosure(){
+  if (Platform.OS !== 'android') return;
+  if ((await Location.getBackgroundPermissionsAsync()).granted) return;
+  const accepted = await new Promise<boolean>((resolve) => {
+    appAlert(
+      'Location while you are online',
+      'Detail collects your location to match you with nearby cleaning requests and to show customers your arrival, ' +
+      'even when the app is closed or not in use. This happens only while you are online or on an active booking, ' +
+      'and stops when you go offline. Your location is not used for ads.\n\n' +
+      'On the next screen, choose "Allow all the time" to stay matchable when Detail is in the background.',
+      [
+        { text: 'No thanks', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Continue', onPress: () => resolve(true) },
+      ],
+      { cancelable: false },
+    );
+  });
+  if (!accepted) throw new CleanerLocationPermissionError('Location sharing is needed to go online. You can turn it on any time from Go Online.', true);
+}
+
 export async function startCleanerLocationUpdates(){
   cleanerPresenceStarting = true;
   try {
+    await confirmBackgroundLocationDisclosure();
     const foreground=await Location.requestForegroundPermissionsAsync();
     if(!foreground.granted)throw new CleanerLocationPermissionError('Allow location while using Detail to go online.', foreground.canAskAgain);
     const background=await Location.requestBackgroundPermissionsAsync();

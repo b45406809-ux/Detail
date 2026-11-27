@@ -1,0 +1,60 @@
+# Signs in with ${EMAIL}/${PASSWORD} from a clean install and passes any first-run screens.
+appId: zw.co.detailapp.mobile
+---
+- launchApp:
+    clearState: true
+    permissions:
+      notifications: allow
+      location: deny
+- extendedWaitUntil:
+    visible:
+      id: welcome-skip
+    timeout: 30000
+- tapOn:
+    id: welcome-skip
+- extendedWaitUntil:
+    visible:
+      id: auth-email-input
+    timeout: 20000
+- tapOn:
+    id: auth-email-input
+- inputText: ${EMAIL}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: auth-password-input
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: auth-password-input
+- inputText: ${PASSWORD}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: auth-email-submit
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: auth-email-submit
+# The review accounts have already accepted the agreements; an agreement screen may flash
+# briefly while the profile loads, so wait for the result instead of reacting to it.
+- extendedWaitUntil:
+    visible: "(?i)(Find cleaners|Continue to App)"
+    timeout: 45000
+- runFlow:
+    when:
+      visible: "Continue to App"
+    commands:
+      - tapOn: "Continue to App"
+- extendedWaitUntil:
+    visible:
+      id: role-toggle-customer
+    timeout: 30000
+- tapOn:
+    id: role-toggle-cleaner
+- extendedWaitUntil:
+    visible:
+      id: cleaner-availability-toggle
+    timeout: 30000
+- waitForAnimationToEnd:
+    timeout: 5000

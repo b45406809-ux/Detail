@@ -1,0 +1,19 @@
+# Continue, then the Android prompts: while using the app, then "Allow all the time".
+appId: zw.co.detailapp.mobile
+---
+- tapOn: "Continue"
+- extendedWaitUntil:
+    visible: "(?i)while using the app"
+    timeout: 20000
+- waitForAnimationToEnd:
+    timeout: 2000
+- tapOn: "(?i)while using the app"
+- extendedWaitUntil:
+    visible: "(?i)allow all the time"
+    timeout: 20000
+- waitForAnimationToEnd:
+    timeout: 3000
+- tapOn: "(?i)allow all the time"
+- waitForAnimationToEnd:
+    timeout: 3000
+- back
