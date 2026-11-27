@@ -390,7 +390,7 @@ export default function OffersScreen() {
             <View className="bg-emerald-50 rounded-3xl p-4 mt-2 flex-row items-center gap-3">
               <ShieldCheck size={20} color="#0FB77A" />
               <Text className="font-sans flex-1 text-xs font-bold text-emerald-800 leading-snug">
-                Detail Trust Guarantee — all professionals undergo background checks. Chat unlocks the
+                Cleaners verify their identity before quoting. This is not a background check. Chat unlocks the
                 moment you accept an offer.
               </Text>
             </View>
