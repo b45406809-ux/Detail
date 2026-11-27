@@ -585,7 +585,11 @@ export default function HomeScreen() {
           </TouchableOpacity>}
         </>
       ) : (
-        <View className="absolute bottom-0 left-0 right-0" style={{ top: '60%' }} pointerEvents="box-none">
+        <>
+          {!isSheetCollapsed && <Animated.View
+            className="absolute left-0 right-0 bottom-0"
+            style={{ top: sheetTop, zIndex: 20 }}
+          >
           <GlassSheet style={{ flex: 1 }}>
           <ScrollView
             style={{ flex: 1 }}
@@ -610,7 +614,27 @@ export default function HomeScreen() {
             />
           </ScrollView>
         </GlassSheet>
-        </View>
+            {/* Same drag handle as customer mode: drag up for more, down to collapse. */}
+            <View
+              {...sheetPanResponder.panHandlers}
+              accessibilityRole="adjustable"
+              accessibilityLabel="Cleaner panel. Drag up for more details or down to collapse."
+              style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 34, zIndex: 2, alignItems: 'center', justifyContent: 'center' }}
+            />
+          </Animated.View>}
+          {isSheetCollapsed && <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Open cleaner panel"
+            onPress={() => { setIsSheetCollapsed(false); snapSheet('normal'); }}
+            activeOpacity={0.9}
+            className="absolute left-5 right-5 bottom-3 bg-white rounded-2xl px-4 py-4 flex-row items-center gap-3 border border-white/80"
+            style={{ zIndex: 20, shadowColor: '#150256', shadowOpacity: 0.18, shadowRadius: 16, shadowOffset: { width: 0, height: 4 }, elevation: 10 }}
+          >
+            <View className={`w-3 h-3 rounded-full ${cleanerStatus === 'AVAILABLE' ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+            <Text className="flex-1 font-display font-black text-ink">{cleanerStatus === 'AVAILABLE' ? 'Online · nearby jobs' : 'Offline · open cleaner panel'}</Text>
+            <ChevronRight size={18} color="#3906D2" />
+          </TouchableOpacity>}
+        </>
       )}
     </View>
   );
