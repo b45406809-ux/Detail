@@ -4,10 +4,18 @@ on:
   workflow_dispatch:
     inputs:
       upload_to_play:
-        description: Upload the built app bundle to Google Play internal testing.
+        description: Upload the built app bundle to a Google Play testing or production track.
         required: false
         type: boolean
         default: false
+      play_track:
+        description: Google Play track to receive the uploaded app bundle.
+        required: true
+        type: choice
+        options:
+          - internal
+          - production
+        default: internal
 
 permissions:
   contents: read
@@ -124,7 +132,7 @@ jobs:
           retention-days: 7
 
   upload:
-    name: Upload app bundle to Google Play internal testing
+    name: Upload app bundle to Google Play ${{ inputs.play_track }}
     needs: build
     if: inputs.upload_to_play
     runs-on: ubuntu-latest
@@ -151,5 +159,5 @@ jobs:
           serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: zw.co.detailapp.mobile
           releaseFiles: ${{ steps.bundle.outputs.path }}
-          tracks: internal
+          tracks: ${{ inputs.play_track }}
           status: completed
